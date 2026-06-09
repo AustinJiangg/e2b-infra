@@ -1,0 +1,12 @@
+label: agent沙箱平台使用
+isManual: true
+description: 了解、安装和使用 E2B（AI 代码解释执行基础设施），适用于需要在本地或私有集群部署 E2B 平台的用户
+sections:
+  - label: 安装 e2b-infra
+    href: ./install.md
+  - label: 使用 e2b-infra
+    href: ./usage.md
+  - label: 维护 e2b-infra
+    href: ./maintain.md
+  - label: 安全管理
+    href: ./security.md
