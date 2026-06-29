@@ -53,9 +53,9 @@ PHASE_ROWS = [
     ("firecracker 恢复虚拟机", "调用恢复",                    "post resume"),
     ("firecracker 恢复虚拟机", "设置mmds",                    "set mmds"),
     ("firecracker 恢复虚拟机", "恢复虚拟机",                  "resume VM"),
-    ("启动 envd",            "启动 envd",                    None),  # patch 未埋点，留空保持格式
-    ("启动 envd",            "请求init接口",                 None),
-    ("启动 envd",            "读取envd返回体",               None),
+    ("启动 envd",            "启动 envd",                    "start envd"),         # WaitForEnvd 整体（sandbox.go）
+    ("启动 envd",            "请求init接口",                 "envd init request"),  # POST /init（envd.go initEnvd）
+    ("启动 envd",            "读取envd返回体",               "read envd response"), # 读 /init 响应体（envd.go initEnvd）
     ("总耗时",               "总耗时",                       "total"),
 ]
 KNOWN_KEYS = {key for _, _, key in PHASE_ROWS if key}

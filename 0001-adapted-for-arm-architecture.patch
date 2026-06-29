@@ -7057,6 +7057,42 @@ index 05cf038..8e88f1e 100644
  )
  
  type Checks struct {
+diff --git a/packages/orchestrator/internal/sandbox/envd.go b/packages/orchestrator/internal/sandbox/envd.go
+index 4b5de91..96c258f 100644
+--- a/packages/orchestrator/internal/sandbox/envd.go
++++ b/packages/orchestrator/internal/sandbox/envd.go
+@@ -115,14 +115,18 @@ func (s *Sandbox) initEnvd(ctx context.Context) (e error) {
+ 	attributesFail := append(attributes, attribute.Bool("success", false))
+ 	attributesSuccess := append(attributes, attribute.Bool("success", true))
+ 
++	traceID := span.SpanContext().TraceID().String()
++
+ 	address := fmt.Sprintf("http://%s:%d/init", s.Slot.HostIPString(), consts.DefaultEnvdServerPort)
+ 
++	reqStart := time.Now()
+ 	response, count, err := s.doRequestWithInfiniteRetries(ctx, http.MethodPost, address)
+ 	if err != nil {
+ 		envdInitCalls.Add(ctx, count, metric.WithAttributes(attributesFail...))
+ 
+ 		return fmt.Errorf("failed to init envd: %w", err)
+ 	}
++	zap.L().Sugar().Infof("[ResumeSandbox] envd init request cost: %.3f ms, traceID=%s", time.Since(reqStart).Seconds()*1000, traceID)
+ 
+ 	if count > 1 {
+ 		// Track failed envd init calls
+@@ -133,10 +137,12 @@ func (s *Sandbox) initEnvd(ctx context.Context) (e error) {
+ 	envdInitCalls.Add(ctx, 1, metric.WithAttributes(attributesSuccess...))
+ 
+ 	defer response.Body.Close()
++	bodyStart := time.Now()
+ 	body, err := io.ReadAll(response.Body)
+ 	if err != nil {
+ 		return fmt.Errorf("failed to read envd init response body: %w", err)
+ 	}
++	zap.L().Sugar().Infof("[ResumeSandbox] read envd response cost: %.3f ms, traceID=%s", time.Since(bodyStart).Seconds()*1000, traceID)
+ 
+ 	if response.StatusCode != http.StatusNoContent {
+ 		logger.L().Error(ctx, "envd init request failed",
 diff --git a/packages/orchestrator/internal/sandbox/fc/client.go b/packages/orchestrator/internal/sandbox/fc/client.go
 index 54cd2cf..ddd0b79 100644
 --- a/packages/orchestrator/internal/sandbox/fc/client.go
@@ -7264,7 +7300,7 @@ index a2539a1..317929d 100644
  	}
  }
 diff --git a/packages/orchestrator/internal/sandbox/sandbox.go b/packages/orchestrator/internal/sandbox/sandbox.go
-index 0ff28c2..00101f8 100644
+index 0ff28c2..b112cf9 100644
 --- a/packages/orchestrator/internal/sandbox/sandbox.go
 +++ b/packages/orchestrator/internal/sandbox/sandbox.go
 @@ -425,6 +425,13 @@ func (f *Factory) ResumeSandbox(
@@ -7336,6 +7372,22 @@ index 0ff28c2..00101f8 100644
 +	zap.L().Sugar().Infof("[ResumeSandbox] resume VM cost: %d ms, traceID=%s", time.Since(phaseStart).Milliseconds(), traceID)
  
  	telemetry.ReportEvent(ctx, "initialized FC")
+ 
+@@ -709,6 +722,7 @@ func (f *Factory) ResumeSandbox(
+ 
+ 	telemetry.ReportEvent(execCtx, "waiting for envd")
+ 
++	envdStart := time.Now()
+ 	err = sbx.WaitForEnvd(
+ 		ctx,
+ 		f.config.EnvdTimeout,
+@@ -716,6 +730,7 @@ func (f *Factory) ResumeSandbox(
+ 	if err != nil {
+ 		return nil, fmt.Errorf("failed to wait for sandbox start: %w", err)
+ 	}
++	zap.L().Sugar().Infof("[ResumeSandbox] start envd cost: %.3f ms, traceID=%s", time.Since(envdStart).Seconds()*1000, traceID)
+ 
+ 	telemetry.ReportEvent(execCtx, "envd initialized")
  
 diff --git a/packages/orchestrator/internal/sandbox/socket/socket.go b/packages/orchestrator/internal/sandbox/socket/socket.go
 index a6ade10..ac23431 100644
