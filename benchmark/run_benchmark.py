@@ -260,6 +260,7 @@ def main():
     print(f"== 下一步：采集日志并生成报告（都会自动定位到本次运行目录 runs/{run_dir_name}/）")
     print("   bash collect_logs.sh")
     print("   python3 parse_report.py --reference reference_sample.csv")
+    print("   python3 visualize_intervals.py          # 可选：画启动区间甘特图（需 matplotlib）")
     print()
     print("   # 客户端与服务器时钟不同步时，改用最近 N 条（会覆盖自动时间窗口）：")
     print(f"   python3 parse_report.py --reference reference_sample.csv --last {args.count}")
