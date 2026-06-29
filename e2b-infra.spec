@@ -18,6 +18,7 @@ Source7:        patch_e2b.py
 Source8:        firecracker.arm
 Source9:        e2b-deploy.tar.gz
 Patch1:         0001-adapted-for-arm-architecture.patch
+Patch2:         0002-fc-launch-dedicated-helper.patch
 
 BuildRequires:  make
 BuildRequires:  gcc
