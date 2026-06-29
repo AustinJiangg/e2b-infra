@@ -80,8 +80,8 @@ lsblk -d -o NAME,MODEL,ROTA,SIZE     # 磁盘类型，影响"加载快照/准备
 ```bash
 cd benchmark
 python3 run_benchmark.py --template base --count 1 --warmup 0 --kill-each
-bash collect_logs.sh orchestrator ./precheck-logs
-grep -h "\[ResumeSandbox\]" precheck-logs/*.log | tail -15
+bash collect_logs.sh
+grep -h "\[ResumeSandbox\]" runs/latest/orchestrator-logs/*.log | tail -15
 ```
 
 能看到 `enter` / `... cost: x ms` / `total cost` 一组日志即可继续。
@@ -104,40 +104,46 @@ python3 run_benchmark.py --template base --count 100 --concurrency 1 --warmup 3
 | `--sandbox-timeout` | 300 | 沙箱自动过期秒数，kill 失败时的兜底 |
 | `--interval` | 0 | 两次创建之间的间隔秒数（限速） |
 
-脚本结束时会打印：客户端整体耗时统计、结果文件路径，以及**已经填好时间窗口的
-parse_report.py 命令**，直接复制执行即可。
+脚本结束时会在 `runs/run_<时间戳>/`（如 `runs/run_20260629_142530/`）下保存本次所有
+产物，记录 `runs/.latest` 指针，写入 `meta.json`（含压测时间窗口、期望数量等），并打印
+客户端整体耗时统计与**简化后的两步后续命令**，直接复制执行即可。后续的采集与分析会
+自动定位到这个运行目录，无需再传时间窗口/数量。
 
 ### 3.3 采集 orchestrator 日志
 
 ```bash
-bash collect_logs.sh orchestrator ./orchestrator-logs
+bash collect_logs.sh
 ```
 
+- 默认自动写到最近一次运行目录的 `orchestrator-logs/`（按 `--run-dir` >
+  `BENCH_RUN_DIR` > `runs/.latest` 定位）；采集某个历史运行用
+  `bash collect_logs.sh --run-dir runs/run_<时间戳>`，自定义 job 名仍是第一个位置参数。
 - 多个 client 节点时脚本会遍历全部 running allocation；**日志必须收齐**，
   否则落在其他节点的沙箱 trace 会缺失。
 - orchestrator 自压测开始后不能重启过（重启会换 allocation、丢 stdout 日志）。
 
 ### 3.4 生成统计报告
 
-用 3.2 结束时打印的命令，形如：
+用 3.2 结束时打印的命令，最简形式：
 
 ```bash
-python3 parse_report.py orchestrator-logs/*.log \
-    --since '2026-06-10T15:00:00.000+08:00' \
-    --until '2026-06-10T15:01:30.000+08:00' \
-    --expected 100 --reference reference_sample.csv
+python3 parse_report.py --reference reference_sample.csv
 ```
+
+不带位置参数时，自动定位最近一次运行目录，读取其 `orchestrator-logs/*.log`，并从
+`meta.json` 自动填入 `--expected` 与统计时间窗口。
 
 | 参数 | 说明 |
 |---|---|
-| `--since/--until` | 统计时间窗口（run_benchmark.py 已打印）。**客户端与服务器时钟不同步时不要用**，改用 `--last 100` |
-| `--last N` | 取最近 N 个有效沙箱，替代时间窗口 |
-| `--expected N` | 有效沙箱数不等于 N 时告警 |
+| `--run-dir` | 指定运行目录（默认 `runs/.latest`），重新分析历史运行时用它 |
+| `--since/--until` | 统计时间窗口（默认取自 `meta.json`）。**客户端与服务器时钟不同步时不要用**，改用 `--last 100` |
+| `--last N` | 取最近 N 个有效沙箱，**覆盖**自动时间窗口 |
+| `--expected N` | 有效沙箱数不等于 N 时告警（默认取自 `meta.json`） |
 | `--reference` | 参考数据，生成对比表 |
 | `--sort` | 沙箱列排序：`traceid`（默认，与参考报告一致）或 `time` |
 | `--tz` | 报告显示时区，默认 `+08:00` |
 
-输出到 `report-out/`：
+输出到本次运行目录的 `report/`：
 
 | 文件 | 内容 |
 |---|---|
@@ -173,18 +179,35 @@ python3 parse_report.py orchestrator-logs/*.log \
    单独记录第一个沙箱的数据，不要混入统计。
 4. **资源不够跑 100 个并存**：用 `--kill-each`。注意这会改变测试形态
    （NBD/网络槽位复用模式不同），对比时注明。
-5. **多次压测**：两轮之间间隔几秒即可，`--last`/时间窗口能区分轮次；
-   报告目录用 `--outdir report-round2` 之类区分。
+5. **多次压测**：每轮自动隔离在各自的 `runs/run_<时间戳>/` 里，互不覆盖，无需手动区分目录；
+   重新分析某一轮用 `python3 parse_report.py --run-dir runs/run_<时间戳> --reference reference_sample.csv`。
 6. **envd 三行为空是正常的**：patch 没有对 envd 阶段埋点，上游报告同样为空。
    如需补测，可在客户端用 `sbx.commands.run("true")` 首次往返耗时近似。
 7. **日志格式**：parse_report.py 同时支持 zap JSON 行和纯文本行，时间字段
    兼容 `timestamp/ts/time`（ISO 字符串或 epoch 秒/毫秒/纳秒）。
 
-## 5. 文件清单
+## 5. 文件清单与运行目录
 
 | 文件 | 用途 |
 |---|---|
-| `run_benchmark.py` | 客户端压测：批量创建/清理沙箱，记录客户端耗时，输出解析命令 |
+| `run_benchmark.py` | 客户端压测：批量创建/清理沙箱，记录客户端耗时，建运行目录并输出后续命令 |
 | `collect_logs.sh` | 从 Nomad 采集所有 orchestrator allocation 的 stdout/stderr 日志 |
 | `parse_report.py` | 解析 `[ResumeSandbox]` 日志，生成 4 个报告文件（仅标准库） |
 | `reference_sample.csv` | 上游报告的 4 个沙箱参考数据，供 `--reference` 对比 |
+
+每次 `run_benchmark.py` 会在 `runs/` 下新建一个运行目录，一次压测的全部产物都归集在内：
+
+```
+runs/
+├── .latest                       # 指针：最近一次运行目录名（采集/分析据此自动定位）
+├── latest -> run_20260629_142530 # 便捷符号链接（尽力维护，可能在不支持的平台缺失）
+└── run_20260629_142530/
+    ├── meta.json                 # 压测窗口/期望数量/模板等，采集与分析据此自动填参
+    ├── bench-<时间戳>.json        # 客户端耗时明细
+    ├── bench-<时间戳>.client_times.csv
+    ├── orchestrator-logs/        # collect_logs.sh 采集的日志
+    └── report/                   # parse_report.py 生成的 4 个报告 CSV
+```
+
+`collect_logs.sh` 与 `parse_report.py` 不带参数时，按 **`--run-dir` > 环境变量
+`BENCH_RUN_DIR` > `runs/.latest`** 的顺序定位运行目录。`runs/` 已在 `.gitignore` 中忽略。

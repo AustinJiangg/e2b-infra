@@ -10,16 +10,19 @@
 
 支持 zap JSON 行（timestamp/ts/time 等字段名均可）与纯文本行，仅依赖标准库。
 
-输出（--outdir，默认 report-out/）:
+输出到本次运行目录的 report/（--outdir 可覆盖）:
     report_wide.csv   与参考报告同布局（行=阶段，列=沙箱），含均值/分位数汇总列
     report_long.csv   每行一个沙箱，便于二次分析
     summary.csv       各阶段统计（min/avg/p50/p90/p95/p99/max）
     compare.csv       与 --reference 参考数据的均值对比（可选）
 
+不带位置参数时，自动定位最近一次运行目录（runs/.latest），读取其
+orchestrator-logs/*.log，并从 meta.json 自动填 --expected 与时间窗口。
+
 用法示例:
-    python3 parse_report.py orchestrator-logs/*.log \
-        --since '2026-06-10T15:00:00+08:00' --until '2026-06-10T15:05:00+08:00' \
-        --expected 100 --reference reference_sample.csv
+    python3 parse_report.py --reference reference_sample.csv
+    python3 parse_report.py --reference reference_sample.csv --last 100   # 时钟不同步时
+    python3 parse_report.py --run-dir runs/run_20260629_142530 --reference reference_sample.csv
 """
 
 import argparse
@@ -31,6 +34,8 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------------------
 # 阶段定义：日志 key -> 报告行（分组、描述），顺序与参考报告完全一致
@@ -316,12 +321,56 @@ def write_compare(path, valid, ref):
     return rows
 
 
+def resolve_run_dir(explicit, runs_root, auto):
+    """定位本次运行目录，返回绝对路径或 None。
+
+    顺序：--run-dir > BENCH_RUN_DIR > runs/.latest（仅 auto=True，即未显式传日志时）。
+    auto=True 且都找不到时直接报错；auto=False（用户已显式传日志）则返回 None。
+    """
+    cand = explicit or os.environ.get("BENCH_RUN_DIR")
+    if cand:
+        cand = os.path.abspath(cand)
+        if not os.path.isdir(cand):
+            raise SystemExit(f"错误: 指定的运行目录不存在: {cand}")
+        return cand
+    if auto:
+        ptr = os.path.join(runs_root, ".latest")
+        if os.path.isfile(ptr):
+            with open(ptr, encoding="utf-8") as f:
+                name = f.read().strip()
+            d = os.path.join(runs_root, name)
+            if name and os.path.isdir(d):
+                return d
+        raise SystemExit(
+            "错误: 未找到基准测试运行目录。\n"
+            "  请先运行 run_benchmark.py（会创建 runs/run_<时间戳>/ 并记录 runs/.latest），\n"
+            "  或用 --run-dir <目录> 显式指定，或设置环境变量 BENCH_RUN_DIR=<目录>。")
+    return None
+
+
+def load_meta(run_dir):
+    """读取运行目录下的 meta.json，缺失/损坏时返回空 dict。"""
+    if not run_dir:
+        return {}
+    path = os.path.join(run_dir, "meta.json")
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="解析 orchestrator [ResumeSandbox] 日志生成耗时统计报告",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    ap.add_argument("logs", nargs="+", help="orchestrator 日志文件（可多个/通配符，- 表示 stdin）")
+    ap.add_argument("logs", nargs="*",
+                    help="orchestrator 日志文件（可多个/通配符，- 表示 stdin；"
+                         "省略则自动用本次运行目录的 orchestrator-logs/*.log）")
+    ap.add_argument("--run-dir", help="本次运行目录（默认读取 runs/.latest 指向的最近一次）")
     ap.add_argument("--since", help="只统计 enter 时间 >= 此时刻的沙箱（ISO 格式）")
     ap.add_argument("--until", help="只统计 enter 时间 <= 此时刻的沙箱（ISO 格式）")
     ap.add_argument("--last", type=int, help="只取按 enter 时间排序的最后 N 个有效沙箱"
@@ -332,8 +381,25 @@ def main():
     ap.add_argument("--tz", default="+08:00",
                     help="无时区日志行的默认时区，及报告显示时区（如 +08:00 / local）")
     ap.add_argument("--reference", help="参考数据 CSV（如 reference_sample.csv），生成对比表")
-    ap.add_argument("--outdir", default="report-out", help="报告输出目录")
+    ap.add_argument("--outdir", help="报告输出目录（默认本次运行目录下的 report/）")
     args = ap.parse_args()
+
+    # 定位本次运行目录并用 meta.json 自动填参；仅当未显式传 logs 时才自动定位。
+    runs_root = os.path.join(SCRIPT_DIR, "runs")
+    run_dir = resolve_run_dir(args.run_dir, runs_root, auto=not args.logs)
+    meta = load_meta(run_dir)
+    if not args.logs and run_dir:
+        args.logs = [os.path.join(run_dir, meta.get("logs_glob", "orchestrator-logs/*.log"))]
+    if args.expected is None and meta.get("expected") is not None:
+        args.expected = meta["expected"]
+    # 时间窗口优先级：--last > CLI --since/--until > meta 窗口兜底（--last 永远压过自动窗口）
+    if not args.last and not args.since and not args.until:
+        if meta.get("bench_window_since"):
+            args.since = meta["bench_window_since"]
+        if meta.get("bench_window_until"):
+            args.until = meta["bench_window_until"]
+    if args.outdir is None:
+        args.outdir = os.path.join(run_dir, "report") if run_dir else "report-out"
 
     assume_tz = parse_tz(args.tz)
 
@@ -421,7 +487,13 @@ def main():
 
     if args.reference:
         compare_path = os.path.join(args.outdir, "compare.csv")
-        ref = load_reference(args.reference)
+        # 相对 cwd 找不到时回退到脚本同级目录，使 --reference reference_sample.csv 不依赖 cwd
+        ref_path = args.reference
+        if not os.path.exists(ref_path):
+            alt = os.path.join(SCRIPT_DIR, ref_path)
+            if os.path.exists(alt):
+                ref_path = alt
+        ref = load_reference(ref_path)
         rows = write_compare(compare_path, valid_list, ref)
         print(f"\n== 与参考数据对比 (参考: {args.reference})")
         hdr2 = f"{'阶段/描述':<34}{'参考avg':>10}{'本次avg':>10}{'差值ms':>10}{'差值%':>9}"

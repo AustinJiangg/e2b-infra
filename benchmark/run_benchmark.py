@@ -31,6 +31,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def now_dt():
     return datetime.now().astimezone()
@@ -46,6 +48,31 @@ def percentile(sorted_vals, p):
         return None
     k = max(1, math.ceil(p / 100.0 * len(sorted_vals)))
     return sorted_vals[k - 1]
+
+
+def write_latest_pointer(runs_root, run_dir_name):
+    """记录最近一次运行目录：原子写 runs/.latest，并尽力维护 runs/latest 符号链接。
+
+    .latest 只存目录名（不存绝对路径），整棵 benchmark/ 树拷到别的机器也能用，
+    读取方再把名字拼回本地 runs 根。collect_logs.sh / parse_report.py 不带参数时
+    就靠它定位到本次运行目录。
+    """
+    os.makedirs(runs_root, exist_ok=True)
+    ptr = os.path.join(runs_root, ".latest")
+    tmp = ptr + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(run_dir_name + "\n")
+    os.replace(tmp, ptr)  # 原子替换，避免并发/中断写半截
+    # 便捷符号链接，失败不影响（.latest 文本才是真相，且全平台可用）
+    try:
+        link = os.path.join(runs_root, "latest")
+        link_tmp = link + ".tmp"
+        if os.path.lexists(link_tmp):
+            os.remove(link_tmp)
+        os.symlink(run_dir_name, link_tmp)  # 相对目标，便于整树搬迁
+        os.replace(link_tmp, link)
+    except (OSError, NotImplementedError):
+        pass
 
 
 def parse_args():
@@ -68,7 +95,6 @@ def parse_args():
                          "与参考测试『100 个沙箱同时存活』的形态一致）")
     ap.add_argument("--keep", action="store_true",
                     help="测试结束后保留沙箱不 kill（依赖 --sandbox-timeout 自动过期）")
-    ap.add_argument("--outdir", default="bench-out", help="结果输出目录")
     return ap.parse_args()
 
 
@@ -88,9 +114,14 @@ def main():
         print("错误: 未安装 e2b SDK。请先执行: pip install e2b==2.20.0", file=sys.stderr)
         sys.exit(1)
 
-    os.makedirs(args.outdir, exist_ok=True)
-
-    run_id = now_dt().strftime("bench-%Y%m%d-%H%M%S")
+    # 每次压测建一个时间戳运行目录 runs/run_<时间戳>/，所有产物（客户端结果、
+    # 采集的日志、报告）都归集到这里；后续 collect/parse 不带参数自动定位到它。
+    start_dt = now_dt()
+    run_id = start_dt.strftime("bench-%Y%m%d-%H%M%S")
+    run_dir_name = start_dt.strftime("run_%Y%m%d_%H%M%S")
+    runs_root = os.path.join(SCRIPT_DIR, "runs")
+    run_dir = os.path.join(runs_root, run_dir_name)
+    os.makedirs(run_dir, exist_ok=True)
     lock = threading.Lock()
     results = []
     alive = []  # 待统一 kill 的沙箱对象
@@ -181,8 +212,10 @@ def main():
     bench_fail = sum(1 for r in results if not r["warmup"] and not r["ok"])
     meta = {
         "run_id": run_id,
+        "run_dir": run_dir,
         "template": args.template,
         "count": args.count,
+        "expected": args.count,  # parse_report.py 直接读这个做 --expected 告警阈值
         "concurrency": args.concurrency,
         "interval": args.interval,
         "warmup": args.warmup,
@@ -190,17 +223,27 @@ def main():
         "bench_window_until": iso(bench_end + timedelta(seconds=10)),
         "client_ok": len(bench_ok),
         "client_fail": bench_fail,
+        "logs_glob": "orchestrator-logs/*.log",  # 相对运行目录，parse 自动读取
     }
 
-    json_path = os.path.join(args.outdir, f"{run_id}.json")
+    json_path = os.path.join(run_dir, f"{run_id}.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump({"meta": meta, "results": results}, f, ensure_ascii=False, indent=2)
 
-    csv_path = os.path.join(args.outdir, f"{run_id}.client_times.csv")
+    csv_path = os.path.join(run_dir, f"{run_id}.client_times.csv")
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(results[0].keys()))
         w.writeheader()
         w.writerows(results)
+
+    # meta.json 是第 1 步到第 3 步的契约：携带压测窗口/期望数/日志通配，
+    # 让 parse_report.py 零参数即可自动填窗口与 --expected。
+    meta_path = os.path.join(run_dir, "meta.json")
+    meta_tmp = meta_path + ".tmp"
+    with open(meta_tmp, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    os.replace(meta_tmp, meta_path)
+    write_latest_pointer(runs_root, run_dir_name)
 
     print()
     print("== 客户端整体耗时统计（包含 API/网络/鉴权/envd 等，注意与服务端阶段耗时口径不同）")
@@ -212,15 +255,14 @@ def main():
     else:
         print(f"   全部失败（{bench_fail} 个），请检查 .env 配置与服务状态")
     print(f"   明细: {json_path}")
+    print(f"   运行目录: {run_dir}")
     print()
-    print("== 下一步：采集 orchestrator 日志并生成服务端阶段耗时报告")
-    print("   bash collect_logs.sh orchestrator ./orchestrator-logs")
-    print(f"   python3 parse_report.py ./orchestrator-logs/*.log \\")
-    print(f"       --since '{meta['bench_window_since']}' \\")
-    print(f"       --until '{meta['bench_window_until']}' \\")
-    print(f"       --expected {args.count} --reference reference_sample.csv")
-    print("   （客户端与服务器时钟不同步时，请改用 --last "
-          f"{args.count} 取最近 {args.count} 条，不要用时间窗口）")
+    print(f"== 下一步：采集日志并生成报告（都会自动定位到本次运行目录 runs/{run_dir_name}/）")
+    print("   bash collect_logs.sh")
+    print("   python3 parse_report.py --reference reference_sample.csv")
+    print()
+    print("   # 客户端与服务器时钟不同步时，改用最近 N 条（会覆盖自动时间窗口）：")
+    print(f"   python3 parse_report.py --reference reference_sample.csv --last {args.count}")
 
 
 if __name__ == "__main__":
