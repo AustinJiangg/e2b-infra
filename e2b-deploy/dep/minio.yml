@@ -2,4 +2,4 @@ MINIO_DIR=/root/data/minio
 MINIO_OPTS="--console-address :9001"
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin
-MINIO_SERVER_URL="http://localhost:9000" #注意改为你的节点的url
+MINIO_SERVER_URL="http://localhost:9000"
