@@ -48,6 +48,7 @@
 - 客户端环境（可以直接用 API server 节点）：
   ```bash
   pip install e2b==2.20.0 python-dotenv
+  pip install matplotlib                     # 可选：仅第 3.6 步画启动区间甘特图时需要
   python3 /opt/e2b-infra/patch_e2b.py        # https -> http 补丁
   ```
   当前目录准备 `.env`（与 docs/zh/usage.md 一致）：
@@ -151,6 +152,7 @@ python3 parse_report.py --reference reference_sample.csv
 | `report_long.csv` | 每行一个沙箱，便于透视/画图 |
 | `summary.csv` | 各阶段 min/avg/p50/p90/p95/p99/max |
 | `compare.csv` | 与参考数据的均值对比（差值 ms 和 %） |
+| `intervals.csv` | 每个沙箱的开始/结束时间（两行），供 `visualize_intervals.py` 画图（见 3.6） |
 
 控制台同时打印 summary 和对比表。
 
@@ -168,6 +170,23 @@ python3 parse_report.py --reference reference_sample.csv
   关注 p95/max 而不是 avg。
 - **获取网络槽位**（参考 ~0.05 ms）：网络池命中时接近 0；如果本次普遍偏大，
   说明池子没预热（加大 `--warmup` 或等 `[Pool Status]` 日志显示池子充足后再压）。
+
+### 3.6 可视化启动区间（可选）
+
+`parse_report.py` 会顺手在 `report/` 下写出 `intervals.csv`（每个沙箱的开始/结束时间，
+两行），无需再手动从 `report_wide.csv` 提取。用它画甘特图，直观看并发铺开与排队情况：
+
+```bash
+python3 visualize_intervals.py          # 自动定位最近一次运行目录，出图 report/intervals.png
+```
+
+- 需要 matplotlib（`pip install matplotlib`）。
+- 不带参数时按 `--run-dir` > `BENCH_RUN_DIR` > `runs/.latest` 定位运行目录；
+  画历史某次用 `python3 visualize_intervals.py --run-dir runs/run_<时间戳>`。
+- 兼容老用法：`python3 visualize_intervals.py 任意.csv`（两行格式：开始时间行、
+  结束时间行），输出同名 `任意.png`。
+- 每条横条 = 一次启动（按开始时间排序），x 轴是相对第一次启动的时间；图下方附启动
+  次数、总跨度、单次时长 min/median/mean/max。
 
 ## 4. 注意事项 / FAQ
 
@@ -192,7 +211,8 @@ python3 parse_report.py --reference reference_sample.csv
 |---|---|
 | `run_benchmark.py` | 客户端压测：批量创建/清理沙箱，记录客户端耗时，建运行目录并输出后续命令 |
 | `collect_logs.sh` | 从 Nomad 采集所有 orchestrator allocation 的 stdout/stderr 日志 |
-| `parse_report.py` | 解析 `[ResumeSandbox]` 日志，生成 4 个报告文件（仅标准库） |
+| `parse_report.py` | 解析 `[ResumeSandbox]` 日志，生成报告 CSV 与 `intervals.csv`（仅标准库） |
+| `visualize_intervals.py` | 读 `intervals.csv` 画启动区间甘特图（需 matplotlib，见 3.6） |
 | `reference_sample.csv` | 上游报告的 4 个沙箱参考数据，供 `--reference` 对比 |
 
 每次 `run_benchmark.py` 会在 `runs/` 下新建一个运行目录，一次压测的全部产物都归集在内：
@@ -206,7 +226,8 @@ runs/
     ├── bench-<时间戳>.json        # 客户端耗时明细
     ├── bench-<时间戳>.client_times.csv
     ├── orchestrator-logs/        # collect_logs.sh 采集的日志
-    └── report/                   # parse_report.py 生成的 4 个报告 CSV
+    └── report/                   # parse_report.py 生成的报告 CSV + intervals.csv，
+        ...                       # visualize_intervals.py 出的 intervals.png 也在这里
 ```
 
 `collect_logs.sh` 与 `parse_report.py` 不带参数时，按 **`--run-dir` > 环境变量

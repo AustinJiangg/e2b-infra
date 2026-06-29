@@ -15,6 +15,7 @@
     report_long.csv   每行一个沙箱，便于二次分析
     summary.csv       各阶段统计（min/avg/p50/p90/p95/p99/max）
     compare.csv       与 --reference 参考数据的均值对比（可选）
+    intervals.csv     每个沙箱的开始/结束时间（两行），供 visualize_intervals.py 画甘特图
 
 不带位置参数时，自动定位最近一次运行目录（runs/.latest），读取其
 orchestrator-logs/*.log，并从 meta.json 自动填 --expected 与时间窗口。
@@ -261,6 +262,31 @@ def write_long(path, ordered):
             w.writerow(row)
 
 
+def write_intervals(path, ordered):
+    """写出供 visualize_intervals.py 用的两行 CSV：第1行各沙箱开始时间、第2行结束时间，
+    每列一个沙箱（与报告同序）。免去手动从 report_wide.csv 提取这两行。
+
+    纯文本无 BOM，时间为带时区 ISO 串（可被 datetime.fromisoformat 直接解析）。
+    缺 enter 时用 end 减总耗时回推开始时间；缺 end 的沙箱无法成区间，跳过。
+    """
+    starts, ends = [], []
+    for _, t in ordered:
+        end = t["end"]
+        if end is None:
+            continue
+        start = t["enter"]
+        if start is None:
+            total = t["phases"].get("total")
+            start = end - timedelta(milliseconds=total) if total is not None else end
+        starts.append(fmt_dt(start))
+        ends.append(fmt_dt(end))
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(starts)
+        w.writerow(ends)
+    return len(starts)
+
+
 def write_summary(path, valid):
     rows = []
     for group, label, key in PHASE_ROWS:
@@ -461,9 +487,11 @@ def main():
     wide_path = os.path.join(args.outdir, "report_wide.csv")
     long_path = os.path.join(args.outdir, "report_long.csv")
     summary_path = os.path.join(args.outdir, "summary.csv")
+    intervals_path = os.path.join(args.outdir, "intervals.csv")
 
     write_wide(wide_path, ordered, gen_time)
     write_long(long_path, ordered)
+    write_intervals(intervals_path, ordered)
     valid_list = [t for _, t in ordered]
     summary_rows = write_summary(summary_path, valid_list)
 
@@ -506,6 +534,8 @@ def main():
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path} | {compare_path}")
     else:
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path}")
+    print(f"启动区间数据: {intervals_path}")
+    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 自动出图 report/intervals.png")
 
 
 if __name__ == "__main__":
