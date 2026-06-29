@@ -1,0 +1,8 @@
+# e2b-deploy/ 是 e2b-deploy.tar.gz 的「可读」目录。
+# 整个目录是要进仓库的，但其中两类内容刻意不跟踪：
+
+# 1) 约 70MB 的二进制大文件，没必要进仓库（仍保留在 e2b-deploy.tar.gz 内供构建使用）
+e2b-deploy/dep/ubuntu-22.04-custom.tar.gz
+
+# 2) 压缩包内自带的 git 仓库：二进制且无法 diff，保留还会让 e2b-deploy/ 被当成子模块
+e2b-deploy/.git/

@@ -1,0 +1,10 @@
+{
+  "insecure-registries": ["173.118.9.2:2900"],
+  "registry-mirrors": [
+    "https://docker.1ms.run",
+    "https://docker.m.daocloud.io",
+    "https://hub-mirror.c.163.com",
+    "https://mirror.baidubce.com",
+    "https://ccr.ccs.tencentyun.com"
+  ]
+}
