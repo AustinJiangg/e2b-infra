@@ -49,8 +49,7 @@ warn() {
 
 # ===================== 安装函数 =====================
 function yum_install() {
-    dnf install docker-engine -y
-    yum install -y curl unzip jq tar docker rsync
+    yum install -y curl unzip jq tar rsync
     yum install -y dnsmasq
 }
 function install_postgre() {
@@ -153,7 +152,7 @@ function install_minio() {
     mkdir -p /root/data/minio || error "创建 MinIO 数据目录失败"
     
     # 复制配置文件
-    cp -f "$DEP_DIR/minio.yml" /etc/default/minio || error "复制 minio 配置文件失败"
+    cp -f "$DEP_DIR/minio.yml" /etc/default/minio.yml || error "复制 minio 配置文件失败"
     cp -f "$DEP_DIR/minio.service" /etc/systemd/system/minio.service || error "复制 minio 服务文件失败"
     
     # 启动并设置自启
@@ -220,14 +219,22 @@ function install_nginx() {
     fi
     cp -f "$DEP_DIR/harbor.cnf" /etc/nginx/ssl/ || error "复制 harbor.cnf 失败"
     cp -f "$DEP_DIR/nginx.conf" /etc/nginx/nginx.conf || error "复制 nginx.conf 失败"
+
     # 生成 SSL 证书（CN 改为本机IP）
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/nginx/ssl/harbor.key \
         -out /etc/nginx/ssl/harbor.crt \
         -config /etc/nginx/ssl/harbor.cnf \
         -extensions v3_req || error "生成 SSL 证书失败"
+
+    # ↓↓↓ 新增：把自签证书装进系统信任库（E2B 构建器读这里，不读 /etc/docker/certs.d）
+    cp -f /etc/nginx/ssl/harbor.crt /etc/pki/ca-trust/source/anchors/harbor-ca.crt || error "复制证书到系统信任库失败"
+    update-ca-trust extract || error "更新系统 CA 信任库失败"
+
+    # docker 信任目录（保留，docker daemon 用）
     mkdir -p /etc/docker/certs.d/harbor:443
-    cp /etc/nginx/ssl/harbor.crt /etc/docker/certs.d/harbor:443/ca.crt
+    cp -f /etc/nginx/ssl/harbor.crt /etc/docker/certs.d/harbor:443/ca.crt
+
     # 启动并验证 Nginx
     systemctl start nginx || error "启动 Nginx 失败"
     systemctl enable nginx || warn "设置 Nginx 开机自启失败（非致命）"
@@ -242,9 +249,10 @@ function install_nginx() {
 # 兼容 yum/dnf 安装 e2b-infra
 function install_e2b() {
     info "开始安装 e2b-infra..."
-    rpm -ivh $DEP_DIR/e2b-infra-2025.36-1.oe2403sp3.aarch64.rpm
-    pip install e2b==2.9.0
+    pip install e2b==2.20.0
     pip install e2b_code_interpreter==2.4.1
+    pip install python-dotenv
+
     # 单机替换相关文件
     local E2B_DIR="/opt/e2b-infra"
     cp -fv $DEP_DIR/install-nomad.sh /opt/e2b-infra
@@ -253,8 +261,7 @@ function install_e2b() {
 
     cp -fv $DEP_DIR/consul_1.21.4_linux_arm64.zip /tmp/consul.zip
     cp -fv $DEP_DIR/nomad_1.10.4_linux_arm64.zip /tmp   
-    cp -fv $DEP_DIR/firecracker-v1.13.1-aarch64.tgz /opt/e2b-infra
-
+    cp -fv $DEP_DIR/firecracker-v1.12.1-aarch64.tgz /opt/e2b-infra
 
     cp -fv "$DEP_DIR/.env" "$E2B_DIR/.env"
     cp -fv "$DEP_DIR/template-manager.hcl" "$E2B_DIR/nomad/template-manager.hcl"
@@ -264,11 +271,16 @@ function install_e2b() {
     cp -fv $DEP_DIR/run-nomad.sh $E2B_DIR/run-nomad.sh
     cp -fv $DEP_DIR/deploy.sh $E2B_DIR/deploy.sh
 
-    cp -fv $DEP_DIR/code_interpreter_sync.py /usr/local/lib/python3.11/site-packages/e2b_code_interpreter/code_interpreter_sync.py
-    cp -fv $DEP_DIR/connection_config.py /usr/local/lib/python3.11/site-packages/e2b/connection_config.py
-    cp -fv $DEP_DIR/dockerfile_parser.py /usr/local/lib/python3.11/site-packages/e2b/template/dockerfile_parser.py
-    cp -fv $DEP_DIR/build_api.py /usr/local/lib/python3.11/site-packages/e2b/template_sync/build_api.py 
-    cp -fv $DEP_DIR/main.py /usr/local/lib/python3.11/site-packages/e2b/template_sync/main.py
+    # 给 SDK 打补丁（路径按你的python版本调整！）
+    SITE=$(python3 -c "import e2b,os;print(os.path.dirname(os.path.dirname(e2b.__file__)))")
+    echo $SITE
+    cp -fv $DEP_DIR/code_interpreter_sync.py $SITE/e2b_code_interpreter/
+    cp -fv $DEP_DIR/connection_config.py     $SITE/e2b/
+    cp -fv $DEP_DIR/dockerfile_parser.py     $SITE/e2b/template/
+    cp -fv $DEP_DIR/build_api.py             $SITE/e2b/template_sync/
+    cp -fv $DEP_DIR/main.py                  $SITE/e2b/template_sync/
+
+    python /opt/e2b-infra/patch_e2b.py
 
     if ! grep -q "address=/.e2b.app/127.0.0.1" /etc/dnsmasq.conf; then
         echo "address=/.e2b.app/127.0.0.1" >> /etc/dnsmasq.conf
@@ -357,9 +369,9 @@ function install() {
     # unzip_package
     # iptables -F
     setenforce 0
-    install_docker
+    # install_docker
     install_postgre
-    # install_minio
+    install_minio
     install_harbor
     install_nginx
     install_e2b
@@ -386,14 +398,14 @@ download_packages() {
         wget -q --show-progress https://github.com/docker/compose/releases/download/v2.40.2/docker-compose-linux-x86_64 -O "$pkg_dir/docker-compose-linux-x86_64" || { echo "docker-compose下载失败"; return 1; }
         wget -q --show-progress https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_amd64.zip -O "$pkg_dir/nomad_1.10.4_linux_amd64.zip" || { echo "nomad下载失败"; return 1; }
         wget -q --show-progress https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_amd64.zip -O "$pkg_dir/consul_1.21.4_linux_amd64.zip" || { echo "consul下载失败"; return 1; }
-        wget -q --show-progress https://github.com/firecracker-microvm/firecracker/releases/download/v1.13.1/firecracker-v1.13.1-x86_64.tgz -O "$pkg_dir/firecracker-v1.13.1-x86_64.tgz" || { echo "firecracker下载失败"; return 1; }
+        wget -q --show-progress https://github.com/firecracker-microvm/firecracker/releases/download/v1.12.1/firecracker-v1.12.1-x86_64.tgz -O "$pkg_dir/firecracker-v1.12.1-x86_64.tgz" || { echo "firecracker下载失败"; return 1; }
     elif [ "$arch" == "arm64" ]; then  # 明确标注arm64，更易读
         echo "开始下载 aarch64/arm64 架构软件包..."
         wget -q --show-progress https://download.docker.com/linux/static/stable/aarch64/docker-24.0.5.tgz -O "$pkg_dir/docker-24.0.5.tgz" || { echo "docker下载失败"; return 1; }
         wget -q --show-progress https://github.com/docker/compose/releases/download/v2.40.2/docker-compose-linux-aarch64 -O "$pkg_dir/docker-compose-linux-aarch64" || { echo "docker-compose下载失败"; return 1; }
         wget -q --show-progress https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_arm64.zip -O "$pkg_dir/nomad_1.10.4_linux_arm64.zip" || { echo "nomad下载失败"; return 1; }
         wget -q --show-progress https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_arm64.zip -O "$pkg_dir/consul_1.21.4_linux_arm64.zip" || { echo "consul下载失败"; return 1; }
-        wget -q --show-progress https://github.com/firecracker-microvm/firecracker/releases/download/v1.13.1/firecracker-v1.13.1-aarch64.tgz -O "$pkg_dir/firecracker-v1.13.1-aarch64.tgz" || { echo "firecracker下载失败"; return 1; }
+        wget -q --show-progress https://github.com/firecracker-microvm/firecracker/releases/download/v1.12.1/firecracker-v1.12.1-aarch64.tgz -O "$pkg_dir/firecracker-v1.12.1-aarch64.tgz" || { echo "firecracker下载失败"; return 1; }
     else
         echo "错误：不支持的架构 $arch，仅支持 x86/arm64"
         return 1
@@ -559,6 +571,12 @@ function start() {
     # iptables -F
     cd $WORK_DIR/harbor
     bash install.sh || error "Harbor 安装脚本执行失败"
+
+    # prepare 生成的部分配置属主可能是 root，容器内 UID 10000 读不了
+    chown -R 10000:10000 "$WORK_DIR/harbor/common/config/registry" \
+                         "$WORK_DIR/harbor/common/config/nginx" || true
+    docker-compose -f "$WORK_DIR/harbor/docker-compose.yml" restart registry proxy || true
+
     # 进入 E2B_DIR 并处理错误
     cd "$E2B_DIR" || error "进入 $E2B_DIR 目录失败"
     
@@ -597,9 +615,13 @@ function start() {
     rm -fv $E2B_DIR/bin/orchestrator.Dockerfile
     info "执行部署脚本..."
     bash "$E2B_DIR/deploy.sh" || error "执行部署脚本失败"
-    iptable_clean
-    iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002
-    iptables -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002
+    # iptable_clean
+
+    # -w 等待锁；-C 检查是否存在；|| 不存在就添加
+    iptables -w -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
+    || iptables -w -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002
+    iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
+    || iptables -w -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002
     success "e2b-infra 服务启动完成！所有组件健康检查通过✅"
 }
 

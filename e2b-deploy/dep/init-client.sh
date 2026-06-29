@@ -106,7 +106,7 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger
 
 # Load the nbd module with 4096 devices
-sudo modprobe nbd nbds_max=4096
+sudo modprobe nbd nbds_max=512
 
 # Create the directory for the fc mounts
 mkdir -p /fc-vm
@@ -123,7 +123,7 @@ du -h "${envd_dir}/envd"
 
 
 
-FIRECRACKER_VERSION=1.13.1
+FIRECRACKER_VERSION=1.12.1
 ARCH=$(uname -m)
 case "$ARCH" in
   x86_64)  FC_ARCH="x86_64" ;;

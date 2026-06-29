@@ -37,6 +37,7 @@ job "template-manager-system" {
 
       env {
         NODE_ID                       = "$${node.unique.name}"
+        ENVD_TIMEOUT                  = "${ENVD_TIMEOUT}"
         CONSUL_TOKEN                  = "${CONSUL_ACL_TOKEN}"
         GCP_DOCKER_REPOSITORY_NAME    = "${HARBOR_HOST}"
         API_SECRET                    = "${EDGE_API_SECRET}"

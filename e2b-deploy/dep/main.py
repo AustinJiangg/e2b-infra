@@ -164,6 +164,7 @@ class Template(TemplateBase):
         )
 
         return BuildInfo(
+            name=alias,
             alias=alias,
             template_id=template_id,
             build_id=build_id,

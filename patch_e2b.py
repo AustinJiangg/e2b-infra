@@ -1,121 +1,122 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-E2B 2.20.0 Patch Script
-1. 修改 connection_config.py: https -> http
+E2B HTTP 补丁脚本 (e2b 2.20.0 + e2b_code_interpreter 2.4.1)
+作用：把 SDK 所有对外连接从 https 降级为 http，适配自建/内网明文部署。
+覆盖：
+  1. e2b/connection_config.py                       (控制面 API，全局 https->http)
+  2. e2b_code_interpreter/code_interpreter_sync.py  (run_code / jupyter)
+  3. e2b_code_interpreter/code_interpreter_async.py (异步 run_code)
+  4. e2b/volume/connection_config.py                (volume API，可选)
+  5. e2b/sandbox/main.py                            (MCP URL，可选)
+并清理 __pycache__，避免加载旧字节码。可重复执行。
 """
-
-import os
 import sys
 import shutil
 from pathlib import Path
 
-def find_e2b_path():
-    """查找 e2b 2.20.0 的安装路径"""
+
+def get_site_packages():
     try:
-        # 方法1: 使用 importlib.metadata (Python 3.8+)
-        try:
-            from importlib.metadata import distribution
-            dist = distribution("e2b")
-            e2b_path = dist.locate_file("")
-            if e2b_path and "e2b" in str(e2b_path):
-                return Path(e2b_path)
-        except Exception:
-            pass
-
-        # 方法2: 使用 pkg_resources
-        try:
-            import pkg_resources
-            dist = pkg_resources.get_distribution("e2b")
-            if dist.version == "2.20.0":
-                return Path(dist.location) / "e2b"
-            else:
-                print(f"警告: 找到 e2b {dist.version}，但需要的是 2.20.0")
-                return Path(dist.location) / "e2b"
-        except Exception:
-            pass
-
-        # 方法3: 直接 import 查找
         import e2b
-        return Path(e2b.__file__).parent
-
+        return Path(e2b.__file__).resolve().parent.parent
     except ImportError:
         print("错误: 未找到 e2b 包，请先安装: pip install e2b==2.20.0")
         sys.exit(1)
 
-def backup_file(file_path):
-    """创建备份文件"""
-    backup_path = str(file_path) + ".backup"
-    shutil.copy2(file_path, backup_path)
-    print(f"已创建备份: {backup_path}")
-    return backup_path
 
-def modify_connection_config(file_path):
-    """修改 connection_config.py: https -> http"""
-    print(f"\n处理文件: {file_path}")
+def backup_once(path: Path):
+    bak = Path(str(path) + ".backup")
+    if not bak.exists():
+        shutil.copy2(path, bak)
+        print(f"    已备份: {bak.name}")
+    else:
+        print(f"    备份已存在，跳过备份: {bak.name}")
 
-    if not file_path.exists():
-        print(f"错误: 文件不存在 {file_path}")
-        return False
 
-    content = file_path.read_text(encoding='utf-8')
-    original_content = content
+def patch(path: Path, replacements, global_https=False, required=True):
+    """replacements: list[(old, new)] 精确替换；global_https: 额外全局 https->http。
+    返回 'patched' | 'skipped' | 'missing'"""
+    label = path.name
+    if not path.exists():
+        if required:
+            print(f"✗ [缺失] {path}")
+        else:
+            print(f"- [缺失] {path} (可选，忽略)")
+        return "missing"
 
-    https_count = content.count('https')
+    content = original = path.read_text(encoding="utf-8")
+    for old, new in replacements:
+        if old in content:
+            content = content.replace(old, new)
+    if global_https:
+        content = content.replace("https", "http")
 
-    content = content.replace("https", "http")
+    if content == original:
+        print(f"○ [已是目标状态] {label}")
+        return "skipped"
 
-    if content == original_content:
-        return False
+    print(f"→ 修改: {path}")
+    backup_once(path)
+    path.write_text(content, encoding="utf-8")
+    print(f"✓ [完成] {label}")
+    return "patched"
 
-    # 备份并写入
-    backup_file(file_path)
-    file_path.write_text(content, encoding='utf-8')
-    return True
+
+def clear_pycache(*roots: Path):
+    print("\n清理 __pycache__ ...")
+    for root in roots:
+        if root.exists():
+            for pc in root.rglob("__pycache__"):
+                shutil.rmtree(pc, ignore_errors=True)
+    print("✓ 已清理字节码缓存")
+
 
 def main():
     print("=" * 60)
-    print("E2B 2.20.0 补丁脚本")
+    print("E2B HTTP 补丁脚本")
     print("=" * 60)
 
-    # 1. 查找 e2b 路径
-    print("\n[1/3] 查找 e2b 安装路径...")
-    e2b_path = find_e2b_path()
-    print(f"找到路径: {e2b_path}")
+    sp = get_site_packages()
+    print(f"site-packages: {sp}")
+    e2b_dir = sp / "e2b"
+    ci_dir = sp / "e2b_code_interpreter"
 
-    # 2. 查找文件
-    print("\n[2/3] 查找目标文件...")
+    # 同步/异步两个文件里完全相同的协议三元表达式
+    JUP = "'http' if self.connection_config.debug else 'https'"
 
-    # 查找 connection_config.py
-    conn_config = None
-    for root, dirs, files in os.walk(e2b_path):
-        if "connection_config.py" in files:
-            conn_config = Path(root) / "connection_config.py"
-            break
+    targets = [
+        # (路径, 精确替换, 是否全局https替换, 是否必需)
+        (e2b_dir / "connection_config.py", [], True, True),
+        (ci_dir / "code_interpreter_sync.py",  [(JUP, "'http'")], False, True),
+        (ci_dir / "code_interpreter_async.py", [(JUP, "'http'")], False, True),
+        (e2b_dir / "volume" / "connection_config.py",
+         [('f"https://api.{self.domain}"', 'f"http://api.{self.domain}"')], False, False),
+        (e2b_dir / "sandbox" / "main.py",
+         [('f"https://{self.get_host(self.mcp_port)}/mcp"',
+           'f"http://{self.get_host(self.mcp_port)}/mcp"')], False, False),
+    ]
 
-    if conn_config:
-        print(f"✓ 找到 connection_config.py: {conn_config}")
-    else:
-        print("✗ 未找到 connection_config.py，尝试直接路径")
-        conn_config = e2b_path / "connection_config.py"
+    results = []
+    missing_required = []
+    for path, reps, glob, req in targets:
+        print()
+        status = patch(path, reps, global_https=glob, required=req)
+        results.append((path.name, status))
+        if status == "missing" and req:
+            missing_required.append(path.name)
 
-    # 3. 执行修改
-    print("\n[3/3] 执行修改...")
-
-    success_count = 0
-    if conn_config and conn_config.exists():
-        if modify_connection_config(conn_config):
-            success_count += 1
-    else:
-        print(f"错误: connection_config.py 不存在: {conn_config}")
+    clear_pycache(e2b_dir, ci_dir)
 
     print("\n" + "=" * 60)
-    if success_count == 2:
-        print("✓ 所有补丁应用成功！")
-    elif success_count == 1:
-        print("△ 部分补丁应用成功")
+    patched = sum(1 for _, s in results if s == "patched")
+    skipped = sum(1 for _, s in results if s == "skipped")
+    print(f"汇总: 本次修改 {patched} 个, 已是目标状态 {skipped} 个")
+    if missing_required:
+        print(f"⚠ 必需文件缺失 -> {missing_required}")
+        print("✗ 补丁未完整应用")
     else:
-        print("✗ 补丁应用失败")
+        print("✓ 补丁应用完成，现在所有连接走 http")
     print("=" * 60)
 
 

@@ -135,7 +135,7 @@ index 7db6c68..521b0d4 100644
  
  # Add cache disk for orchestrator and swapfile
  MOUNT_POINT="/orchestrator"
-+FIRECRACKER_VERSION="1.13.1"
++FIRECRACKER_VERSION="1.12.1"
  
  # Step 2: Create the mount point
  sudo mkdir -p $MOUNT_POINT
@@ -5207,7 +5207,7 @@ index 0000000..5b36700
 +        MINIO_ENDPOINT = "${MINIO_ENDPOINT}"
 +        MINIO_ACCESS_KEY = "${MINIO_ACCESS_KEY}"
 +        MINIO_SECRET_KEY = "${MINIO_SECRET_KEY}"
-+        MAX_STARTING_INSTANCES_PER_NODE = "30"
++        MAX_STARTING_INSTANCES_PER_NODE = "500"
 +      }
 +
 +      config {
@@ -5704,7 +5704,7 @@ index 87079a2..087ed62 100644
 +        MINIO_ENDPOINT = "${MINIO_ENDPOINT}"
 +        MINIO_ACCESS_KEY = "${MINIO_ACCESS_KEY}"
 +        MINIO_SECRET_KEY = "${MINIO_SECRET_KEY}"
-+        MAX_STARTING_INSTANCES_PER_NODE = "30"
++        MAX_STARTING_INSTANCES_PER_NODE = "500"
        }
  
        config {
@@ -7453,7 +7453,7 @@ index e294939..a0ed5e8 100644
 -	acquireTimeout              = 15 * time.Second
 -	maxStartingInstancesPerNode = 3
 +	acquireTimeout              = 300 * time.Second
-+	maxStartingInstancesPerNode = 30
++	maxStartingInstancesPerNode = 500
  
  	// executionEventDataKey is the key used in webhook event data for sandbox execution metrics.
  	executionEventDataKey = "execution"
@@ -8302,8 +8302,8 @@ index 6ed0d4a..5110ec1 100644
  const (
 -	DefaultFirecackerV1_10Version = "v1.10.1_30cbb07"
 -	DefaultFirecackerV1_12Version = "v1.12.1_a41d3fb"
-+	DefaultFirecackerV1_10Version = "v1.13.1"
-+	DefaultFirecackerV1_12Version = "v1.13.1"
++	DefaultFirecackerV1_10Version = "v1.12.1"
++	DefaultFirecackerV1_12Version = "v1.12.1"
  	DefaultFirecrackerVersion     = DefaultFirecackerV1_12Version
  )
  
