@@ -1,179 +1,184 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-可视化沙箱(sandbox)启动耗时——按启动区间画甘特图。
+可视化沙箱(sandbox)启动耗时 —— 一张「真实时间轴 + 彩色分阶段 + 并行重叠」甘特图。
 
-输入 CSV 共两行：
-  第一行: 每次启动的开始时间
-  第二行: 每次启动的结束时间
-  每一列是一次启动。时间格式形如 2026-06-23T15:22:24.451+08:00
-这正是 parse_report.py 自动写出的 report/intervals.csv 的格式。
+读 parse_report.py 生成的 report/timeline.csv（每行一个「沙箱-阶段」区间，列：
+TraceID, stage, start_ms, end_ms；时间是相对全局最早事件的毫秒偏移，来自各阶段
+埋点日志时间戳，同节点时钟、天然自洽）。每个沙箱画一条，按真实时刻摆放各阶段、
+按阶段上色；并行段(configure∥uffd∥rootfs)用泳道在同一条内分层展示重叠。
 
 用法:
-  python3 visualize_intervals.py                    # 自动定位最近一次运行目录，
-                                                    # 读取 report/intervals.csv，
-                                                    # 输出 report/intervals.png
-  python3 visualize_intervals.py --run-dir runs/run_20260629_142530   # 指定某次运行
-  python3 visualize_intervals.py xxx.csv            # 兼容老用法：输出同名 xxx.png
+  python3 visualize_intervals.py                       # 自动定位最近一次运行目录
+  python3 visualize_intervals.py --run-dir runs/run_20260629_142530
+  python3 visualize_intervals.py path/to/timeline.csv  # 直接画指定 timeline.csv
 
 不带位置参数时，按 --run-dir > 环境变量 BENCH_RUN_DIR > runs/.latest 的顺序定位运行
-目录（与 collect_logs.sh / parse_report.py 一致）。
-
-输出:
-  - 甘特图(每次启动一条横条，按开始时间排序)
-  - 控制台打印: 启动次数、总跨度、单次启动耗时
+目录（与 collect_logs.sh / parse_report.py 一致）。需要 matplotlib（pip install matplotlib）。
 """
 import os
 import sys
 import argparse
 import csv
-from datetime import datetime
+from collections import defaultdict
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# 阶段顺序（仅图例用）、英文标签（避免缺中文字体显示方块）、配色。
+# 与 parse_report.py 的 TIMELINE_STAGES 对应。
+STAGE_ORDER = [
+    "acquire wait", "wait network slot", "get template metadata", "fc.NewProcess",
+    "fc spawn", "fc socket wait", "get uffd sock path", "get rootfs path",
+    "load snapshot", "post resume", "set mmds", "start envd",
+]
+STAGE_LABEL = {
+    "acquire wait": "queue (acquire wait) [outside total]",
+    "wait network slot": "net slot",
+    "get template metadata": "template meta",
+    "fc.NewProcess": "fc.NewProcess",
+    "fc spawn": "fc spawn (cmd.Start)",
+    "fc socket wait": "fc socket wait",
+    "get uffd sock path": "uffd sock wait",
+    "get rootfs path": "rootfs path",
+    "load snapshot": "load snapshot",
+    "post resume": "post resume",
+    "set mmds": "set mmds",
+    "start envd": "start envd",
+}
+STAGE_COLOR = {
+    "acquire wait": "#9e9e9e",        # gray (total 外)
+    "wait network slot": "#aec7e8",
+    "get template metadata": "#c5b0d5",
+    "fc.NewProcess": "#17becf",       # cyan
+    "fc spawn": "#ff7f0e",            # orange
+    "fc socket wait": "#d62728",      # red（通常最大）
+    "get uffd sock path": "#1f77b4",  # blue（与 socket wait 并行）
+    "get rootfs path": "#bcbd22",     # olive（与 socket wait 并行）
+    "load snapshot": "#9467bd",       # purple
+    "post resume": "#e377c2",
+    "set mmds": "#8c564b",
+    "start envd": "#2ca02c",          # green
+}
 
-def parse_time(s: str) -> datetime:
-    s = s.strip()
-    # datetime.fromisoformat 支持 +08:00 这种带冒号的时区
-    return datetime.fromisoformat(s)
 
-
-def read_intervals(path):
-    # utf-8-sig 兼容带/不带 BOM 的 CSV（Excel 导出的老文件可能带 BOM）
+def read_timeline(path):
+    """读 timeline.csv -> {tid: [(start_ms, end_ms, stage), ...]}（按 tid 分组）。"""
+    groups = defaultdict(list)
     with open(path, newline="", encoding="utf-8-sig") as f:
-        rows = [r for r in csv.reader(f) if any(c.strip() for c in r)]
-    if len(rows) < 2:
-        sys.exit("错误: CSV 至少需要两行(开始时间行、结束时间行)。")
-    starts_raw, ends_raw = rows[0], rows[1]
-    if len(starts_raw) != len(ends_raw):
-        sys.exit(f"错误: 开始时间数({len(starts_raw)}) 与结束时间数({len(ends_raw)}) 不一致。")
-
-    intervals = []
-    for i, (s, e) in enumerate(zip(starts_raw, ends_raw)):
-        if not s.strip() and not e.strip():
-            continue
-        intervals.append((parse_time(s), parse_time(e), i))
-    return intervals
+        for r in csv.DictReader(f):
+            try:
+                s, e = float(r["start_ms"]), float(r["end_ms"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            stage = (r.get("stage") or "").strip()
+            groups[(r.get("TraceID") or "").strip()].append((s, e, stage))
+    return groups
 
 
-def resolve_paths(args):
-    """根据是否显式给了 csv，决定 输入 CSV / 输出 PNG / 标题前缀。"""
+def assign_lanes(intervals):
+    """贪心把重叠区间分配到不同泳道（并行段→不同泳道）。返回 [(s,e,stage,lane)], 泳道数。"""
+    lane_end = []
+    out = []
+    for s, e, stage in sorted(intervals, key=lambda x: x[0]):
+        placed = False
+        for L in range(len(lane_end)):
+            if s >= lane_end[L] - 1e-6:        # 该泳道已空出
+                lane_end[L] = e
+                out.append((s, e, stage, L))
+                placed = True
+                break
+        if not placed:
+            lane_end.append(e)
+            out.append((s, e, stage, len(lane_end) - 1))
+    return out, max(1, len(lane_end))
+
+
+def resolve_timeline_csv(args):
     if args.csv:
-        csv_path = args.csv
-        stem = os.path.splitext(os.path.basename(csv_path))[0]  # xxx
-        output = os.path.join(os.path.dirname(csv_path) or ".", stem + ".png")
-        return csv_path, output, stem
-    # 自动定位运行目录，复用 parse_report 的同一套约定（仅标准库，不会引入 matplotlib）
+        return args.csv, os.path.splitext(os.path.basename(args.csv))[0], \
+            os.path.join(os.path.dirname(args.csv) or ".", "timeline.png")
     from parse_report import resolve_run_dir
-    runs_root = os.path.join(SCRIPT_DIR, "runs")
-    run_dir = resolve_run_dir(args.run_dir, runs_root, auto=True)
-    csv_path = os.path.join(run_dir, "report", "intervals.csv")
+    run_dir = resolve_run_dir(args.run_dir, os.path.join(SCRIPT_DIR, "runs"), auto=True)
+    csv_path = os.path.join(run_dir, "report", "timeline.csv")
     if not os.path.exists(csv_path):
-        sys.exit(f"错误: 未找到 {csv_path}。\n"
-                 "  请先运行 parse_report.py 生成报告（会自动写出 intervals.csv）。")
-    stem = os.path.basename(run_dir.rstrip("/"))  # 如 run_20260629_142530
-    output = os.path.join(run_dir, "report", "intervals.png")
-    return csv_path, output, stem
+        sys.exit(f"错误: 未找到 {csv_path}。请先运行 parse_report.py 生成报告。")
+    return csv_path, os.path.basename(run_dir.rstrip("/")), \
+        os.path.join(run_dir, "report", "timeline.png")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="可视化 CSV 中的沙箱启动时间区间（甘特图）")
-    ap.add_argument("csv", nargs="?",
-                    help="输入 CSV（省略则自动用最近一次运行目录的 report/intervals.csv）")
+    ap = argparse.ArgumentParser(
+        description="真实时间轴 + 彩色分阶段 + 并行重叠 的沙箱启动甘特图")
+    ap.add_argument("csv", nargs="?", help="timeline.csv（省略则自动用最近一次运行目录的）")
     ap.add_argument("--run-dir", help="本次运行目录（默认读取 runs/.latest 指向的最近一次）")
     args = ap.parse_args()
 
-    csv_path, output, stem = resolve_paths(args)
+    csv_path, stem, output = resolve_timeline_csv(args)
+    groups = read_timeline(csv_path)
+    if not groups:
+        sys.exit(f"没有从 {csv_path} 读到任何阶段区间。")
 
-    intervals = read_intervals(csv_path)
-    n = len(intervals)
-    if n == 0:
-        sys.exit("没有读到任何区间。")
+    # 沙箱按「最早事件时刻」排序（≈ 进入顺序），高并发下能看出排队铺开的阶梯
+    tids = sorted(groups, key=lambda t: min(s for s, _e, _st in groups[t]))
+    n = len(tids)
+    laid = {t: assign_lanes(groups[t]) for t in tids}
+    max_lanes = min(6, max(nl for _o, nl in laid.values()))
+    span = max(e for g in groups.values() for _s, e, _st in g)
+    use_s = span >= 5000
+    scale = 1 / 1000.0 if use_s else 1.0
+    unit = "s" if use_s else "ms"
 
-    span_start = min(i[0] for i in intervals)
-    span_end = max(i[1] for i in intervals)
-    durations = [(e - s).total_seconds() for s, e, _ in intervals]
+    print(f"沙箱数: {n}  时间跨度: {span * scale:.3f} {unit}  最大泳道: {max_lanes}")
+    # 控制台也打印各阶段平均时长（无图环境也能读数）
+    durs = defaultdict(list)
+    for g in groups.values():
+        for s, e, st in g:
+            durs[st].append(e - s)
+    print("== 各阶段平均时长 (ms)")
+    for st in STAGE_ORDER:
+        if durs.get(st):
+            print(f"  {STAGE_LABEL[st]:<32} {sum(durs[st])/len(durs[st]):8.2f}  (n={len(durs[st])})")
 
-    print(f"区间数: {n}")
-    print(f"时间跨度: {span_start}  →  {span_end}  "
-          f"({(span_end - span_start).total_seconds():.3f} 秒)")
-    print(f"单区间时长: 最短 {min(durations)*1000:.1f} ms, "
-          f"最长 {max(durations)*1000:.1f} ms, "
-          f"平均 {sum(durations)/n*1000:.1f} ms")
-
-    # matplotlib 延迟导入：未安装时给清晰提示（控制台统计已先打印）
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        from matplotlib.patches import Patch
     except ImportError:
         sys.exit("错误: 画图需要 matplotlib。请先执行: pip install matplotlib")
 
-    # 按开始时间排序后画甘特图
-    ordered = sorted(intervals, key=lambda x: x[0])
+    row_h = 0.30 if n <= 60 else (0.16 if n <= 200 else 0.06)
+    fig_h = min(46, max(3.5, n * row_h + 2.0))
+    fig, ax = plt.subplots(figsize=(13, fig_h))
+    bar_h = 0.82
+    lane_h = bar_h / max_lanes
+    min_w = max(span * 0.001, 1e-6) * scale     # 极短阶段至少给一点可见宽度
 
-    # 行高随数量自适应，限制总高度，适配几十到上千个沙箱
-    row_h = 0.22 if n <= 60 else (0.12 if n <= 200 else 0.05)
-    fig_h = min(40, max(3.5, n * row_h + 1.4))
-    fig, ax = plt.subplots(figsize=(12, fig_h))
+    for row, t in enumerate(tids):
+        placed, _nl = laid[t]
+        y_top = row - bar_h / 2.0
+        for s, e, stage, lane in placed:
+            y = y_top + lane * lane_h + lane_h / 2.0
+            ax.barh(y, max((e - s) * scale, min_w), left=s * scale, height=lane_h * 0.9,
+                    color=STAGE_COLOR.get(stage, "#333333"), edgecolor="none")
 
-    bar_h = 0.6 if n <= 200 else 0.8
-    total_span = (span_end - span_start).total_seconds()
-    # x 轴用相对起点的时间(秒)，跨度小用 ms 显示，大用 s
-    use_ms = total_span < 10
-    scale = 1000.0 if use_ms else 1.0
-    unit = "ms" if use_ms else "s"
-
-    def rel(t):  # 距起点的秒数
-        return (t - span_start).total_seconds()
-
-    min_w = total_span * 0.002 * scale  # 极短区间至少给一点可见宽度
-    for row, (s, e, orig_i) in enumerate(ordered):
-        left = rel(s) * scale
-        width = max((rel(e) - rel(s)) * scale, min_w)
-        ax.barh(row, width, left=left,
-                height=bar_h, color="#1f77b4", alpha=0.85)
-
-    # 紧贴数据，上下只留半行余量；倒序使第一条在顶部
     ax.set_ylim(n - 0.5, -0.5)
-    # 数量太多时稀疏显示 y 轴编号，避免重叠
     if n <= 60:
         ticks = list(range(n))
     else:
         step = max(1, n // 40)
         ticks = list(range(0, n, step))
     ax.set_yticks(ticks)
-    ax.set_yticklabels([f"#{ordered[i][2]}" for i in ticks], fontsize=7)
-    title = f"{stem} — {n} sandbox launches"
-    ax.set_title(title)
-    ax.set_xlabel(f"Time since first launch ({unit})", fontsize=10)
+    ax.set_yticklabels([tids[i][:8] for i in ticks], fontsize=7)
+    ax.set_xlabel(f"Time since first event ({unit}) — real timeline; parallel stages shown as lanes",
+                  fontsize=10)
+    ax.set_title(f"{stem} — sandbox start timeline by stage (n={n})")
     ax.grid(axis="x", linestyle=":", alpha=0.5)
-    ax.margins(x=0.02)  # 左右留一点边距，横条不贴边
+    ax.margins(x=0.01)
+    handles = [Patch(color=STAGE_COLOR[s], label=STAGE_LABEL[s]) for s in STAGE_ORDER]
+    ax.legend(handles=handles, ncol=4, fontsize=7.5, loc="lower right", framealpha=0.9)
 
-    # 图片底部的统计信息(英文)
-    sorted_d = sorted(durations)
-    m = len(sorted_d)
-    median = (sorted_d[m // 2] if m % 2 else
-              (sorted_d[m // 2 - 1] + sorted_d[m // 2]) / 2)
-    stats = (
-        f"Launches: {n}      Total span: {total_span:.3f} s\n"
-        f"Launch duration min/median/mean/max: "
-        f"{min(durations)*1000:.1f} / {median*1000:.1f} / "
-        f"{sum(durations)/n*1000:.1f} / {max(durations)*1000:.1f} ms"
-    )
-
-    # 用固定英寸预留各边距，保证不同图高下间距观感一致
-    top_in, xlabel_in, footer_in = 0.5, 0.8, 0.7
-    fig.subplots_adjust(
-        left=0.07, right=0.97,
-        top=1 - top_in / fig_h,
-        bottom=(xlabel_in + footer_in) / fig_h,
-    )
-    # 统计文字固定贴在坐标区下方(距底边固定英寸)，间距不随图高变化
-    ax_bottom = ax.get_position().y0
-    fig.text(0.5, ax_bottom - (xlabel_in + footer_in * 0.45) / fig_h, stats,
-             ha="center", va="center", fontsize=12, family="monospace")
-
+    fig.subplots_adjust(left=0.08, right=0.98, top=1 - 0.5 / fig_h, bottom=0.8 / fig_h)
     plt.savefig(output, dpi=150)
     print(f"已保存图片: {output}")
 
