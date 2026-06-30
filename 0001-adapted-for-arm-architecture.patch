@@ -7116,7 +7116,7 @@ index 54cd2cf..ddd0b79 100644
  	if hugePages {
  		machineConfig.HugePages = models.MachineConfigurationHugePagesNr2M
 diff --git a/packages/orchestrator/internal/sandbox/fc/process.go b/packages/orchestrator/internal/sandbox/fc/process.go
-index 687d14e..0f322f0 100644
+index 687d14e..1a3f4bd 100644
 --- a/packages/orchestrator/internal/sandbox/fc/process.go
 +++ b/packages/orchestrator/internal/sandbox/fc/process.go
 @@ -7,6 +7,7 @@ import (
@@ -7127,7 +7127,15 @@ index 687d14e..0f322f0 100644
  	"strings"
  	"syscall"
  	"time"
-@@ -166,13 +167,13 @@ func (p *Process) configure(
+@@ -151,6 +152,7 @@ func (p *Process) configure(
+ ) error {
+ 	ctx, childSpan := tracer.Start(ctx, "configure-fc")
+ 	defer childSpan.End()
++	traceID := childSpan.SpanContext().TraceID().String()
+ 
+ 	stdoutWriter := &zapio.Writer{Log: sbxlogger.I(sbxMetadata).Logger.Detach(ctx), Level: zap.InfoLevel}
+ 	stdoutWriters := []io.Writer{stdoutWriter}
+@@ -166,18 +168,20 @@ func (p *Process) configure(
  	}
  	p.cmd.Stderr = io.MultiWriter(stderrWriters...)
  
@@ -7146,9 +7154,32 @@ index 687d14e..0f322f0 100644
 +	//	p.cmd.SysProcAttr.CgroupFD = cgroupFD
 +	//}
  
++	spawnStart := time.Now()
  	err := p.cmd.Start()
  	if err != nil {
-@@ -271,19 +272,17 @@ func (p *Process) Create(
+ 		return fmt.Errorf("error starting fc process: %w", err)
+ 	}
++	zap.L().Sugar().Infof("[ResumeSandbox] fc spawn cost: %.3f ms, traceID=%s", time.Since(spawnStart).Seconds()*1000, traceID)
+ 
+ 	startCtx, cancelStart := context.WithCancelCause(ctx)
+ 	defer cancelStart(fmt.Errorf("fc finished starting"))
+@@ -212,6 +216,7 @@ func (p *Process) configure(
+ 	}()
+ 
+ 	// Wait for the FC process to start so we can use FC API
++	socketStart := time.Now()
+ 	err = socket.Wait(startCtx, p.firecrackerSocketPath)
+ 	if err != nil {
+ 		errMsg := fmt.Errorf("error waiting for fc socket: %w", err)
+@@ -220,6 +225,7 @@ func (p *Process) configure(
+ 
+ 		return errors.Join(errMsg, fcStopErr)
+ 	}
++	zap.L().Sugar().Infof("[ResumeSandbox] fc socket wait cost: %.3f ms, traceID=%s", time.Since(socketStart).Seconds()*1000, traceID)
+ 
+ 	return nil
+ }
+@@ -271,19 +277,17 @@ func (p *Process) Create(
  		"ipv6.autoconf": "1",
  
  		// Wait 1 second before exiting FC after panic or reboot
@@ -7175,7 +7206,7 @@ index 687d14e..0f322f0 100644
  	if options.SystemdToKernelLogs {
  		args["systemd.journald.forward_to_console"] = ""
  	}
-@@ -317,7 +316,7 @@ func (p *Process) Create(
+@@ -317,7 +321,7 @@ func (p *Process) Create(
  	if err != nil {
  		fcStopErr := p.Stop(ctx)
  
@@ -7184,7 +7215,7 @@ index 687d14e..0f322f0 100644
  	}
  	telemetry.ReportEvent(ctx, "symlinked rootfs")
  
-@@ -374,6 +373,7 @@ func (p *Process) Resume(
+@@ -374,6 +378,7 @@ func (p *Process) Resume(
  	uffdReady chan struct{},
  	accessToken *string,
  	cgroupFD int,
@@ -7192,7 +7223,7 @@ index 687d14e..0f322f0 100644
  ) error {
  	ctx, span := tracer.Start(ctx, "resume-fc")
  	defer span.End()
-@@ -388,6 +388,7 @@ func (p *Process) Resume(
+@@ -388,6 +393,7 @@ func (p *Process) Resume(
  	eg, egCtx := errgroup.WithContext(ctx)
  
  	eg.Go(func() error {
@@ -7200,7 +7231,7 @@ index 687d14e..0f322f0 100644
  		err := p.configure(
  			egCtx,
  			sbxMetadata,
-@@ -398,6 +399,7 @@ func (p *Process) Resume(
+@@ -398,6 +404,7 @@ func (p *Process) Resume(
  		if err != nil {
  			return fmt.Errorf("error starting fc process: %w", err)
  		}
@@ -7208,7 +7239,7 @@ index 687d14e..0f322f0 100644
  
  		telemetry.ReportEvent(egCtx, "configured fc")
  
-@@ -405,17 +407,20 @@ func (p *Process) Resume(
+@@ -405,17 +412,20 @@ func (p *Process) Resume(
  	})
  
  	eg.Go(func() error {
@@ -7229,7 +7260,7 @@ index 687d14e..0f322f0 100644
  		rootfsPath, err := p.rootfsProvider.Path()
  		if err != nil {
  			return fmt.Errorf("error getting rootfs path: %w", err)
-@@ -427,6 +432,7 @@ func (p *Process) Resume(
+@@ -427,6 +437,7 @@ func (p *Process) Resume(
  		}
  
  		telemetry.ReportEvent(egCtx, "symlinked rootfs")
@@ -7237,7 +7268,7 @@ index 687d14e..0f322f0 100644
  
  		return nil
  	})
-@@ -437,7 +443,7 @@ func (p *Process) Resume(
+@@ -437,7 +448,7 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error waiting for uffd socket or symlinking rootfs: %w", err), fcStopErr)
  	}
@@ -7246,7 +7277,7 @@ index 687d14e..0f322f0 100644
  	err = p.client.loadSnapshot(
  		ctx,
  		uffdSocketPath,
-@@ -449,6 +455,8 @@ func (p *Process) Resume(
+@@ -449,6 +460,8 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error loading snapshot: %w", err), fcStopErr)
  	}
@@ -7255,7 +7286,7 @@ index 687d14e..0f322f0 100644
  
  	err = p.client.resumeVM(ctx)
  	if err != nil {
-@@ -456,6 +464,8 @@ func (p *Process) Resume(
+@@ -456,6 +469,8 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error resuming vm: %w", err), fcStopErr)
  	}
@@ -7264,7 +7295,7 @@ index 687d14e..0f322f0 100644
  
  	meta := &MmdsMetadata{
  		SandboxID:            sbxMetadata.SandboxID,
-@@ -475,6 +485,7 @@ func (p *Process) Resume(
+@@ -475,6 +490,7 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error setting mmds: %w", err), fcStopErr)
  	}
@@ -7522,6 +7553,37 @@ index e294939..a0ed5e8 100644
  			telemetry.ReportEvent(ctx, "too many starting sandboxes on node")
  
  			return nil, status.Errorf(codes.ResourceExhausted, "too many sandboxes starting on this node, please retry")
+diff --git a/packages/orchestrator/internal/server/utils.go b/packages/orchestrator/internal/server/utils.go
+index a8a589a..7f8da8e 100644
+--- a/packages/orchestrator/internal/server/utils.go
++++ b/packages/orchestrator/internal/server/utils.go
+@@ -2,7 +2,9 @@ package server
+ 
+ import (
+ 	"context"
++	"time"
+ 
++	"go.uber.org/zap"
+ 	"google.golang.org/grpc/codes"
+ 	"google.golang.org/grpc/status"
+ 
+@@ -15,13 +17,16 @@ func (s *Server) waitForAcquire(ctx context.Context) error {
+ 
+ 	ctx, span := tracer.Start(ctx, "wait-for-acquire")
+ 	defer span.End()
++	traceID := span.SpanContext().TraceID().String()
+ 
++	acquireStart := time.Now()
+ 	err := s.startingSandboxes.Acquire(ctx, 1)
+ 	if err != nil {
+ 		telemetry.ReportEvent(ctx, "too many resuming sandboxes on node")
+ 
+ 		return status.Errorf(codes.ResourceExhausted, "too many sandboxes resuming on this node, please retry")
+ 	}
++	zap.L().Sugar().Infof("[ResumeSandbox] acquire wait cost: %.3f ms, traceID=%s", time.Since(acquireStart).Seconds()*1000, traceID)
+ 
+ 	return nil
+ }
 diff --git a/packages/orchestrator/internal/service/machineinfo/main.go b/packages/orchestrator/internal/service/machineinfo/main.go
 index 27d280d..61dcf5b 100644
 --- a/packages/orchestrator/internal/service/machineinfo/main.go

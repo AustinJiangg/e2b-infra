@@ -43,11 +43,14 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 PHASE_ROWS = [
     # (分组,                 描述,                          日志 key，None=日志中无此埋点)
+    ("准入排队",             "准入排队(等starting槽位)",     "acquire wait"),       # total 外：等信号量
     ("沙箱恢复准备",         "准备 rootfs（连接 nbd 设备）", "get rootfs path"),
     ("沙箱恢复准备",         "获取网络槽位",                 "wait network slot"),
     ("沙箱恢复准备",         "获取 template 元数据",         "get template metadata"),
     ("创建 firecracker 进程", "创建 firecracker 进程",       "fc.NewProcess"),
-    ("创建 firecracker 进程", "等待firecracker启动",          "configured fc"),
+    ("创建 firecracker 进程", "等待firecracker启动",          "configured fc"),       # 父=下面两段之和
+    ("创建 firecracker 进程", "└拉起FC进程",                  "fc spawn"),            # cmd.Start
+    ("创建 firecracker 进程", "└等FC API socket",             "fc socket wait"),      # socket.Wait
     ("创建 firecracker 进程", "等待uffd sock",                "get uffd sock path"),
     ("firecracker 恢复虚拟机", "加载快照",                    "load snapshot"),
     ("firecracker 恢复虚拟机", "调用恢复",                    "post resume"),
@@ -56,7 +59,7 @@ PHASE_ROWS = [
     ("启动 envd",            "启动 envd",                    "start envd"),         # WaitForEnvd 整体（sandbox.go）
     ("启动 envd",            "请求init接口",                 "envd init request"),  # POST /init（envd.go initEnvd）
     ("启动 envd",            "读取envd返回体",               "read envd response"), # 读 /init 响应体（envd.go initEnvd）
-    ("总耗时",               "总耗时",                       "total"),
+    ("ResumeSandbox",        "ResumeSandbox总耗时",          "total"),
 ]
 KNOWN_KEYS = {key for _, _, key in PHASE_ROWS if key}
 
@@ -306,6 +309,71 @@ def write_summary(path, valid):
     return rows
 
 
+# ---------------------------------------------------------------------------
+# 可视化用粗粒度阶段：按关键路径把 total 划成几段（准入排队在 total 外）。
+# 详见 高并发瓶颈定位方案.md 第 6 节。visualize_intervals.py 直接读 stages.csv。
+# ---------------------------------------------------------------------------
+COARSE_ORDER = ["准入排队", "恢复准备", "创建FC进程", "拉起FC进程",
+                "等FC_socket", "加载快照", "启动envd", "其他"]
+
+
+def coarse_stages(t):
+    """把一个沙箱的各埋点归并成 COARSE_ORDER 这几段（关键路径口径）。
+    其他 = total − 其余已命名段之和（吸收 post resume/set mmds/进入开销/并行段余量）。"""
+    p = t["phases"]
+
+    def g(k):
+        return p.get(k) or 0.0
+
+    total = g("total")
+    queue = g("acquire wait")           # total 外
+    prep = g("wait network slot") + g("get template metadata")
+    newproc = g("fc.NewProcess")
+    spawn = g("fc spawn")
+    sockwait = g("fc socket wait")
+    loadsnap = g("load snapshot")
+    envd = g("start envd")
+    named = prep + newproc + spawn + sockwait + loadsnap + envd
+    other = total - named
+    if other < 0:
+        other = 0.0
+    return {
+        "准入排队": queue, "恢复准备": prep, "创建FC进程": newproc,
+        "拉起FC进程": spawn, "等FC_socket": sockwait, "加载快照": loadsnap,
+        "启动envd": envd, "其他": other, "total": total,
+    }
+
+
+def write_stages(path, ordered):
+    """每沙箱一行：TraceID + 8 个粗阶段(ms) + total，供 visualize_intervals.py 堆叠上色。"""
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["TraceID"] + COARSE_ORDER + ["total"])
+        for tid, t in ordered:
+            cs = coarse_stages(t)
+            w.writerow([tid] + [fmt(cs[k]) for k in COARSE_ORDER] + [fmt(cs["total"])])
+
+
+def load_client_ms(run_dir):
+    """从运行目录的 *.client_times.csv 读 client_ms 列（DictReader；缺失返回 []）。"""
+    if not run_dir:
+        return []
+    vals = []
+    for p in sorted(glob.glob(os.path.join(run_dir, "*.client_times.csv"))):
+        try:
+            with open(p, encoding="utf-8-sig", newline="") as f:
+                for row in csv.DictReader(f):
+                    v = row.get("client_ms")
+                    if v:
+                        try:
+                            vals.append(float(v))
+                        except ValueError:
+                            pass
+        except OSError:
+            pass
+    return vals
+
+
 def load_reference(path):
     """读取参考数据 CSV（行=阶段，第 3 列起为各沙箱数值），返回 {描述: [值...]}"""
     ref = {}
@@ -488,10 +556,12 @@ def main():
     long_path = os.path.join(args.outdir, "report_long.csv")
     summary_path = os.path.join(args.outdir, "summary.csv")
     intervals_path = os.path.join(args.outdir, "intervals.csv")
+    stages_path = os.path.join(args.outdir, "stages.csv")
 
     write_wide(wide_path, ordered, gen_time)
     write_long(long_path, ordered)
     write_intervals(intervals_path, ordered)
+    write_stages(stages_path, ordered)
     valid_list = [t for _, t in ordered]
     summary_rows = write_summary(summary_path, valid_list)
 
@@ -512,6 +582,29 @@ def main():
         name = f"{r[0]}/{r[1]}"
         pad = max(0, 34 - sum(2 if ord(c) > 127 else 1 for c in name))
         print(f"{name}{' ' * pad}{r[2]:>5} " + " ".join(f"{x:>9}" for x in r[3:]))
+
+    # 端到端拆解（聚合）：客户端整体 ≈ 准入排队 + ResumeSandbox总耗时 + 其余(路由/API/取模板…)
+    client_ms = load_client_ms(run_dir)
+    if client_ms:
+        c_avg = sum(client_ms) / len(client_ms)
+        q = phase_stats(valid_list, "acquire wait")
+        tot = phase_stats(valid_list, "total")
+        q_avg = q["avg"] if q else 0.0
+        t_avg = tot["avg"] if tot else 0.0
+        rest = c_avg - q_avg - t_avg
+        print(f"\n== 端到端拆解 (聚合 avg, ms; client_ms 来自 client_times.csv, n={len(client_ms)})")
+        print(f"  客户端整体 client_ms        : {fmt(c_avg)}")
+        print(f"  ├ 准入排队 acquire wait      : {fmt(q_avg)}   (total 外)")
+        print(f"  ├ ResumeSandbox总耗时 total  : {fmt(t_avg)}")
+        print(f"  └ 其余(路由+API+取模板等)    : {fmt(rest)}   ← client_ms − total − 准入排队")
+        with open(os.path.join(args.outdir, "e2e_breakdown.csv"), "w",
+                  encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["项", "avg(ms)", "样本数", "说明"])
+            w.writerow(["客户端整体 client_ms", fmt(c_avg), len(client_ms), "Sandbox.create() 墙钟"])
+            w.writerow(["准入排队 acquire wait", fmt(q_avg), q["n"] if q else 0, "等 starting 信号量(total 外)"])
+            w.writerow(["ResumeSandbox总耗时 total", fmt(t_avg), tot["n"] if tot else 0, "ResumeSandbox 函数"])
+            w.writerow(["其余(路由+API+取模板等)", fmt(rest), "", "client_ms − total − 准入排队(派生)"])
 
     if args.reference:
         compare_path = os.path.join(args.outdir, "compare.csv")
@@ -534,8 +627,8 @@ def main():
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path} | {compare_path}")
     else:
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path}")
-    print(f"启动区间数据: {intervals_path}")
-    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 自动出图 report/intervals.png")
+    print(f"启动区间数据: {intervals_path} | 分阶段数据: {stages_path}")
+    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 出图 report/intervals.png + stages.png")
 
 
 if __name__ == "__main__":
