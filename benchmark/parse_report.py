@@ -43,20 +43,23 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 PHASE_ROWS = [
     # (分组,                 描述,                          日志 key，None=日志中无此埋点)
+    ("准入排队",             "准入排队(等starting槽位)",     "acquire wait"),       # total 外：等信号量
     ("沙箱恢复准备",         "准备 rootfs（连接 nbd 设备）", "get rootfs path"),
     ("沙箱恢复准备",         "获取网络槽位",                 "wait network slot"),
     ("沙箱恢复准备",         "获取 template 元数据",         "get template metadata"),
     ("创建 firecracker 进程", "创建 firecracker 进程",       "fc.NewProcess"),
-    ("创建 firecracker 进程", "等待firecracker启动",          "configured fc"),
+    ("创建 firecracker 进程", "等待firecracker启动",          "configured fc"),       # 父=下面两段之和
+    ("创建 firecracker 进程", "└拉起FC进程",                  "fc spawn"),            # cmd.Start
+    ("创建 firecracker 进程", "└等FC API socket",             "fc socket wait"),      # socket.Wait
     ("创建 firecracker 进程", "等待uffd sock",                "get uffd sock path"),
     ("firecracker 恢复虚拟机", "加载快照",                    "load snapshot"),
     ("firecracker 恢复虚拟机", "调用恢复",                    "post resume"),
     ("firecracker 恢复虚拟机", "设置mmds",                    "set mmds"),
     ("firecracker 恢复虚拟机", "恢复虚拟机",                  "resume VM"),
-    ("启动 envd",            "启动 envd",                    None),  # patch 未埋点，留空保持格式
-    ("启动 envd",            "请求init接口",                 None),
-    ("启动 envd",            "读取envd返回体",               None),
-    ("总耗时",               "总耗时",                       "total"),
+    ("启动 envd",            "启动 envd",                    "start envd"),         # WaitForEnvd 整体（sandbox.go）
+    ("启动 envd",            "请求init接口",                 "envd init request"),  # POST /init（envd.go initEnvd）
+    ("启动 envd",            "读取envd返回体",               "read envd response"), # 读 /init 响应体（envd.go initEnvd）
+    ("ResumeSandbox",        "ResumeSandbox总耗时",          "total"),
 ]
 KNOWN_KEYS = {key for _, _, key in PHASE_ROWS if key}
 
@@ -146,7 +149,8 @@ def parse_logs(paths, assume_tz):
     unknown_keys = {}
 
     def trace(tid):
-        return traces.setdefault(tid, {"enter": None, "end": None, "phases": {}})
+        # phase_ts[key] = 该阶段 cost 日志的时间戳(≈阶段结束时刻)，供 timeline.csv 还原真实区间
+        return traces.setdefault(tid, {"enter": None, "end": None, "phases": {}, "phase_ts": {}})
 
     n_lines = 0
     for path in paths:
@@ -174,8 +178,11 @@ def parse_logs(paths, assume_tz):
                     t = trace(tid)
                     t["phases"]["total"] = val
                     t["end"] = extract_ts(line, assume_tz)
+                    t["phase_ts"]["total"] = t["end"]
                 elif key in KNOWN_KEYS:
-                    trace(tid)["phases"][key] = val
+                    t = trace(tid)
+                    t["phases"][key] = val
+                    t["phase_ts"][key] = extract_ts(line, assume_tz)
                 else:
                     unknown_keys[key] = unknown_keys.get(key, 0) + 1
     return traces, n_lines, unknown_keys
@@ -304,6 +311,66 @@ def write_summary(path, valid):
                     "p90(ms)", "p95(ms)", "p99(ms)", "max(ms)"])
         w.writerows(rows)
     return rows
+
+
+# ---------------------------------------------------------------------------
+# 可视化用：把每个阶段还原成「真实时间轴上的区间」，供 visualize_intervals.py 画
+# 「真实时间轴 + 彩色分阶段 + 并行重叠」的二合一甘特图。详见 高并发瓶颈定位方案.md 第 6 节。
+# 每条 cost 日志的时间戳 ≈ 该阶段结束时刻，区间 = [ts − 时长, ts]；同节点时钟、天然自洽。
+# 只取「叶子」阶段，排除父区间(configured fc/resume VM/total)与被 start envd 覆盖的 envd 子段，
+# 避免在时间轴上重复绘制。并行段(configure∥uffd∥rootfs)的区间会自然重叠，由可视化用泳道展开。
+# ---------------------------------------------------------------------------
+TIMELINE_STAGES = [
+    "acquire wait", "wait network slot", "get template metadata", "fc.NewProcess",
+    "fc spawn", "fc socket wait", "get uffd sock path", "get rootfs path",
+    "load snapshot", "post resume", "set mmds", "start envd",
+]
+
+
+def write_timeline(path, ordered):
+    """每行一个(沙箱,阶段)区间：TraceID, stage, start_ms, end_ms（相对全局最早事件的毫秒偏移）。"""
+    rows = []
+    origin = None
+    for tid, t in ordered:
+        pts = t.get("phase_ts", {})
+        ph = t["phases"]
+        for k in TIMELINE_STAGES:
+            ts, dur = pts.get(k), ph.get(k)
+            if ts is None or dur is None:
+                continue
+            start = ts - timedelta(milliseconds=dur)
+            rows.append((tid, k, start, ts))
+            if origin is None or start < origin:
+                origin = start
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["TraceID", "stage", "start_ms", "end_ms"])
+        if origin is None:
+            return
+        for tid, k, start, end in rows:
+            w.writerow([tid, k,
+                        fmt((start - origin).total_seconds() * 1000),
+                        fmt((end - origin).total_seconds() * 1000)])
+
+
+def load_client_ms(run_dir):
+    """从运行目录的 *.client_times.csv 读 client_ms 列（DictReader；缺失返回 []）。"""
+    if not run_dir:
+        return []
+    vals = []
+    for p in sorted(glob.glob(os.path.join(run_dir, "*.client_times.csv"))):
+        try:
+            with open(p, encoding="utf-8-sig", newline="") as f:
+                for row in csv.DictReader(f):
+                    v = row.get("client_ms")
+                    if v:
+                        try:
+                            vals.append(float(v))
+                        except ValueError:
+                            pass
+        except OSError:
+            pass
+    return vals
 
 
 def load_reference(path):
@@ -488,10 +555,12 @@ def main():
     long_path = os.path.join(args.outdir, "report_long.csv")
     summary_path = os.path.join(args.outdir, "summary.csv")
     intervals_path = os.path.join(args.outdir, "intervals.csv")
+    timeline_path = os.path.join(args.outdir, "timeline.csv")
 
     write_wide(wide_path, ordered, gen_time)
     write_long(long_path, ordered)
     write_intervals(intervals_path, ordered)
+    write_timeline(timeline_path, ordered)
     valid_list = [t for _, t in ordered]
     summary_rows = write_summary(summary_path, valid_list)
 
@@ -512,6 +581,29 @@ def main():
         name = f"{r[0]}/{r[1]}"
         pad = max(0, 34 - sum(2 if ord(c) > 127 else 1 for c in name))
         print(f"{name}{' ' * pad}{r[2]:>5} " + " ".join(f"{x:>9}" for x in r[3:]))
+
+    # 端到端拆解（聚合）：客户端整体 ≈ 准入排队 + ResumeSandbox总耗时 + 其余(路由/API/取模板…)
+    client_ms = load_client_ms(run_dir)
+    if client_ms:
+        c_avg = sum(client_ms) / len(client_ms)
+        q = phase_stats(valid_list, "acquire wait")
+        tot = phase_stats(valid_list, "total")
+        q_avg = q["avg"] if q else 0.0
+        t_avg = tot["avg"] if tot else 0.0
+        rest = c_avg - q_avg - t_avg
+        print(f"\n== 端到端拆解 (聚合 avg, ms; client_ms 来自 client_times.csv, n={len(client_ms)})")
+        print(f"  客户端整体 client_ms        : {fmt(c_avg)}")
+        print(f"  ├ 准入排队 acquire wait      : {fmt(q_avg)}   (total 外)")
+        print(f"  ├ ResumeSandbox总耗时 total  : {fmt(t_avg)}")
+        print(f"  └ 其余(路由+API+取模板等)    : {fmt(rest)}   ← client_ms − total − 准入排队")
+        with open(os.path.join(args.outdir, "e2e_breakdown.csv"), "w",
+                  encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["项", "avg(ms)", "样本数", "说明"])
+            w.writerow(["客户端整体 client_ms", fmt(c_avg), len(client_ms), "Sandbox.create() 墙钟"])
+            w.writerow(["准入排队 acquire wait", fmt(q_avg), q["n"] if q else 0, "等 starting 信号量(total 外)"])
+            w.writerow(["ResumeSandbox总耗时 total", fmt(t_avg), tot["n"] if tot else 0, "ResumeSandbox 函数"])
+            w.writerow(["其余(路由+API+取模板等)", fmt(rest), "", "client_ms − total − 准入排队(派生)"])
 
     if args.reference:
         compare_path = os.path.join(args.outdir, "compare.csv")
@@ -534,8 +626,8 @@ def main():
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path} | {compare_path}")
     else:
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path}")
-    print(f"启动区间数据: {intervals_path}")
-    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 自动出图 report/intervals.png")
+    print(f"分阶段时间轴数据: {timeline_path}")
+    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 出图 report/timeline.png（真实时间轴+彩色分阶段+并行重叠）")
 
 
 if __name__ == "__main__":

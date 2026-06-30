@@ -95,6 +95,9 @@ def parse_args():
                          "与参考测试『100 个沙箱同时存活』的形态一致）")
     ap.add_argument("--keep", action="store_true",
                     help="测试结束后保留沙箱不 kill（依赖 --sandbox-timeout 自动过期）")
+    ap.add_argument("--fc-launch-mode", default=os.environ.get("E2B_FC_LAUNCH_MODE", ""),
+                    help="本次 orchestrator 的 E2B_FC_LAUNCH_MODE（disabled/netns-exec/launch），"
+                         "仅作标注写入 meta.json，便于 3 档 A/B/C 对照（默认读同名环境变量）")
     return ap.parse_args()
 
 
@@ -219,6 +222,8 @@ def main():
         "concurrency": args.concurrency,
         "interval": args.interval,
         "warmup": args.warmup,
+        "fc_launch_mode": args.fc_launch_mode,  # 3 档启动模式标注，仅记录
+
         "bench_window_since": iso(bench_start - timedelta(seconds=2)),
         "bench_window_until": iso(bench_end + timedelta(seconds=10)),
         "client_ok": len(bench_ok),
