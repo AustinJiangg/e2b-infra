@@ -149,7 +149,8 @@ def parse_logs(paths, assume_tz):
     unknown_keys = {}
 
     def trace(tid):
-        return traces.setdefault(tid, {"enter": None, "end": None, "phases": {}})
+        # phase_ts[key] = 该阶段 cost 日志的时间戳(≈阶段结束时刻)，供 timeline.csv 还原真实区间
+        return traces.setdefault(tid, {"enter": None, "end": None, "phases": {}, "phase_ts": {}})
 
     n_lines = 0
     for path in paths:
@@ -177,8 +178,11 @@ def parse_logs(paths, assume_tz):
                     t = trace(tid)
                     t["phases"]["total"] = val
                     t["end"] = extract_ts(line, assume_tz)
+                    t["phase_ts"]["total"] = t["end"]
                 elif key in KNOWN_KEYS:
-                    trace(tid)["phases"][key] = val
+                    t = trace(tid)
+                    t["phases"][key] = val
+                    t["phase_ts"][key] = extract_ts(line, assume_tz)
                 else:
                     unknown_keys[key] = unknown_keys.get(key, 0) + 1
     return traces, n_lines, unknown_keys
@@ -310,48 +314,43 @@ def write_summary(path, valid):
 
 
 # ---------------------------------------------------------------------------
-# 可视化用粗粒度阶段：按关键路径把 total 划成几段（准入排队在 total 外）。
-# 详见 高并发瓶颈定位方案.md 第 6 节。visualize_intervals.py 直接读 stages.csv。
+# 可视化用：把每个阶段还原成「真实时间轴上的区间」，供 visualize_intervals.py 画
+# 「真实时间轴 + 彩色分阶段 + 并行重叠」的二合一甘特图。详见 高并发瓶颈定位方案.md 第 6 节。
+# 每条 cost 日志的时间戳 ≈ 该阶段结束时刻，区间 = [ts − 时长, ts]；同节点时钟、天然自洽。
+# 只取「叶子」阶段，排除父区间(configured fc/resume VM/total)与被 start envd 覆盖的 envd 子段，
+# 避免在时间轴上重复绘制。并行段(configure∥uffd∥rootfs)的区间会自然重叠，由可视化用泳道展开。
 # ---------------------------------------------------------------------------
-COARSE_ORDER = ["准入排队", "恢复准备", "创建FC进程", "拉起FC进程",
-                "等FC_socket", "加载快照", "启动envd", "其他"]
+TIMELINE_STAGES = [
+    "acquire wait", "wait network slot", "get template metadata", "fc.NewProcess",
+    "fc spawn", "fc socket wait", "get uffd sock path", "get rootfs path",
+    "load snapshot", "post resume", "set mmds", "start envd",
+]
 
 
-def coarse_stages(t):
-    """把一个沙箱的各埋点归并成 COARSE_ORDER 这几段（关键路径口径）。
-    其他 = total − 其余已命名段之和（吸收 post resume/set mmds/进入开销/并行段余量）。"""
-    p = t["phases"]
-
-    def g(k):
-        return p.get(k) or 0.0
-
-    total = g("total")
-    queue = g("acquire wait")           # total 外
-    prep = g("wait network slot") + g("get template metadata")
-    newproc = g("fc.NewProcess")
-    spawn = g("fc spawn")
-    sockwait = g("fc socket wait")
-    loadsnap = g("load snapshot")
-    envd = g("start envd")
-    named = prep + newproc + spawn + sockwait + loadsnap + envd
-    other = total - named
-    if other < 0:
-        other = 0.0
-    return {
-        "准入排队": queue, "恢复准备": prep, "创建FC进程": newproc,
-        "拉起FC进程": spawn, "等FC_socket": sockwait, "加载快照": loadsnap,
-        "启动envd": envd, "其他": other, "total": total,
-    }
-
-
-def write_stages(path, ordered):
-    """每沙箱一行：TraceID + 8 个粗阶段(ms) + total，供 visualize_intervals.py 堆叠上色。"""
+def write_timeline(path, ordered):
+    """每行一个(沙箱,阶段)区间：TraceID, stage, start_ms, end_ms（相对全局最早事件的毫秒偏移）。"""
+    rows = []
+    origin = None
+    for tid, t in ordered:
+        pts = t.get("phase_ts", {})
+        ph = t["phases"]
+        for k in TIMELINE_STAGES:
+            ts, dur = pts.get(k), ph.get(k)
+            if ts is None or dur is None:
+                continue
+            start = ts - timedelta(milliseconds=dur)
+            rows.append((tid, k, start, ts))
+            if origin is None or start < origin:
+                origin = start
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["TraceID"] + COARSE_ORDER + ["total"])
-        for tid, t in ordered:
-            cs = coarse_stages(t)
-            w.writerow([tid] + [fmt(cs[k]) for k in COARSE_ORDER] + [fmt(cs["total"])])
+        w.writerow(["TraceID", "stage", "start_ms", "end_ms"])
+        if origin is None:
+            return
+        for tid, k, start, end in rows:
+            w.writerow([tid, k,
+                        fmt((start - origin).total_seconds() * 1000),
+                        fmt((end - origin).total_seconds() * 1000)])
 
 
 def load_client_ms(run_dir):
@@ -556,12 +555,12 @@ def main():
     long_path = os.path.join(args.outdir, "report_long.csv")
     summary_path = os.path.join(args.outdir, "summary.csv")
     intervals_path = os.path.join(args.outdir, "intervals.csv")
-    stages_path = os.path.join(args.outdir, "stages.csv")
+    timeline_path = os.path.join(args.outdir, "timeline.csv")
 
     write_wide(wide_path, ordered, gen_time)
     write_long(long_path, ordered)
     write_intervals(intervals_path, ordered)
-    write_stages(stages_path, ordered)
+    write_timeline(timeline_path, ordered)
     valid_list = [t for _, t in ordered]
     summary_rows = write_summary(summary_path, valid_list)
 
@@ -627,8 +626,8 @@ def main():
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path} | {compare_path}")
     else:
         print(f"\n报告文件: {wide_path} | {long_path} | {summary_path}")
-    print(f"启动区间数据: {intervals_path} | 分阶段数据: {stages_path}")
-    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 出图 report/intervals.png + stages.png")
+    print(f"分阶段时间轴数据: {timeline_path}")
+    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 出图 report/timeline.png（真实时间轴+彩色分阶段+并行重叠）")
 
 
 if __name__ == "__main__":

@@ -180,23 +180,22 @@ python3 parse_report.py --reference reference_sample.csv
 
 ### 3.6 可视化（可选）
 
-`parse_report.py` 会在 `report/` 下写出 `stages.csv`（每沙箱分阶段耗时）和 `intervals.csv`
-（每沙箱开始/结束时间）。`visualize_intervals.py` 据此出**两张图**：
+`parse_report.py` 会在 `report/` 下写出 `timeline.csv`（每行一个「沙箱-阶段」区间，时间来自
+各阶段埋点日志时间戳）。`visualize_intervals.py` 据此出**一张二合一甘特图**：
 
 ```bash
-python3 visualize_intervals.py          # 自动定位最近一次运行目录
-# → report/stages.png    每沙箱「分阶段堆叠彩色条」：准入排队/拉起FC进程/等FC socket/… 各一色，
-#                        一眼看出时间花在哪（高并发定位主力图，详见 高并发瓶颈定位方案.md）
-# → report/intervals.png 启动区间甘特图（时间线视角，看并发铺开与排队节奏）
+python3 visualize_intervals.py          # 自动定位最近一次运行目录 → report/timeline.png
 ```
 
-- 需要 matplotlib（`pip install matplotlib`）。
+`timeline.png` =「**真实时间轴 + 彩色分阶段 + 并行重叠**」：每沙箱一条，按真实时刻摆放各阶段、
+按阶段上色；并行段（`configure`∥`uffd`∥`rootfs`）在同一条内用泳道分层显示重叠。一眼能看到：
+高并发下灰色「准入排队」排成阶梯（每 cap 一波）、红色 `fc socket wait` 多长/是否随波变长、
+蓝色 `uffd` 与红色并行。详见 `高并发瓶颈定位方案.md` 第 6 节。
+
+- 需要 matplotlib（`pip install matplotlib`）；无图环境也会在控制台打印各阶段平均时长。
 - 不带参数时按 `--run-dir` > `BENCH_RUN_DIR` > `runs/.latest` 定位运行目录；
-  画历史某次用 `python3 visualize_intervals.py --run-dir runs/run_<时间戳>`。
-- 兼容老用法：`python3 visualize_intervals.py 任意.csv`（两行格式：开始时间行、
-  结束时间行），输出同名 `任意.png`。
-- 每条横条 = 一次启动（按开始时间排序），x 轴是相对第一次启动的时间；图下方附启动
-  次数、总跨度、单次时长 min/median/mean/max。
+  画历史某次用 `python3 visualize_intervals.py --run-dir runs/run_<时间戳>`，
+  或直接 `python3 visualize_intervals.py path/to/timeline.csv`。
 
 ## 4. 注意事项 / FAQ
 
@@ -225,11 +224,11 @@ python3 visualize_intervals.py          # 自动定位最近一次运行目录
 |---|---|
 | `run_benchmark.py` | 客户端压测：批量创建/清理沙箱，记录客户端耗时，建运行目录并输出后续命令 |
 | `collect_logs.sh` | 从 Nomad 采集所有 orchestrator allocation 的 stdout/stderr 日志 |
-| `parse_report.py` | 解析 `[ResumeSandbox]` 日志，生成报告 CSV、`stages.csv`、`intervals.csv`（仅标准库） |
-| `visualize_intervals.py` | 读 `stages.csv`/`intervals.csv` 出分阶段堆叠图 + 区间甘特图（需 matplotlib，见 3.6） |
+| `parse_report.py` | 解析 `[ResumeSandbox]` 日志，生成报告 CSV、`timeline.csv`、`intervals.csv`（仅标准库） |
+| `visualize_intervals.py` | 读 `timeline.csv` 出「真实时间轴+彩色分阶段+并行重叠」二合一甘特图（需 matplotlib，见 3.6） |
 | `reference_sample.csv` | 上游报告的 4 个沙箱参考数据，供 `--reference` 对比 |
 | `启动耗时阶段分析.md` | 各阶段在源码里的位置/嵌套关系/端到端口径分析 |
-| `高并发瓶颈定位方案.md` | **高并发瓶颈定位的持续迭代方案**：准入排队、`等待fc启动` 拆分、彩色分阶段可视化 |
+| `高并发瓶颈定位方案.md` | **高并发瓶颈定位的持续迭代方案**：准入排队、`等待fc启动` 拆分、二合一甘特可视化 |
 
 每次 `run_benchmark.py` 会在 `runs/` 下新建一个运行目录，一次压测的全部产物都归集在内：
 
@@ -242,8 +241,8 @@ runs/
     ├── bench-<时间戳>.json        # 客户端耗时明细
     ├── bench-<时间戳>.client_times.csv
     ├── orchestrator-logs/        # collect_logs.sh 采集的日志
-    └── report/                   # parse_report.py 生成的报告 CSV + stages.csv + intervals.csv，
-        ...                       # visualize_intervals.py 出的 stages.png / intervals.png 也在这里
+    └── report/                   # parse_report.py 生成的报告 CSV + timeline.csv + intervals.csv，
+        ...                       # visualize_intervals.py 出的 timeline.png 也在这里
 ```
 
 `collect_logs.sh` 与 `parse_report.py` 不带参数时，按 **`--run-dir` > 环境变量
