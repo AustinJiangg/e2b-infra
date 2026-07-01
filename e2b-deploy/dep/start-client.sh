@@ -88,7 +88,8 @@ sudo sysctl vm.vfs_cache_pressure=50
 # Add tmpfs for snapshotting
 # TODO: Parametrize this
 sudo mkdir -p /mnt/snapshot-cache
-sudo mount -t tmpfs -o size=65G tmpfs /mnt/snapshot-cache
+# Idempotent: don't stack another tmpfs on every re-run
+mountpoint -q /mnt/snapshot-cache || sudo mount -t tmpfs -o size=65G tmpfs /mnt/snapshot-cache
 
 ulimit -n 1048576
 export GOMAXPROCS='nproc'
@@ -145,7 +146,8 @@ EOF
 # We are allocating the hugepages at the start when the memory is not fragmented yet
 echo "[Setting up huge pages]"
 sudo mkdir -p /mnt/hugepages
-mount -t hugetlbfs none /mnt/hugepages
+# Idempotent: don't stack another hugetlbfs mount on every re-run
+mountpoint -q /mnt/hugepages || mount -t hugetlbfs none /mnt/hugepages
 # Increase proactive compaction to reduce memory fragmentation for using overcomitted huge pages
 
 available_ram=$(grep MemTotal /proc/meminfo | awk '{print $2}') # in KiB
@@ -220,9 +222,14 @@ echo $overcommitment_hugepages >/proc/sys/vm/nr_overcommit_hugepages
 #./install-consul.sh --version ${CONSUL_VERSION}
 #./install-nomad.sh --version ${NOMAD_VERSION}
 
+# Idempotent: drop any existing 'nameserver 127.0.0.1' lines first, then add exactly one
+# at the top. Re-running this script used to stack a new duplicate line on every run.
+sed -i '/^nameserver 127\.0\.0\.1$/d' /etc/resolv.conf
 sed -i '1i nameserver 127.0.0.1' /etc/resolv.conf
 mkdir -p /etc/dnsmasq.d
-echo 'server=/consul/127.0.0.1#8600' >> /etc/dnsmasq.d/consul.conf
+# Idempotent: only append the consul forwarder once
+grep -qxF 'server=/consul/127.0.0.1#8600' /etc/dnsmasq.d/consul.conf 2>/dev/null \
+  || echo 'server=/consul/127.0.0.1#8600' >> /etc/dnsmasq.d/consul.conf
 systemctl restart dnsmasq
 
 # These variables are passed in via Terraform template interpolation

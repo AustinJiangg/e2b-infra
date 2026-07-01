@@ -74,11 +74,14 @@ sudo sysctl vm.vfs_cache_pressure=50
 # Add tmpfs for snapshotting
 # TODO: Parametrize this
 sudo mkdir -p /mnt/snapshot-cache
-sudo mount -t tmpfs -o size=65G tmpfs /mnt/snapshot-cache
+# Idempotent: don't stack another tmpfs on every re-run
+mountpoint -q /mnt/snapshot-cache || sudo mount -t tmpfs -o size=65G tmpfs /mnt/snapshot-cache
 
 ulimit -n 1048576
 export GOMAXPROCS='nproc'
 
+# Idempotent: only append this sysctl block once (re-runs used to append it every time)
+if ! grep -q '^net.core.somaxconn = 65535' /etc/sysctl.conf 2>/dev/null; then
 sudo tee -a /etc/sysctl.conf <<EOF
 # Increase the maximum number of socket connections
 net.core.somaxconn = 65535
@@ -93,6 +96,7 @@ net.ipv4.tcp_max_syn_backlog = 65535
 vm.max_map_count=1048576
 
 EOF
+fi
 sudo sysctl -p
 
 echo "Disabling inotify for NBD devices"
@@ -174,7 +178,8 @@ ls -lh $fc_versions_dir
 # We are allocating the hugepages at the start when the memory is not fragmented yet
 echo "[Setting up huge pages]"
 sudo mkdir -p /mnt/hugepages
-mount -t hugetlbfs none /mnt/hugepages
+# Idempotent: don't stack another hugetlbfs mount on every re-run
+mountpoint -q /mnt/hugepages || mount -t hugetlbfs none /mnt/hugepages
 # Increase proactive compaction to reduce memory fragmentation for using overcomitted huge pages
 
 available_ram=$(grep MemTotal /proc/meminfo | awk '{print $2}') # in KiB

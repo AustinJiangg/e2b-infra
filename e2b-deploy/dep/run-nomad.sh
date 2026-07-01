@@ -480,17 +480,33 @@ function run {
       done
     fi
 
+    # The ACL bootstrap token lives with the cluster state, NOT in the RPM-managed
+    # .env (build.sh -i / rpm reinstall resets that .env to the placeholder token).
+    # Persist it under the Nomad data dir so re-runs can recover it; it is wiped
+    # together with the cluster on `build.sh -d` / `-u --force`.
+    local acl_token_file="$data_dir/acl.token"
     if [[ "$skip_bootstrap" == "true" ]]; then
       log_info "Joining existing Nomad cluster."
+      if [[ -f "$acl_token_file" ]]; then
+        bootstrap_token="$(cat "$acl_token_file")"
+        log_info "Recovered persisted ACL token from $acl_token_file"
+      else
+        log_warn "No persisted ACL token at $acl_token_file; deploy may fail with 403. To re-bootstrap cleanly: build.sh -d  then  build.sh -s"
+      fi
     else
       bootstrap_token=$(bootstrap)
       create_node_pools "$bootstrap_token"
-      if [[ -n "${bootstrap_token:-}" ]]; then
-        env_file="$SCRIPT_DIR/.env"
-        grep -q '^export NOMAD_ACL_TOKEN=' "$env_file" 2>/dev/null \
-          && sed -i "s|^export NOMAD_ACL_TOKEN=.*|export NOMAD_ACL_TOKEN=$bootstrap_token|" "$env_file" \
-          || echo "export NOMAD_ACL_TOKEN=$bootstrap_token" >> "$env_file"
-      fi
+      mkdir -p "$(dirname "$acl_token_file")"
+      printf '%s' "$bootstrap_token" > "$acl_token_file"
+      chmod 600 "$acl_token_file"
+    fi
+
+    # Always sync the real token into .env so deploy.sh submits jobs with a valid token.
+    if [[ -n "${bootstrap_token:-}" ]]; then
+      env_file="$SCRIPT_DIR/.env"
+      grep -q '^export NOMAD_ACL_TOKEN=' "$env_file" 2>/dev/null \
+        && sed -i "s|^export NOMAD_ACL_TOKEN=.*|export NOMAD_ACL_TOKEN=$bootstrap_token|" "$env_file" \
+        || echo "export NOMAD_ACL_TOKEN=$bootstrap_token" >> "$env_file"
     fi
   fi
 }

@@ -37,8 +37,501 @@ into packages/orchestrator/bin and installed by the spec's existing
 packages/*/bin/* glob to /opt/e2b-infra/bin/ (paths overridable via
 E2B_FC_NETNS_EXEC_HELPER / E2B_FC_LAUNCH_HELPER).
 ---
+diff --git a/packages/orchestrator/Makefile b/packages/orchestrator/Makefile
+index 9077063..ba4209c 100644
+--- a/packages/orchestrator/Makefile
++++ b/packages/orchestrator/Makefile
+@@ -21,6 +21,8 @@ build:
+ 	$(eval COMMIT_SHA ?= $(shell git rev-parse --short HEAD))
+ 	CGO_ENABLED=1 GOOS=linux go build -o bin/orchestrator -ldflags "-X=main.commitSHA=$(COMMIT_SHA)" .
+ 	CGO_ENABLED=1 GOOS=linux go build -o bin/clean-nfs-cache -ldflags "-X=main.commitSHA=$(COMMIT_SHA)" ./cmd/clean-nfs-cache
++	CGO_ENABLED=0 GOOS=linux go build -o bin/fc-netns-exec ./cmd/fc-netns-exec
++	CGO_ENABLED=0 GOOS=linux go build -o bin/fc-launch ./cmd/fc-launch
+ 
+ .PHONY: build-local
+ build-local:
+diff --git a/packages/orchestrator/cmd/fc-launch/main.go b/packages/orchestrator/cmd/fc-launch/main.go
+new file mode 100644
+index 0000000..322a598
+--- /dev/null
++++ b/packages/orchestrator/cmd/fc-launch/main.go
+@@ -0,0 +1,50 @@
++//go:build linux
++
++// Command fc-launch starts a firecracker process from a JSON launch plan (see
++// package launchplan). It is the "launch" mode helper.
++//
++// The orchestrator execs this binary — in a fresh mount namespace — instead of
++// the old shell pipeline
++//
++//	unshare -m -- bash -c "mount --make-rprivate / && mount -t tmpfs ... && \
++//	    ln -s ... && mkdir -p ... && ln -s ... && \
++//	    ip netns exec <ns> <firecracker> --api-sock <sock>"
++//
++// (bash + coreutils mount/ln/mkdir + iproute2's `ip` = ~8 fork/exec per
++// sandbox). fc-launch performs the per-sandbox mount/symlink setup, enters the
++// sandbox network namespace and execs firecracker, all via direct syscalls in a
++// single tiny process: no bash, no coreutils, no iproute2, and — unlike
++// re-execing the orchestrator itself — no heavy package init() on the launch
++// critical path.
++package main
++
++import (
++	"encoding/json"
++	"fmt"
++	"os"
++
++	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/fc/launchplan"
++)
++
++func main() {
++	if len(os.Args) < 2 {
++		fmt.Fprintf(os.Stderr, "usage: %s <json-launch-plan>\n", os.Args[0])
++		os.Exit(2)
++	}
++
++	var plan launchplan.Plan
++	if err := json.Unmarshal([]byte(os.Args[1]), &plan); err != nil {
++		fmt.Fprintf(os.Stderr, "fc-launch: invalid launch plan: %v\n", err)
++		os.Exit(1)
++	}
++
++	if err := launchplan.Run(plan); err != nil {
++		fmt.Fprintf(os.Stderr, "fc-launch: %v\n", err)
++		os.Exit(1)
++	}
++
++	// Run execs firecracker on success and never returns; reaching here means
++	// execve did not replace the process image.
++	fmt.Fprintln(os.Stderr, "fc-launch: launcher returned without exec")
++	os.Exit(1)
++}
+diff --git a/packages/orchestrator/cmd/fc-netns-exec/main.go b/packages/orchestrator/cmd/fc-netns-exec/main.go
+new file mode 100644
+index 0000000..dcedfb8
+--- /dev/null
++++ b/packages/orchestrator/cmd/fc-netns-exec/main.go
+@@ -0,0 +1,74 @@
++//go:build linux
++
++package main
++
++import (
++	"fmt"
++	"os"
++	"path/filepath"
++	"runtime"
++	"time"
++
++	"golang.org/x/sys/unix"
++)
++
++const netnsDir = "/run/netns"
++
++func main() {
++	if len(os.Args) < 3 {
++		fmt.Fprintf(os.Stderr, "usage: %s <netns-name-or-path> <command> [args...]\n", os.Args[0])
++		os.Exit(2)
++	}
++
++	namespace := os.Args[1]
++	command := os.Args[2]
++	commandArgs := os.Args[2:]
++
++	runtime.LockOSThread()
++
++	nsPath := namespacePath(namespace)
++	fd, err := unix.Open(nsPath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
++	if err != nil {
++		fmt.Fprintf(os.Stderr, "fc-netns-exec: open network namespace %q: %v\n", nsPath, err)
++		os.Exit(1)
++	}
++	defer unix.Close(fd)
++
++	if err := unix.Setns(fd, unix.CLONE_NEWNET); err != nil {
++		fmt.Fprintf(os.Stderr, "fc-netns-exec: setns(%q, CLONE_NEWNET): %v\n", nsPath, err)
++		os.Exit(1)
++	}
++
++	if os.Getenv("E2B_FC_START_SCRIPT_DIAG") == "1" {
++		fmt.Fprintf(
++			os.Stderr,
++			"e2b_fc_start_script_marker stage=inside_netns_before_firecracker_exec ns=%d socket=%s namespace=%s\n",
++			time.Now().UnixNano(),
++			findArgValue(commandArgs, "--api-sock"),
++			namespace,
++		)
++	}
++
++	if err := unix.Exec(command, commandArgs, os.Environ()); err != nil {
++		fmt.Fprintf(os.Stderr, "fc-netns-exec: exec %q: %v\n", command, err)
++		os.Exit(1)
++	}
++}
++
++func namespacePath(namespace string) string {
++	if filepath.IsAbs(namespace) {
++		return filepath.Clean(namespace)
++	}
++
++	return filepath.Join(netnsDir, namespace)
++}
++
++func findArgValue(args []string, name string) string {
++	for i := 0; i+1 < len(args); i++ {
++		if args[i] == name {
++			return args[i+1]
++		}
++	}
++
++	return ""
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go b/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go
+new file mode 100644
+index 0000000..2f69fba
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go
+@@ -0,0 +1,47 @@
++// Package launchplan defines the shell-free description of how to start a
++// firecracker process and (on Linux) executes it.
++//
++// It is intentionally tiny and imports only the standard library (plus
++// golang.org/x/sys/unix for the execution half) so that the fc-launch helper
++// binary built from it stays small and has negligible startup cost. This is the
++// key difference from re-execing the whole orchestrator binary: there, every
++// imported package's init() would run on each sandbox launch and land on the
++// "wait firecracker start" critical path. A dedicated helper pays none of that.
++package launchplan
++
++// StepOp enumerates the filesystem operations performed inside the sandbox's
++// private mount namespace. They mirror the orchestrator's startScriptV1/V2.
++type StepOp string
++
++const (
++	OpMkdir   StepOp = "mkdir"   // mkdir -p <Path>
++	OpTmpfs   StepOp = "tmpfs"   // mkdir -p <Path> && mount -t tmpfs tmpfs <Path>
++	OpSymlink StepOp = "symlink" // ln -s <Src> <Path>
++)
++
++// Step is a single ordered filesystem-setup operation.
++type Step struct {
++	Op   StepOp `json:"op"`
++	Path string `json:"path"`
++	Src  string `json:"src,omitempty"`
++}
++
++// Plan fully describes how to start a firecracker process. It is the shell-free
++// replacement for the generated start script: NewProcess JSON-encodes it and
++// passes it to the re-exec'd fc-launch helper as a single argv element (exec
++// passes argv as a slice, so no shell quoting is involved).
++type Plan struct {
++	// Steps are mount-namespace filesystem operations, executed in order.
++	Steps []Step `json:"steps"`
++
++	// NamespaceID is the named network namespace to enter, as created by
++	// `ip netns add`. It is resolved under /var/run/netns and /run/netns,
++	// matching iproute2's `ip netns exec` lookup.
++	NamespaceID string `json:"namespaceID"`
++
++	// FirecrackerPath is the firecracker binary to exec.
++	FirecrackerPath string `json:"firecrackerPath"`
++
++	// FirecrackerSocket is the API socket path passed as --api-sock.
++	FirecrackerSocket string `json:"firecrackerSocket"`
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/plan_test.go b/packages/orchestrator/internal/sandbox/fc/launchplan/plan_test.go
+new file mode 100644
+index 0000000..9f58163
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/launchplan/plan_test.go
+@@ -0,0 +1,48 @@
++package launchplan
++
++import (
++	"encoding/json"
++	"testing"
++)
++
++// TestPlanJSONRoundTrip ensures the plan survives the JSON encode/argv/decode
++// round trip that NewProcess -> fc-launch relies on.
++func TestPlanJSONRoundTrip(t *testing.T) {
++	t.Parallel()
++
++	in := Plan{
++		Steps: []Step{
++			{Op: OpTmpfs, Path: "/fc-vm"},
++			{Op: OpSymlink, Path: "/fc-vm/rootfs.ext4", Src: "/orchestrator/sandbox/rootfs.link"},
++			{Op: OpMkdir, Path: "/fc-vm/6.1.0"},
++			{Op: OpSymlink, Path: "/fc-vm/6.1.0/vmlinux.bin", Src: "/fc-kernels/6.1.0/vmlinux.bin"},
++		},
++		NamespaceID:       "ns-7",
++		FirecrackerPath:   "/fc-versions/1.4.0/firecracker",
++		FirecrackerSocket: "/orchestrator/sandbox/fc.sock",
++	}
++
++	encoded, err := json.Marshal(in)
++	if err != nil {
++		t.Fatalf("marshal: %v", err)
++	}
++
++	var out Plan
++	if err := json.Unmarshal(encoded, &out); err != nil {
++		t.Fatalf("unmarshal: %v", err)
++	}
++
++	if out.NamespaceID != in.NamespaceID ||
++		out.FirecrackerPath != in.FirecrackerPath ||
++		out.FirecrackerSocket != in.FirecrackerSocket {
++		t.Fatalf("scalar fields changed: %+v", out)
++	}
++	if len(out.Steps) != len(in.Steps) {
++		t.Fatalf("step count changed: got %d want %d", len(out.Steps), len(in.Steps))
++	}
++	for i := range in.Steps {
++		if out.Steps[i] != in.Steps[i] {
++			t.Fatalf("step %d changed: got %+v want %+v", i, out.Steps[i], in.Steps[i])
++		}
++	}
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go b/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go
+new file mode 100644
+index 0000000..8ea37c6
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go
+@@ -0,0 +1,104 @@
++//go:build linux
++
++package launchplan
++
++import (
++	"fmt"
++	"os"
++	"runtime"
++
++	"golang.org/x/sys/unix"
++)
++
++// netnsSearchDirs mirrors iproute2's lookup order for `ip netns exec NAME`.
++var netnsSearchDirs = []string{"/var/run/netns", "/run/netns"}
++
++// Run performs the plan and, on success, never returns: it execs firecracker,
++// replacing the current process image.
++//
++// It must be called from a process that was started in a fresh mount namespace
++// (CLONE_NEWNS); the orchestrator requests that via SysProcAttr.Unshareflags,
++// replacing the old `unshare -m`.
++func Run(plan Plan) error {
++	// We are already in a fresh mount namespace, but it still shares mount
++	// propagation with the host. Make the root mount private so the per-sandbox
++	// tmpfs/symlinks added below do not propagate back to the host mount
++	// namespace. This is the direct-syscall equivalent of the start script's
++	// first step.
++	//
++	// The classic idiom is `mount --make-rprivate /` (MS_REC), which walks the
++	// entire host mount tree on every launch and serializes under the mount
++	// namespace lock when many sandboxes resume at once. A non-recursive
++	// MS_PRIVATE on "/" is sufficient here — the per-sandbox tmpfs is mounted on
++	// the root mount (SandboxDir lives on "/"), so making the root mount private
++	// already prevents the new mounts from propagating — and it is O(1) instead
++	// of O(number of host mounts).
++	if err := unix.Mount("", "/", "", unix.MS_PRIVATE, ""); err != nil {
++		return fmt.Errorf("make / private: %w", err)
++	}
++
++	for _, s := range plan.Steps {
++		if err := runStep(s); err != nil {
++			return fmt.Errorf("step %s %q: %w", s.Op, s.Path, err)
++		}
++	}
++
++	// Enter the sandbox network namespace, then exec firecracker in place.
++	// setns(CLONE_NEWNET) only changes the calling OS thread's network
++	// namespace, so we pin the goroutine to its thread and exec from the same
++	// thread; execve collapses the process onto that thread, so firecracker
++	// inherits the sandbox network namespace. This is what `ip netns exec` does.
++	runtime.LockOSThread()
++
++	if err := enterNetns(plan.NamespaceID); err != nil {
++		return err
++	}
++
++	argv := []string{plan.FirecrackerPath, "--api-sock", plan.FirecrackerSocket}
++	if err := unix.Exec(plan.FirecrackerPath, argv, os.Environ()); err != nil {
++		return fmt.Errorf("exec firecracker %q: %w", plan.FirecrackerPath, err)
++	}
++
++	return nil // unreachable: unix.Exec replaced the process image
++}
++
++func runStep(s Step) error {
++	switch s.Op {
++	case OpMkdir:
++		return os.MkdirAll(s.Path, 0o755)
++	case OpTmpfs:
++		// X-mount.mkdir: ensure the mountpoint exists, then mount the tmpfs.
++		if err := os.MkdirAll(s.Path, 0o755); err != nil {
++			return err
++		}
++		return unix.Mount("tmpfs", s.Path, "tmpfs", 0, "")
++	case OpSymlink:
++		return os.Symlink(s.Src, s.Path)
++	default:
++		return fmt.Errorf("unknown op %q", s.Op)
++	}
++}
++
++// enterNetns opens the named network namespace and setns()es the calling thread
++// into it. The caller must already hold runtime.LockOSThread.
++func enterNetns(namespaceID string) error {
++	var lastErr error
++	for _, dir := range netnsSearchDirs {
++		path := dir + "/" + namespaceID
++		fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC, 0)
++		if err != nil {
++			lastErr = err
++			continue
++		}
++
++		err = unix.Setns(fd, unix.CLONE_NEWNET)
++		_ = unix.Close(fd)
++		if err != nil {
++			return fmt.Errorf("setns %q: %w", path, err)
++		}
++
++		return nil
++	}
++
++	return fmt.Errorf("open netns %q: %w", namespaceID, lastErr)
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/mode.go b/packages/orchestrator/internal/sandbox/fc/mode.go
+new file mode 100644
+index 0000000..97f46d9
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/mode.go
+@@ -0,0 +1,72 @@
++package fc
++
++import (
++	"os"
++	"strings"
++)
++
++// fcMode selects how NewProcess launches firecracker. It is chosen at runtime
++// via the E2B_FC_LAUNCH_MODE environment variable so the three approaches can be
++// A/B/C-compared without rebuilding the orchestrator:
++//
++//	disabled    (default) — original `unshare -m -- bash -c "... ip netns exec <ns> firecracker"`
++//	netns-exec            — same shell pipeline, but the trailing `ip netns exec` is
++//	                        replaced by the fc-netns-exec helper (setns + execve)
++//	launch                — the dedicated shell-free fc-launch helper (mounts + setns +
++//	                        execve in one tiny process), plus inotify-based socket wait
++//
++// Both optimized modes are off by default so a freshly installed RPM behaves
++// exactly like upstream until the operator opts in.
++type fcMode string
++
++const (
++	modeDisabled  fcMode = "disabled"
++	modeNetnsExec fcMode = "netns-exec"
++	modeLaunch    fcMode = "launch"
++
++	// envLaunchMode is also read, as a raw string, by package socket (which
++	// cannot import this package) to gate the inotify fast-path.
++	envLaunchMode = "E2B_FC_LAUNCH_MODE"
++)
++
++// fcLaunchMode resolves the configured launch mode, defaulting to modeDisabled
++// for an unset or unrecognized value.
++func fcLaunchMode() fcMode {
++	switch fcMode(os.Getenv(envLaunchMode)) {
++	case modeNetnsExec:
++		return modeNetnsExec
++	case modeLaunch:
++		return modeLaunch
++	default:
++		return modeDisabled
++	}
++}
++
++// fcNetnsExecHelperPath is the fc-netns-exec binary used in netns-exec mode.
++// Overridable via E2B_FC_NETNS_EXEC_HELPER; defaults to the RPM install path.
++func fcNetnsExecHelperPath() string {
++	if p := os.Getenv("E2B_FC_NETNS_EXEC_HELPER"); p != "" {
++		return p
++	}
++
++	return "/opt/e2b-infra/bin/fc-netns-exec"
++}
++
++// fcLaunchHelperPath is the fc-launch binary used in launch mode. Overridable
++// via E2B_FC_LAUNCH_HELPER; defaults to the RPM install path.
++func fcLaunchHelperPath() string {
++	if p := os.Getenv("E2B_FC_LAUNCH_HELPER"); p != "" {
++		return p
++	}
++
++	return "/opt/e2b-infra/bin/fc-launch"
++}
++
++// netnsExecScript rewrites a generated start script's trailing
++// `ip netns exec <ns> ...` into `<helper> <ns> ...` so that netns-exec mode
++// reuses the exact same shell pipeline as the baseline, only swapping the final
++// network-namespace entry step. Everything before it (mounts/symlinks) is
++// unchanged.
++func netnsExecScript(script, namespaceID, helper string) string {
++	return strings.Replace(script, "ip netns exec "+namespaceID, helper+" "+namespaceID, 1)
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/mode_test.go b/packages/orchestrator/internal/sandbox/fc/mode_test.go
+new file mode 100644
+index 0000000..effaf3a
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/mode_test.go
+@@ -0,0 +1,43 @@
++package fc
++
++import (
++	"strings"
++	"testing"
++)
++
++func TestFcLaunchMode(t *testing.T) {
++	cases := map[string]fcMode{
++		"":           modeDisabled,
++		"disabled":   modeDisabled,
++		"bogus":      modeDisabled,
++		"netns-exec": modeNetnsExec,
++		"launch":     modeLaunch,
++	}
++	for val, want := range cases {
++		t.Setenv(envLaunchMode, val)
++		if got := fcLaunchMode(); got != want {
++			t.Errorf("E2B_FC_LAUNCH_MODE=%q -> %q, want %q", val, got, want)
++		}
++	}
++}
++
++func TestNetnsExecScript(t *testing.T) {
++	// A baseline (disabled) script ends with `ip netns exec <ns> <fc> --api-sock`.
++	base := "mount --make-rprivate / &&\n" +
++		"mount -t tmpfs tmpfs /fc-vm -o X-mount.mkdir &&\n" +
++		"ln -s /a /fc-vm/rootfs.ext4 &&\n" +
++		"ip netns exec ns-7 /fc-versions/1.12.1/firecracker --api-sock /run/fc.sock"
++
++	got := netnsExecScript(base, "ns-7", "/opt/e2b-infra/bin/fc-netns-exec")
++
++	if strings.Contains(got, "ip netns exec ns-7") {
++		t.Fatalf("ip netns exec was not replaced:\n%s", got)
++	}
++	if !strings.Contains(got, "/opt/e2b-infra/bin/fc-netns-exec ns-7 /fc-versions/1.12.1/firecracker --api-sock /run/fc.sock") {
++		t.Fatalf("helper invocation not formed correctly:\n%s", got)
++	}
++	// The mount/symlink prefix must be untouched.
++	if !strings.HasPrefix(got, "mount --make-rprivate / &&\n") {
++		t.Fatalf("script prefix changed:\n%s", got)
++	}
++}
 diff --git a/packages/orchestrator/internal/sandbox/fc/process.go b/packages/orchestrator/internal/sandbox/fc/process.go
-index 7b75a14..e5888f7 100644
+index 1a3f4bd..8c33e49 100644
 --- a/packages/orchestrator/internal/sandbox/fc/process.go
 +++ b/packages/orchestrator/internal/sandbox/fc/process.go
 @@ -2,6 +2,7 @@ package fc
@@ -141,7 +634,7 @@ index 7b75a14..e5888f7 100644
  	return &Process{
  		Versions:              versions,
  		Exit:                  utils.NewErrorOnce(),
-@@ -138,7 +173,7 @@ func NewProcess(
+@@ -138,8 +173,8 @@ func NewProcess(
  		files:                 files,
  		slot:                  slot,
  
@@ -151,11 +644,12 @@ index 7b75a14..e5888f7 100644
 +		rootfsPath: rootfsPath,
  	}, nil
  }
+ 
 diff --git a/packages/orchestrator/internal/sandbox/fc/script_builder.go b/packages/orchestrator/internal/sandbox/fc/script_builder.go
-index 6254abb4b..4cde18284 100644
+index dcd2662..c8af8bb 100644
 --- a/packages/orchestrator/internal/sandbox/fc/script_builder.go
 +++ b/packages/orchestrator/internal/sandbox/fc/script_builder.go
-@@ -8,6 +8,7 @@ import (
+@@ -7,6 +7,7 @@ import (
  	txtTemplate "text/template"
  
  	"github.com/e2b-dev/infra/packages/orchestrator/internal/cfg"
@@ -163,7 +657,7 @@ index 6254abb4b..4cde18284 100644
  	"github.com/e2b-dev/infra/packages/shared/pkg/storage"
  )
  
-@@ -190,3 +191,60 @@ func (sb *StartScriptBuilder) getRootfsPath(args startScriptArgs, rootfsPaths Ro
+@@ -164,3 +165,60 @@ func (sb *StartScriptBuilder) getRootfsPath(args startScriptArgs, rootfsPaths Ro
  func (sb *StartScriptBuilder) getKernelPath(args startScriptArgs) string {
  	return filepath.Join(args.SandboxDir, args.SandboxKernelDir, args.SandboxKernelFile)
  }
@@ -225,7 +719,7 @@ index 6254abb4b..4cde18284 100644
 +	}, nil
 +}
 diff --git a/packages/orchestrator/internal/sandbox/socket/socket.go b/packages/orchestrator/internal/sandbox/socket/socket.go
-index ac234317f..4e10e3b23 100644
+index ac23431..4e10e3b 100644
 --- a/packages/orchestrator/internal/sandbox/socket/socket.go
 +++ b/packages/orchestrator/internal/sandbox/socket/socket.go
 @@ -4,17 +4,40 @@ import (
@@ -339,495 +833,3 @@ index ac234317f..4e10e3b23 100644
  	ticker := time.NewTicker(waitInterval)
  	defer ticker.Stop()
  
-diff --git a/packages/orchestrator/internal/sandbox/fc/mode.go b/packages/orchestrator/internal/sandbox/fc/mode.go
-new file mode 100644
-index 000000000..97f46d953
---- /dev/null
-+++ b/packages/orchestrator/internal/sandbox/fc/mode.go
-@@ -0,0 +1,72 @@
-+package fc
-+
-+import (
-+	"os"
-+	"strings"
-+)
-+
-+// fcMode selects how NewProcess launches firecracker. It is chosen at runtime
-+// via the E2B_FC_LAUNCH_MODE environment variable so the three approaches can be
-+// A/B/C-compared without rebuilding the orchestrator:
-+//
-+//	disabled    (default) — original `unshare -m -- bash -c "... ip netns exec <ns> firecracker"`
-+//	netns-exec            — same shell pipeline, but the trailing `ip netns exec` is
-+//	                        replaced by the fc-netns-exec helper (setns + execve)
-+//	launch                — the dedicated shell-free fc-launch helper (mounts + setns +
-+//	                        execve in one tiny process), plus inotify-based socket wait
-+//
-+// Both optimized modes are off by default so a freshly installed RPM behaves
-+// exactly like upstream until the operator opts in.
-+type fcMode string
-+
-+const (
-+	modeDisabled  fcMode = "disabled"
-+	modeNetnsExec fcMode = "netns-exec"
-+	modeLaunch    fcMode = "launch"
-+
-+	// envLaunchMode is also read, as a raw string, by package socket (which
-+	// cannot import this package) to gate the inotify fast-path.
-+	envLaunchMode = "E2B_FC_LAUNCH_MODE"
-+)
-+
-+// fcLaunchMode resolves the configured launch mode, defaulting to modeDisabled
-+// for an unset or unrecognized value.
-+func fcLaunchMode() fcMode {
-+	switch fcMode(os.Getenv(envLaunchMode)) {
-+	case modeNetnsExec:
-+		return modeNetnsExec
-+	case modeLaunch:
-+		return modeLaunch
-+	default:
-+		return modeDisabled
-+	}
-+}
-+
-+// fcNetnsExecHelperPath is the fc-netns-exec binary used in netns-exec mode.
-+// Overridable via E2B_FC_NETNS_EXEC_HELPER; defaults to the RPM install path.
-+func fcNetnsExecHelperPath() string {
-+	if p := os.Getenv("E2B_FC_NETNS_EXEC_HELPER"); p != "" {
-+		return p
-+	}
-+
-+	return "/opt/e2b-infra/bin/fc-netns-exec"
-+}
-+
-+// fcLaunchHelperPath is the fc-launch binary used in launch mode. Overridable
-+// via E2B_FC_LAUNCH_HELPER; defaults to the RPM install path.
-+func fcLaunchHelperPath() string {
-+	if p := os.Getenv("E2B_FC_LAUNCH_HELPER"); p != "" {
-+		return p
-+	}
-+
-+	return "/opt/e2b-infra/bin/fc-launch"
-+}
-+
-+// netnsExecScript rewrites a generated start script's trailing
-+// `ip netns exec <ns> ...` into `<helper> <ns> ...` so that netns-exec mode
-+// reuses the exact same shell pipeline as the baseline, only swapping the final
-+// network-namespace entry step. Everything before it (mounts/symlinks) is
-+// unchanged.
-+func netnsExecScript(script, namespaceID, helper string) string {
-+	return strings.Replace(script, "ip netns exec "+namespaceID, helper+" "+namespaceID, 1)
-+}
-diff --git a/packages/orchestrator/internal/sandbox/fc/mode_test.go b/packages/orchestrator/internal/sandbox/fc/mode_test.go
-new file mode 100644
-index 000000000..effaf3ade
---- /dev/null
-+++ b/packages/orchestrator/internal/sandbox/fc/mode_test.go
-@@ -0,0 +1,43 @@
-+package fc
-+
-+import (
-+	"strings"
-+	"testing"
-+)
-+
-+func TestFcLaunchMode(t *testing.T) {
-+	cases := map[string]fcMode{
-+		"":           modeDisabled,
-+		"disabled":   modeDisabled,
-+		"bogus":      modeDisabled,
-+		"netns-exec": modeNetnsExec,
-+		"launch":     modeLaunch,
-+	}
-+	for val, want := range cases {
-+		t.Setenv(envLaunchMode, val)
-+		if got := fcLaunchMode(); got != want {
-+			t.Errorf("E2B_FC_LAUNCH_MODE=%q -> %q, want %q", val, got, want)
-+		}
-+	}
-+}
-+
-+func TestNetnsExecScript(t *testing.T) {
-+	// A baseline (disabled) script ends with `ip netns exec <ns> <fc> --api-sock`.
-+	base := "mount --make-rprivate / &&\n" +
-+		"mount -t tmpfs tmpfs /fc-vm -o X-mount.mkdir &&\n" +
-+		"ln -s /a /fc-vm/rootfs.ext4 &&\n" +
-+		"ip netns exec ns-7 /fc-versions/1.12.1/firecracker --api-sock /run/fc.sock"
-+
-+	got := netnsExecScript(base, "ns-7", "/opt/e2b-infra/bin/fc-netns-exec")
-+
-+	if strings.Contains(got, "ip netns exec ns-7") {
-+		t.Fatalf("ip netns exec was not replaced:\n%s", got)
-+	}
-+	if !strings.Contains(got, "/opt/e2b-infra/bin/fc-netns-exec ns-7 /fc-versions/1.12.1/firecracker --api-sock /run/fc.sock") {
-+		t.Fatalf("helper invocation not formed correctly:\n%s", got)
-+	}
-+	// The mount/symlink prefix must be untouched.
-+	if !strings.HasPrefix(got, "mount --make-rprivate / &&\n") {
-+		t.Fatalf("script prefix changed:\n%s", got)
-+	}
-+}
-diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go b/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go
-new file mode 100644
-index 000000000..2f69fbad6
---- /dev/null
-+++ b/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go
-@@ -0,0 +1,47 @@
-+// Package launchplan defines the shell-free description of how to start a
-+// firecracker process and (on Linux) executes it.
-+//
-+// It is intentionally tiny and imports only the standard library (plus
-+// golang.org/x/sys/unix for the execution half) so that the fc-launch helper
-+// binary built from it stays small and has negligible startup cost. This is the
-+// key difference from re-execing the whole orchestrator binary: there, every
-+// imported package's init() would run on each sandbox launch and land on the
-+// "wait firecracker start" critical path. A dedicated helper pays none of that.
-+package launchplan
-+
-+// StepOp enumerates the filesystem operations performed inside the sandbox's
-+// private mount namespace. They mirror the orchestrator's startScriptV1/V2.
-+type StepOp string
-+
-+const (
-+	OpMkdir   StepOp = "mkdir"   // mkdir -p <Path>
-+	OpTmpfs   StepOp = "tmpfs"   // mkdir -p <Path> && mount -t tmpfs tmpfs <Path>
-+	OpSymlink StepOp = "symlink" // ln -s <Src> <Path>
-+)
-+
-+// Step is a single ordered filesystem-setup operation.
-+type Step struct {
-+	Op   StepOp `json:"op"`
-+	Path string `json:"path"`
-+	Src  string `json:"src,omitempty"`
-+}
-+
-+// Plan fully describes how to start a firecracker process. It is the shell-free
-+// replacement for the generated start script: NewProcess JSON-encodes it and
-+// passes it to the re-exec'd fc-launch helper as a single argv element (exec
-+// passes argv as a slice, so no shell quoting is involved).
-+type Plan struct {
-+	// Steps are mount-namespace filesystem operations, executed in order.
-+	Steps []Step `json:"steps"`
-+
-+	// NamespaceID is the named network namespace to enter, as created by
-+	// `ip netns add`. It is resolved under /var/run/netns and /run/netns,
-+	// matching iproute2's `ip netns exec` lookup.
-+	NamespaceID string `json:"namespaceID"`
-+
-+	// FirecrackerPath is the firecracker binary to exec.
-+	FirecrackerPath string `json:"firecrackerPath"`
-+
-+	// FirecrackerSocket is the API socket path passed as --api-sock.
-+	FirecrackerSocket string `json:"firecrackerSocket"`
-+}
-diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go b/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go
-new file mode 100644
-index 000000000..8ea37c642
---- /dev/null
-+++ b/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go
-@@ -0,0 +1,104 @@
-+//go:build linux
-+
-+package launchplan
-+
-+import (
-+	"fmt"
-+	"os"
-+	"runtime"
-+
-+	"golang.org/x/sys/unix"
-+)
-+
-+// netnsSearchDirs mirrors iproute2's lookup order for `ip netns exec NAME`.
-+var netnsSearchDirs = []string{"/var/run/netns", "/run/netns"}
-+
-+// Run performs the plan and, on success, never returns: it execs firecracker,
-+// replacing the current process image.
-+//
-+// It must be called from a process that was started in a fresh mount namespace
-+// (CLONE_NEWNS); the orchestrator requests that via SysProcAttr.Unshareflags,
-+// replacing the old `unshare -m`.
-+func Run(plan Plan) error {
-+	// We are already in a fresh mount namespace, but it still shares mount
-+	// propagation with the host. Make the root mount private so the per-sandbox
-+	// tmpfs/symlinks added below do not propagate back to the host mount
-+	// namespace. This is the direct-syscall equivalent of the start script's
-+	// first step.
-+	//
-+	// The classic idiom is `mount --make-rprivate /` (MS_REC), which walks the
-+	// entire host mount tree on every launch and serializes under the mount
-+	// namespace lock when many sandboxes resume at once. A non-recursive
-+	// MS_PRIVATE on "/" is sufficient here — the per-sandbox tmpfs is mounted on
-+	// the root mount (SandboxDir lives on "/"), so making the root mount private
-+	// already prevents the new mounts from propagating — and it is O(1) instead
-+	// of O(number of host mounts).
-+	if err := unix.Mount("", "/", "", unix.MS_PRIVATE, ""); err != nil {
-+		return fmt.Errorf("make / private: %w", err)
-+	}
-+
-+	for _, s := range plan.Steps {
-+		if err := runStep(s); err != nil {
-+			return fmt.Errorf("step %s %q: %w", s.Op, s.Path, err)
-+		}
-+	}
-+
-+	// Enter the sandbox network namespace, then exec firecracker in place.
-+	// setns(CLONE_NEWNET) only changes the calling OS thread's network
-+	// namespace, so we pin the goroutine to its thread and exec from the same
-+	// thread; execve collapses the process onto that thread, so firecracker
-+	// inherits the sandbox network namespace. This is what `ip netns exec` does.
-+	runtime.LockOSThread()
-+
-+	if err := enterNetns(plan.NamespaceID); err != nil {
-+		return err
-+	}
-+
-+	argv := []string{plan.FirecrackerPath, "--api-sock", plan.FirecrackerSocket}
-+	if err := unix.Exec(plan.FirecrackerPath, argv, os.Environ()); err != nil {
-+		return fmt.Errorf("exec firecracker %q: %w", plan.FirecrackerPath, err)
-+	}
-+
-+	return nil // unreachable: unix.Exec replaced the process image
-+}
-+
-+func runStep(s Step) error {
-+	switch s.Op {
-+	case OpMkdir:
-+		return os.MkdirAll(s.Path, 0o755)
-+	case OpTmpfs:
-+		// X-mount.mkdir: ensure the mountpoint exists, then mount the tmpfs.
-+		if err := os.MkdirAll(s.Path, 0o755); err != nil {
-+			return err
-+		}
-+		return unix.Mount("tmpfs", s.Path, "tmpfs", 0, "")
-+	case OpSymlink:
-+		return os.Symlink(s.Src, s.Path)
-+	default:
-+		return fmt.Errorf("unknown op %q", s.Op)
-+	}
-+}
-+
-+// enterNetns opens the named network namespace and setns()es the calling thread
-+// into it. The caller must already hold runtime.LockOSThread.
-+func enterNetns(namespaceID string) error {
-+	var lastErr error
-+	for _, dir := range netnsSearchDirs {
-+		path := dir + "/" + namespaceID
-+		fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC, 0)
-+		if err != nil {
-+			lastErr = err
-+			continue
-+		}
-+
-+		err = unix.Setns(fd, unix.CLONE_NEWNET)
-+		_ = unix.Close(fd)
-+		if err != nil {
-+			return fmt.Errorf("setns %q: %w", path, err)
-+		}
-+
-+		return nil
-+	}
-+
-+	return fmt.Errorf("open netns %q: %w", namespaceID, lastErr)
-+}
-diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/plan_test.go b/packages/orchestrator/internal/sandbox/fc/launchplan/plan_test.go
-new file mode 100644
-index 000000000..9f5816355
---- /dev/null
-+++ b/packages/orchestrator/internal/sandbox/fc/launchplan/plan_test.go
-@@ -0,0 +1,48 @@
-+package launchplan
-+
-+import (
-+	"encoding/json"
-+	"testing"
-+)
-+
-+// TestPlanJSONRoundTrip ensures the plan survives the JSON encode/argv/decode
-+// round trip that NewProcess -> fc-launch relies on.
-+func TestPlanJSONRoundTrip(t *testing.T) {
-+	t.Parallel()
-+
-+	in := Plan{
-+		Steps: []Step{
-+			{Op: OpTmpfs, Path: "/fc-vm"},
-+			{Op: OpSymlink, Path: "/fc-vm/rootfs.ext4", Src: "/orchestrator/sandbox/rootfs.link"},
-+			{Op: OpMkdir, Path: "/fc-vm/6.1.0"},
-+			{Op: OpSymlink, Path: "/fc-vm/6.1.0/vmlinux.bin", Src: "/fc-kernels/6.1.0/vmlinux.bin"},
-+		},
-+		NamespaceID:       "ns-7",
-+		FirecrackerPath:   "/fc-versions/1.4.0/firecracker",
-+		FirecrackerSocket: "/orchestrator/sandbox/fc.sock",
-+	}
-+
-+	encoded, err := json.Marshal(in)
-+	if err != nil {
-+		t.Fatalf("marshal: %v", err)
-+	}
-+
-+	var out Plan
-+	if err := json.Unmarshal(encoded, &out); err != nil {
-+		t.Fatalf("unmarshal: %v", err)
-+	}
-+
-+	if out.NamespaceID != in.NamespaceID ||
-+		out.FirecrackerPath != in.FirecrackerPath ||
-+		out.FirecrackerSocket != in.FirecrackerSocket {
-+		t.Fatalf("scalar fields changed: %+v", out)
-+	}
-+	if len(out.Steps) != len(in.Steps) {
-+		t.Fatalf("step count changed: got %d want %d", len(out.Steps), len(in.Steps))
-+	}
-+	for i := range in.Steps {
-+		if out.Steps[i] != in.Steps[i] {
-+			t.Fatalf("step %d changed: got %+v want %+v", i, out.Steps[i], in.Steps[i])
-+		}
-+	}
-+}
-diff --git a/packages/orchestrator/cmd/fc-launch/main.go b/packages/orchestrator/cmd/fc-launch/main.go
-new file mode 100644
-index 000000000..322a598cf
---- /dev/null
-+++ b/packages/orchestrator/cmd/fc-launch/main.go
-@@ -0,0 +1,50 @@
-+//go:build linux
-+
-+// Command fc-launch starts a firecracker process from a JSON launch plan (see
-+// package launchplan). It is the "launch" mode helper.
-+//
-+// The orchestrator execs this binary — in a fresh mount namespace — instead of
-+// the old shell pipeline
-+//
-+//	unshare -m -- bash -c "mount --make-rprivate / && mount -t tmpfs ... && \
-+//	    ln -s ... && mkdir -p ... && ln -s ... && \
-+//	    ip netns exec <ns> <firecracker> --api-sock <sock>"
-+//
-+// (bash + coreutils mount/ln/mkdir + iproute2's `ip` = ~8 fork/exec per
-+// sandbox). fc-launch performs the per-sandbox mount/symlink setup, enters the
-+// sandbox network namespace and execs firecracker, all via direct syscalls in a
-+// single tiny process: no bash, no coreutils, no iproute2, and — unlike
-+// re-execing the orchestrator itself — no heavy package init() on the launch
-+// critical path.
-+package main
-+
-+import (
-+	"encoding/json"
-+	"fmt"
-+	"os"
-+
-+	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/fc/launchplan"
-+)
-+
-+func main() {
-+	if len(os.Args) < 2 {
-+		fmt.Fprintf(os.Stderr, "usage: %s <json-launch-plan>\n", os.Args[0])
-+		os.Exit(2)
-+	}
-+
-+	var plan launchplan.Plan
-+	if err := json.Unmarshal([]byte(os.Args[1]), &plan); err != nil {
-+		fmt.Fprintf(os.Stderr, "fc-launch: invalid launch plan: %v\n", err)
-+		os.Exit(1)
-+	}
-+
-+	if err := launchplan.Run(plan); err != nil {
-+		fmt.Fprintf(os.Stderr, "fc-launch: %v\n", err)
-+		os.Exit(1)
-+	}
-+
-+	// Run execs firecracker on success and never returns; reaching here means
-+	// execve did not replace the process image.
-+	fmt.Fprintln(os.Stderr, "fc-launch: launcher returned without exec")
-+	os.Exit(1)
-+}
-diff --git a/packages/orchestrator/cmd/fc-netns-exec/main.go b/packages/orchestrator/cmd/fc-netns-exec/main.go
-new file mode 100644
-index 000000000..dcedfb884
---- /dev/null
-+++ b/packages/orchestrator/cmd/fc-netns-exec/main.go
-@@ -0,0 +1,74 @@
-+//go:build linux
-+
-+package main
-+
-+import (
-+	"fmt"
-+	"os"
-+	"path/filepath"
-+	"runtime"
-+	"time"
-+
-+	"golang.org/x/sys/unix"
-+)
-+
-+const netnsDir = "/run/netns"
-+
-+func main() {
-+	if len(os.Args) < 3 {
-+		fmt.Fprintf(os.Stderr, "usage: %s <netns-name-or-path> <command> [args...]\n", os.Args[0])
-+		os.Exit(2)
-+	}
-+
-+	namespace := os.Args[1]
-+	command := os.Args[2]
-+	commandArgs := os.Args[2:]
-+
-+	runtime.LockOSThread()
-+
-+	nsPath := namespacePath(namespace)
-+	fd, err := unix.Open(nsPath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
-+	if err != nil {
-+		fmt.Fprintf(os.Stderr, "fc-netns-exec: open network namespace %q: %v\n", nsPath, err)
-+		os.Exit(1)
-+	}
-+	defer unix.Close(fd)
-+
-+	if err := unix.Setns(fd, unix.CLONE_NEWNET); err != nil {
-+		fmt.Fprintf(os.Stderr, "fc-netns-exec: setns(%q, CLONE_NEWNET): %v\n", nsPath, err)
-+		os.Exit(1)
-+	}
-+
-+	if os.Getenv("E2B_FC_START_SCRIPT_DIAG") == "1" {
-+		fmt.Fprintf(
-+			os.Stderr,
-+			"e2b_fc_start_script_marker stage=inside_netns_before_firecracker_exec ns=%d socket=%s namespace=%s\n",
-+			time.Now().UnixNano(),
-+			findArgValue(commandArgs, "--api-sock"),
-+			namespace,
-+		)
-+	}
-+
-+	if err := unix.Exec(command, commandArgs, os.Environ()); err != nil {
-+		fmt.Fprintf(os.Stderr, "fc-netns-exec: exec %q: %v\n", command, err)
-+		os.Exit(1)
-+	}
-+}
-+
-+func namespacePath(namespace string) string {
-+	if filepath.IsAbs(namespace) {
-+		return filepath.Clean(namespace)
-+	}
-+
-+	return filepath.Join(netnsDir, namespace)
-+}
-+
-+func findArgValue(args []string, name string) string {
-+	for i := 0; i+1 < len(args); i++ {
-+		if args[i] == name {
-+			return args[i+1]
-+		}
-+	}
-+
-+	return ""
-+}
-diff --git a/packages/orchestrator/Makefile b/packages/orchestrator/Makefile
---- a/packages/orchestrator/Makefile
-+++ b/packages/orchestrator/Makefile
-@@ -20,6 +20,8 @@ build:
- 	# Allow for passing commit sha directly for docker builds
- 	$(eval COMMIT_SHA ?= $(shell git rev-parse --short HEAD))
- 	CGO_ENABLED=1 GOOS=linux go build -o bin/orchestrator -ldflags "-X=main.commitSHA=$(COMMIT_SHA)" .
- 	CGO_ENABLED=1 GOOS=linux go build -o bin/clean-nfs-cache -ldflags "-X=main.commitSHA=$(COMMIT_SHA)" ./cmd/clean-nfs-cache
-+	CGO_ENABLED=0 GOOS=linux go build -o bin/fc-netns-exec ./cmd/fc-netns-exec
-+	CGO_ENABLED=0 GOOS=linux go build -o bin/fc-launch ./cmd/fc-launch
- 
- .PHONY: build-local
