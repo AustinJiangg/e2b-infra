@@ -269,6 +269,7 @@ function install_e2b() {
     cp -fv $DEP_DIR/start-server.sh $E2B_DIR/start-server.sh
     cp -fv $DEP_DIR/init-client.sh $E2B_DIR/init-client.sh
     cp -fv $DEP_DIR/run-nomad.sh $E2B_DIR/run-nomad.sh
+    cp -fv $DEP_DIR/run-consul.sh $E2B_DIR/run-consul.sh
     cp -fv $DEP_DIR/deploy.sh $E2B_DIR/deploy.sh
 
     # 给 SDK 打补丁（路径按你的python版本调整！）
@@ -435,13 +436,28 @@ function uninstall() {
 function append_nomad_client_config() {
     local nomad_config_file="/etc/nomad.d/default.hcl"
     local node_pool_name="api"  # 可根据实际需求修改节点池名称
-    
+
+    # Nomad's client network fingerprint enumerates EVERY host network interface
+    # and probes each one's link speed. On a shared host with thousands of veth
+    # interfaces (e.g. a neighbour running hundreds of containers) that walk takes
+    # minutes, and the HTTP API (4646) only opens after the client finishes — so
+    # `wait_for_port 4646` appears to hang. Two mitigations:
+    #   - network_interface: pin the primary NIC (holding HOST_IP), skip the
+    #     `ip route` auto-detect of the default interface.
+    #   - network_speed: hardcode the link speed so Nomad SKIPS the per-interface
+    #     ethtool/sysfs speed probe (the part that scales with interface count).
+    local net_if net_if_line=""
+    net_if=$(ip -o -4 addr show 2>/dev/null | awk -v ip="$HOST_IP" '$4 ~ "^"ip"/"{print $2; exit}')
+    [ -n "$net_if" ] && net_if_line="  network_interface = \"$net_if\""
+
     # 1. 定义要追加的配置内容（替换变量）
     local client_config=$(cat <<EOF
 # === 自动追加的客户端配置 ===
 client {
 enabled = true
 node_pool = "$node_pool_name"
+$net_if_line
+  network_speed = 1000
 meta {
     node_pool = "$node_pool_name"
 }
