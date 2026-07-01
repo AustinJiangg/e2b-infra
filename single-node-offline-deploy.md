@@ -32,6 +32,40 @@
    systemctl restart docker   # ⚠️ 会重启现有容器，挑好时机
    ```
 
+### 0.2 自定义 nbd 内核模块（`nbd.ko`，需自备）
+
+`start-client.sh` / `init-client.sh`（`build.sh -i` 从 `dep/` 拷进 `/opt/e2b-infra/`、
+`build.sh -s` 启动 Nomad 客户端时执行）已不再用 `modprobe nbd`，改成先 `rmmod nbd` 再
+`insmod` 你**自己编译的优化版 nbd 模块**（带 `nbds_max=512`）。模块路径默认
+`/home/j30059180/tools/nbd-patch/nbd.ko`，可用环境变量 `NBD_KO` 覆盖。部署前须满足两个前提，
+否则脚本会在加载 nbd 这步 `exit 1`：
+
+1. **vermagic 必须与运行内核完全一致**。`insmod` 会校验模块 vermagic 是否等于本机 `uname -r`，
+   不一致直接报 `Invalid module format`（这是从 `modprobe` 换成 `insmod` 新增的硬约束，`modprobe`
+   不校验这么严）。检查：
+   ```bash
+   modinfo /home/j30059180/tools/nbd-patch/nbd.ko | grep vermagic
+   # vermagic: 6.6.0_6.6.0_515-uffd_copy_open_tree SMP mod_unload modversions aarch64
+   uname -r        # 必须与上面 vermagic 里的内核版本一致
+   ```
+   内核不同就要在目标机对应内核上重新编译 `nbd.ko`。
+
+2. **`.ko` 必须存在于本节点**。脚本在本机读取 `$NBD_KO`；单节点部署里编译机和 client 通常是同一台，
+   若 `.ko` 不在默认路径，就先拷过去或用 `NBD_KO` 指到实际路径。文件缺失时脚本 fail-fast 报
+   「找不到自定义 nbd 模块」并退出：
+   ```bash
+   # 放到默认路径：
+   mkdir -p /home/j30059180/tools/nbd-patch && cp nbd.ko /home/j30059180/tools/nbd-patch/nbd.ko
+   # 或指到别处（例如和其它离线大件一起放 dep/）：
+   export NBD_KO=/opt/e2b-infra/dep/nbd.ko
+   ```
+
+> ⚠️ 仓库里有**两套** client 脚本：RPM（`e2b-infra.spec`）打包的
+> `.github/actions/host-init/init-client.sh`、`iac/provider-gcp/nomad-cluster/scripts/start-client.sh`
+> **不加载 nbd**；真正加载 nbd（`rmmod`+`insmod`）的是 `e2b-deploy/dep/` 下的版本，由 `build.sh -i`
+> 覆盖进 `/opt/e2b-infra/`、再由 `-s` 执行。所以**务必走 `build.sh -i` → `-s`**，别绕过它直接跑
+> RPM 装的 `/opt/e2b-infra/*-client.sh`，否则不会加载你的自定义 nbd 模块。
+
 ---
 
 ## 1. 准备离线大件与镜像
