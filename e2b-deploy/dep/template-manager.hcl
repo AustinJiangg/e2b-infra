@@ -49,6 +49,7 @@ job "template-manager-system" {
         LOGS_COLLECTOR_ADDRESS        = "${LOGS_COLLECTOR_ADDRESS}"
         ORCHESTRATOR_SERVICES         = "orchestrator,template-manager"
         E2B_FC_LAUNCH_MODE            = "launch"
+        MAX_STARTING_INSTANCES_PER_NODE = "500"
         LOGS_COLLECTOR_PUBLIC_IP      = "${LOGS_COLLECTOR_PUBLIC_IP}"
         ALLOW_SANDBOX_INTERNET        = "${ALLOW_SANDBOX_INTERNET}"
         SHARED_CHUNK_CACHE_PATH       = "${SHARED_CHUNK_CACHE_PATH}"

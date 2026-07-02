@@ -655,9 +655,14 @@ function iptable_clean() {
     bash "$E2B_DIR/deploy.sh" || error "执行部署脚本失败"
 }
 
-function deploy() { 
+function deploy() {
     info "执行部署脚本..."
     bash "$E2B_DIR/deploy.sh" || error "执行部署脚本失败"
+}
+
+function redeploy_job() {
+    info "快速重跑 nomad job：$1（只 render+重跑该 job，跳过镜像构建与 DB 初始化）..."
+    bash "$E2B_DIR/deploy.sh" --only "$1" || error "重跑 job $1 失败"
 }
 
 function stop() {
@@ -752,8 +757,8 @@ function make_images() {
 
 # ===================== 参数解析（完整修正）=====================
 # 定义正确的短/长选项：m: 表示 -m 需要接收参数；d对应stop
-OPTIONS="iusdfm:"
-LONGOPTIONS="install,uninstall,start,stop,deploy,make:"  # make: 表示--make需要参数
+OPTIONS="iusdfm:r:"
+LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:"  # make:/redeploy: 表示需要参数
 
 # 解析参数（处理 getopt 结果）
 # 兼容不同系统的 getopt，增加 -o/-l 明确指定选项
@@ -794,6 +799,15 @@ while true; do
             has_valid_param=1
             shift
             ;;
+        -r|--redeploy)
+            # -r/--redeploy 需要接收 job 名（nomad/ 下 hcl 文件名，不带 .hcl）
+            if [ -z "$2" ]; then
+                error "--redeploy/-r 必须指定 job 名！例如：$0 -r template-manager"
+            fi
+            redeploy_job "$2"
+            has_valid_param=1
+            shift 2
+            ;;
         -m|--make)
             # -m/--make 需要接收后续参数，$2 是参数值
             if [ -z "$2" ]; then
@@ -823,6 +837,7 @@ if [ $has_valid_param -eq 0 ]; then
     echo "  启动 e2b-infra 服务：$0 --start 或 $0 -s"
     echo "  停止 e2b-infra 服务：$0 --stop 或 $0 -d"
     echo "  部署 e2b-infra 服务：$0 --deploy 或 $0 -f"
+    echo "  快速重跑单个 job：$0 --redeploy <job> 或 $0 -r <job>（例如：$0 -r template-manager，只 render+重跑该 job，跳过镜像构建）"
     echo "  构建镜像：$0 --make <镜像参数> 或 $0 -m <镜像参数>（例如：$0 -m ubuntu22.04）"
     exit 1
 fi
