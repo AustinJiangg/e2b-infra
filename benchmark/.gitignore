@@ -1,3 +1,5 @@
 # 每次压测的运行目录（客户端结果、采集的日志、生成的报告），不入库
 runs/
 __pycache__/
+# 本机凭据（E2B / Nomad token），只把 .env.example 模板入库；真实 .env 不入库
+.env
