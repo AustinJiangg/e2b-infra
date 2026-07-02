@@ -4,11 +4,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 DEPLOY_TYPE="nomad"  # 默认使用nomad
+ONLY_JOB=""          # 非空：只重跑该 nomad job（跳过镜像构建与一次性初始化），供快速改 env 迭代
 if [[ "$#" -gt 0 ]]; then
   while [[ "$#" -gt 0 ]]; do
     case $1 in
       --type)
         DEPLOY_TYPE="$2"
+        shift 2
+        ;;
+      --only)
+        ONLY_JOB="$2"
         shift 2
         ;;
       *)
@@ -31,6 +36,7 @@ set +a
 # 本机 buildx 插件(v0.12.1, API 1.43)与 daemon 29.x 不兼容，强制走传统构建
 export DOCKER_BUILDKIT=0
 
+if [[ -z "$ONLY_JOB" ]]; then
 BIN_DIR="./bin"
 cd "$BIN_DIR"
 
@@ -60,6 +66,9 @@ for name in "${!IMGS[@]}"; do
   docker tag  "$src" "$tag"
   docker push "$tag"
 done
+else
+  echo "==> --only=$ONLY_JOB：跳过镜像构建与推送（假设镜像已构建）"
+fi
 
 cd "$SCRIPT_DIR"
 if [[ "$DEPLOY_TYPE" == "k8s" ]]; then
@@ -137,12 +146,17 @@ elif [[ "$DEPLOY_TYPE" == "nomad" ]]; then
     edge
     api
   )
+  if [[ -n "$ONLY_JOB" ]]; then
+    JOBS=("$ONLY_JOB")
+  fi
 
   echo "==> submitting nomad job..."
   for j in "${JOBS[@]}"; do
     if [ -f "rendered/${j}.hcl" ]; then
       echo "-----> $j"
       nomad job run --token $NOMAD_ACL_TOKEN rendered/${j}.hcl
+    else
+      echo "!! rendered/${j}.hcl 不存在，跳过"
     fi
   done
 
@@ -151,6 +165,11 @@ else
   exit 1
 fi
 
+
+if [[ -n "$ONLY_JOB" ]]; then
+  echo "==> 快速重跑完成：${JOBS[*]}（已跳过镜像构建与 DB 初始化）"
+  exit 0
+fi
 
 PG_CONTAINER="postgres"
 PG_USER="postgres"

@@ -183,6 +183,7 @@ curl -s http://$SERVER_IP:4646/v1/status/leader
 |-----------|---------|:--------------:|
 | **Go 源码**（orchestrator / api / template-manager 等） | 重建 RPM → `cp bin/orchestrator /usr/bin/{orchestrator,template-manager}` → `nomad job run` 重跑受影响的 job（下方场景一） | 否 |
 | **`.env` 部署变量** | `bash build.sh -f`（只 render + 提交 job，下方场景二） | 否 |
+| **单个 job 的 env**（如 `E2B_FC_LAUNCH_MODE`、`MAX_STARTING_INSTANCES_PER_NODE`） | `bash build.sh -r <job>`（只 render + 重跑该 job，见第 11 节） | 否 |
 | **nomad / consul 配置**（如 `network_speed`、`network_interface`） | 改 `/etc/nomad.d/default.hcl` → `systemctl restart nomad`（下方场景四） | 是（仅 nomad，不动别的） |
 | **harbor / minio / postgres 等组件** | 单独重启对应服务（`systemctl restart` / `docker restart`），不用整套重来 | 否 |
 | **彻底重来 / 换 ACL / 清状态** | `build.sh -d` → `-i` → `-s`（下方场景三，最慢） | 是 |
@@ -388,7 +389,7 @@ while mountpoint -q /mnt/hugepages;     do umount /mnt/hugepages     || break; d
 orchestrator + template-manager 两个 service**。所以开关加在它的 `env {}` 块里。
 
 - 仓库源头（持久，扛得住 `build.sh -i` / `rpm -Uvh` 覆盖）：`e2b-deploy/dep/template-manager.hcl`
-- 部署机上被 `build.sh -f` 渲染的模板：`/opt/e2b-infra/nomad/template-manager.hcl`
+- 部署机上被 `deploy.sh` 渲染的模板：`/opt/e2b-infra/nomad/template-manager.hcl`
 
 `env {}` 里加一行（**用字面量，别用 `${...}`**——`deploy.sh` 的 `envsubst` 有变量白名单，
 `${E2B_FC_LAUNCH_MODE}` 不在名单里会被清空成空串，反而回落到 `disabled`）：
@@ -422,7 +423,8 @@ ls -l /opt/e2b-infra/bin/fc-launch /opt/e2b-infra/bin/fc-netns-exec
 ### 9.3 怎么生效
 
 **只改 `E2B_FC_LAUNCH_MODE` 是 nomad job env 改动，不是 Go 源码改动**，对应「第 5 节·场景二」，
-只需 `build.sh -f`（重新 render + 重跑 job），**不用 `rpmbuild`，也不用 `-i` / `-s`**：
+**不用 `rpmbuild`，也不用 `-i` / `-s`**。它只影响 template-manager 这一个 job，所以用第 11 节的
+快速重跑最省事——只 render + 重跑该 job，跳过整套 `build.sh -f` 的镜像构建：
 
 ```bash
 # 让改动落到 /opt/e2b-infra/nomad/template-manager.hcl，二选一：
@@ -430,12 +432,14 @@ ls -l /opt/e2b-infra/bin/fc-launch /opt/e2b-infra/bin/fc-netns-exec
 cp -f e2b-deploy/dep/template-manager.hcl /opt/e2b-infra/nomad/template-manager.hcl
 #   ② 或直接就地编辑 /opt/e2b-infra/nomad/template-manager.hcl 改那一行
 
-cd /opt/e2b-infra && source .env      # 确认 NOMAD_ACL_TOKEN 是真 token（非占位符）
-bash build.sh -f                      # 重新 render + 重跑 job，orchestrator 带新 env 重启
+cd /opt/e2b-infra && source .env         # 确认 NOMAD_ACL_TOKEN 是真 token（非占位符）
+bash build.sh -r template-manager        # 只 render+重跑该 job（见第 11 节）；镜像/二进制没变时用它
+#   （首次部署、或 patch 0002 的助手二进制刚更新时，改用全套 bash build.sh -f）
 ```
 
 > ⚠️ 别为切个档去跑 `build.sh -i`——它会把 `.env` 的 `NOMAD_ACL_TOKEN` 重置成占位符（见 6.1）。
-> 集群已在跑时，用上面 ① 手动 `cp` 那一个 hcl + `build.sh -f` 最稳。
+> 集群已在跑时，用上面 ① 手动 `cp` 那一个 hcl + `build.sh -r template-manager` 最稳
+> （前提：`/opt/e2b-infra/deploy.sh` 已是带 `--only` 的新版，见第 11 节的「前提」）。
 > 直接就地编辑 `/opt/e2b-infra/nomad/…` 是临时的，下次 `build.sh -i` 或 `rpm -Uvh` 会覆盖——
 > 要持久必须改仓库 `e2b-deploy/dep/template-manager.hcl`（本仓库已改）。
 
@@ -457,19 +461,126 @@ for pid in $(pgrep -f /usr/bin/template-manager); do
   tr '\0' '\n' < /proc/$pid/environ | grep -E 'E2B_FC_LAUNCH_MODE|ORCHESTRATOR_SERVICES'
 done
 
-# 3) nomad 层（更权威）：提交的 job spec 带上了，且 alloc 是本次 -f 之后重启的
+# 3) nomad 层（更权威）：提交的 job spec 带上了，且 alloc 是本次重跑之后重启的
 cd /opt/e2b-infra && source .env
 nomad job inspect -token "$NOMAD_ACL_TOKEN" template-manager-system | grep E2B_FC_LAUNCH_MODE
 nomad job status  -token "$NOMAD_ACL_TOKEN" template-manager-system   # 看 Version 递增、Status=running
-ps -o pid,lstart,cmd -p $(pgrep -f /usr/bin/template-manager | head -1) # lstart 应是你 -f 之后的时间
+ps -o pid,lstart,cmd -p $(pgrep -f /usr/bin/template-manager | head -1) # lstart 应是你本次重跑之后的时间
 
 # 4) 再跑 benchmark 对比 configured fc cost（benchmark/README.md）
 ```
 
 判定：进程 env 出现 `E2B_FC_LAUNCH_MODE=launch`、`nomad job inspect` 里有该键、且进程 `lstart`
-是本次 `build.sh -f` 之后的时间（说明 alloc 已按新 env 重启），即为生效。
+是本次重跑（`build.sh -r` 或 `-f`）之后的时间（说明 alloc 已按新 env 重启），即为生效。
 
 > env 改动**只对新起的进程生效**。若 `job status` 的 Version 没变 / 进程 `lstart` 还是老时间，
-> 说明 job 没重启：确认 `nomad/template-manager.hcl`（而非只改 `rendered/`）已带上该行，再 `build.sh -f`。
+> 说明 job 没重启：确认 `nomad/template-manager.hcl`（而非只改 `rendered/`）已带上该行，再 `build.sh -r template-manager`。
 
-回退：把值改回 `disabled`（或删掉这行）→ `build.sh -f`。
+回退：把值改回 `disabled`（或删掉这行）→ `build.sh -r template-manager`。
+
+---
+
+## 10. 准入并发上限（`MAX_STARTING_INSTANCES_PER_NODE`）
+
+orchestrator 用一个 `startingSandboxes` 信号量给「同时正在启动的沙箱数」封顶，超过上限的请求在
+「准入排队」阶段等待（`0001-adapted-for-arm-architecture.patch` 的 `server/sandboxes.go`，常量
+`maxStartingInstancesPerNode`；配套 `acquireTimeout` 已放宽到 300s）。上限越低、并发越高，排队越久
+（详见 `benchmark/高并发瓶颈定位方案.md`）。
+
+`main.go` 的 `server.New()` 用 `env.GetEnvAsInt("MAX_STARTING_INSTANCES_PER_NODE", 500)` 读环境变量，
+**读不到就回落到编译默认 500**。这是个免重编的运行时开关，适合扫不同上限看耗时。
+
+### 10.1 在哪配
+
+和 `E2B_FC_LAUNCH_MODE`（第 9 节）一样：真正跑沙箱、执行 `ResumeSandbox` 的 orchestrator 逻辑在
+**`template-manager.hcl`** 这个 job 里（`ORCHESTRATOR_SERVICES = "orchestrator,template-manager"`，
+一个进程同时跑 orchestrator + template-manager 两个 service），所以开关加在它的 `env {}` 块。
+
+- 仓库源头（持久，扛得住 `build.sh -i` / `rpm -Uvh` 覆盖）：`e2b-deploy/dep/template-manager.hcl`
+- 部署机上被 `deploy.sh` 渲染的模板：`/opt/e2b-infra/nomad/template-manager.hcl`
+
+`env {}` 里的这一行（**用字面数字，别用 `${...}`**——`deploy.sh` 的 `envsubst` 白名单里没有它，
+`${MAX_STARTING_INSTANCES_PER_NODE}` 会被清空成空串，反而回落到 500）：
+
+```hcl
+      env {
+        ...
+        ORCHESTRATOR_SERVICES         = "orchestrator,template-manager"
+        MAX_STARTING_INSTANCES_PER_NODE = "500"   # 500=当前默认；改这一个数字即可扫不同上限
+        ...
+      }
+```
+
+> 本仓库把默认值显式写成 `500`（= 原编译默认，行为不变），只是把旋钮摆到明面上、方便改。
+
+### 10.2 怎么生效
+
+这是 nomad job env 改动、不是 Go 源码改动（对应第 5 节·场景二）：改完让它落到
+`/opt/e2b-infra/nomad/template-manager.hcl`，再重跑 template-manager 这一个 job 即可，
+**不用 `rpmbuild`，也不用 `-i` / `-s`**。为省掉整套 `build.sh -f` 的镜像构建，用第 11 节的快速重跑：
+
+```bash
+# ① 从仓库同步这一个文件（推荐，不动 .env 的 token）：
+cp -f e2b-deploy/dep/template-manager.hcl /opt/e2b-infra/nomad/template-manager.hcl
+#    或就地编辑 /opt/e2b-infra/nomad/template-manager.hcl 改那一个数字
+
+cd /opt/e2b-infra && source .env
+bash build.sh -r template-manager     # 只 render + 重跑该 job（见第 11 节）；也可用 build.sh -f 走全套
+```
+
+### 10.3 验证 & benchmark 提醒
+
+```bash
+# 文件层 + nomad 层 + 进程层（同 9.4，键名换成 MAX_STARTING_INSTANCES_PER_NODE）
+grep MAX_STARTING_INSTANCES_PER_NODE /opt/e2b-infra/nomad/template-manager.hcl
+cd /opt/e2b-infra && source .env
+nomad job inspect -token "$NOMAD_ACL_TOKEN" template-manager-system | grep MAX_STARTING_INSTANCES_PER_NODE
+for pid in $(pgrep -f /usr/bin/template-manager); do
+  tr '\0' '\n' < /proc/$pid/environ | grep MAX_STARTING_INSTANCES_PER_NODE
+done
+```
+
+> **值的含义**：上限=500 时，并发 ≤100 基本不排队（「准入排队」≈0），扫 100/500 之间看不出差别。
+> 要观察排队效应，要么把上限调小（如 15/30/100），要么把 benchmark 的 `--concurrency` 提到超过上限。
+> 与 `benchmark/高并发瓶颈定位方案.md` 的「cap 扫描」一致：固定并发扫 15/30/100/500，
+> 看「准入排队」与「等 FC API socket」此消彼长。
+
+---
+
+## 11. 快速重跑单个 job（`build.sh -r` / `deploy.sh --only`，免整套 `-f`）
+
+只改了某个 job 的 env（如 `E2B_FC_LAUNCH_MODE`、`MAX_STARTING_INSTANCES_PER_NODE`）时，
+`build.sh -f`（= `deploy.sh`）其实做了很多用不上的活：**重新 `docker build` 并 push `bin/*.Dockerfile`
+的所有镜像、拉取/推 redis、重跑 redis/edge/api、跑 seed-db、改 tier 配额**。而 env 改动只需要：
+重新 render 这一个 hcl + `nomad job run` 重跑它。扫参数要跑很多轮时，这个差别很明显。
+
+为此给 `deploy.sh` 加了 `--only <job>`，并在 `build.sh` 暴露为 `-r / --redeploy <job>`：
+
+```bash
+cd /opt/e2b-infra && source .env
+bash build.sh -r template-manager        # 等价于 bash deploy.sh --only template-manager
+```
+
+`--only <job>` 相比全量 `-f` 的区别：
+
+| 步骤 | `build.sh -f` | `build.sh -r <job>` |
+|------|:---:|:---:|
+| render `nomad/*.hcl` | ✅ | ✅ |
+| `docker build` + push 镜像 | ✅ | ❌ 跳过 |
+| 拉取/推 redis 等 | ✅ | ❌ 跳过 |
+| `nomad job run` | redis/template-manager/edge/api 全跑 | 只跑 `<job>` |
+| seed-db / 改 tier 配额 | ✅ | ❌ 跳过 |
+
+`<job>` 用 `nomad/` 下的 hcl 文件名（不带 `.hcl`）：`template-manager`、`api`、`edge`、`redis`。
+重跑会给该 job 提交新版本、按新 env 重启 alloc（env 改动只对新起的进程生效，验证见 9.4 / 10.3）。
+
+**适用 / 不适用**：
+- ✅ 适用：只改了 job 的 **env / 部署配置**（本文档两个开关，或其它 env）。镜像与二进制都没变。
+- ❌ 不适用：改了 **Go 源码 / 二进制**——那要走第 5 节·场景一（`rpmbuild` → `rpm -Uvh` →
+  `cp bin/orchestrator /usr/bin/{orchestrator,template-manager}`）；`-r` 既不重建镜像也不刷二进制。
+- ⚠️ 首次部署、或镜像/二进制有更新时，先跑一次全量 `build.sh -f`（或场景一）把镜像推上去，
+  之后的 env 微调再用 `-r` 快速迭代。
+
+> 前提：`/opt/e2b-infra/deploy.sh` 与 `build.sh` 得是带 `--only` / `-r` 的新版本。现有部署先同步一次：
+> `cp -f e2b-deploy/dep/deploy.sh /opt/e2b-infra/deploy.sh`（`build.sh` 在 e2b-deploy 目录下直接用即可，
+> 或重装 RPM）。直接改 `/opt/e2b-infra/…` 是临时的，要持久得改仓库 `e2b-deploy/dep/` 源文件（见第 5 节 ⚠️ 提示）。
