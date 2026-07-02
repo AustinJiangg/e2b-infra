@@ -366,3 +366,110 @@ while mountpoint -q /mnt/hugepages;     do umount /mnt/hugepages     || break; d
 
 - `yum install -y curl unzip jq tar rsync dnsmasq`（`yum_install`）、`yum install -y nginx`（`install_nginx`）
 - `pip install e2b==2.20.0 e2b_code_interpreter==2.4.1 python-dotenv`（`install_e2b`）
+
+---
+
+## 9. Firecracker 启动优化档位（`E2B_FC_LAUNCH_MODE`）
+
+高并发启动沙箱时，`[ResumeSandbox]` 的 `configured fc cost`（拉起 FC 进程 + 等 API socket）是主要瓶颈
+（100 并发实测 ~240ms，详见 `benchmark/启动耗时阶段分析.md`）。patch `0002-fc-launch-dedicated-helper.patch`
+给 orchestrator 加了一个**运行时开关** `E2B_FC_LAUNCH_MODE`，三档启动机制可**免重编**切换、A/B/C 对比：
+
+| 档 | `E2B_FC_LAUNCH_MODE` | 机制 |
+|----|----------------------|------|
+| 1（默认，不优化） | `disabled` | 原始 `unshare -m -- bash -c "… ip netns exec <ns> firecracker"` 全 shell 管道；轮询等 socket。装完 RPM 未改就是这档，行为与上游一致 |
+| 2（中） | `netns-exec` | 同一条 shell 管道，但末尾 `ip netns exec` 换成 `fc-netns-exec` 助手（setns+execve），省掉 iproute2 的额外挂载/sysfs 开销 |
+| 3（最强） | `launch` | 专用无 shell 的 `fc-launch` 助手，一个小进程里做完 挂载+setns+execve；非递归 `MS_PRIVATE` 替代 `mount --make-rprivate /`；等 socket 用 inotify 而非轮询 |
+
+### 9.1 在哪配
+
+真正跑沙箱、执行 `ResumeSandbox`/拉 FC 的 orchestrator 进程，是 **`template-manager.hcl`** 这个 nomad job
+起来的——它设了 `ORCHESTRATOR_SERVICES = "orchestrator,template-manager"`，**一个进程同时跑
+orchestrator + template-manager 两个 service**。所以开关加在它的 `env {}` 块里。
+
+- 仓库源头（持久，扛得住 `build.sh -i` / `rpm -Uvh` 覆盖）：`e2b-deploy/dep/template-manager.hcl`
+- 部署机上被 `build.sh -f` 渲染的模板：`/opt/e2b-infra/nomad/template-manager.hcl`
+
+`env {}` 里加一行（**用字面量，别用 `${...}`**——`deploy.sh` 的 `envsubst` 有变量白名单，
+`${E2B_FC_LAUNCH_MODE}` 不在名单里会被清空成空串，反而回落到 `disabled`）：
+
+```hcl
+      env {
+        ...
+        ORCHESTRATOR_SERVICES         = "orchestrator,template-manager"
+        E2B_FC_LAUNCH_MODE            = "launch"     # disabled | netns-exec | launch
+        ...
+      }
+```
+
+> 本仓库已把默认值设为 `launch`。要换档/回退，改这一行的值即可（`disabled` = 关掉优化）。
+
+### 9.2 前置：助手二进制必须在位（档 2/档 3）
+
+`launch` / `netns-exec` 会去调 `/opt/e2b-infra/bin/{fc-launch,fc-netns-exec}`（路径可用
+`E2B_FC_LAUNCH_HELPER` / `E2B_FC_NETNS_EXEC_HELPER` 覆盖）。这两个助手由 patch 0002 的 Makefile
+`make build` 产出、spec 的 `packages/*/bin/*` glob 装到该路径，所以**含 patch 0002 的 RPM 里已经有**。
+切档前先校验：
+
+```bash
+ls -l /opt/e2b-infra/bin/fc-launch /opt/e2b-infra/bin/fc-netns-exec
+```
+
+若**缺失** = 当前部署的二进制早于 patch 0002：先按「第 5 节·场景一」重建并刷新二进制
+（`rpmbuild -bb e2b-infra.spec …` → `rpm -Uvh` → `cp -f /opt/e2b-infra/bin/orchestrator /usr/bin/orchestrator`），
+再切档。`disabled` 不依赖助手，任何版本都能用。
+
+### 9.3 怎么生效
+
+**只改 `E2B_FC_LAUNCH_MODE` 是 nomad job env 改动，不是 Go 源码改动**，对应「第 5 节·场景二」，
+只需 `build.sh -f`（重新 render + 重跑 job），**不用 `rpmbuild`，也不用 `-i` / `-s`**：
+
+```bash
+# 让改动落到 /opt/e2b-infra/nomad/template-manager.hcl，二选一：
+#   ① 从仓库同步这一个文件（推荐，不动 .env 的 token）：
+cp -f e2b-deploy/dep/template-manager.hcl /opt/e2b-infra/nomad/template-manager.hcl
+#   ② 或直接就地编辑 /opt/e2b-infra/nomad/template-manager.hcl 改那一行
+
+cd /opt/e2b-infra && source .env      # 确认 NOMAD_ACL_TOKEN 是真 token（非占位符）
+bash build.sh -f                      # 重新 render + 重跑 job，orchestrator 带新 env 重启
+```
+
+> ⚠️ 别为切个档去跑 `build.sh -i`——它会把 `.env` 的 `NOMAD_ACL_TOKEN` 重置成占位符（见 6.1）。
+> 集群已在跑时，用上面 ① 手动 `cp` 那一个 hcl + `build.sh -f` 最稳。
+> 直接就地编辑 `/opt/e2b-infra/nomad/…` 是临时的，下次 `build.sh -i` 或 `rpm -Uvh` 会覆盖——
+> 要持久必须改仓库 `e2b-deploy/dep/template-manager.hcl`（本仓库已改）。
+
+### 9.4 验证 & 回退
+
+> ⚠️ 别用 `pgrep -f orchestrator` 找进程——本部署里 orchestrator 逻辑跑在 `template-manager.hcl`
+> 起的进程里，命令是 `/usr/bin/template-manager --port ...`，cmdline 里**没有 "orchestrator" 字样**，
+> `pgrep -f orchestrator` 匹配不到会返回空，命令退化成 `/proc//environ` 报 `No such file`。
+> deploy.sh 的 JOBS 里也没有单独的 orchestrator job。要按 `template-manager` 找。
+
+```bash
+# 1) 文件层：源模板 + 渲染结果都带上了
+grep E2B_FC_LAUNCH_MODE /opt/e2b-infra/nomad/template-manager.hcl      # render 源头（持久）
+grep E2B_FC_LAUNCH_MODE /opt/e2b-infra/rendered/template-manager.hcl   # 本次渲染产物
+
+# 2) 进程层：真正在跑的进程 env 里生效了（父 bash 和子进程都继承 nomad 的 env）
+for pid in $(pgrep -f /usr/bin/template-manager); do
+  echo "== pid $pid: $(tr '\0' ' ' </proc/$pid/cmdline)"
+  tr '\0' '\n' < /proc/$pid/environ | grep -E 'E2B_FC_LAUNCH_MODE|ORCHESTRATOR_SERVICES'
+done
+
+# 3) nomad 层（更权威）：提交的 job spec 带上了，且 alloc 是本次 -f 之后重启的
+cd /opt/e2b-infra && source .env
+nomad job inspect -token "$NOMAD_ACL_TOKEN" template-manager-system | grep E2B_FC_LAUNCH_MODE
+nomad job status  -token "$NOMAD_ACL_TOKEN" template-manager-system   # 看 Version 递增、Status=running
+ps -o pid,lstart,cmd -p $(pgrep -f /usr/bin/template-manager | head -1) # lstart 应是你 -f 之后的时间
+
+# 4) 再跑 benchmark 对比 configured fc cost（benchmark/README.md）
+```
+
+判定：进程 env 出现 `E2B_FC_LAUNCH_MODE=launch`、`nomad job inspect` 里有该键、且进程 `lstart`
+是本次 `build.sh -f` 之后的时间（说明 alloc 已按新 env 重启），即为生效。
+
+> env 改动**只对新起的进程生效**。若 `job status` 的 Version 没变 / 进程 `lstart` 还是老时间，
+> 说明 job 没重启：确认 `nomad/template-manager.hcl`（而非只改 `rendered/`）已带上该行，再 `build.sh -f`。
+
+回退：把值改回 `disabled`（或删掉这行）→ `build.sh -f`。
