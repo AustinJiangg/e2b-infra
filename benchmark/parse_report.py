@@ -11,19 +11,18 @@
 支持 zap JSON 行（timestamp/ts/time 等字段名均可）与纯文本行，仅依赖标准库。
 
 输出到本次运行目录的 report/（--outdir 可覆盖）:
-    report_wide.csv   与参考报告同布局（行=阶段，列=沙箱），含均值/分位数汇总列
+    report_wide.csv   行=阶段，列=沙箱，含均值/分位数汇总列
     report_long.csv   每行一个沙箱，便于二次分析
     summary.csv       各阶段统计（min/avg/p50/p90/p95/p99/max）
-    compare.csv       与 --reference 参考数据的均值对比（可选）
     intervals.csv     每个沙箱的开始/结束时间（两行），供 visualize_intervals.py 画甘特图
 
 不带位置参数时，自动定位最近一次运行目录（runs/.latest），读取其
-orchestrator-logs/*.log，并从 meta.json 自动填 --expected 与时间窗口。
+orchestrator-logs/*.log，并从 meta.json 自动填 --expected 与时间窗口
+（时间窗口把跨多次运行累积的日志按「本次运行」隔离，运行了多少沙箱就分析多少个）。
 
 用法示例:
-    python3 parse_report.py --reference reference_sample.csv
-    python3 parse_report.py --reference reference_sample.csv --last 100   # 时钟不同步时
-    python3 parse_report.py --run-dir runs/run_20260629_142530 --reference reference_sample.csv
+    python parse_report.py                                       # 分析最近一次运行
+    python parse_report.py --run-dir runs/run_20260629_142530    # 指定某次运行
 """
 
 import argparse
@@ -373,47 +372,6 @@ def load_client_ms(run_dir):
     return vals
 
 
-def load_reference(path):
-    """读取参考数据 CSV（行=阶段，第 3 列起为各沙箱数值），返回 {描述: [值...]}"""
-    ref = {}
-    with open(path, "r", encoding="utf-8-sig", newline="") as f:
-        for row in csv.reader(f):
-            if len(row) < 3 or row[1] in ("", "描述"):
-                continue
-            vals = []
-            for cell in row[2:]:
-                try:
-                    vals.append(float(cell))
-                except ValueError:
-                    pass
-            if vals:
-                ref[row[1].strip()] = vals
-    return ref
-
-
-def write_compare(path, valid, ref):
-    rows = []
-    for group, label, key in PHASE_ROWS:
-        if key is None or label not in ref:
-            continue
-        st = phase_stats(valid, key)
-        rvals = ref[label]
-        ravg = sum(rvals) / len(rvals)
-        if st:
-            diff = st["avg"] - ravg
-            pct = (diff / ravg * 100) if ravg else float("inf")
-            rows.append([group, label, fmt(ravg), len(rvals), fmt(st["avg"]), st["n"],
-                         fmt(diff), f"{pct:+.1f}%"])
-        else:
-            rows.append([group, label, fmt(ravg), len(rvals), "", 0, "", ""])
-    with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["阶段", "描述", "参考均值(ms)", "参考样本数",
-                    "本次均值(ms)", "本次样本数", "差值(ms)", "差值(%)"])
-        w.writerows(rows)
-    return rows
-
-
 def resolve_run_dir(explicit, runs_root, auto):
     """定位本次运行目录，返回绝对路径或 None。
 
@@ -466,14 +424,11 @@ def main():
     ap.add_argument("--run-dir", help="本次运行目录（默认读取 runs/.latest 指向的最近一次）")
     ap.add_argument("--since", help="只统计 enter 时间 >= 此时刻的沙箱（ISO 格式）")
     ap.add_argument("--until", help="只统计 enter 时间 <= 此时刻的沙箱（ISO 格式）")
-    ap.add_argument("--last", type=int, help="只取按 enter 时间排序的最后 N 个有效沙箱"
-                                             "（客户端/服务器时钟不同步时替代时间窗口）")
     ap.add_argument("--expected", type=int, help="期望的有效沙箱数，不一致时告警")
     ap.add_argument("--sort", choices=["traceid", "time"], default="traceid",
-                    help="报告中沙箱列的排序方式（参考报告按 traceid 排序）")
+                    help="报告中沙箱列的排序方式（默认按 traceid 排序）")
     ap.add_argument("--tz", default="+08:00",
                     help="无时区日志行的默认时区，及报告显示时区（如 +08:00 / local）")
-    ap.add_argument("--reference", help="参考数据 CSV（如 reference_sample.csv），生成对比表")
     ap.add_argument("--outdir", help="报告输出目录（默认本次运行目录下的 report/）")
     args = ap.parse_args()
 
@@ -485,8 +440,9 @@ def main():
         args.logs = [os.path.join(run_dir, meta.get("logs_glob", "orchestrator-logs/*.log"))]
     if args.expected is None and meta.get("expected") is not None:
         args.expected = meta["expected"]
-    # 时间窗口优先级：--last > CLI --since/--until > meta 窗口兜底（--last 永远压过自动窗口）
-    if not args.last and not args.since and not args.until:
+    # 时间窗口：CLI --since/--until 优先，否则用 meta.json 记录的本次运行窗口兜底
+    # （把跨多次运行累积的 orchestrator 日志按「本次运行」隔离）
+    if not args.since and not args.until:
         if meta.get("bench_window_since"):
             args.since = meta["bench_window_since"]
         if meta.get("bench_window_until"):
@@ -528,14 +484,9 @@ def main():
         if not until:
             raise SystemExit(f"--until 时间格式错误: {args.until}")
         valid = {k: v for k, v in valid.items() if anchor(v) and anchor(v) <= until}
-    if args.last:
-        picked = sorted(valid.items(),
-                        key=lambda kv: anchor(kv[1]) or datetime.min.replace(tzinfo=timezone.utc))
-        valid = dict(picked[-args.last:])
-
     if not valid:
         raise SystemExit("错误: 过滤后没有有效沙箱（有 total cost 的 trace）。"
-                         "请检查 --since/--until 时间窗口或改用 --last。")
+                         "请检查 --since/--until 时间窗口，或用 --run-dir 指定正确的运行目录。")
 
     # 显示时区统一
     for t in valid.values():
@@ -605,29 +556,10 @@ def main():
             w.writerow(["ResumeSandbox总耗时 total", fmt(t_avg), tot["n"] if tot else 0, "ResumeSandbox 函数"])
             w.writerow(["其余(路由+API+取模板等)", fmt(rest), "", "client_ms − total − 准入排队(派生)"])
 
-    if args.reference:
-        compare_path = os.path.join(args.outdir, "compare.csv")
-        # 相对 cwd 找不到时回退到脚本同级目录，使 --reference reference_sample.csv 不依赖 cwd
-        ref_path = args.reference
-        if not os.path.exists(ref_path):
-            alt = os.path.join(SCRIPT_DIR, ref_path)
-            if os.path.exists(alt):
-                ref_path = alt
-        ref = load_reference(ref_path)
-        rows = write_compare(compare_path, valid_list, ref)
-        print(f"\n== 与参考数据对比 (参考: {args.reference})")
-        hdr2 = f"{'阶段/描述':<34}{'参考avg':>10}{'本次avg':>10}{'差值ms':>10}{'差值%':>9}"
-        print(hdr2)
-        print("-" * len(hdr2))
-        for r in rows:
-            name = f"{r[0]}/{r[1]}"
-            pad = max(0, 34 - sum(2 if ord(c) > 127 else 1 for c in name))
-            print(f"{name}{' ' * pad}{r[2]:>10}{r[4]:>10}{r[6]:>10}{r[7]:>9}")
-        print(f"\n报告文件: {wide_path} | {long_path} | {summary_path} | {compare_path}")
-    else:
-        print(f"\n报告文件: {wide_path} | {long_path} | {summary_path}")
+    print(f"\n报告文件: {wide_path} | {long_path} | {summary_path}")
     print(f"分阶段时间轴数据: {timeline_path}")
-    print("可视化（需 matplotlib）: python3 visualize_intervals.py   # 出图 report/timeline.png（真实时间轴+彩色分阶段+并行重叠）")
+    print("可视化（需 matplotlib）: python visualize_intervals.py   # 出图 3 张 PNG: "
+          "timeline.png（合并图）、total_gantt.png（单色 total 甘特）、stage_durations.png（分阶段堆叠）")
 
 
 if __name__ == "__main__":

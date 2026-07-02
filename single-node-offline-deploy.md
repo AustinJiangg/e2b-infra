@@ -584,3 +584,32 @@ bash build.sh -r template-manager        # 等价于 bash deploy.sh --only templ
 > 前提：`/opt/e2b-infra/deploy.sh` 与 `build.sh` 得是带 `--only` / `-r` 的新版本。现有部署先同步一次：
 > `cp -f e2b-deploy/dep/deploy.sh /opt/e2b-infra/deploy.sh`（`build.sh` 在 e2b-deploy 目录下直接用即可，
 > 或重装 RPM）。直接改 `/opt/e2b-infra/…` 是临时的，要持久得改仓库 `e2b-deploy/dep/` 源文件（见第 5 节 ⚠️ 提示）。
+
+---
+
+## 12. 压测（benchmark）：凭据同步与运行流程
+
+`benchmark/` 下跑压测要用两类凭据：建沙箱的 E2B 客户端配置，和采集 orchestrator 日志的
+Nomad ACL token。它们都通过 `benchmark/.env` 提供，值用 `sync-env.sh` 从磁盘上的“真相源”**同步一次**，
+之后整套流程（压测 → 采集 → 分析 → 出图）裸跑即可：
+
+```bash
+cd benchmark
+bash sync-env.sh          # 首次会从 .env.example 生成 .env，并填入下面 3 个易变的值
+python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3
+bash collect_logs.sh      # 不用再手动 export 任何 token
+python parse_report.py    # 默认分析最近一次运行；指定某次用 --run-dir runs/run_<时间戳>
+python visualize_intervals.py   # 可选：出 3 张图（timeline / total_gantt / stage_durations），需 matplotlib
+```
+
+- `.env` 已被 gitignore，**不入库**；入库的只是模板 `.env.example`，真实 token 只留在本机。
+- `sync-env.sh` 只刷新下面 3 个易变值，其它行（`E2B_DOMAIN` / `E2B_API_URL` / `E2B_HTTP_SSL` 等）原样保留：
+
+  | 变量 | 真相源（磁盘） | 用途 |
+  |---|---|---|
+  | `E2B_ACCESS_TOKEN` | `/root/.e2b/config.json` → `.accessToken` | E2B SDK 建沙箱 |
+  | `E2B_API_KEY` | `/root/.e2b/config.json` → `.teamApiKey` | E2B SDK 建沙箱 |
+  | `NOMAD_TOKEN` | `${NOMAD_DATA_DIR:-/data/nomad}/acl.token` | 采集 orchestrator 日志 |
+
+- 路径可用环境变量覆盖：`E2B_CONFIG_JSON=... NOMAD_DATA_DIR=... bash sync-env.sh`。
+  `acl.token` 是 `chmod 600` 归 root，非 root 用户读它要 `sudo`。E2B token 取不到时先用 e2b CLI 登录。

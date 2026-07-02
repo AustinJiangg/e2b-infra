@@ -11,13 +11,13 @@ E2B 沙箱启动耗时压测脚本。
 
 依赖（与 docs/zh/usage.md 的客户端环境一致）:
     pip install e2b==2.20.0 python-dotenv
-    python3 /opt/e2b-infra/patch_e2b.py   # 自部署环境 https->http 补丁
+    python /opt/e2b-infra/patch_e2b.py   # 自部署环境 https->http 补丁
 
-环境变量（可放在当前目录 .env 中）:
+环境变量（可放在当前目录 .env 中，用 sync-env.sh 同步）:
     E2B_API_KEY / E2B_DOMAIN / E2B_API_URL / E2B_HTTP_SSL
 
 用法示例:
-    python3 run_benchmark.py --template base --count 100 --concurrency 1
+    python run_benchmark.py --template base --count 100 --concurrency 1
 """
 
 import argparse
@@ -107,7 +107,8 @@ def main():
     # 加载 .env（与 usage.md 客户端配置方式一致）；未装 dotenv 时静默跳过
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        # 固定读脚本同目录的 .env（不依赖当前工作目录）；文件不存在时静默跳过
+        load_dotenv(os.path.join(SCRIPT_DIR, ".env"))
     except ImportError:
         pass
 
@@ -264,11 +265,8 @@ def main():
     print()
     print(f"== 下一步：采集日志并生成报告（都会自动定位到本次运行目录 runs/{run_dir_name}/）")
     print("   bash collect_logs.sh")
-    print("   python3 parse_report.py --reference reference_sample.csv")
-    print("   python3 visualize_intervals.py          # 可选：画启动区间甘特图（需 matplotlib）")
-    print()
-    print("   # 客户端与服务器时钟不同步时，改用最近 N 条（会覆盖自动时间窗口）：")
-    print(f"   python3 parse_report.py --reference reference_sample.csv --last {args.count}")
+    print("   python parse_report.py")
+    print("   python visualize_intervals.py          # 可选：画启动甘特图 3 张（需 matplotlib）")
 
 
 if __name__ == "__main__":
