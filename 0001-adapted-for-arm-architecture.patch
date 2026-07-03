@@ -78,7 +78,7 @@ Subject: [PATCH] Adapt E2B to the arm64 architecture, remove its dependency on
  .../internal/sandbox/uffd/uffd.go             |   2 +-
  .../sandbox/uffd/userfaultfd/userfaultfd.go   |   8 +-
  packages/orchestrator/internal/server/main.go |  10 +-
- .../orchestrator/internal/server/sandboxes.go |  12 +-
+ .../orchestrator/internal/server/sandboxes.go |  14 +-
  .../internal/service/machineinfo/main.go      |  25 +-
  .../internal/template/build/commands/user.go  |  53 ++-
  .../internal/template/build/core/oci/oci.go   |   2 +-
@@ -96,7 +96,7 @@ Subject: [PATCH] Adapt E2B to the arm64 architecture, remove its dependency on
  packages/shared/pkg/grpc/server.go            |   3 +
  packages/shared/pkg/storage/storage.go        |  14 +-
  packages/shared/pkg/storage/storage_minio.go  | 300 ++++++++++++++
- 91 files changed, 5166 insertions(+), 1129 deletions(-)
+ 91 files changed, 5168 insertions(+), 1129 deletions(-)
  create mode 100644 helm/Chart.yaml
  create mode 100644 helm/templates/api.yaml
  create mode 100644 helm/templates/clickhouse.yaml
@@ -7540,7 +7540,7 @@ index e294939..a0ed5e8 100644
  
  	// executionEventDataKey is the key used in webhook event data for sandbox execution metrics.
  	executionEventDataKey = "execution"
-@@ -94,8 +94,10 @@ func (s *Server) Create(ctx context.Context, req *orchestrator.SandboxCreateRequ
+@@ -94,8 +94,12 @@ func (s *Server) Create(ctx context.Context, req *orchestrator.SandboxCreateRequ
  			return nil, err
  		}
  	} else {
@@ -7548,7 +7548,9 @@ index e294939..a0ed5e8 100644
 -		if !acquired {
 +		ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 +		defer cancel()
++		acquireStart := time.Now()
 +		err := s.startingSandboxes.Acquire(ctx, 1)
++		zap.L().Sugar().Infof("[ResumeSandbox] acquire wait cost: %.3f ms, traceID=%s", time.Since(acquireStart).Seconds()*1000, trace.SpanContextFromContext(ctx).TraceID().String())
 +		if err != nil {
  			telemetry.ReportEvent(ctx, "too many starting sandboxes on node")
  

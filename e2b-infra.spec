@@ -3,7 +3,7 @@
 
 Name:           e2b-infra
 Version:        %{tag}
-Release:        3
+Release:        4
 Summary:        E2B Infra – sandbox runtime (ARM-adapted)
 License:        MIT
 URL:            https://github.com/e2b-dev/infra
@@ -164,6 +164,9 @@ chmod -R a+rX %{buildroot}/opt/e2b-infra/helm
 /opt/e2b-infra/dep/.env
 
 %changelog
+* Thu Jul 02 2026 Claude <noreply@anthropic.com> - 2026.09-4
+- instrument acquire-wait (starting-slot queue) on the non-snapshot sandbox create path
+
 * Fri Apr 24 2026 fly_1997 <flylove7@outlook.com> - 2026.09-3
 - add auto-deploy
 
