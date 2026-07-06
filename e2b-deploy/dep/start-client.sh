@@ -117,17 +117,8 @@ EOH
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
-# 加载自定义优化后的 nbd 模块（512 个设备），替换内核自带的 nbd
-# Load our custom-patched (optimized) nbd module with 512 devices instead of the in-tree one.
-# 模块路径可通过环境变量 NBD_KO 覆盖
-NBD_KO="${NBD_KO:-/home/j30059180/tools/nbd-patch/nbd.ko}"
-if [ ! -f "$NBD_KO" ]; then
-    echo "错误：找不到自定义 nbd 模块：$NBD_KO" >&2
-    exit 1
-fi
-# 先卸载当前已加载的 nbd（内核自带或上一次加载的），未加载时忽略报错
-sudo rmmod nbd 2>/dev/null || true
-sudo insmod "$NBD_KO" nbds_max=512
+# 自定义 nbd 模块（nbds_max=512）不在此处加载：服务器重启后手动执行一次
+# rmmod nbd && insmod nbd.ko nbds_max=512 即可，见 single-node-offline-deploy.md 0.2
 
 # Create the directory for the fc mounts
 mkdir -p /fc-vm
