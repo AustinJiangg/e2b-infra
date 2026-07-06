@@ -496,7 +496,7 @@ while mountpoint -q /mnt/hugepages;     do umount /mnt/hugepages     || break; d
 |----|----------------------|------|
 | 1（默认，不优化） | `disabled` | 原始 `unshare -m -- bash -c "… ip netns exec <ns> firecracker"` 全 shell 管道；轮询等 socket。装完 RPM 未改就是这档，行为与上游一致 |
 | 2（中） | `netns-exec` | 同一条 shell 管道，但末尾 `ip netns exec` 换成 `fc-netns-exec` 助手（setns+execve），省掉 iproute2 的额外挂载/sysfs 开销 |
-| 3（最强） | `launch` | 专用无 shell 的 `fc-launch` 助手，一个小进程里做完 挂载+setns+execve；mount ns 经 `Cloneflags` 在 clone(2) 时创建（不用 `Unshareflags`——Go 的 Unshareflags 路径会在子进程里偷偷 `mount("/", MS_REC\|MS_PRIVATE)`，把 O(主机挂载数) 遍历又加回来），由 fc-launch 只对承载 per-sandbox tmpfs 的挂载点做非递归 `MS_PRIVATE`（O(路径深度)）；等 socket 用 inotify 而非轮询 |
+| 3（最强） | `launch` | 专用无 shell 的 `fc-launch` 助手，一个小进程里做完 挂载+setns+execve；经 `unshare --mount --propagation unchanged` 包装启动（要求 util-linux ≥ 2.26）——mount ns 在子进程创建且跳过 unshare(1) 默认的递归 remount，orchestrator 的 `cmd.Start()` 保持纯 vfork+execve（旧版用 `Cloneflags` 在父进程 clone(2) 时创建 ns，100 并发实测挂载表复制持全局 namespace_sem 锁在 spawn 路径上排成车队，spawn avg 143ms vs 6.6ms，已废弃，详见 `benchmark/FC启动优化-launch.md` §3.2）；由 fc-launch 只对承载 per-sandbox tmpfs 的挂载点做非递归 `MS_PRIVATE`（O(路径深度)）；等 socket 用 inotify 而非轮询 |
 
 ### 9.1 在哪配
 
