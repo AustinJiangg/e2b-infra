@@ -28,15 +28,24 @@ three launch mechanisms so they can be A/B/C-compared without rebuilding:
     mount/symlink setup, enters the sandbox network namespace and execs
     firecracker via direct syscalls in one tiny process (no bash, no coreutils,
     no iproute2, and - unlike re-execing the orchestrator - no heavy package
-    init() on the launch path). The mount namespace is requested via
-    SysProcAttr.Cloneflags, NOT Unshareflags: Go's Unshareflags path remounts
-    "/" with MS_REC|MS_PRIVATE in the child before exec (syscall/exec_linux.go),
-    silently reintroducing the O(host-mounts) walk this mode exists to avoid,
-    while Cloneflags creates the namespace at clone(2) time with no remount and
-    keeps the CLONE_VFORK|CLONE_VM fast path. fc-launch instead marks private,
-    non-recursively, exactly the mounts that receive the per-sandbox tmpfs
-    (O(path depth) instead of O(host-mounts)), and socket.Wait arms inotify
-    instead of polling.
+    init() on the launch path). The helper is spawned through a minimal
+    `unshare --mount --propagation unchanged` wrapper (util-linux >= 2.26):
+    the fresh mount namespace must NOT be created in the orchestrator's own
+    clone(2) via SysProcAttr.Cloneflags, because there the kernel copies the
+    entire host mount table (copy_mnt_ns, under the global namespace_sem
+    lock) inside cmd.Start() while the CLONE_VFORK fast path keeps the parent
+    blocked - so concurrent resumes convoy on that lock right on the
+    orchestrator's spawn path (measured at 100 concurrent resumes: fc spawn
+    avg 143ms / max 233ms with Cloneflags vs 6.6ms for the shell pipeline,
+    costing launch mode more end-to-end than netns-exec despite doing less
+    total work). The wrapper keeps cmd.Start() a plain vfork+execve and moves
+    the namespace copy into the child, off the spawn path and overlapped with
+    the rest of each sandbox's startup. --propagation unchanged suppresses
+    unshare(1)'s default recursive MS_PRIVATE remount of "/" - the same
+    O(host-mounts) walk Go's Unshareflags path would inject. fc-launch
+    instead marks private, non-recursively, exactly the mounts that receive
+    the per-sandbox tmpfs (O(path depth) instead of O(host-mounts)), and
+    socket.Wait arms inotify instead of polling.
 
 Both helper binaries (cmd/fc-netns-exec, cmd/fc-launch) are built by `make build`
 into packages/orchestrator/bin and installed by the spec's existing
@@ -61,14 +70,16 @@ new file mode 100644
 index 0000000..322a598
 --- /dev/null
 +++ b/packages/orchestrator/cmd/fc-launch/main.go
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,52 @@
 +//go:build linux
 +
 +// Command fc-launch starts a firecracker process from a JSON launch plan (see
 +// package launchplan). It is the "launch" mode helper.
 +//
-+// The orchestrator execs this binary — in a fresh mount namespace — instead of
-+// the old shell pipeline
++// The orchestrator starts this binary through a minimal
++// `unshare --mount --propagation unchanged` wrapper — a fresh mount namespace
++// created in the child, with no recursive remount of "/" — instead of the old
++// shell pipeline
 +//
 +//	unshare -m -- bash -c "mount --make-rprivate / && mount -t tmpfs ... && \
 +//	    ln -s ... && mkdir -p ... && ln -s ... && \
@@ -304,7 +315,7 @@ new file mode 100644
 index 0000000..8ea37c6
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/fc/launchplan/run_linux.go
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,135 @@
 +//go:build linux
 +
 +package launchplan
@@ -325,13 +336,14 @@ index 0000000..8ea37c6
 +// replacing the current process image.
 +//
 +// It must be called from a process that was started in a fresh mount namespace
-+// (CLONE_NEWNS); the orchestrator requests that via SysProcAttr.Cloneflags,
-+// replacing the old `unshare -m`. Cloneflags — not Unshareflags — matters:
-+// Go's Unshareflags path remounts "/" with MS_REC|MS_PRIVATE in the child
-+// before exec (syscall/exec_linux.go), walking every host mount under the
-+// global namespace lock on each launch. With Cloneflags the namespace is
-+// created at clone(2) time with no remount, and cutting mount propagation
-+// back to the host is our job, done non-recursively below.
++// (CLONE_NEWNS); the orchestrator arranges that by spawning this helper
++// through `unshare --mount --propagation unchanged` (see the launch branch in
++// fc/process.go for why the namespace is created in the child and not in the
++// orchestrator's own clone(2) via SysProcAttr.Cloneflags). The wrapper's
++// --propagation unchanged suppresses unshare(1)'s default recursive
++// MS_PRIVATE remount of "/" — the same O(host-mounts) walk Go's Unshareflags
++// path would inject — so cutting mount propagation back to the host is our
++// job, done non-recursively below.
 +func Run(plan Plan) error {
 +	// The fresh mount namespace still shares mount propagation with the host
 +	// (on systemd hosts every mount is shared), so the per-sandbox tmpfs
@@ -339,7 +351,7 @@ index 0000000..8ea37c6
 +	// namespace. The classic fix is `mount --make-rprivate /` (MS_REC), which
 +	// walks the entire host mount tree on every launch and serializes under
 +	// the mount namespace lock when many sandboxes resume at once — the very
-+	// walk the Cloneflags spawn just avoided. Instead, mark private exactly
++	// walk `--propagation unchanged` just avoided. Instead, mark private exactly
 +	// the mounts that will receive a tmpfs: O(path depth) syscalls, and
 +	// unrelated mounts keep their propagation.
 +	for _, s := range plan.Steps {
@@ -578,7 +590,7 @@ index 1a3f4bd..8c33e49 100644
  	"errors"
  	"fmt"
  	"io"
-@@ -93,18 +94,73 @@ func NewProcess(
+@@ -93,18 +94,87 @@ func NewProcess(
  	))
  	defer childSpan.End()
  
@@ -600,7 +612,7 @@ index 1a3f4bd..8c33e49 100644
 +
 +	if fcLaunchMode() == modeLaunch {
 +		// launch (C): one tiny fc-launch helper does mounts + setns + execve via
-+		// direct syscalls; the new mount namespace is requested via Cloneflags.
++		// direct syscalls, inside a fresh mount namespace made by unshare(1).
 +		launch, err := startBuilder.BuildLaunchPlan(versions, files, rootfsPaths, slot.NamespaceID())
 +		if err != nil {
 +			return nil, err
@@ -611,18 +623,32 @@ index 1a3f4bd..8c33e49 100644
 +			return nil, fmt.Errorf("error marshaling fc launch plan: %w", err)
 +		}
 +
-+		cmd = exec.CommandContext(execCtx, fcLaunchHelperPath(), string(planJSON))
-+		// The new mount namespace (replacing `unshare -m`) is requested via
-+		// Cloneflags, NOT Unshareflags: Go's Unshareflags path remounts "/" with
-+		// MS_REC|MS_PRIVATE in the child before exec (syscall/exec_linux.go),
-+		// which walks every host mount under the global namespace lock — the
-+		// exact O(host-mounts) cost launch mode exists to avoid. Cloneflags
-+		// creates the namespace at clone(2) time, skips that remount and keeps
-+		// the CLONE_VFORK|CLONE_VM fast path. Mount propagation back to the
-+		// host is cut, non-recursively, by fc-launch itself (launchplan.Run).
++		// The fresh mount namespace is created by the child (`unshare --mount`),
++		// NOT in the orchestrator's own clone(2) via SysProcAttr.Cloneflags:
++		// with Cloneflags the kernel copies the entire host mount table
++		// (copy_mnt_ns, under the global namespace_sem lock) inside cmd.Start(),
++		// and the CLONE_VFORK fast path keeps the parent blocked for all of it,
++		// so concurrent resumes convoy on that lock right on the spawn path
++		// (measured at 100 concurrent resumes: fc spawn avg 143ms / max 233ms
++		// vs 6.6ms for the shell pipeline). Spawning through unshare(1) keeps
++		// cmd.Start() a plain vfork+execve; the mount-table copy still happens,
++		// but in the child, overlapped with the rest of each sandbox's startup.
++		//
++		// --propagation unchanged (util-linux >= 2.26) suppresses unshare(1)'s
++		// default recursive MS_PRIVATE remount of "/" — the same O(host-mounts)
++		// walk Go's Unshareflags path would inject. Cutting mount propagation
++		// back to the host stays fc-launch's job, done non-recursively on just
++		// the mounts that receive the per-sandbox tmpfs (launchplan.Run).
++		cmd = exec.CommandContext(execCtx,
++			"unshare",
++			"--mount",
++			"--propagation", "unchanged",
++			"--",
++			fcLaunchHelperPath(),
++			string(planJSON),
++		)
 +		cmd.SysProcAttr = &syscall.SysProcAttr{
-+			Setsid:     true,                // Create a new session
-+			Cloneflags: syscall.CLONE_NEWNS, // New mount namespace at clone(2) time
++			Setsid: true, // Create a new session
 +		}
 +		kernelPath, rootfsPath = launch.KernelPath, launch.RootfsPath
 +		cmdDesc = fmt.Sprintf("%s --api-sock %s", launch.Plan.FirecrackerPath, launch.Plan.FirecrackerSocket)
@@ -658,7 +684,7 @@ index 1a3f4bd..8c33e49 100644
  	if err != nil {
  		return nil, fmt.Errorf("error stating firecracker binary: %w", err)
  	}
-@@ -114,19 +162,6 @@ func NewProcess(
+@@ -114,19 +184,6 @@ func NewProcess(
  		return nil, fmt.Errorf("error stating kernel file: %w", err)
  	}
  
@@ -678,7 +704,7 @@ index 1a3f4bd..8c33e49 100644
  	return &Process{
  		Versions:              versions,
  		Exit:                  utils.NewErrorOnce(),
-@@ -138,8 +173,8 @@ func NewProcess(
+@@ -138,8 +195,8 @@ func NewProcess(
  		files:                 files,
  		slot:                  slot,
  
