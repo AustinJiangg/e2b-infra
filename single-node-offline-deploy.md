@@ -32,17 +32,28 @@
    systemctl restart docker   # ⚠️ 会重启现有容器，挑好时机
    ```
 
-### 0.2 自定义 nbd 内核模块（`nbd.ko`，需自备）
+### 0.2 自定义 nbd 内核模块（`nbd.ko`，需自备，**手动加载**）
 
-`start-client.sh` / `init-client.sh`（`build.sh -i` 从 `dep/` 拷进 `/opt/e2b-infra/`、
-`build.sh -s` 启动 Nomad 客户端时执行）已不再用 `modprobe nbd`，改成先 `rmmod nbd` 再
-`insmod` 你**自己编译的优化版 nbd 模块**（带 `nbds_max=512`）。模块路径默认
-`/home/j30059180/tools/nbd-patch/nbd.ko`，可用环境变量 `NBD_KO` 覆盖。部署前须满足两个前提，
-否则脚本会在加载 nbd 这步 `exit 1`：
+`start-client.sh` / `init-client.sh` **不自动加载 nbd 模块**（脚本里原有的 `rmmod`+`insmod`
+逻辑已删除——模块已加载时重复 `insmod` 会报
+`insmod: ERROR: could not insert module nbd.ko: File exists`，而模块本来只需加载一次）。
+你**自己编译的优化版 nbd 模块**（`nbds_max=512`）改为部署前手动加载一次即可，加载后长期有效；
+**服务器每次重启后模块会丢，需重新手动执行一遍**：
+
+```bash
+# 先卸载内核自带（或旧的）nbd，未加载时忽略报错；再装自定义模块
+sudo rmmod nbd 2>/dev/null || true
+sudo insmod /home/j30059180/tools/nbd-patch/nbd.ko nbds_max=512
+
+# 验证
+lsmod | grep nbd
+ls /dev/nbd* | wc -l    # 应为 512
+```
+
+两个注意点：
 
 1. **vermagic 必须与运行内核完全一致**。`insmod` 会校验模块 vermagic 是否等于本机 `uname -r`，
-   不一致直接报 `Invalid module format`（这是从 `modprobe` 换成 `insmod` 新增的硬约束，`modprobe`
-   不校验这么严）。检查：
+   不一致直接报 `Invalid module format`（`modprobe` 不校验这么严）。检查：
    ```bash
    modinfo /home/j30059180/tools/nbd-patch/nbd.ko | grep vermagic
    # vermagic: 6.6.0_6.6.0_515-uffd_copy_open_tree SMP mod_unload modversions aarch64
@@ -50,21 +61,8 @@
    ```
    内核不同就要在目标机对应内核上重新编译 `nbd.ko`。
 
-2. **`.ko` 必须存在于本节点**。脚本在本机读取 `$NBD_KO`；单节点部署里编译机和 client 通常是同一台，
-   若 `.ko` 不在默认路径，就先拷过去或用 `NBD_KO` 指到实际路径。文件缺失时脚本 fail-fast 报
-   「找不到自定义 nbd 模块」并退出：
-   ```bash
-   # 放到默认路径：
-   mkdir -p /home/j30059180/tools/nbd-patch && cp nbd.ko /home/j30059180/tools/nbd-patch/nbd.ko
-   # 或指到别处（例如和其它离线大件一起放 dep/）：
-   export NBD_KO=/opt/e2b-infra/dep/nbd.ko
-   ```
-
-> ⚠️ 仓库里有**两套** client 脚本：RPM（`e2b-infra.spec`）打包的
-> `.github/actions/host-init/init-client.sh`、`iac/provider-gcp/nomad-cluster/scripts/start-client.sh`
-> **不加载 nbd**；真正加载 nbd（`rmmod`+`insmod`）的是 `e2b-deploy/dep/` 下的版本，由 `build.sh -i`
-> 覆盖进 `/opt/e2b-infra/`、再由 `-s` 执行。所以**务必走 `build.sh -i` → `-s`**，别绕过它直接跑
-> RPM 装的 `/opt/e2b-infra/*-client.sh`，否则不会加载你的自定义 nbd 模块。
+2. **重复 `insmod` 报 `File exists` = 模块已在**，无需处理。若要换新编译的 `.ko`，
+   先确认没有 nbd 设备在用，`rmmod nbd` 后再 `insmod`。
 
 ---
 
@@ -200,7 +198,7 @@ curl -s http://$SERVER_IP:4646/v1/status/leader
 |---|:--:|---|
 | `bin/*`（orchestrator、envd、firecracker、vmlinux.bin、goose、migrations…） | ✅ 覆盖 | 新二进制正是从这里来的 |
 | `nomad/*.hcl`（render 模板） | ✅ 覆盖 | ⚠️ 被重置成「上游+patch 默认版」——`ORCHESTRATOR_SERVICES` 缺 `orchestrator`、`E2B_FC_LAUNCH_MODE` 整行消失（缺省=disabled）、`MAX_STARTING_INSTANCES_PER_NODE` 回 500。修复=重放 overlay（5.0） |
-| `deploy.sh`、`start-*.sh`、`run-*.sh`、`install-*.sh`、`uninstall-*.sh`、`init-client.sh`、`env.template`、`nomad.service` | ✅ 覆盖成**上游 iac 版** | ⚠️ 同类坑：dep/ 侧增强丢失——`deploy.sh` 丢 `--only`（之后 `build.sh -r` 报 `Unknown parameter: --only`）、`start-client.sh`/`init-client.sh` 丢 rmmod+insmod 定制 nbd 逻辑。修复=重放 overlay（5.0） |
+| `deploy.sh`、`start-*.sh`、`run-*.sh`、`install-*.sh`、`uninstall-*.sh`、`init-client.sh`、`env.template`、`nomad.service` | ✅ 覆盖成**上游 iac 版** | ⚠️ 同类坑：dep/ 侧增强丢失——`deploy.sh` 丢 `--only`（之后 `build.sh -r` 报 `Unknown parameter: --only`）。修复=重放 overlay（5.0）。（定制 nbd 模块已改为手动加载，见 0.2，不再受此影响） |
 | `dep/*`（含 `dep/.env`、`dep/template-manager.hcl`） | ✅ 覆盖 | 重置为仓库里的部署基线——重放 overlay 的**来源**就是这里 |
 | `build.sh`、`*.py`、`helm/*` | ✅ 覆盖（仓库版） | 与仓库同步，无坑——注意 `build.sh` 是新版而 `deploy.sh` 可能是旧版，两者错配正是上面坑的表现 |
 | `.env`（顶层，含 bootstrap 出来的真实 `NOMAD_ACL_TOKEN`） | ❌ 不动 | 不在 `%files` 里——**这就是场景二不需要重新 bootstrap 的原因** |
@@ -212,7 +210,7 @@ curl -s http://$SERVER_IP:4646/v1/status/leader
 部署机上的 `/opt/e2b-infra/` 是三层叠出来的：
 
 1. **RPM 铺底**——`bin/*`、`nomad/*.hcl`、`deploy.sh` 等部署脚本，内容是**上游源树(+patch) 版**；每次 `rpm -Uvh` 整层重铺。
-2. **dep overlay**——`build.sh -i` 把 `dep/` 里的**增强版**盖到对应位置（`deploy.sh` 的 `--only`、`start-client.sh`/`init-client.sh` 的 insmod nbd、`template-manager.hcl` 的 `orchestrator,template-manager` 等）。**rpm 重铺第 1 层时，这层被打回上游版。**
+2. **dep overlay**——`build.sh -i` 把 `dep/` 里的**增强版**盖到对应位置（`deploy.sh` 的 `--only`、`template-manager.hcl` 的 `orchestrator,template-manager` 等）。**rpm 重铺第 1 层时，这层被打回上游版。**
 3. **bootstrap / 运行产物**——顶层 `.env`（真 token）、`rendered/*`、`/etc` 下的组件配置、python site-packages 里的 SDK 补丁。rpm 一概不碰；但 `build.sh -i` 会重置 `.env`、`-s` 会重新 bootstrap——**所以不能用 `-i -s` 来补第 2 层**。
 
 推论：**每次 `rpm -Uvh` 之后，手动重放第 2 层（= 执行 `-i` 中安全的那部分，唯独跳过 `.env`）**：
