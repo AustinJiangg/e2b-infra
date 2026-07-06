@@ -20,7 +20,7 @@
 | 沙箱恢复准备 | 获取 template 元数据 | `get template metadata cost` | |
 | 创建 firecracker 进程 | 创建 firecracker 进程 | `fc.NewProcess cost` | |
 | 创建 firecracker 进程 | 等待firecracker启动 | `configured fc cost` | 启动 FC 进程并等待其 API socket（父=下面两段之和） |
-| 创建 firecracker 进程 | └拉起FC进程 | `fc spawn cost` | `p.cmd.Start()` fork/exec 启动命令（受 `E2B_FC_LAUNCH_MODE` 3 档影响），在 `process.go` `configure` 埋点 |
+| 创建 firecracker 进程 | └拉起FC进程 | `fc spawn cost` | `p.cmd.Start()` fork/exec 启动命令（受 `E2B_FC_LAUNCH_MODE` 3 档影响，档位机制详解见 `FC启动优化-netns-exec.md` / `FC启动优化-launch.md`），在 `process.go` `configure` 埋点 |
 | 创建 firecracker 进程 | └等FC API socket | `fc socket wait cost` | `socket.Wait()` 等 FC 的 API socket 就绪（含命名空间内脚本/exec + FC 启动），在 `process.go` `configure` 埋点 |
 | 创建 firecracker 进程 | 等待uffd sock | `get uffd sock path cost` | |
 | firecracker 恢复虚拟机 | 加载快照 | `load snapshot cost` | |

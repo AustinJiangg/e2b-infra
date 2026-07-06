@@ -491,13 +491,14 @@ while mountpoint -q /mnt/hugepages;     do umount /mnt/hugepages     || break; d
 
 高并发启动沙箱时，`[ResumeSandbox]` 的 `configured fc cost`（拉起 FC 进程 + 等 API socket）是主要瓶颈
 （100 并发实测 ~240ms，详见 `benchmark/启动耗时阶段分析.md`）。patch `0002-fc-launch-dedicated-helper.patch`
-给 orchestrator 加了一个**运行时开关** `E2B_FC_LAUNCH_MODE`，三档启动机制可**免重编**切换、A/B/C 对比：
+给 orchestrator 加了一个**运行时开关** `E2B_FC_LAUNCH_MODE`，三档启动机制可**免重编**切换、A/B/C 对比
+（两个优化档的动机/原理/实现详解见 `benchmark/FC启动优化-netns-exec.md` 与 `benchmark/FC启动优化-launch.md`）：
 
 | 档 | `E2B_FC_LAUNCH_MODE` | 机制 |
 |----|----------------------|------|
 | 1（默认，不优化） | `disabled` | 原始 `unshare -m -- bash -c "… ip netns exec <ns> firecracker"` 全 shell 管道；轮询等 socket。装完 RPM 未改就是这档，行为与上游一致 |
 | 2（中） | `netns-exec` | 同一条 shell 管道，但末尾 `ip netns exec` 换成 `fc-netns-exec` 助手（setns+execve），省掉 iproute2 的额外挂载/sysfs 开销 |
-| 3（最强） | `launch` | 专用无 shell 的 `fc-launch` 助手，一个小进程里做完 挂载+setns+execve；非递归 `MS_PRIVATE` 替代 `mount --make-rprivate /`；等 socket 用 inotify 而非轮询 |
+| 3（最强） | `launch` | 专用无 shell 的 `fc-launch` 助手，一个小进程里做完 挂载+setns+execve；mount ns 经 `Cloneflags` 在 clone(2) 时创建（不用 `Unshareflags`——Go 的 Unshareflags 路径会在子进程里偷偷 `mount("/", MS_REC\|MS_PRIVATE)`，把 O(主机挂载数) 遍历又加回来），由 fc-launch 只对承载 per-sandbox tmpfs 的挂载点做非递归 `MS_PRIVATE`（O(路径深度)）；等 socket 用 inotify 而非轮询 |
 
 ### 9.1 在哪配
 
