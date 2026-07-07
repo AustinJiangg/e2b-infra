@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: jianglulu <jianglulu001@gmail.com>
 Date: Sat, 27 Jun 2026 00:00:00 +0000
 Subject: [PATCH] orchestrator: selectable firecracker launch mode
- (disabled/netns-exec/launch)
+ (disabled/netns-exec/launch/launch-c)
 
 The orchestrator starts each firecracker through a shell pipeline:
 
@@ -16,7 +16,7 @@ namespace lock. Under concurrent resume this dominates the
 "[ResumeSandbox] configured fc cost" phase (~200-300ms at 100 concurrent).
 
 This adds a runtime switch, E2B_FC_LAUNCH_MODE (see mode.go), selecting one of
-three launch mechanisms so they can be A/B/C-compared without rebuilding:
+four launch mechanisms so they can be A/B-compared without rebuilding:
 
   * disabled (default) - the original shell pipeline with `ip netns exec`.
     Polls for the FC API socket. A faithful baseline; a freshly installed RPM
@@ -46,22 +46,36 @@ three launch mechanisms so they can be A/B/C-compared without rebuilding:
     instead marks private, non-recursively, exactly the mounts that receive
     the per-sandbox tmpfs (O(path depth) instead of O(host-mounts)), and
     socket.Wait arms inotify instead of polling.
+  * launch-c - like launch, but the helper is a single-threaded C binary
+    (cmd/fc-launch-c/fc_launch.c) that unshares its own mount namespace after
+    execve - legal for a single-threaded process, impossible in Go, whose
+    runtime threads share fs_struct - so the orchestrator spawns it directly:
+    no unshare(1) wrapper (one execve less), no Go runtime startup (~1-2ms)
+    and no dependence on util-linux flags on the launch path. The plan
+    travels as ordered argv flags (--netns/--fc/--sock + --tmpfs/--symlink/
+    --mkdir, see launchplan.Argv) instead of JSON: execve passes argv
+    verbatim, so there is still no quoting layer, and the C side needs no
+    JSON parser. Propagation handling is identical to launch (targeted,
+    non-recursive MS_PRIVATE). socket.Wait's inotify fast-path applies here
+    too.
 
-Both helper binaries (cmd/fc-netns-exec, cmd/fc-launch) are built by `make build`
-into packages/orchestrator/bin and installed by the spec's existing
-packages/*/bin/* glob to /opt/e2b-infra/bin/ (paths overridable via
-E2B_FC_NETNS_EXEC_HELPER / E2B_FC_LAUNCH_HELPER).
+The helper binaries (cmd/fc-netns-exec, cmd/fc-launch, cmd/fc-launch-c) are
+built by `make build` into packages/orchestrator/bin and installed by the
+spec's existing packages/*/bin/* glob to /opt/e2b-infra/bin/ (paths
+overridable via E2B_FC_NETNS_EXEC_HELPER / E2B_FC_LAUNCH_HELPER /
+E2B_FC_LAUNCH_C_HELPER).
 ---
 diff --git a/packages/orchestrator/Makefile b/packages/orchestrator/Makefile
 index 9077063..ba4209c 100644
 --- a/packages/orchestrator/Makefile
 +++ b/packages/orchestrator/Makefile
-@@ -21,6 +21,8 @@ build:
+@@ -21,6 +21,9 @@ build:
  	$(eval COMMIT_SHA ?= $(shell git rev-parse --short HEAD))
  	CGO_ENABLED=1 GOOS=linux go build -o bin/orchestrator -ldflags "-X=main.commitSHA=$(COMMIT_SHA)" .
  	CGO_ENABLED=1 GOOS=linux go build -o bin/clean-nfs-cache -ldflags "-X=main.commitSHA=$(COMMIT_SHA)" ./cmd/clean-nfs-cache
 +	CGO_ENABLED=0 GOOS=linux go build -o bin/fc-netns-exec ./cmd/fc-netns-exec
 +	CGO_ENABLED=0 GOOS=linux go build -o bin/fc-launch ./cmd/fc-launch
++	$(CC) -O2 -Wall -Wextra -o bin/fc-launch-c ./cmd/fc-launch-c/fc_launch.c
  
  .PHONY: build-local
  build-local:
@@ -122,6 +136,212 @@ index 0000000..322a598
 +	// execve did not replace the process image.
 +	fmt.Fprintln(os.Stderr, "fc-launch: launcher returned without exec")
 +	os.Exit(1)
++}
+diff --git a/packages/orchestrator/cmd/fc-launch-c/fc_launch.c b/packages/orchestrator/cmd/fc-launch-c/fc_launch.c
+new file mode 100644
+index 0000000..6cd7fab
+--- /dev/null
++++ b/packages/orchestrator/cmd/fc-launch-c/fc_launch.c
+@@ -0,0 +1,200 @@
++// fc-launch-c — the "launch-c" (gear 4) firecracker launcher.
++//
++// Single-threaded C replacement for the Go fc-launch helper (gear 3,
++// "launch"). Because it is single-threaded it may call unshare(CLONE_NEWNS)
++// itself after execve — impossible in Go, whose runtime threads share their
++// fs_struct so unshare(2) fails with EINVAL — so the orchestrator spawns this
++// binary directly: no `unshare --mount --propagation unchanged` wrapper (one
++// execve less) and no Go runtime startup (~1-2ms) on the launch path.
++//
++// The launch plan arrives as ordered argv flags instead of JSON: execve
++// passes argv verbatim (no shell, no quoting layer), and C then needs no JSON
++// parser. Step flags execute strictly in argv order and mirror
++// startScriptV1/V2 exactly like launchplan.Plan.Steps (see launchplan.Argv).
++//
++// Usage:
++//   fc-launch-c --netns <name|/abs/path> --fc <firecracker> --sock <api-sock>
++//               [--tmpfs <dir> | --symlink <link> <target> | --mkdir <dir>]...
++//
++// Propagation handling matches launchplan.Run: the fresh mount namespace
++// still shares propagation with the host, so the mount containing every
++// --tmpfs target is marked MS_PRIVATE non-recursively (walking up on
++// EINVAL/ENOENT; "/" always terminates the walk) — O(path depth) syscalls,
++// never the O(host-mounts) recursive remount.
++
++#define _GNU_SOURCE
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <sched.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mount.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++extern char **environ;
++
++static void die(const char *what, const char *arg) {
++	if (arg != NULL)
++		fprintf(stderr, "fc-launch-c: %s %s: %s\n", what, arg, strerror(errno));
++	else
++		fprintf(stderr, "fc-launch-c: %s: %s\n", what, strerror(errno));
++	exit(1);
++}
++
++static void usage(void) {
++	fprintf(stderr,
++	        "usage: fc-launch-c --netns <name|path> --fc <firecracker> --sock <api-sock>\n"
++	        "                   [--tmpfs <dir> | --symlink <link> <target> | --mkdir <dir>]...\n");
++	exit(2);
++}
++
++// copy_path bounds-checks an argv path (absolute, fits PATH_MAX) and copies it
++// into a fixed buffer the walk/mkdir helpers can edit in place.
++static void copy_path(char *dst, size_t cap, const char *path, const char *what) {
++	size_t n = strlen(path);
++	if (n == 0 || path[0] != '/' || n >= cap) {
++		errno = (n >= cap) ? ENAMETOOLONG : EINVAL;
++		die(what, path);
++	}
++	memcpy(dst, path, n + 1);
++}
++
++// mkdir -p, mode 0755 (mirrors os.MkdirAll in the Go helper).
++static void mkdir_p(const char *path) {
++	char buf[PATH_MAX];
++	copy_path(buf, sizeof(buf), path, "mkdir -p");
++	for (char *p = buf + 1; *p != '\0'; p++) {
++		if (*p != '/')
++			continue;
++		*p = '\0';
++		if (mkdir(buf, 0755) != 0 && errno != EEXIST)
++			die("mkdir -p", path);
++		*p = '/';
++	}
++	if (mkdir(buf, 0755) != 0 && errno != EEXIST)
++		die("mkdir -p", path);
++}
++
++// make_containing_mount_private marks the mount containing path MS_PRIVATE
++// (non-recursive) so mounts later placed at path do not propagate to peer
++// namespaces. MS_PRIVATE on a non-mount-point fails with EINVAL, and
++// components that do not exist yet (created by a later step) fail with ENOENT
++// — both mean "try the parent". "/" is always a mount point, so the walk
++// terminates.
++static void make_containing_mount_private(const char *path) {
++	char buf[PATH_MAX];
++	copy_path(buf, sizeof(buf), path, "make mount private");
++	for (;;) {
++		if (mount("", buf, NULL, MS_PRIVATE, NULL) == 0)
++			return;
++		if ((errno != EINVAL && errno != ENOENT) || strcmp(buf, "/") == 0)
++			die("make mount private", path);
++		char *slash = strrchr(buf, '/');
++		if (slash == buf)
++			buf[1] = '\0'; // parent of "/x" is "/"
++		else
++			*slash = '\0';
++	}
++}
++
++// open_netns resolves a namespace name under /var/run/netns then /run/netns
++// (iproute2's lookup order); an absolute path is used as-is.
++static int open_netns(const char *ns) {
++	if (ns[0] == '/') {
++		int fd = open(ns, O_RDONLY | O_CLOEXEC);
++		if (fd < 0)
++			die("open netns", ns);
++		return fd;
++	}
++
++	static const char *const dirs[] = {"/var/run/netns", "/run/netns"};
++	for (size_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++) {
++		char buf[PATH_MAX];
++		int n = snprintf(buf, sizeof(buf), "%s/%s", dirs[i], ns);
++		if (n < 0 || (size_t)n >= sizeof(buf)) {
++			errno = ENAMETOOLONG;
++			die("open netns", ns);
++		}
++		int fd = open(buf, O_RDONLY | O_CLOEXEC);
++		if (fd >= 0)
++			return fd;
++	}
++	die("open netns", ns); // errno from the last open attempt
++	return -1;             // unreachable
++}
++
++int main(int argc, char **argv) {
++	const char *netns = NULL, *fc = NULL, *sock = NULL;
++
++	// Pass 1: collect config flags and validate the whole argv shape, so a
++	// malformed invocation fails before anything is mutated.
++	for (int i = 1; i < argc; i++) {
++		const char *a = argv[i];
++		if (strcmp(a, "--netns") == 0 && i + 1 < argc)
++			netns = argv[++i];
++		else if (strcmp(a, "--fc") == 0 && i + 1 < argc)
++			fc = argv[++i];
++		else if (strcmp(a, "--sock") == 0 && i + 1 < argc)
++			sock = argv[++i];
++		else if ((strcmp(a, "--tmpfs") == 0 || strcmp(a, "--mkdir") == 0) && i + 1 < argc)
++			i += 1;
++		else if (strcmp(a, "--symlink") == 0 && i + 2 < argc)
++			i += 2;
++		else
++			usage();
++	}
++	if (netns == NULL || fc == NULL || sock == NULL)
++		usage();
++
++	// Own mount namespace. A single-threaded process may unshare(CLONE_NEWNS)
++	// directly, and unlike unshare(1)'s default or Go's Unshareflags path,
++	// nothing here remounts "/" recursively — propagation is cut per target
++	// below.
++	if (unshare(CLONE_NEWNS) != 0)
++		die("unshare(CLONE_NEWNS)", NULL);
++
++	// Cut propagation for every tmpfs target...
++	for (int i = 1; i < argc; i++) {
++		if (strcmp(argv[i], "--tmpfs") == 0)
++			make_containing_mount_private(argv[++i]);
++		else if (strcmp(argv[i], "--symlink") == 0)
++			i += 2;
++		else
++			i += 1; // value of --netns/--fc/--sock/--mkdir
++	}
++
++	// ...then execute the steps in argv order (mirrors launchplan.Run).
++	for (int i = 1; i < argc; i++) {
++		const char *a = argv[i];
++		if (strcmp(a, "--tmpfs") == 0) {
++			const char *dir = argv[++i];
++			mkdir_p(dir);
++			if (mount("tmpfs", dir, "tmpfs", 0, NULL) != 0)
++				die("mount tmpfs", dir);
++		} else if (strcmp(a, "--mkdir") == 0) {
++			mkdir_p(argv[++i]);
++		} else if (strcmp(a, "--symlink") == 0) {
++			const char *link_path = argv[++i];
++			const char *target = argv[++i];
++			if (symlink(target, link_path) != 0)
++				die("symlink", link_path);
++		} else {
++			i++; // value of --netns/--fc/--sock
++		}
++	}
++
++	// Enter the sandbox network namespace, then exec firecracker in place; the
++	// process is still single-threaded, so no thread pinning is needed (this
++	// is what `ip netns exec` does, minus its mount-namespace/sysfs work).
++	int fd = open_netns(netns);
++	if (setns(fd, CLONE_NEWNET) != 0)
++		die("setns(CLONE_NEWNET)", netns);
++	close(fd);
++
++	char *fc_argv[] = {(char *)fc, "--api-sock", (char *)sock, NULL};
++	execve(fc, fc_argv, environ);
++	die("exec firecracker", fc); // execve only returns on failure
 +}
 diff --git a/packages/orchestrator/cmd/fc-netns-exec/main.go b/packages/orchestrator/cmd/fc-netns-exec/main.go
 new file mode 100644
@@ -202,6 +422,93 @@ index 0000000..dcedfb8
 +	}
 +
 +	return ""
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/argv.go b/packages/orchestrator/internal/sandbox/fc/launchplan/argv.go
+new file mode 100644
+index 0000000..744165b
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/launchplan/argv.go
+@@ -0,0 +1,31 @@
++package launchplan
++
++import "fmt"
++
++// Argv encodes a Plan as the ordered flag list understood by the fc-launch-c
++// helper (launch-c mode). Like the JSON form handed to the Go fc-launch
++// helper, argv is passed verbatim by execve — no shell, no quoting layer —
++// but flags additionally need no parser at all on the C side. Step flags keep
++// Plan.Steps order; the helper executes them in argv order.
++func Argv(p Plan) ([]string, error) {
++	args := []string{
++		"--netns", p.NamespaceID,
++		"--fc", p.FirecrackerPath,
++		"--sock", p.FirecrackerSocket,
++	}
++
++	for _, s := range p.Steps {
++		switch s.Op {
++		case OpTmpfs:
++			args = append(args, "--tmpfs", s.Path)
++		case OpMkdir:
++			args = append(args, "--mkdir", s.Path)
++		case OpSymlink:
++			args = append(args, "--symlink", s.Path, s.Src)
++		default:
++			return nil, fmt.Errorf("unknown op %q", s.Op)
++		}
++	}
++
++	return args, nil
++}
+diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/argv_test.go b/packages/orchestrator/internal/sandbox/fc/launchplan/argv_test.go
+new file mode 100644
+index 0000000..1ec8fcf
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/launchplan/argv_test.go
+@@ -0,0 +1,44 @@
++package launchplan
++
++import (
++	"reflect"
++	"testing"
++)
++
++func TestArgv(t *testing.T) {
++	plan := Plan{
++		Steps: []Step{
++			{Op: OpTmpfs, Path: "/fc-vm"},
++			{Op: OpSymlink, Path: "/fc-vm/rootfs.ext4", Src: "/orchestrator/sandbox/rootfs"},
++			{Op: OpMkdir, Path: "/fc-vm/kernel"},
++			{Op: OpSymlink, Path: "/fc-vm/kernel/vmlinux.bin", Src: "/fc-kernels/vmlinux.bin"},
++		},
++		NamespaceID:       "ns-7",
++		FirecrackerPath:   "/fc-versions/v1.12.1/firecracker",
++		FirecrackerSocket: "/run/fc.sock",
++	}
++
++	got, err := Argv(plan)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	want := []string{
++		"--netns", "ns-7",
++		"--fc", "/fc-versions/v1.12.1/firecracker",
++		"--sock", "/run/fc.sock",
++		"--tmpfs", "/fc-vm",
++		"--symlink", "/fc-vm/rootfs.ext4", "/orchestrator/sandbox/rootfs",
++		"--mkdir", "/fc-vm/kernel",
++		"--symlink", "/fc-vm/kernel/vmlinux.bin", "/fc-kernels/vmlinux.bin",
++	}
++	if !reflect.DeepEqual(got, want) {
++		t.Fatalf("Argv:\n got %q\nwant %q", got, want)
++	}
++}
++
++func TestArgvUnknownOp(t *testing.T) {
++	if _, err := Argv(Plan{Steps: []Step{{Op: "chmod", Path: "/x"}}}); err == nil {
++		t.Fatal("want error for unknown op")
++	}
 +}
 diff --git a/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go b/packages/orchestrator/internal/sandbox/fc/launchplan/plan.go
 new file mode 100644
@@ -456,7 +763,7 @@ new file mode 100644
 index 0000000..97f46d9
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/fc/mode.go
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,91 @@
 +package fc
 +
 +import (
@@ -472,9 +779,15 @@ index 0000000..97f46d9
 +//	netns-exec            — same shell pipeline, but the trailing `ip netns exec` is
 +//	                        replaced by the fc-netns-exec helper (setns + execve)
 +//	launch                — the dedicated shell-free fc-launch helper (mounts + setns +
-+//	                        execve in one tiny process), plus inotify-based socket wait
++//	                        execve in one tiny process, spawned through a minimal
++//	                        `unshare --mount --propagation unchanged` wrapper), plus
++//	                        inotify-based socket wait
++//	launch-c              — like launch, but the helper is a single-threaded C binary
++//	                        (fc-launch-c) that unshares its own mount namespace: no
++//	                        unshare(1) wrapper and no Go runtime startup on the launch
++//	                        path; the plan travels as argv flags (launchplan.Argv)
 +//
-+// Both optimized modes are off by default so a freshly installed RPM behaves
++// All optimized modes are off by default so a freshly installed RPM behaves
 +// exactly like upstream until the operator opts in.
 +type fcMode string
 +
@@ -482,6 +795,7 @@ index 0000000..97f46d9
 +	modeDisabled  fcMode = "disabled"
 +	modeNetnsExec fcMode = "netns-exec"
 +	modeLaunch    fcMode = "launch"
++	modeLaunchC   fcMode = "launch-c"
 +
 +	// envLaunchMode is also read, as a raw string, by package socket (which
 +	// cannot import this package) to gate the inotify fast-path.
@@ -496,6 +810,8 @@ index 0000000..97f46d9
 +		return modeNetnsExec
 +	case modeLaunch:
 +		return modeLaunch
++	case modeLaunchC:
++		return modeLaunchC
 +	default:
 +		return modeDisabled
 +	}
@@ -521,6 +837,16 @@ index 0000000..97f46d9
 +	return "/opt/e2b-infra/bin/fc-launch"
 +}
 +
++// fcLaunchCHelperPath is the fc-launch-c binary used in launch-c mode.
++// Overridable via E2B_FC_LAUNCH_C_HELPER; defaults to the RPM install path.
++func fcLaunchCHelperPath() string {
++	if p := os.Getenv("E2B_FC_LAUNCH_C_HELPER"); p != "" {
++		return p
++	}
++
++	return "/opt/e2b-infra/bin/fc-launch-c"
++}
++
 +// netnsExecScript rewrites a generated start script's trailing
 +// `ip netns exec <ns> ...` into `<helper> <ns> ...` so that netns-exec mode
 +// reuses the exact same shell pipeline as the baseline, only swapping the final
@@ -534,7 +860,7 @@ new file mode 100644
 index 0000000..effaf3a
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/fc/mode_test.go
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,44 @@
 +package fc
 +
 +import (
@@ -549,6 +875,7 @@ index 0000000..effaf3a
 +		"bogus":      modeDisabled,
 +		"netns-exec": modeNetnsExec,
 +		"launch":     modeLaunch,
++		"launch-c":   modeLaunchC,
 +	}
 +	for val, want := range cases {
 +		t.Setenv(envLaunchMode, val)
@@ -590,14 +917,14 @@ index 1a3f4bd..8c33e49 100644
  	"errors"
  	"fmt"
  	"io"
-@@ -93,18 +94,87 @@ func NewProcess(
+@@ -93,18 +94,110 @@ func NewProcess(
  	))
  	defer childSpan.End()
  
 -	// Build the firecracker start script and get computed paths
 +	// Build the firecracker launch command. The mechanism is selected at runtime
-+	// by E2B_FC_LAUNCH_MODE (see mode.go) so disabled/netns-exec/launch can be
-+	// A/B/C-compared without rebuilding.
++	// by E2B_FC_LAUNCH_MODE (see mode.go) so the disabled/netns-exec/launch/
++	// launch-c mechanisms can be A/B-compared without rebuilding.
  	startBuilder := NewStartScriptBuilder(config)
 -	startScript, err := startBuilder.Build(versions, files, rootfsPaths, slot.NamespaceID())
 -	if err != nil {
@@ -610,7 +937,30 @@ index 1a3f4bd..8c33e49 100644
 +		cmdDesc    string
 +	)
 +
-+	if fcLaunchMode() == modeLaunch {
++	if fcLaunchMode() == modeLaunchC {
++		// launch-c (D): like launch, but the helper is a single-threaded C
++		// binary that unshares its own mount namespace after execve — legal
++		// there, impossible in multi-threaded Go — so it is spawned directly:
++		// no unshare(1) wrapper execve and no Go runtime startup on this path.
++		// The plan travels as ordered argv flags (launchplan.Argv), which
++		// execve passes verbatim; the C side parses nothing.
++		launch, err := startBuilder.BuildLaunchPlan(versions, files, rootfsPaths, slot.NamespaceID())
++		if err != nil {
++			return nil, err
++		}
++
++		helperArgv, err := launch.HelperArgv()
++		if err != nil {
++			return nil, fmt.Errorf("error encoding fc launch argv: %w", err)
++		}
++
++		cmd = exec.CommandContext(execCtx, fcLaunchCHelperPath(), helperArgv...)
++		cmd.SysProcAttr = &syscall.SysProcAttr{
++			Setsid: true, // Create a new session
++		}
++		kernelPath, rootfsPath = launch.KernelPath, launch.RootfsPath
++		cmdDesc = fmt.Sprintf("%s --api-sock %s", launch.Plan.FirecrackerPath, launch.Plan.FirecrackerSocket)
++	} else if fcLaunchMode() == modeLaunch {
 +		// launch (C): one tiny fc-launch helper does mounts + setns + execve via
 +		// direct syscalls, inside a fresh mount namespace made by unshare(1).
 +		launch, err := startBuilder.BuildLaunchPlan(versions, files, rootfsPaths, slot.NamespaceID())
@@ -684,7 +1034,7 @@ index 1a3f4bd..8c33e49 100644
  	if err != nil {
  		return nil, fmt.Errorf("error stating firecracker binary: %w", err)
  	}
-@@ -114,19 +184,6 @@ func NewProcess(
+@@ -114,19 +207,6 @@ func NewProcess(
  		return nil, fmt.Errorf("error stating kernel file: %w", err)
  	}
  
@@ -704,7 +1054,7 @@ index 1a3f4bd..8c33e49 100644
  	return &Process{
  		Versions:              versions,
  		Exit:                  utils.NewErrorOnce(),
-@@ -138,8 +195,8 @@ func NewProcess(
+@@ -138,8 +218,8 @@ func NewProcess(
  		files:                 files,
  		slot:                  slot,
  
@@ -727,7 +1077,7 @@ index dcd2662..c8af8bb 100644
  	"github.com/e2b-dev/infra/packages/shared/pkg/storage"
  )
  
-@@ -164,3 +165,60 @@ func (sb *StartScriptBuilder) getRootfsPath(args startScriptArgs, rootfsPaths Ro
+@@ -164,3 +165,67 @@ func (sb *StartScriptBuilder) getRootfsPath(args startScriptArgs, rootfsPaths Ro
  func (sb *StartScriptBuilder) getKernelPath(args startScriptArgs) string {
  	return filepath.Join(args.SandboxDir, args.SandboxKernelDir, args.SandboxKernelFile)
  }
@@ -788,11 +1138,18 @@ index dcd2662..c8af8bb 100644
 +		KernelPath: sb.getKernelPath(args),
 +	}, nil
 +}
++
++// HelperArgv encodes the plan as the ordered argv flag list for the
++// fc-launch-c helper (launch-c mode). Defined here, next to BuildLaunchPlan,
++// so process.go needs no launchplan import.
++func (r *LaunchPlanResult) HelperArgv() ([]string, error) {
++	return launchplan.Argv(r.Plan)
++}
 diff --git a/packages/orchestrator/internal/sandbox/socket/socket.go b/packages/orchestrator/internal/sandbox/socket/socket.go
 index ac23431..4e10e3b 100644
 --- a/packages/orchestrator/internal/sandbox/socket/socket.go
 +++ b/packages/orchestrator/internal/sandbox/socket/socket.go
-@@ -4,17 +4,40 @@ import (
+@@ -4,17 +4,42 @@ import (
  	"context"
  	"fmt"
  	"os"
@@ -814,31 +1171,33 @@ index ac23431..4e10e3b 100644
 +	// inotify, or a watch race) and can be coarse.
 +	inotifyRecheckInterval = 250 * time.Millisecond
 +
-+	// launchModeEnv / launchModeInotify mirror package fc's E2B_FC_LAUNCH_MODE
-+	// (this package cannot import fc). The inotify fast-path is part of the
-+	// "launch" optimization (C); disabled/netns-exec keep the original polling so
-+	// they remain a faithful baseline / A comparison.
-+	launchModeEnv     = "E2B_FC_LAUNCH_MODE"
-+	launchModeInotify = "launch"
++	// launchModeEnv / launchModeInotify / launchModeInotifyC mirror package
++	// fc's E2B_FC_LAUNCH_MODE (this package cannot import fc). The inotify
++	// fast-path is part of the "launch" (C) and "launch-c" (D) optimizations;
++	// disabled/netns-exec keep the original polling so they remain a faithful
++	// baseline / A comparison.
++	launchModeEnv      = "E2B_FC_LAUNCH_MODE"
++	launchModeInotify  = "launch"
++	launchModeInotifyC = "launch-c"
  )
  
 -// Wait waits for the given file to exist.
 +// Wait waits for the given file (a unix socket) to exist.
 +//
-+// In launch mode it arms inotify on the socket's parent directory so it returns
-+// within microseconds of firecracker (or the uffd handler) creating the socket,
-+// rather than paying up to waitInterval of polling latency per sandbox — which
-+// matters on the "wait firecracker start" critical path under concurrent resume.
-+// In any other mode (disabled/netns-exec), and whenever inotify cannot be set
-+// up, it falls back to polling.
++// In launch/launch-c mode it arms inotify on the socket's parent directory so
++// it returns within microseconds of firecracker (or the uffd handler) creating
++// the socket, rather than paying up to waitInterval of polling latency per
++// sandbox — which matters on the "wait firecracker start" critical path under
++// concurrent resume. In any other mode (disabled/netns-exec), and whenever
++// inotify cannot be set up, it falls back to polling.
  func Wait(ctx context.Context, socketPath string) error {
  	// 从环境变量获取超时时间（秒）
  	timeoutSeconds, err := env.GetEnvAsInt("SOCKET_WAIT_TIMEOUT_SECONDS", defaultWaitTimeoutSeconds)
-@@ -25,6 +48,68 @@ func Wait(ctx context.Context, socketPath string) error {
+@@ -25,6 +50,68 @@ func Wait(ctx context.Context, socketPath string) error {
  	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
  	defer cancel()
  
-+	if os.Getenv(launchModeEnv) == launchModeInotify && waitInotify(ctx, socketPath) {
++	if mode := os.Getenv(launchModeEnv); (mode == launchModeInotify || mode == launchModeInotifyC) && waitInotify(ctx, socketPath) {
 +		return nil
 +	}
 +

@@ -2,7 +2,7 @@
 
 > **版本基准：e2b-infra `2026.09` tag + `0001-adapted-for-arm-architecture.patch` + `0002-fc-launch-dedicated-helper.patch`。**
 > 本档全部源码都在 `0002-fc-launch-dedicated-helper.patch` 里（仓库不直接跟踪打过补丁的 Go 源码树），
-> 文中引用的文件路径均指补丁应用后的路径。三档开关机制、配置方法见 `single-node-offline-deploy.md` 第 9 节；
+> 文中引用的文件路径均指补丁应用后的路径。档位开关机制、配置方法见 `single-node-offline-deploy.md` 第 9 节；
 > 各阶段耗时数据口径见 `启动耗时阶段分析.md`。姊妹篇：`FC启动优化-launch.md`（档位 3）。
 
 ---
