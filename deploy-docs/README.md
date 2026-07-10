@@ -28,6 +28,7 @@
 | [`04-build.sh-i-安装组件详解.md`](04-build.sh-i-安装组件详解.md) | `build.sh -i` 逐函数拆解：postgres/minio/harbor/nginx/e2b 各装了什么、改了系统哪里 |
 | [`05-build.sh-s-启动部署详解.md`](05-build.sh-s-启动部署详解.md) | `build.sh -s` 逐步拆解：consul/nomad 拉起与 ACL bootstrap、宿主机调优、deploy.sh 渲染与提交 job |
 | [`06-日常运维手册.md`](06-日常运维手册.md) | 各组件怎么看状态/日志/重启：nomad、consul、postgres、minio、harbor、nginx、dnsmasq 等，含巡检清单 |
+| [`07-single-node-traffic-architecture.md`](07-single-node-traffic-architecture.md) | 流量处理深度剖析：resolv.conf/glibc 解析原理、dnsmasq 分流、iptables 80→3002、三类流量完整链路、验证与排障 |
 
 ## 推荐阅读路径
 
