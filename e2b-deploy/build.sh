@@ -258,6 +258,7 @@ function install_e2b() {
     cp -fv $DEP_DIR/install-nomad.sh /opt/e2b-infra
     cp -fv $DEP_DIR/install-consul.sh /opt/e2b-infra
     cp -fv $DEP_DIR/uninstall-nomad.sh /opt/e2b-infra
+    cp -fv $DEP_DIR/uninstall-consul.sh /opt/e2b-infra
 
     cp -fv $DEP_DIR/consul_1.21.4_linux_arm64.zip /tmp/consul.zip
     cp -fv $DEP_DIR/nomad_1.10.4_linux_arm64.zip /tmp   
@@ -678,6 +679,10 @@ function stop() {
     cd "$E2B_DIR" || error "进入 $E2B_DIR 目录失败"
     bash "$E2B_DIR/uninstall-consul.sh" --force || warn "停止 Consul 失败（非致命）"
     bash "$E2B_DIR/uninstall-nomad.sh" --force || warn "停止 Nomad 失败（非致命）"
+
+    # 兜底：确保 consul / nomad agent 进程确实退出（与 uninstall_nomad() 对称）
+    pkill nomad 2>/dev/null || true
+    pkill consul 2>/dev/null || true
 
     tasks=("redis" "/client-proxy" "/api" "template-manager")
 
