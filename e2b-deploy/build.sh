@@ -160,11 +160,12 @@ function install_minio() {
     systemctl enable minio || warn "设置 minio 开机自启失败（非致命）"
     systemctl start minio || error "启动 minio 服务失败"
     
-    # 健康检查
+    # 健康检查：MinIO 监听 0.0.0.0，走 127.0.0.1 探测即可；--noproxy 防止
+    # http_proxy 环境变量把探测请求劫持到代理（表现为 504）
     info "等待 MinIO 健康检查通过..."
     HEALTH_CHECK=""
     for ((i=0; i<10; i++)); do
-        HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 "http://$HOST_IP:$MINIO_PORT/minio/health/ready")
+        HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" --noproxy '*' --connect-timeout 2 "http://127.0.0.1:$MINIO_PORT/minio/health/ready")
         if [ "$HEALTH_CHECK" = "200" ]; then
             break
         fi
@@ -365,8 +366,17 @@ function uninstall_e2b() {
 }
 
 # ===================== 主函数 =====================
+# 校验 .env 里的 SERVER_IP 确实是本机地址。配错时各组件健康检查会把请求发到外网
+# （若 shell 配了 http_proxy 还会收到代理的 504），报错极具误导性，故在此提前拦截。
+function check_host_ip() {
+    if ! ip -o -4 addr show | grep -q "inet $HOST_IP/"; then
+        error "SERVER_IP=$HOST_IP 不是本机地址！请修改 $DEP_DIR/.env 中的 SERVER_IP 为本机实际 IP（可用 ip -4 addr 查看），再重新执行安装"
+    fi
+}
+
 function install() {
     info "===== 开始批量安装组件（本机IP：$HOST_IP）====="
+    check_host_ip
     yum_install
     # unzip_package
     # iptables -F
