@@ -8423,6 +8423,15 @@ index 6ed0d4a..5110ec1 100644
  	DefaultFirecrackerVersion     = DefaultFirecackerV1_12Version
  )
  
+@@ -204,7 +204,7 @@ var FirecrackerVersionMap = map[string]string{
+ 
+ // BuildIoEngine Sync is used by default as there seems to be a bad interaction between Async and a lot of io operations.
+ var (
+-	BuildFirecrackerVersion     = newStringFlag("build-firecracker-version", env.GetEnv("DEFAULT_FIRECRACKER_VERSION", DefaultFirecrackerVersion))
++	BuildFirecrackerVersion     = newStringFlag("build-firecracker-version", DefaultFirecrackerVersion)
+ 	BuildIoEngine               = newStringFlag("build-io-engine", "Sync")
+ 	DefaultPersistentVolumeType = newStringFlag("default-persistent-volume-type", "")
+ 	BuildNodeInfo               = newJSONFlag("preferred-build-node", ldvalue.Null())
 diff --git a/packages/shared/pkg/grpc/server.go b/packages/shared/pkg/grpc/server.go
 index d03c750..33b3b1e 100644
 --- a/packages/shared/pkg/grpc/server.go
