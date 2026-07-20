@@ -69,7 +69,7 @@ fi
 # 2. 设置swap永久生效（避免重复写入fstab）
 echo "检查swap配置是否已写入/etc/fstab..."
 if ! grep -q "^$SWAPFILE\s\+none\s\+swap\s\+sw\s\+0\s\+0$" /etc/fstab; then
-    echo "$SWAPFILE none swap sw 0 0" | $SUDO tee -a /etc/fstab >/dev/null
+    echo "$SWAPFILE none swap sw 0 0" | sudo tee -a /etc/fstab >/dev/null
     echo "✅ swap配置已写入/etc/fstab，重启后自动生效。"
 else
     echo "ℹ️ swap配置已存在于/etc/fstab，无需重复写入。"
