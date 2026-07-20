@@ -131,8 +131,18 @@ git clone <本仓库地址> e2b-infra
 cd e2b-infra
 git lfs pull                       # 拉取 e2b-infra-2026.09.tar.gz
 
-# 2) 若改了 dep/.env（尤其 SERVER_IP、各端口），先重建 e2b-deploy.tar.gz
-#    （e2b-deploy.tar.gz 是打进 RPM 的部署包，dep/.env 里的 SERVER_IP 必须是本机 IP）
+# 1b) git lfs pull 拉不动时（LFS 服务器 https://artlfs.openeuler.openatom.cn 不可达/被代理拦截），
+#     从上游 GitHub 下载同一份源码后重打包。注意：GitHub 归档解包后的顶层目录叫 infra-2026.09，
+#     而 spec 的 %autosetup 期望 e2b-infra-2026.09，必须解包改名再重新打包，只改文件名没用
+wget https://github.com/e2b-dev/infra/archive/refs/tags/2026.09.tar.gz -O infra-2026.09.tar.gz
+tar -xzf infra-2026.09.tar.gz && mv infra-2026.09 e2b-infra-2026.09
+tar -czf e2b-infra-2026.09.tar.gz e2b-infra-2026.09
+rm -rf e2b-infra-2026.09 infra-2026.09.tar.gz
+
+# 2) 改 e2b-deploy/dep/.env：SERVER_IP= 必须改成本机 IP（否则 harbor/registry/nomad 地址全错），
+#    改完重建打进 RPM 的部署包 e2b-deploy.tar.gz（改了其它端口/变量同理）
+sed -i 's/^SERVER_IP=.*/SERVER_IP=<本机IP>/' e2b-deploy/dep/.env
+tar -czf e2b-deploy.tar.gz e2b-deploy
 
 # 3) 构建 RPM
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
@@ -713,6 +723,8 @@ Nomad ACL token。它们都通过 `benchmark/.env` 提供，值用 `sync-env.sh`
 ```bash
 cd benchmark
 bash sync-env.sh          # 首次会从 .env.example 生成 .env，并填入下面 3 个易变的值
+# 首次必做：E2B_API_URL 默认是占位符，改成本机 API 地址（远程跑客户端则填 http://<SERVER_IP>:3000）
+sed -i 's|^E2B_API_URL=.*|E2B_API_URL="http://127.0.0.1:3000"|' .env
 python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3
 bash collect_logs.sh      # 不用再手动 export 任何 token
 python parse_report.py    # 默认分析最近一次运行；指定某次用 --run-dir runs/run_<时间戳>
@@ -728,6 +740,10 @@ python visualize_intervals.py   # 可选：出 3 张图（timeline / total_gantt
   | `E2B_API_KEY` | `/root/.e2b/config.json` → `.teamApiKey` | E2B SDK 建沙箱 |
   | `NOMAD_TOKEN` | `${NOMAD_DATA_DIR:-/data/nomad}/acl.token` | 采集 orchestrator 日志 |
 
+- **首次生成的 `.env` 里 `E2B_API_URL` 是占位符 `http://<server_ip>:3000`，必须手工改成本机 IP**
+  （本机跑压测用 `http://127.0.0.1:3000`；不改的话 SDK 第一步就报 `Name or service not known`）。
+  `sync-env.sh` 永不动这行，改一次即可。`E2B_DOMAIN="e2b.app"` 保持默认——`build.sh -i` 装的
+  dnsmasq 已把 `*.e2b.app` 解析到本机，这个域名是连沙箱用的。
 - 路径可用环境变量覆盖：`E2B_CONFIG_JSON=... NOMAD_DATA_DIR=... bash sync-env.sh`。
   `acl.token` 是 `chmod 600` 归 root，非 root 用户读它要 `sudo`。E2B token 取不到时先用 e2b CLI 登录。
 
