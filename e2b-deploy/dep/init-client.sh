@@ -128,12 +128,6 @@ du -h "${envd_dir}/envd"
 
 
 FIRECRACKER_VERSION=1.12.1
-ARCH=$(uname -m)
-case "$ARCH" in
-  x86_64)  FC_ARCH="x86_64" ;;
-  aarch64) FC_ARCH="aarch64" ;;
-  *)       echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
-esac
 
 # Download kernels
 kernels_dir="/fc-kernels"
@@ -142,32 +136,17 @@ cp ./bin/vmlinux.bin "${kernels_dir}/vmlinux-6.1.102/"
 chmod -R 755 $kernels_dir
 ls -lh $kernels_dir
 
-# Download FC versions
+# Install FC versions
 fc_versions_dir="/fc-versions"
 mkdir -p $fc_versions_dir
 mkdir -p $fc_versions_dir/v${FIRECRACKER_VERSION}
-#rm -rf firecracker-v${FIRECRACKER_VERSION}-${FC_ARCH}.tgz
-#wget https://github.com/firecracker-microvm/firecracker/releases/download/v${FIRECRACKER_VERSION}/firecracker-v${FIRECRACKER_VERSION}-${FC_ARCH}.tgz
 cd /opt/e2b-infra
-# 拼接文件名和下载链接
-FILENAME="firecracker-v${FIRECRACKER_VERSION}-${FC_ARCH}.tgz"
-DOWNLOAD_URL="https://github.com/firecracker-microvm/firecracker/releases/download/v${FIRECRACKER_VERSION}/${FILENAME}"
-
-# 核心逻辑：检查文件是否存在，不存在则下载
-if [ -f "${FILENAME}" ]; then
-    echo "文件 ${FILENAME} 已存在，跳过下载。"
-else
-    echo "文件 ${FILENAME} 不存在，开始下载..."
-    if wget "${DOWNLOAD_URL}"; then
-        echo "下载完成：${FILENAME}"
-    else
-        echo "错误：下载 ${FILENAME} 失败！"
-        exit 1  # 下载失败时退出脚本，返回非0状态码
-    fi
+# RPM 自带定制版 firecracker（bin/firecracker，仅 aarch64 打包），直接安装，不再下载官方 tgz
+if [ ! -f ./bin/firecracker ]; then
+    echo "错误：/opt/e2b-infra/bin/firecracker 不存在（x86_64 RPM 不打包定制 firecracker）！"
+    exit 1
 fi
-
-tar -xvf firecracker-v${FIRECRACKER_VERSION}-${FC_ARCH}.tgz
-cp release-v${FIRECRACKER_VERSION}-${FC_ARCH}/firecracker-v${FIRECRACKER_VERSION}-${FC_ARCH} ${fc_versions_dir}/v${FIRECRACKER_VERSION}/firecracker
+cp ./bin/firecracker "${fc_versions_dir}/v${FIRECRACKER_VERSION}/firecracker"
 chmod +x ${fc_versions_dir}/v${FIRECRACKER_VERSION}/firecracker
 chmod -R 755 $fc_versions_dir/v${FIRECRACKER_VERSION}
 ls -lh $fc_versions_dir
