@@ -122,8 +122,9 @@ cp consul_1.21.4_linux_arm64.zip harbor-offline-installer-aarch64-v2.13.0.tgz \
    nomad_1.10.4_linux_arm64.zip  minio  /opt/e2b-infra/dep/
 ```
 
-> firecracker 不用下载：RPM 自带仓库定制版 v1.12.1（`/opt/e2b-infra/bin/firecracker`），
-> `init-client.sh` 直接把它安装到 `/fc-versions/v1.12.1/firecracker`。
+> firecracker 不用下载：RPM 自带仓库定制版（基于 v1.12.1，`/opt/e2b-infra/bin/firecracker`），
+> `init-client.sh` 直接把它安装到 `/fc-versions/v1.13.1/firecracker`（目录名 v1.13.1
+> 对应代码运行时查找的版本号标签）。
 
 ### 1.2 docker 镜像 → 在目标机 `docker load`
 
@@ -182,9 +183,9 @@ tar -czf e2b-deploy.tar.gz e2b-deploy
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
 
 # 4) 安装到 /opt（会生成 /opt/e2b-infra/ 及 /opt/e2b-infra/dep/）
-#    Release 要写明（当前 -4，与 e2b-infra.spec 的 Release 同步递增）；
-#    别用 e2b-infra-*.rpm 通配——RPMS 目录里若还留着旧 -3 包会一起匹配进来报冲突
-rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm      # 升级用 rpm -Uvh --force
+#    Release 要写明（当前 -3，与 e2b-infra.spec 的 Release 同步递增）；
+#    别用 e2b-infra-*.rpm 通配——RPMS 目录里若还留着旧包会一起匹配进来报冲突
+rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm      # 升级用 rpm -Uvh --force
 ```
 
 > 关键：`dep/.env` 的 `SERVER_IP=` 必须改成本机 IP，否则 harbor/registry/nomad 地址全错。
@@ -283,7 +284,7 @@ done
 
 ```bash
 bash build.sh -d        # 停止并清空 nomad/consul 数据（含 ACL 状态）
-rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm   # 若改了源码
+rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm   # 若改了源码
 bash build.sh -i
 bash build.sh -s        # 全新 bootstrap，自动生成新 token 并写回 .env
 ```
@@ -292,10 +293,10 @@ bash build.sh -s        # 全新 bootstrap，自动生成新 token 并写回 .en
 
 ```bash
 # 1) 重建并安装 RPM（只为更新 /opt/e2b-infra/bin 下的二进制）
-#    --force：同一个 Release（当前 -4）反复改源码重建时也能覆盖安装，不然 rpm 会报 already installed；
-#    版本号写明 -4，别用 e2b-infra-*.rpm 通配（会把旧 -3 包一起匹配进来报冲突）
+#    --force：同一个 Release（当前 -3）反复改源码重建时也能覆盖安装，不然 rpm 会报 already installed；
+#    版本号写明 -3，别用 e2b-infra-*.rpm 通配（会把旧包一起匹配进来报冲突）
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
-rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm
+rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm
 
 # 2) 重放 dep overlay（见 5.0——rpm 之后的必做动作，不做则下次 render/-r/-f 必炸）
 

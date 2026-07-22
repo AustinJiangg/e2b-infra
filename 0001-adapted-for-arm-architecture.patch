@@ -135,7 +135,7 @@ index 7db6c68..521b0d4 100644
  
  # Add cache disk for orchestrator and swapfile
  MOUNT_POINT="/orchestrator"
-+FIRECRACKER_VERSION="1.12.1"
++FIRECRACKER_VERSION="1.13.1"
  
  # Step 2: Create the mount point
  sudo mkdir -p $MOUNT_POINT
@@ -8418,20 +8418,11 @@ index 6ed0d4a..5110ec1 100644
  const (
 -	DefaultFirecackerV1_10Version = "v1.10.1_30cbb07"
 -	DefaultFirecackerV1_12Version = "v1.12.1_a41d3fb"
-+	DefaultFirecackerV1_10Version = "v1.12.1"
-+	DefaultFirecackerV1_12Version = "v1.12.1"
++	DefaultFirecackerV1_10Version = "v1.13.1"
++	DefaultFirecackerV1_12Version = "v1.13.1"
  	DefaultFirecrackerVersion     = DefaultFirecackerV1_12Version
  )
  
-@@ -204,7 +204,7 @@ var FirecrackerVersionMap = map[string]string{
- 
- // BuildIoEngine Sync is used by default as there seems to be a bad interaction between Async and a lot of io operations.
- var (
--	BuildFirecrackerVersion     = newStringFlag("build-firecracker-version", env.GetEnv("DEFAULT_FIRECRACKER_VERSION", DefaultFirecrackerVersion))
-+	BuildFirecrackerVersion     = newStringFlag("build-firecracker-version", DefaultFirecrackerVersion)
- 	BuildIoEngine               = newStringFlag("build-io-engine", "Sync")
- 	DefaultPersistentVolumeType = newStringFlag("default-persistent-volume-type", "")
- 	BuildNodeInfo               = newJSONFlag("preferred-build-node", ldvalue.Null())
 diff --git a/packages/shared/pkg/grpc/server.go b/packages/shared/pkg/grpc/server.go
 index d03c750..33b3b1e 100644
 --- a/packages/shared/pkg/grpc/server.go

@@ -164,7 +164,6 @@ pip install e2b==2.20.0 e2b_code_interpreter==2.4.1 python-dotenv
 | `install-nomad.sh`、`install-consul.sh`、`uninstall-nomad.sh` | `/opt/e2b-infra/` | 离线缓存版安装/卸载脚本 |
 | `consul_1.21.4_linux_arm64.zip` | `/tmp/consul.zip` | install-consul.sh 认这个缓存路径 |
 | `nomad_1.10.4_linux_arm64.zip` | `/tmp/` | install-nomad.sh 认 `/tmp/nomad_<ver>_linux_<arch>.zip` |
-| `firecracker-v1.12.1-aarch64.tgz` | `/opt/e2b-infra/` | init-client.sh 就地解压用 |
 | **`.env`** | `/opt/e2b-infra/.env` | ⚠️ **顶层 .env 被重置为基线**（占位 token）——集群在跑时的 403 之源 |
 | `template-manager.hcl` | `nomad/template-manager.hcl` | 换成合体进程+双开关的增强版 |
 | `start-client.sh`、`start-server.sh`、`init-client.sh`、`run-nomad.sh`、`run-consul.sh`、`deploy.sh` | `/opt/e2b-infra/` | 全套增强版部署脚本（含 `deploy.sh --only`） |

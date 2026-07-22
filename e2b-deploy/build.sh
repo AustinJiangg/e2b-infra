@@ -599,7 +599,7 @@ function start() {
     # prepare 生成的部分配置属主可能是 root，容器内 UID 10000 读不了
     chown -R 10000:10000 "$WORK_DIR/harbor/common/config/registry" \
                          "$WORK_DIR/harbor/common/config/nginx" || true
-    docker-compose -f "$WORK_DIR/harbor/docker-compose.yml" restart registry proxy || true
+    docker compose -f "$WORK_DIR/harbor/docker-compose.yml" restart registry proxy || true
 
     # 进入 E2B_DIR 并处理错误
     cd "$E2B_DIR" || error "进入 $E2B_DIR 目录失败"
