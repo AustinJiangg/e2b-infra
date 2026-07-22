@@ -14,8 +14,9 @@
 # allocation，脚本会遍历所有 running 的 allocation（多节点时日志必须收齐，
 # 否则部分沙箱的 trace 会缺失）。
 #
-# 本部署启用了 Nomad ACL，nomad 调用需要 token；请先 export NOMAD_TOKEN=<token>
-# （或提供部署 .env 里的 NOMAD_ACL_TOKEN），否则会报 403 Permission denied。
+# 本部署启用了 Nomad ACL，nomad 调用需要 token。本脚本只从 benchmark/.env 的
+# NOMAD_TOKEN 取值（请先 bash sync-env.sh 同步），并忽略 shell 里已 export 的
+# NOMAD_TOKEN/NOMAD_ACL_TOKEN，避免陈旧环境变量盖过刚同步的 .env。
 #
 # 如果 nomad CLI 不可用，也可以直接到各 client 节点的 Nomad 数据目录拿文件:
 #   <nomad data_dir>/alloc/<alloc_id>/alloc/logs/start.stdout.0
@@ -70,32 +71,26 @@ command -v nomad >/dev/null 2>&1 || {
 # ---- Nomad ACL token ----
 # 本部署默认启用了 Nomad ACL（e2b-deploy/dep/default.hcl: acl.enabled=true），
 # 所有 nomad 调用都必须携带有效 token，否则返回 403 Permission denied。
-# 分层解析，命中即止（越靠前优先级越高），命中后 export 给后续所有 nomad 子命令复用：
-#   1) 已 export 的 NOMAD_TOKEN（显式覆盖）
-#   2) 环境变量 NOMAD_ACL_TOKEN（部署脚本惯用名）
-#   3) benchmark/.env 里的 NOMAD_TOKEN / NOMAD_ACL_TOKEN（用 sync-env.sh 刷新它）
-#   4) ${NOMAD_DATA_DIR:-/data/nomad}/acl.token（bootstrap 持久化的权威 token，永不过期）
-# 只按需读取指定键、不整体 source .env：既避免 .env 里的空值把已有 token 冲掉，
-# 也不执行 .env 里的任意内容。同步过一次后就能裸跑，不必每次手动 export。
+# 唯一来源：benchmark/.env 里的 NOMAD_TOKEN（由 sync-env.sh 从
+# ${NOMAD_DATA_DIR:-/data/nomad}/acl.token 同步）。不看 shell 环境变量、
+# 不看 NOMAD_ACL_TOKEN、不直接读 acl.token —— 单一来源，行为可预期；
+# 并显式 unset 继承来的 NOMAD_TOKEN/NOMAD_ACL_TOKEN，防止 shell 里
+# 残留的陈旧值干扰。只按需读取指定键、不整体 source .env。
+# 每次 build.sh -s 之后（尤其是重新 bootstrap 之后）务必重跑 bash sync-env.sh。
 ENV_FILE="$SCRIPT_DIR/.env"
 env_file_get() {  # 从 .env 取某键的值（去掉可选 export 前缀与首尾引号，多条时取最后一条）
   [[ -f "$ENV_FILE" ]] || return 0
   sed -n "s/^[[:space:]]*\(export[[:space:]]\+\)\?$1=//p" "$ENV_FILE" \
     | tail -n1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
 }
-nomad_token=""
-for cand in \
-  "${NOMAD_TOKEN:-}" \
-  "${NOMAD_ACL_TOKEN:-}" \
-  "$(env_file_get NOMAD_TOKEN)" \
-  "$(env_file_get NOMAD_ACL_TOKEN)"; do
-  if [[ -n "$cand" ]]; then nomad_token="$cand"; break; fi
-done
+unset NOMAD_TOKEN NOMAD_ACL_TOKEN
+nomad_token="$(env_file_get NOMAD_TOKEN)"
 if [[ -z "$nomad_token" ]]; then
-  acl_file="${NOMAD_DATA_DIR:-/data/nomad}/acl.token"
-  [[ -r "$acl_file" ]] && nomad_token="$(tr -d '[:space:]' < "$acl_file")"
+  echo "错误: $ENV_FILE 里没有 NOMAD_TOKEN（本脚本只从这一处取 token）。" >&2
+  echo "  修复: 先同步凭据:  bash sync-env.sh" >&2
+  exit 1
 fi
-[[ -n "$nomad_token" ]] && export NOMAD_TOKEN="$nomad_token"
+export NOMAD_TOKEN="$nomad_token"
 
 # ---- 预检 + 解析 job ----
 # 用 `nomad job status`（纯文本表格）列出集群里真实存在的 job：
@@ -114,10 +109,11 @@ if ! nomad job status >"$jobs_txt" 2>"$tmp_err"; then
   sed 's/^/  /' "$tmp_err" >&2
   if grep -qiE '403|permission denied|\bACL\b' "$tmp_err"; then
     echo >&2
-    echo "  原因: 本部署启用了 Nomad ACL，nomad 调用必须携带有效 token（脚本没在 env / .env /" >&2
-    echo "        \${NOMAD_DATA_DIR:-/data/nomad}/acl.token 里找到）。" >&2
-    echo "  修复: 同步一次凭据（推荐，之后裸跑即可）:  bash sync-env.sh" >&2
-    echo "        或临时手动导出:  export NOMAD_TOKEN=<你的 nomad ACL token>" >&2
+    echo "  原因: $ENV_FILE 里的 NOMAD_TOKEN 对当前集群无效（Nomad 对失效 token 与匿名请求" >&2
+    echo "        同样返回 403 Permission denied）。常见于部署侧重新 bootstrap 过 ACL" >&2
+    echo "        （build.sh -u 卸载后再 -s 会重新 bootstrap 生成新 token），而 .env 还留着旧值。" >&2
+    echo "  修复: 重新同步凭据后重试:  bash sync-env.sh" >&2
+    echo "        仍失败则先验证真相源:  NOMAD_TOKEN=\$(cat \${NOMAD_DATA_DIR:-/data/nomad}/acl.token) nomad job status" >&2
   fi
   exit 1
 fi

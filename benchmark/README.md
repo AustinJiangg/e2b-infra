@@ -127,6 +127,10 @@ bash collect_logs.sh
 - 默认自动写到最近一次运行目录的 `orchestrator-logs/`（按 `--run-dir` >
   `BENCH_RUN_DIR` > `runs/.latest` 定位）；采集某个历史运行用
   `bash collect_logs.sh --run-dir runs/run_<时间戳>`，自定义 job 名仍是第一个位置参数。
+- Nomad ACL token **只从 `benchmark/.env` 的 `NOMAD_TOKEN` 读取**（先 `bash sync-env.sh`
+  同步）；shell 里已 export 的 `NOMAD_TOKEN`/`NOMAD_ACL_TOKEN` 会被忽略，陈旧的环境变量
+  不会盖过刚同步的 `.env`。重新 bootstrap 过 ACL（如 `build.sh -u` 卸载后再 `-s`）后记得重跑
+  `bash sync-env.sh`。
 - 多个 client 节点时脚本会遍历全部 running allocation；**日志必须收齐**，
   否则落在其他节点的沙箱 trace 会缺失。
 - orchestrator 自压测开始后不能重启过（重启会换 allocation、丢 stdout 日志）。

@@ -727,7 +727,7 @@ bash sync-env.sh          # 首次会从 .env.example 生成 .env，并填入下
 # 首次必做：E2B_API_URL 默认是占位符，改成本机 API 地址（远程跑客户端则填 http://<SERVER_IP>:3000）
 sed -i 's|^E2B_API_URL=.*|E2B_API_URL="http://127.0.0.1:3000"|' .env
 python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3
-bash collect_logs.sh      # 不用再手动 export 任何 token
+bash collect_logs.sh      # token 只认 .env 里的 NOMAD_TOKEN，手动 export 的会被忽略
 python parse_report.py    # 默认分析最近一次运行；指定某次用 --run-dir runs/run_<时间戳>
 python visualize_intervals.py   # 可选：出 3 张图（timeline / total_gantt / stage_durations），需 matplotlib
 ```
@@ -745,6 +745,10 @@ python visualize_intervals.py   # 可选：出 3 张图（timeline / total_gantt
   （本机跑压测用 `http://127.0.0.1:3000`；不改的话 SDK 第一步就报 `Name or service not known`）。
   `sync-env.sh` 永不动这行，改一次即可。`E2B_DOMAIN="e2b.app"` 保持默认——`build.sh -i` 装的
   dnsmasq 已把 `*.e2b.app` 解析到本机，这个域名是连沙箱用的。
+- `collect_logs.sh` 的 token **只有一个来源：`.env` 里的 `NOMAD_TOKEN`**——shell 里已 export 的
+  `NOMAD_TOKEN`/`NOMAD_ACL_TOKEN` 会被显式忽略（unset），`acl.token` 也不再直接读。
+  好处是行为可预期：403 时只需检查 `.env` 是否过期。重新 bootstrap 过 ACL（如 `build.sh -u`
+  卸载后再 `-s`）后先重跑 `bash sync-env.sh`，否则 `.env` 里的旧 token 会一直 403。
 - 路径可用环境变量覆盖：`E2B_CONFIG_JSON=... NOMAD_DATA_DIR=... bash sync-env.sh`。
   `acl.token` 是 `chmod 600` 归 root，非 root 用户读它要 `sudo`。E2B token 取不到时先用 e2b CLI 登录。
 
