@@ -313,7 +313,7 @@ iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 
 4. **代理路由到 api**:代理识别为控制请求 → 查 `api.service.consul`(经 dnsmasq→Consul:8600)拿 api 真实地址 → 转发;
 5. **api 业务处理**:查 **Postgres** 校验 team/tier 配额(base_v1 已放开到 10000)→ 读写 **redis** → 放行后调用 **orchestrator**(宿主机二进制,raw_exec 运行);
 6. **orchestrator 创建 microVM**:
-   - hypervisor:`/fc-versions/v1.12.1/firecracker`;
+   - hypervisor:`/fc-versions/v1.13.1/firecracker`;
    - guest 内核:`/fc-kernels/vmlinux-6.1.102/vmlinux.bin`;
    - rootfs:从 **MinIO** 拉模板,或从 **/mnt/snapshot-cache(65G tmpfs)** 快照秒级恢复(e2b 启动快的关键);
    - 内存:从**大页(hugepages)池**分配;

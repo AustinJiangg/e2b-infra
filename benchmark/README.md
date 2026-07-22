@@ -99,7 +99,7 @@ grep -h "\[ResumeSandbox\]" runs/latest/orchestrator-logs/*.log | tail -15
 ### 3.2 正式压测（100 个沙箱）
 
 ```bash
-python run_benchmark.py --template base --count 100 --concurrency 1 --warmup 3
+python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3
 ```
 
 参数说明：

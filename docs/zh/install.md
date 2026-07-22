@@ -141,7 +141,7 @@ export NOMAD_VERSION=1.10.4
 export SANDBOX_STORAGE_BACKEND=redis
 
 # Firecracker 轻量级虚拟化版本,用于隔离沙箱
-export FIRECRACKER_VERSION=1.12.1
+export FIRECRACKER_VERSION=1.13.1
 
 
 # --- Database / Redis / Harbor ---

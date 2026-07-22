@@ -50,5 +50,5 @@
 - 本机 IP 记作 `SERVER_IP`（部署前必须写进 `e2b-deploy/dep/.env` 的 `SERVER_IP=`）。
 - `/opt/e2b-infra/` 指 RPM 安装出来的部署目录；`e2b-deploy/` 指仓库里与之对应的可读源目录。
 - 命令默认以 root 在部署机上执行。
-- 文中引用的行为以当前仓库代码为准（spec Release 4，e2b 2.20.0 / e2b_code_interpreter 2.4.1，
-  consul 1.21.4 / nomad 1.10.4 / firecracker v1.12.1 / harbor v2.13.0）。
+- 文中引用的行为以当前仓库代码为准（spec Release 3，e2b 2.20.0 / e2b_code_interpreter 2.4.1，
+  consul 1.21.4 / nomad 1.10.4 / firecracker 定制版（基于 v1.12.1，装到 `/fc-versions/v1.13.1/`）/ harbor v2.13.0）。

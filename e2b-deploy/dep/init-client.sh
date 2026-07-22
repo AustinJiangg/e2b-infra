@@ -127,7 +127,7 @@ du -h "${envd_dir}/envd"
 
 
 
-FIRECRACKER_VERSION=1.12.1
+FIRECRACKER_VERSION=1.13.1
 
 # Download kernels
 kernels_dir="/fc-kernels"
