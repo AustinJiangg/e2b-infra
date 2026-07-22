@@ -109,8 +109,8 @@ EOH
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
-# 自定义 nbd 模块（nbds_max=512）不在此处加载：服务器重启后手动执行一次
-# rmmod nbd && insmod nbd.ko nbds_max=512 即可，见 single-node-offline-deploy.md 0.2
+# 自定义 nbd 模块（nbds_max=512）不在此处加载：按 single-node-offline-deploy.md 0.2
+# 一次性固化到系统模块目录（modules-load.d + modprobe.d）后开机自动加载
 
 # Create the directory for the fc mounts
 mkdir -p /fc-vm

@@ -32,25 +32,50 @@
    systemctl restart docker   # ⚠️ 会重启现有容器，挑好时机
    ```
 
-### 0.2 自定义 nbd 内核模块（`nbd.ko`，需自备，**手动加载**）
+### 0.2 自定义 nbd 内核模块（`nbd.ko`，需自备，**一次性固化，开机自动加载**）
 
 `start-client.sh` / `init-client.sh` **不自动加载 nbd 模块**（脚本里原有的 `rmmod`+`insmod`
 逻辑已删除——模块已加载时重复 `insmod` 会报
 `insmod: ERROR: could not insert module nbd.ko: File exists`，而模块本来只需加载一次）。
-你**自己编译的优化版 nbd 模块**（`nbds_max=512`）改为部署前手动加载一次即可，加载后长期有效；
-**服务器每次重启后模块会丢，需重新手动执行一遍**：
+你**自己编译的优化版 nbd 模块**（`nbds_max=512`）在这台机器上**固化一次**即可：把 patch 版
+覆盖进系统模块目录 + `modules-load.d`/`modprobe.d` 两个配置，之后每次重启都自动加载，
+不再需要手动 `insmod`：
 
 ```bash
-# 先卸载内核自带（或旧的）nbd，未加载时忽略报错；再装自定义模块
-sudo rmmod nbd 2>/dev/null || true
-sudo insmod /home/j30059180/tools/nbd-patch/nbd.ko nbds_max=512
+# 0) 预检：vermagic 必须与运行内核完全一致（见下方注意点 1）
+cd /home/j30059180/tools/nbd-patch/       # 换成你放 patch 版 nbd.ko 的目录
+modinfo nbd.ko | grep vermagic            # 预期与 uname -r 完全一致
 
-# 验证
+# 1) 立即生效：先卸内核自带（或旧的）nbd，再装 patch 版
+sudo rmmod nbd 2>/dev/null || true        # 有 nbd 设备在用时会失败，先停沙箱
+sudo insmod nbd.ko nbds_max=512
 lsmod | grep nbd
-ls /dev/nbd* | wc -l    # 应为 512
+ls /dev/nbd* | wc -l                      # 应为 512
+
+# 2) 固化：备份内核自带原版（.orig 后缀不会被 depmod 识别为模块，放同目录安全）
+sudo cp /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko \
+        /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko.orig
+# 用 patch 版覆盖，并校验两个 hash 一致
+sudo cp nbd.ko /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko
+sha256sum nbd.ko /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko
+# 刷新模块依赖，让 modprobe/开机加载认得它
+sudo depmod -a
+
+# 3) 开机自动加载 + 默认参数
+echo nbd | sudo tee /etc/modules-load.d/nbd.conf                      # 开机加载 nbd
+echo "options nbd nbds_max=512" | sudo tee /etc/modprobe.d/nbd.conf   # 加载时带 nbds_max=512
 ```
 
-两个注意点：
+重启后验证固化生效：
+
+```bash
+lsmod | grep nbd                            # 自动出现，无需手动加载
+cat /sys/module/nbd/parameters/nbds_max     # 512
+ls /dev/nbd* | wc -l                        # 512
+sha256sum /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko   # 仍是 patch 版的 hash
+```
+
+注意点：
 
 1. **vermagic 必须与运行内核完全一致**。`insmod` 会校验模块 vermagic 是否等于本机 `uname -r`，
    不一致直接报 `Invalid module format`（`modprobe` 不校验这么严）。检查：
@@ -62,7 +87,15 @@ ls /dev/nbd* | wc -l    # 应为 512
    内核不同就要在目标机对应内核上重新编译 `nbd.ko`。
 
 2. **重复 `insmod` 报 `File exists` = 模块已在**，无需处理。若要换新编译的 `.ko`，
-   先确认没有 nbd 设备在用，`rmmod nbd` 后再 `insmod`。
+   先确认没有 nbd 设备在用，`rmmod nbd` 后再 `insmod`（固化后换新版本还要重做上面第 2 步覆盖）。
+
+3. **升级/重装内核包会让固化悄悄失效**：新内核目录里放的是发行版原版 `nbd.ko`，开机仍会
+   自动加载、`nbds_max` 也仍是 512（modprobe.d 参数照常生效），从设备数上看不出异常——
+   但跑的已是原版模块。所以内核变更后必须用 `sha256sum` 对比确认，并在新内核上重新编译
+   patch 版、重做固化第 2 步。
+
+4. 本机的模块是未压缩 `.ko`（上面 hash 对比已验证）。若在别的机器上原版是 `nbd.ko.xz`/
+   `nbd.ko.zst` 压缩形态，覆盖前要先把压缩原版移走，否则目录里会同时存在两个候选模块。
 
 ---
 
@@ -209,7 +242,7 @@ curl -s http://$SERVER_IP:4646/v1/status/leader
 |---|:--:|---|
 | `bin/*`（orchestrator、envd、firecracker、vmlinux.bin、goose、migrations…） | ✅ 覆盖 | 新二进制正是从这里来的 |
 | `nomad/*.hcl`（render 模板） | ✅ 覆盖 | ⚠️ 被重置成「上游+patch 默认版」——`ORCHESTRATOR_SERVICES` 缺 `orchestrator`、`E2B_FC_LAUNCH_MODE` 整行消失（缺省=disabled）、`MAX_STARTING_INSTANCES_PER_NODE` 回 500。修复=重放 overlay（5.0） |
-| `deploy.sh`、`start-*.sh`、`run-*.sh`、`install-*.sh`、`uninstall-*.sh`、`init-client.sh`、`env.template`、`nomad.service` | ✅ 覆盖成**上游 iac 版** | ⚠️ 同类坑：dep/ 侧增强丢失——`deploy.sh` 丢 `--only`（之后 `build.sh -r` 报 `Unknown parameter: --only`）。修复=重放 overlay（5.0）。（定制 nbd 模块已改为手动加载，见 0.2，不再受此影响） |
+| `deploy.sh`、`start-*.sh`、`run-*.sh`、`install-*.sh`、`uninstall-*.sh`、`init-client.sh`、`env.template`、`nomad.service` | ✅ 覆盖成**上游 iac 版** | ⚠️ 同类坑：dep/ 侧增强丢失——`deploy.sh` 丢 `--only`（之后 `build.sh -r` 报 `Unknown parameter: --only`）。修复=重放 overlay（5.0）。（定制 nbd 模块已固化到系统模块目录开机自动加载，见 0.2，不再受此影响） |
 | `dep/*`（含 `dep/.env`、`dep/template-manager.hcl`） | ✅ 覆盖 | 重置为仓库里的部署基线——重放 overlay 的**来源**就是这里 |
 | `build.sh`、`*.py`、`helm/*` | ✅ 覆盖（仓库版） | 与仓库同步，无坑——注意 `build.sh` 是新版而 `deploy.sh` 可能是旧版，两者错配正是上面坑的表现 |
 | `.env`（顶层，含 bootstrap 出来的真实 `NOMAD_ACL_TOKEN`） | ❌ 不动 | 不在 `%files` 里——**这就是场景二不需要重新 bootstrap 的原因** |
