@@ -283,6 +283,10 @@ rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm
 
 ### 6.1 怎么改 patch（Go 源码改动的标准姿势）
 
+> **推荐流程已升级**：现在以 `e2b-infra-arm` 源码仓库的分层 git 历史为真相源，
+> 用 `scripts/gen-patches.sh` 机械化导出 patch，见 **08-补丁规范流程.md**。
+> 下面的"临时工作树"方法仅作应急备用。
+
 patch 文件不能手改（行号/上下文一错就 FAILED）。标准流程是**维护一棵打好补丁的工作树**：
 
 ```bash
