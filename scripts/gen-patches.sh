@@ -11,8 +11,11 @@ REF=${2:-HEAD}
 BUILD_REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT="$BUILD_REPO/0001-adapted-for-arm-architecture.patch"
 
-BASE=$(git -C "$ARM_REPO" rev-parse "upstream-2026.09^{commit}") \
-    || { echo "错误: 源码仓库缺少 upstream-2026.09 基线 tag"; exit 1; }
+# 基线 = upstream-2026.09 tag；tag 不存在时（tag 无法经 git 代理同步）
+# 回退为当前分支的根提交——基线正是本仓库唯一的根提交。
+BASE=$(git -C "$ARM_REPO" rev-parse "upstream-2026.09^{commit}" 2>/dev/null) \
+    || BASE=$(git -C "$ARM_REPO" rev-list --max-parents=0 HEAD)
+[ -n "$BASE" ] || { echo "错误: 无法定位基线提交"; exit 1; }
 HEAD_SHA=$(git -C "$ARM_REPO" rev-parse --short "$REF")
 
 {

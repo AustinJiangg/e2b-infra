@@ -11,8 +11,11 @@ TARBALL="$BUILD_REPO/e2b-infra-2026.09.tar.gz"
 
 file "$TARBALL" | grep -q 'gzip' || {
     echo "错误: $TARBALL 仍是 LFS 指针文件，请先: cd $BUILD_REPO && git lfs pull"; exit 1; }
-BASE=$(git -C "$ARM_REPO" rev-parse "upstream-2026.09^{commit}") \
-    || { echo "错误: 源码仓库缺少 upstream-2026.09 基线 tag"; exit 1; }
+# 基线 = upstream-2026.09 tag；tag 不存在时（tag 无法经 git 代理同步）
+# 回退为当前分支的根提交——基线正是本仓库唯一的根提交。
+BASE=$(git -C "$ARM_REPO" rev-parse "upstream-2026.09^{commit}" 2>/dev/null) \
+    || BASE=$(git -C "$ARM_REPO" rev-list --max-parents=0 HEAD)
+[ -n "$BASE" ] || { echo "错误: 无法定位基线提交"; exit 1; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
