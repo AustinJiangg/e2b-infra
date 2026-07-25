@@ -533,7 +533,7 @@ while mountpoint -q /mnt/hugepages;     do umount /mnt/hugepages     || break; d
 ## 9. Firecracker 启动优化档位（`E2B_FC_LAUNCH_MODE`）
 
 高并发启动沙箱时，`[ResumeSandbox]` 的 `configured fc cost`（拉起 FC 进程 + 等 API socket）是主要瓶颈
-（100 并发实测 ~240ms，详见 `benchmark/启动耗时阶段分析.md`）。patch `0002-fc-launch-dedicated-helper.patch`
+（100 并发实测 ~240ms，详见 `benchmark/启动耗时阶段分析.md`）。FC 启动优化（`0001` 补丁的一部分）
 给 orchestrator 加了一个**运行时开关** `E2B_FC_LAUNCH_MODE`，四档启动机制可**免重编**切换、A/B 对比
 （两个优化档的动机/原理/实现详解见 `benchmark/FC启动优化-netns-exec.md` 与 `benchmark/FC启动优化-launch.md`）：
 
@@ -570,15 +570,15 @@ orchestrator + template-manager 两个 service**。所以开关加在它的 `env
 ### 9.2 前置：助手二进制必须在位（档 2/档 3）
 
 `launch` / `netns-exec` 会去调 `/opt/e2b-infra/bin/{fc-launch,fc-netns-exec}`（路径可用
-`E2B_FC_LAUNCH_HELPER` / `E2B_FC_NETNS_EXEC_HELPER` 覆盖）。这两个助手由 patch 0002 的 Makefile
-`make build` 产出、spec 的 `packages/*/bin/*` glob 装到该路径，所以**含 patch 0002 的 RPM 里已经有**。
+`E2B_FC_LAUNCH_HELPER` / `E2B_FC_NETNS_EXEC_HELPER` 覆盖）。这两个助手由 orchestrator 的 Makefile
+`make build` 产出、spec 的 `packages/*/bin/*` glob 装到该路径，所以**当前 RPM 里已经有**。
 切档前先校验：
 
 ```bash
 ls -l /opt/e2b-infra/bin/fc-launch /opt/e2b-infra/bin/fc-netns-exec
 ```
 
-若**缺失** = 当前部署的二进制早于 patch 0002：先按「第 5 节·场景二」重建并刷新二进制
+若**缺失** = 当前部署的二进制早于 FC 启动优化：先按「第 5 节·场景二」重建并刷新二进制
 （`rpmbuild -bb e2b-infra.spec …` → `rpm -Uvh --force` → `cp -f /opt/e2b-infra/bin/orchestrator /usr/bin/orchestrator`），
 再切档。`disabled` 不依赖助手，任何版本都能用。
 
@@ -596,7 +596,7 @@ cp -f e2b-deploy/dep/template-manager.hcl /opt/e2b-infra/nomad/template-manager.
 
 cd /opt/e2b-infra && source .env         # 确认 NOMAD_ACL_TOKEN 是真 token（非占位符）
 bash build.sh -r template-manager        # 只 render+重跑该 job（见第 11 节）；镜像/二进制没变时用它
-#   （首次部署、或 patch 0002 的助手二进制刚更新时，改用全套 bash build.sh -f）
+#   （首次部署、或 FC 启动助手二进制刚更新时，改用全套 bash build.sh -f）
 ```
 
 > ⚠️ 别为切个档去跑 `build.sh -i`——它会把 `.env` 的 `NOMAD_ACL_TOKEN` 重置成占位符（见 6.1）。
