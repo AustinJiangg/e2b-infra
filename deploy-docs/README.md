@@ -18,6 +18,10 @@
 
 一句话：**怎么做**看 `single-node-offline-deploy.md`，**为什么这么做/背后发生了什么**看本目录。
 
+> 一个例外：本目录的 `08-源码开发与出包流程.md` 是**操作流程**而非原理讲解。
+> 它讲的是"改 Go 源码"这条链路（源码工作树 → 重新生成 patch → 出 RPM），
+> 而 `single-node-offline-deploy.md` 讲的是"拿到 RPM 之后"的装机与生效。两者首尾相接。
+
 ## 文档清单
 
 | 文档 | 内容 |
@@ -29,6 +33,7 @@
 | [`05-build.sh-s-启动部署详解.md`](05-build.sh-s-启动部署详解.md) | `build.sh -s` 逐步拆解：consul/nomad 拉起与 ACL bootstrap、宿主机调优、deploy.sh 渲染与提交 job |
 | [`06-日常运维手册.md`](06-日常运维手册.md) | 各组件怎么看状态/日志/重启：nomad、consul、postgres、minio、harbor、nginx、dnsmasq 等，含巡检清单 |
 | [`07-single-node-traffic-architecture.md`](07-single-node-traffic-architecture.md) | 流量处理深度剖析：resolv.conf/glibc 解析原理、dnsmasq 分流、iptables 80→3002、三类流量完整链路、验证与排障 |
+| [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md) | 改 Go 源码的完整工作流：两个仓库+Go SDK 的心智模型、源码工作树搭建、日常 5 步循环（改码→编译→提交→`git diff` 重生成 patch→出包）、vendor/go.work 两个坑 |
 
 ## 推荐阅读路径
 
@@ -42,6 +47,8 @@
 
 4. `02-仓库文件地图.md` —— 改一个东西之前，先知道它在仓库里的"源头"是哪个文件。
 5. `03-RPM包构建深度解析.md` —— 理解从源码到 `/opt/e2b-infra` 的完整供应链。
+6. `08-源码开发与出包流程.md` —— 上面两篇是"原理"，这篇是**你每天照着做的操作流程**：
+   环境怎么配、源码工作树怎么搭、改完代码怎么重新生成 patch 和出包。
 
 **要做变更/调参数的人**：读完上面后直接用 `single-node-offline-deploy.md` 第 5 节的场景表操作。
 
