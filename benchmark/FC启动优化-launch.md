@@ -1,7 +1,7 @@
 # FC 启动优化 · 档位 3：`launch` 详解
 
-> **版本基准：e2b-infra `2026.09` tag + `0001-adapted-for-arm-architecture.patch` + `0002-fc-launch-dedicated-helper.patch`。**
-> 本档全部源码都在 `0002-fc-launch-dedicated-helper.patch` 里，文中文件路径均指补丁应用后的路径。
+> **版本基准：e2b-infra `2026.09` tag + `0001-adapted-for-arm-architecture.patch`。**
+> 本档全部源码都在 `0001-adapted-for-arm-architecture.patch` 里，文中文件路径均指补丁应用后的路径。
 > 档位开关机制、配置方法见 `single-node-offline-deploy.md` 第 9 节；耗时数据口径见 `启动耗时阶段分析.md`。
 > 姊妹篇：`FC启动优化-netns-exec.md`（档位 2，含 baseline 管线成本的完整解剖，本文不重复）；
 > `FC启动优化-launch-c.md`（档位 4，本档的单线程 C 重写，消掉 unshare(1) 包装与 Go runtime 自启动）。

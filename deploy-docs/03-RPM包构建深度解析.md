@@ -1,6 +1,6 @@
 # 03 RPM 包构建深度解析
 
-本篇深入讲解 `e2b-infra.spec`：这个 RPM 是怎么从"上游源码 + 两个补丁 + 一堆离线二进制"
+本篇深入讲解 `e2b-infra.spec`：这个 RPM 是怎么从"上游源码 + 一个补丁 + 一堆离线二进制"
 构建出来的，构建产物如何映射到 `/opt/e2b-infra/`，以及日常改代码后怎么正确地重建、升级。
 读完本篇你应该能独立完成一次"改 patch → 重建 RPM → 升级部署机"的完整循环。
 
@@ -38,13 +38,16 @@ SOURCES 目录，所以下面所有文件直接放在仓库根即可。
 ### 2.2 补丁体系
 
 ```
-Patch1: 0001-adapted-for-arm-architecture.patch   （~300KB，主改造）
-Patch2: 0002-fc-launch-dedicated-helper.patch     （~32KB，FC 启动优化）
+Patch1: 0001-adapted-for-arm-architecture.patch   （~333KB，104 个文件，唯一的下游补丁）
 ```
 
-`%autosetup -p1` 会在解包后按序应用两个补丁（`-p1` 去掉路径前缀 `a/`、`b/`）。
+`%autosetup -p1` 会在解包后应用它（`-p1` 去掉路径前缀 `a/`、`b/`）。
 
-**Patch1（ARM 适配 + 去 GCP 化 + 可观测性）** 触达约 100 个文件，按改动域拆解：
+> FC 启动优化早期是独立的 `Patch2: 0002-fc-launch-dedicated-helper.patch`，
+> 现已合并进 Patch1。多补丁对下游开发只有负担没有收益，
+> 理由与新的开发流程见 [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md)。
+
+**改动域一：ARM 适配 + 去 GCP 化 + 可观测性**（约 90 个文件）：
 
 | 改动域 | 代表文件 | 干了什么 |
 |---|---|---|
@@ -57,16 +60,21 @@ Patch2: 0002-fc-launch-dedicated-helper.patch     （~32KB，FC 启动优化）
 | 构建体系 | 各 `packages/*/Makefile`、`Dockerfile`、`go.mod/go.sum` | vendor 构建可用、Dockerfile 改为离线基础镜像（debian:bookworm-slim） |
 | 部署物料 | `iac/provider-gcp/nomad/jobs/*.hcl`、`iac/provider-gcp/nomad-cluster/scripts/*`、`.github/actions/host-init/init-client.sh`、`helm/*` | nomad job 模板去 GCP 化（上游版基线，dep overlay 在其上再增强）、部署脚本、k8s helm chart |
 
-**Patch2（FC 启动三档优化）** 全部集中在 orchestrator：
+**改动域二：FC 启动优化**（14 个文件，全部集中在 orchestrator）：
 
 | 文件 | 干了什么 |
 |---|---|
 | `cmd/fc-launch/main.go` | 新增专用启动器：单进程内完成 mount ns（经 `Cloneflags` 在 clone(2) 时创建）+ setns 进 netns + execve firecracker，等 socket 用 inotify。对应 `E2B_FC_LAUNCH_MODE=launch` |
 | `cmd/fc-netns-exec/main.go` | 轻量助手：替换 shell 管道末端的 `ip netns exec`（setns+execve），省 iproute2 开销。对应 `netns-exec` 档 |
-| `internal/sandbox/fc/mode.go`、`launchplan/*`、`process.go`、`script_builder.go`、`socket/socket.go` | 三档开关解析、启动计划、socket inotify 等待 |
-| `Makefile` | `make build` 额外产出 `bin/fc-launch`、`bin/fc-netns-exec`（随 `packages/*/bin/*` glob 一起装进 RPM） |
+| `cmd/fc-launch-c/fc_launch.c` | 单线程 C 版启动器（`launch-c` 档），由 `$(CC)` 编译 |
+| `internal/sandbox/fc/mode.go`、`launchplan/*`、`process.go`、`script_builder.go`、`socket/socket.go` | 档位开关解析、启动计划、socket inotify 等待 |
+| `Makefile` | `make build` 额外产出 `bin/fc-launch`、`bin/fc-netns-exec`、`bin/fc-launch-c`（随 `packages/*/bin/*` glob 一起装进 RPM） |
 
-两档优化的动机与原理详见 `benchmark/FC启动优化-netns-exec.md`、`benchmark/FC启动优化-launch.md`。
+各档的动机与原理详见 `benchmark/FC启动优化-netns-exec.md`、`FC启动优化-launch.md`、`FC启动优化-launch-c.md`。
+
+> 这两个改动域只是**叙述上的分组**，在补丁文件里是连续的一份 diff，没有物理边界。
+> 其中 `packages/orchestrator/Makefile`、`internal/sandbox/fc/process.go`、
+> `internal/sandbox/socket/socket.go` 三个文件被两域同时触及，合并后各自只有一份 hunk。
 
 ## 3. spec 逐段精读
 
@@ -87,7 +95,7 @@ BuildRequires: make gcc           # Go 工具链自带，不写进 BuildRequires
 ```spec
 %autosetup -p1 -n e2b-infra-%{tag}
 ```
-等价于：解开 Source0 到 `BUILD/e2b-infra-2026.09/`，然后按序 `patch -p1` 应用 Patch1、Patch2。
+等价于：解开 Source0 到 `BUILD/e2b-infra-2026.09/`，然后 `patch -p1` 应用 Patch1。
 **补丁应用失败会直接停在这一步**——改 patch 后构建报 `FAILED ... hunk` 就是这儿。
 
 ```spec
@@ -142,7 +150,7 @@ done
 | `packages/client-proxy` | `client-proxy` |
 | `packages/envd` | `envd`（沙箱内代理） |
 | `packages/db` | 迁移相关（migrations 由 `%install` 直接 cp 目录） |
-| `packages/orchestrator` | `orchestrator`（同一二进制按 `ORCHESTRATOR_SERVICES` 环境变量决定跑哪些服务）、**`fc-launch`、`fc-netns-exec`**（patch 0002 加的） |
+| `packages/orchestrator` | `orchestrator`（同一二进制按 `ORCHESTRATOR_SERVICES` 环境变量决定跑哪些服务）、**`fc-launch`、`fc-netns-exec`、`fc-launch-c`**（FC 启动优化产出） |
 
 > 构建耗时主要在 orchestrator（依赖多）。vendor 不全时报
 > `cannot find module providing package ...`——说明改了 go.mod 却没同步 vendor，
@@ -249,7 +257,7 @@ tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy              # 3) 重打包放回�
 rpm -ql e2b-infra | head -50                       # 包内文件清单
 ls /opt/e2b-infra/bin/ | sort
 # 应至少包含：api client-proxy envd orchestrator seed-db goose vmlinux.bin firecracker
-#             fc-launch fc-netns-exec              ← 没有这两个 = 构建时没带上 patch 0002
+#             fc-launch fc-netns-exec fc-launch-c  ← 缺这几个 = 补丁没带上 FC 启动优化
 #             api.Dockerfile client-proxy.Dockerfile db-migrator.Dockerfile orchestrator.Dockerfile
 #             migrations/ migrations-clickhouse/
 ls /opt/e2b-infra/nomad/*.hcl                      # job 模板齐全
@@ -264,7 +272,7 @@ strings /opt/e2b-infra/bin/orchestrator | grep -c "acquire wait cost"   # ≥1 =
 git lfs pull                                        # e2b-infra-2026.09.tar.gz 变成真文件
 
 # 1) 改动落到正确源头：
-#    - Go 源码改动 → 改 0001/0002 patch（见 §6.1）
+#    - Go 源码改动 → 重新生成 0001 patch（见 §6.1）
 #    - 部署脚本/配置 → 改 e2b-deploy/dep/* → 按 §4 重建 e2b-deploy.tar.gz
 #    - 打包逻辑     → 改 e2b-infra.spec（记得 Release+1 与 %changelog）
 
@@ -283,30 +291,31 @@ rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm
 
 ### 6.1 怎么改 patch（Go 源码改动的标准姿势）
 
-patch 文件不能手改（行号/上下文一错就 FAILED）。标准流程是**维护一棵打好补丁的工作树**：
+patch 文件不能手改（行号/上下文一错就 FAILED）。标准流程是**维护一棵打好补丁的工作树**，
+让 `git diff` 替你生成 patch：
 
 ```bash
-# 1) 展开上游源码并应用现有补丁（与 %prep 完全一致的状态），每层打个 tag 作基线
+# 1) 展开上游源码并应用补丁（与 %prep 完全一致的状态），给纯上游打个 tag 作基线
 tar -xzf e2b-infra-2026.09.tar.gz && cd e2b-infra-2026.09
-git init -q && git add -A && git commit -qm base && git tag upstream   # 基线：纯上游
+git init -q && git add -A && git commit -qm base && git tag upstream   # ← 基线，永不变动
 patch -p1 < ../0001-adapted-for-arm-architecture.patch
-git add -A && git commit -qm p1 && git tag patch1                      # 基线：patch1 之后
-patch -p1 < ../0002-fc-launch-dedicated-helper.patch
-git add -A && git commit -qm p2 && git tag patch2
+git add -A && git commit -qm patched
 
-# 2) 直接改代码、本地验证（可用仓库的 tools-arm64.tar.gz 里的 go 编译）
+# 2) 直接改代码、本地验证（编译前先 rm -f go.work，它与 -mod=vendor 冲突）
 
-# 3) 重新生成受影响的 patch（改动属于哪层就重生成哪个）：
+# 3) 重新生成 patch —— 一条命令，零歧义
 git add -A && git commit -qm "my change"
-git diff patch1 HEAD > ../0002-fc-launch-dedicated-helper.patch    # 改动属于 patch2 范围
-# 改动属于 patch1 范围：git diff upstream <patch1新状态> > ../0001-...patch，
-# 然后务必确认 patch2 仍能在其上干净叠加
+git diff upstream HEAD > ../0001-adapted-for-arm-architecture.patch
 
 # 4) 验证补丁能干净应用（模拟 %prep）：
 cd /tmp && rm -rf t && mkdir t && tar -xzf $REPO/e2b-infra-2026.09.tar.gz -C t && cd t/e2b-infra-2026.09
-patch -p1 --dry-run < $REPO/0001-*.patch && patch -p1 < $REPO/0001-*.patch
-patch -p1 --dry-run < $REPO/0002-*.patch
+patch -p1 --dry-run < $REPO/0001-*.patch
 ```
+
+> 这就是只保留单一补丁的最大收益：改动不必再判断"属于哪一层"，
+> 也不存在"改了 patch1 把 patch2 打崩"的回归风险。
+> **完整的日常开发流程**（环境变量、源码工作树布局、Go SDK 怎么选、常见坑）
+> 见 [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md)，本节只是其中第 ①③④ 步的浓缩。
 
 ### 6.2 常见构建报错速查
 
