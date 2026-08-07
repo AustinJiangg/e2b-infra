@@ -717,6 +717,26 @@ function stop() {
             echo "ℹ️  未找到运行中的 $task 进程"
         fi
     done
+
+    # firecracker：每个运行中的沙箱/模板构建都是一个独立进程，命令行以 /fc-versions/... 开头，
+    # 上面的 tasks 列表（pgrep -f "^$task"）匹配不到它们。
+    # 不清掉的话，下次 build.sh -s 里 init-client.sh 拷贝 firecracker 会报 Text file busy
+    # （ETXTBSY：不能写一个正在被执行的二进制）。
+    fc_pids=$(pgrep -f '/fc-versions/.*/firecracker' 2>/dev/null || true)
+    if [ -n "$fc_pids" ]; then
+        echo "正在关闭残留的 firecracker（沙箱）进程，PID列表：$fc_pids"
+        kill $fc_pids 2>/dev/null
+        sleep 2
+        fc_pids=$(pgrep -f '/fc-versions/.*/firecracker' 2>/dev/null || true)
+        if [ -n "$fc_pids" ]; then
+            echo "⚠️  部分 firecracker 未优雅退出，强制终止（PID：$fc_pids）"
+            kill -9 $fc_pids 2>/dev/null
+        fi
+        echo "✅ firecracker 进程已全部关闭"
+    else
+        echo "ℹ️  未找到运行中的 firecracker 进程"
+    fi
+
     success "e2b-infra 服务停止完成！"
 }
 

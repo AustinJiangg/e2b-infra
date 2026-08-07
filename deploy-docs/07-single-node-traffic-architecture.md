@@ -314,7 +314,7 @@ iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 
 5. **api 业务处理**:查 **Postgres** 校验 team/tier 配额(base_v1 已放开到 10000)→ 读写 **redis** → 放行后调用 **orchestrator**(宿主机二进制,raw_exec 运行);
 6. **orchestrator 创建 microVM**:
    - hypervisor:`/fc-versions/v1.13.1/firecracker`;
-   - guest 内核:`/fc-kernels/vmlinux-6.1.102/vmlinux.bin`;
+   - guest 内核:`/fc-kernels/<KernelVersion>/vmlinux.bin`(默认 `vmlinux-6.1.158`);
    - rootfs:从 **MinIO** 拉模板,或从 **/mnt/snapshot-cache(65G tmpfs)** 快照秒级恢复(e2b 启动快的关键);
    - 内存:从**大页(hugepages)池**分配;
    - 磁盘挂载:经 **NBD** 设备(受 nbds_max 限制);

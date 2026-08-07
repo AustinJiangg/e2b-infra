@@ -194,8 +194,12 @@ plugin "raw_exec" { config { enabled = true } }   # template-manager-system 要�
 
 - sysctl 这次写进 **`/etc/sysctl.conf`**（持久化，有存在性检查防重复追加）+ `sysctl -p`；
 - **envd**：`cp bin/envd /fc-envd/envd`（模板构建时注入沙箱 rootfs 的代理）；
-- **客户机内核**：`cp bin/vmlinux.bin /fc-kernels/vmlinux-6.1.102/`（RPM 自带 ARM 内核；
-  目录名 6.1.102 是 orchestrator 按版本寻址的约定路径）；
+- **客户机内核**：`cp bin/vmlinux.bin /fc-kernels/vmlinux-6.1.158/`（外加 `vmlinux-6.1.102/` 兼容旧模板，
+  以及 openEuler 变体 `vmlinux-6.6.0-132.0.0/`）。orchestrator 按
+  `/fc-kernels/<KernelVersion>/vmlinux.bin` 寻址（`fc/config.go`），`<KernelVersion>` 来自建模板请求，
+  请求没带就用 api 编译进去的默认值 `vmlinux-6.1.158`（`packages/api/internal/cfg/model.go`，
+  本部署没有任何地方设 `DEFAULT_KERNEL_VERSION` 覆盖它）。**目录名对不上 = 建模板在
+  「Provisioning sandbox template」那步立刻失败**；目录名只是标签，几份放的是同一个内核二进制；
 - **firecracker**：`cp bin/firecracker /fc-versions/v1.13.1/firecracker` 并加执行权限
   （RPM 自带的仓库定制版，基于 v1.12.1，仅 aarch64 打包；不再下载/解压官方 tgz。
   目录名 v1.13.1 是代码运行时查找的版本标签）。
