@@ -66,7 +66,18 @@
   E2B_API_URL="http://{server_ip}:3000"
   E2B_HTTP_SSL="false"
   ```
-  也可 `cp .env.example .env` 后用 `bash sync-env.sh` 从磁盘自动填入 token（见 `single-node-offline-deploy.md` §12）。
+  推荐直接 `bash sync-env.sh`：首次会从 `.env.example` 生成 `.env`，并自动填入
+  `E2B_API_KEY` / `E2B_ACCESS_TOKEN`（来自 `/root/.e2b/config.json`）、`NOMAD_TOKEN`
+  （来自 `/data/nomad/acl.token`）以及 `E2B_API_URL`（用 `/opt/e2b-infra/dep/.env` 的
+  `SERVER_IP` 替换模板里的 `<server_ip>` 占位符）。详见 `single-node-offline-deploy.md` §12。
+
+  > `E2B_API_URL` 里的 `<server_ip>` 占位符没被替换掉的话，SDK 会拿 `<server_ip>` 当主机名去
+  > 解析，报 `httpx.ConnectError: [Errno -2] Name or service not known`。
+  > 若 `/opt/e2b-infra/dep/.env` 不可读，用 `SERVER_IP=<本机IP> bash sync-env.sh` 指定。
+  >
+  > 重复执行 `sync-env.sh` 时看到「读不到 `/root/.e2b/config.json`，沿用 .env 里已有的」是正常的：
+  > 该文件是 `deploy.sh` 在**首次** seed-db（库里还没有 E2B 团队）时写的一次性产物，之后不再重建。
+  > 数据库里只存哈希，token 明文只在这个文件和 `.env` 里，**两边都丢了就只能清库重新 seed**。
 - 能访问 Nomad（`nomad` CLI + `NOMAD_ADDR`），用于采集 orchestrator 日志。
 - 节点资源足够同时跑 100 个沙箱（参考测试是 100 个沙箱存活；1c1g 模板约需
   100G 内存预算，不够就用 `--kill-each` 改为"创建即销毁"，见 5.4）。

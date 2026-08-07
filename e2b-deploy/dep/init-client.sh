@@ -130,9 +130,25 @@ du -h "${envd_dir}/envd"
 FIRECRACKER_VERSION=1.13.1
 
 # Download kernels
+#
+# orchestrator 按 /fc-kernels/<KernelVersion>/vmlinux.bin 寻址
+# （fc/config.go: filepath.Join(HostKernelsDir, t.KernelVersion, SandboxKernelFile)），
+# 其中 <KernelVersion> 来自建模板请求；请求没带就用 api 编译进去的默认值
+# packages/api/internal/cfg/model.go: DefaultKernelVersion = "vmlinux-6.1.158"
+# （本部署没有任何地方设 DEFAULT_KERNEL_VERSION 来覆盖它）。
+# 少了这个目录，建模板会在 "Provisioning sandbox template" 那一步立刻失败。
+# 目录名只是寻址用的标签，这里几份放的是同一个内核二进制。
 kernels_dir="/fc-kernels"
-mkdir -p ${kernels_dir}/vmlinux-6.1.102/
-cp ./bin/vmlinux.bin "${kernels_dir}/vmlinux-6.1.102/"
+KERNEL_VERSIONS=(vmlinux-6.1.158 vmlinux-6.1.102)
+for kv in "${KERNEL_VERSIONS[@]}"; do
+    mkdir -p "${kernels_dir}/${kv}/"
+    cp ./bin/vmlinux.bin "${kernels_dir}/${kv}/"
+done
+# openEuler 变体内核（仅 aarch64 RPM 打包），给指定该版本的模板用
+if [ -f ./bin/vmlinux.bin.openeuler ]; then
+    mkdir -p "${kernels_dir}/vmlinux-6.6.0-132.0.0/"
+    cp ./bin/vmlinux.bin.openeuler "${kernels_dir}/vmlinux-6.6.0-132.0.0/vmlinux.bin"
+fi
 chmod -R 755 $kernels_dir
 ls -lh $kernels_dir
 
@@ -146,6 +162,11 @@ if [ ! -f ./bin/firecracker ]; then
     echo "错误：/opt/e2b-infra/bin/firecracker 不存在（x86_64 RPM 不打包定制 firecracker）！"
     exit 1
 fi
+# 重新部署时，上一轮残留的沙箱进程可能正在执行这个二进制，直接 cp 会失败：
+#   cp: cannot create regular file '.../firecracker': Text file busy   (ETXTBSY)
+# 内核不允许以写方式打开正在被执行的文件，但允许 unlink：
+# 先删目录项，运行中的老进程继续用旧 inode，新文件写到新 inode，互不影响。
+rm -f "${fc_versions_dir}/v${FIRECRACKER_VERSION}/firecracker"
 cp ./bin/firecracker "${fc_versions_dir}/v${FIRECRACKER_VERSION}/firecracker"
 chmod +x ${fc_versions_dir}/v${FIRECRACKER_VERSION}/firecracker
 chmod -R 755 $fc_versions_dir/v${FIRECRACKER_VERSION}
