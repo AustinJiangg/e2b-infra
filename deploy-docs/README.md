@@ -33,7 +33,7 @@
 | [`05-build.sh-s-启动部署详解.md`](05-build.sh-s-启动部署详解.md) | `build.sh -s` 逐步拆解：consul/nomad 拉起与 ACL bootstrap、宿主机调优、deploy.sh 渲染与提交 job |
 | [`06-日常运维手册.md`](06-日常运维手册.md) | 各组件怎么看状态/日志/重启：nomad、consul、postgres、minio、harbor、nginx、dnsmasq 等，含巡检清单 |
 | [`07-single-node-traffic-architecture.md`](07-single-node-traffic-architecture.md) | 流量处理深度剖析：resolv.conf/glibc 解析原理、dnsmasq 分流、iptables 80→3002、三类流量完整链路、验证与排障 |
-| [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md) | 改 Go 源码的完整工作流：两个仓库+Go SDK 的心智模型、源码工作树搭建、日常 5 步循环（改码→编译→提交→`git diff` 重生成 patch→出包）、vendor/go.work 两个坑 |
+| [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md) | 改 Go 源码的完整工作流：部署线 vs 源码线两条开发线、两个仓库+Go SDK 的心智模型、源码工作树搭建（一段可直接粘的八步脚本）、**日常高频循环＝改码→编译→直接换二进制→验证（不出包）**、阶段收尾才做的"重生成 patch + 出 RPM"、报错速查表 |
 | [`09-增量快照实现与ARM实测分析.md`](09-增量快照实现与ARM实测分析.md) | 快照存了哪些文件、三套实现对比（FC 原生 / e2b x86 / 本仓库 ARM）、UFFD 写保护如何决定增量精度、ARM 上「读过即脏」的实测数据与优化方向；配套脚本 `benchmark/snapshot.py` |
 | [`10-模板与快照存储位置梳理.md`](10-模板与快照存储位置梳理.md) | 模板/快照到底存在哪：本地缓存 vs 持久化存储的分层、`STORAGE_PROVIDER` 如何选 provider、为什么 `.env` 里的 MinIO 在 nomad 单机路径下没生效、想换成 MinIO 的完整改法与回滚 |
 
