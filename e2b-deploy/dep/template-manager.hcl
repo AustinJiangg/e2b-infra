@@ -48,7 +48,7 @@ job "template-manager-system" {
         OTEL_COLLECTOR_GRPC_ENDPOINT  = "${OTEL_COLLECTOR_GRPC_ENDPOINT}"
         LOGS_COLLECTOR_ADDRESS        = "${LOGS_COLLECTOR_ADDRESS}"
         ORCHESTRATOR_SERVICES         = "orchestrator,template-manager"
-        E2B_FC_LAUNCH_MODE            = "netns-exec"
+        E2B_FC_NETNS_EXEC_HELPER      = "/opt/e2b-infra/bin/fc-netns-exec"
         MAX_STARTING_INSTANCES_PER_NODE = "30"
         LOGS_COLLECTOR_PUBLIC_IP      = "${LOGS_COLLECTOR_PUBLIC_IP}"
         ALLOW_SANDBOX_INTERNET        = "${ALLOW_SANDBOX_INTERNET}"

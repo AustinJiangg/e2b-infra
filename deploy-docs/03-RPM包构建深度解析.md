@@ -60,17 +60,20 @@ Patch1: 0001-adapted-for-arm-architecture.patch   （~333KB，104 个文件，�
 | 构建体系 | 各 `packages/*/Makefile`、`Dockerfile`、`go.mod/go.sum` | vendor 构建可用、Dockerfile 改为离线基础镜像（debian:bookworm-slim） |
 | 部署物料 | `iac/provider-gcp/nomad/jobs/*.hcl`、`iac/provider-gcp/nomad-cluster/scripts/*`、`.github/actions/host-init/init-client.sh`、`helm/*` | nomad job 模板去 GCP 化（上游版基线，dep overlay 在其上再增强）、部署脚本、k8s helm chart |
 
-**改动域二：FC 启动优化**（14 个文件，全部集中在 orchestrator）：
+**改动域二：FC 启动优化**（5 个文件，全部集中在 orchestrator）：
 
 | 文件 | 干了什么 |
 |---|---|
-| `cmd/fc-launch/main.go` | 新增专用启动器：单进程内完成 mount ns（经 `Cloneflags` 在 clone(2) 时创建）+ setns 进 netns + execve firecracker，等 socket 用 inotify。对应 `E2B_FC_LAUNCH_MODE=launch` |
-| `cmd/fc-netns-exec/main.go` | 轻量助手：替换 shell 管道末端的 `ip netns exec`（setns+execve），省 iproute2 开销。对应 `netns-exec` 档 |
-| `cmd/fc-launch-c/fc_launch.c` | 单线程 C 版启动器（`launch-c` 档），由 `$(CC)` 编译 |
-| `internal/sandbox/fc/mode.go`、`launchplan/*`、`process.go`、`script_builder.go`、`socket/socket.go` | 档位开关解析、启动计划、socket inotify 等待 |
-| `Makefile` | `make build` 额外产出 `bin/fc-launch`、`bin/fc-netns-exec`、`bin/fc-launch-c`（随 `packages/*/bin/*` glob 一起装进 RPM） |
+| `cmd/fc-netns-exec/main.go` | 轻量助手：替换 shell 管道末端的 `ip netns exec`（setns+execve），省 iproute2 开销 |
+| `internal/cfg/model.go` | 新增 `FirecrackerNetnsExecHelper` 配置项（`E2B_FC_NETNS_EXEC_HELPER`），并入 `makePathsAbsolute` |
+| `internal/sandbox/fc/script_builder.go` | 启动脚本模板末尾改成 `{{ .FirecrackerCommand }}` 占位符，由 `firecrackerCommand()` 决定用 helper 还是 `ip netns exec`；模板构建的 VM 显式排除 |
+| `internal/sandbox/fc/script_builder_test.go` | 三种取值（默认 / `disabled` / 模板构建）的单测 |
+| `Makefile` | `make build` 额外产出 `bin/fc-netns-exec`（随 `packages/*/bin/*` glob 一起装进 RPM） |
+| `internal/sandbox/socket/socket.go` | `socket.Wait()` 的超时改为派生自调用方 ctx（官方那版用了 `context.Background()`，FC 起不来时会空等 300s） |
 
-各档的动机与原理详见 `benchmark/FC启动优化-netns-exec.md`、`FC启动优化-launch.md`、`FC启动优化-launch-c.md`。
+这是 openEuler 官方的实现，前四个文件与官方源码逐字节一致，`socket.go` 只多一处 ctx bug 修复。动机与原理详见
+`benchmark/FC启动优化-netns-exec.md`。本仓库自研的 `launch` / `launch-c` 两档实测收益不足，
+已移除，存档在分支 `archive/fc-launch-modes`。
 
 > 这两个改动域只是**叙述上的分组**，在补丁文件里是连续的一份 diff，没有物理边界。
 > 其中 `packages/orchestrator/Makefile`、`internal/sandbox/fc/process.go`、
@@ -150,7 +153,7 @@ done
 | `packages/client-proxy` | `client-proxy` |
 | `packages/envd` | `envd`（沙箱内代理） |
 | `packages/db` | 迁移相关（migrations 由 `%install` 直接 cp 目录） |
-| `packages/orchestrator` | `orchestrator`（同一二进制按 `ORCHESTRATOR_SERVICES` 环境变量决定跑哪些服务）、**`fc-launch`、`fc-netns-exec`、`fc-launch-c`**（FC 启动优化产出） |
+| `packages/orchestrator` | `orchestrator`（同一二进制按 `ORCHESTRATOR_SERVICES` 环境变量决定跑哪些服务）、**`fc-netns-exec`**（FC 启动优化产出） |
 
 > 构建耗时主要在 orchestrator（依赖多）。vendor 不全时报
 > `cannot find module providing package ...`——说明改了 go.mod 却没同步 vendor，
@@ -257,7 +260,7 @@ tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy              # 3) 重打包放回�
 rpm -ql e2b-infra | head -50                       # 包内文件清单
 ls /opt/e2b-infra/bin/ | sort
 # 应至少包含：api client-proxy envd orchestrator seed-db goose vmlinux.bin firecracker
-#             fc-launch fc-netns-exec fc-launch-c  ← 缺这几个 = 补丁没带上 FC 启动优化
+#             fc-netns-exec                      ← 缺这个 = 补丁没带上 FC 启动优化（沙箱起不来，报 exit status 127）
 #             api.Dockerfile client-proxy.Dockerfile db-migrator.Dockerfile orchestrator.Dockerfile
 #             migrations/ migrations-clickhouse/
 ls /opt/e2b-infra/nomad/*.hcl                      # job 模板齐全
