@@ -95,8 +95,8 @@ strace -f -e trace=unshare,setns,mount,execve -p $(pgrep -f orchestrator) 2>&1 |
 # 2) 宿主机不应见到沙箱 tmpfs 传播（恒为 0）
 grep -c '<沙箱目录前缀>' /proc/self/mountinfo
 
-# 3) 压测对比档 3：fc spawn cost 应持平（都是纯 vfork+execve），
-#    fc socket wait cost 应再降 ~2-4ms（少一次 execve + 无 Go runtime init）
+# 3) 压测对比档 3：configured fc cost 应再降 ~2-4ms
+#    （spawn 段持平——都是纯 vfork+execve；省下的是一次 execve + Go runtime init）
 ```
 
 ## 6. 局限与下一步

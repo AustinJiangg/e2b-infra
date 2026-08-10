@@ -19,9 +19,7 @@
 | 沙箱恢复准备 | 获取网络槽位 | `wait network slot cost` | 从网络池取槽位 |
 | 沙箱恢复准备 | 获取 template 元数据 | `get template metadata cost` | |
 | 创建 firecracker 进程 | 创建 firecracker 进程 | `fc.NewProcess cost` | |
-| 创建 firecracker 进程 | 等待firecracker启动 | `configured fc cost` | 启动 FC 进程并等待其 API socket（父=下面两段之和） |
-| 创建 firecracker 进程 | └拉起FC进程 | `fc spawn cost` | `p.cmd.Start()` fork/exec 启动命令（受 `E2B_FC_LAUNCH_MODE` 4 档影响，档位机制详解见 `FC启动优化-netns-exec.md` / `FC启动优化-launch.md` / `FC启动优化-launch-c.md`），在 `process.go` `configure` 埋点 |
-| 创建 firecracker 进程 | └等FC API socket | `fc socket wait cost` | `socket.Wait()` 等 FC 的 API socket 就绪（含命名空间内脚本/exec + FC 启动），在 `process.go` `configure` 埋点 |
+| 创建 firecracker 进程 | 等待firecracker启动 | `configured fc cost` | `p.configure()` 整体：`cmd.Start()` fork/exec 拉起命令 + `socket.Wait()` 等 FC 的 API socket 就绪（含命名空间内脚本/exec + FC 启动）。受 `E2B_FC_LAUNCH_MODE` 4 档影响，档位机制详解见 `FC启动优化-netns-exec.md` / `FC启动优化-launch.md` / `FC启动优化-launch-c.md` |
 | 创建 firecracker 进程 | 等待uffd sock | `get uffd sock path cost` | |
 | firecracker 恢复虚拟机 | 加载快照 | `load snapshot cost` | |
 | firecracker 恢复虚拟机 | 调用恢复 | `post resume cost` | resumeVM API |
@@ -202,7 +200,7 @@ python visualize_intervals.py           # 自动定位最近一次运行目录 �
 
 - `timeline.png` =「**真实时间轴 + 彩色分阶段 + 并行重叠**」（合并图）：每沙箱一条，按真实时刻摆放
   各阶段、按阶段上色；并行段（`configure`∥`uffd`∥`rootfs`）在同一条内用泳道分层显示重叠。一眼能看到：
-  高并发下灰色「准入排队」排成阶梯（每 cap 一波）、红色 `fc socket wait` 多长/是否随波变长、蓝色 `uffd` 与红色并行。
+  高并发下灰色「准入排队」排成阶梯（每 cap 一波）、红色 `configured fc` 多长/是否随波变长、蓝色 `uffd` 与红色并行。
 - `total_gantt.png` = **单色 total 甘特**：每沙箱一条 total 区间（enter→total），按开始时间排序，底部附启动耗时统计。
 - `stage_durations.png` = **分阶段堆叠**：每沙箱把各阶段 duration 首尾相接堆叠、按阶段上色，看耗时构成（不反映并行重叠）。
 

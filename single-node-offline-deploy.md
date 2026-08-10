@@ -845,7 +845,7 @@ python parse_report.py
 
 - **排队 vs FC 启动的此消彼长**：cap=100 时「准入排队」应≈0——若「等待firecracker启动」「恢复虚拟机」
   反而变大，说明信号量原本在保护已饱和的 CPU，真瓶颈在 FC 启动侧（这正是 cap 扫描要回答的问题）。
-- **各 mode 的差异**主要看「└拉起FC进程」（fc spawn）一段；档位含义见第 9 节。
+- **各 mode 的差异**主要看「等待firecracker启动」（`configured fc`）一段；档位含义见第 9 节。
 - **事后对比某一轮**：`python parse_report.py --run-dir runs/run_<时间戳>`；每轮的 `combo.txt` +
   `meta.json` 里的 `fc_launch_mode` 能对上号。
 - **扫完定档**：把胜出组合写回仓库 `e2b-deploy/dep/template-manager.hcl` 作为长期默认

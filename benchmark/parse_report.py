@@ -47,9 +47,7 @@ PHASE_ROWS = [
     ("沙箱恢复准备",         "获取网络槽位",                 "wait network slot"),
     ("沙箱恢复准备",         "获取 template 元数据",         "get template metadata"),
     ("创建 firecracker 进程", "创建 firecracker 进程",       "fc.NewProcess"),
-    ("创建 firecracker 进程", "等待firecracker启动",          "configured fc"),       # 父=下面两段之和
-    ("创建 firecracker 进程", "└拉起FC进程",                  "fc spawn"),            # cmd.Start
-    ("创建 firecracker 进程", "└等FC API socket",             "fc socket wait"),      # socket.Wait
+    ("创建 firecracker 进程", "等待firecracker启动",          "configured fc"),       # cmd.Start + socket.Wait
     ("创建 firecracker 进程", "等待uffd sock",                "get uffd sock path"),
     ("firecracker 恢复虚拟机", "加载快照",                    "load snapshot"),
     ("firecracker 恢复虚拟机", "调用恢复",                    "post resume"),
@@ -316,12 +314,12 @@ def write_summary(path, valid):
 # 可视化用：把每个阶段还原成「真实时间轴上的区间」，供 visualize_intervals.py 画
 # 「真实时间轴 + 彩色分阶段 + 并行重叠」的二合一甘特图。详见 高并发瓶颈定位方案.md 第 6 节。
 # 每条 cost 日志的时间戳 ≈ 该阶段结束时刻，区间 = [ts − 时长, ts]；同节点时钟、天然自洽。
-# 只取「叶子」阶段，排除父区间(configured fc/resume VM/total)与被 start envd 覆盖的 envd 子段，
+# 只取「叶子」阶段，排除父区间(resume VM/total)与被 start envd 覆盖的 envd 子段，
 # 避免在时间轴上重复绘制。并行段(configure∥uffd∥rootfs)的区间会自然重叠，由可视化用泳道展开。
 # ---------------------------------------------------------------------------
 TIMELINE_STAGES = [
     "acquire wait", "wait network slot", "get template metadata", "fc.NewProcess",
-    "fc spawn", "fc socket wait", "get uffd sock path", "get rootfs path",
+    "configured fc", "get uffd sock path", "get rootfs path",
     "load snapshot", "post resume", "set mmds", "start envd",
 ]
 

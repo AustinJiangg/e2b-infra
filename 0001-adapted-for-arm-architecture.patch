@@ -7816,7 +7816,7 @@ index 0000000..ebe13f4
 +	}
 +}
 diff --git a/packages/orchestrator/internal/sandbox/fc/process.go b/packages/orchestrator/internal/sandbox/fc/process.go
-index 687d14e..9fc1bdc 100644
+index 687d14e..7a9061d 100644
 --- a/packages/orchestrator/internal/sandbox/fc/process.go
 +++ b/packages/orchestrator/internal/sandbox/fc/process.go
 @@ -2,11 +2,13 @@ package fc
@@ -7895,7 +7895,7 @@ index 687d14e..9fc1bdc 100644
 +		// (copy_mnt_ns, under the global namespace_sem lock) inside cmd.Start(),
 +		// and the CLONE_VFORK fast path keeps the parent blocked for all of it,
 +		// so concurrent resumes convoy on that lock right on the spawn path
-+		// (measured at 100 concurrent resumes: fc spawn avg 143ms / max 233ms
++		// (measured at 100 concurrent resumes: cmd.Start() avg 143ms / max 233ms
 +		// vs 6.6ms for the shell pipeline). Spawning through unshare(1) keeps
 +		// cmd.Start() a plain vfork+execve; the mount-table copy still happens,
 +		// but in the child, overlapped with the rest of each sandbox's startup.
@@ -7981,15 +7981,7 @@ index 687d14e..9fc1bdc 100644
  	}, nil
  }
  
-@@ -151,6 +232,7 @@ func (p *Process) configure(
- ) error {
- 	ctx, childSpan := tracer.Start(ctx, "configure-fc")
- 	defer childSpan.End()
-+	traceID := childSpan.SpanContext().TraceID().String()
- 
- 	stdoutWriter := &zapio.Writer{Log: sbxlogger.I(sbxMetadata).Logger.Detach(ctx), Level: zap.InfoLevel}
- 	stdoutWriters := []io.Writer{stdoutWriter}
-@@ -166,18 +248,20 @@ func (p *Process) configure(
+@@ -166,13 +247,13 @@ func (p *Process) configure(
  	}
  	p.cmd.Stderr = io.MultiWriter(stderrWriters...)
  
@@ -8008,32 +8000,9 @@ index 687d14e..9fc1bdc 100644
 +	//	p.cmd.SysProcAttr.CgroupFD = cgroupFD
 +	//}
  
-+	spawnStart := time.Now()
  	err := p.cmd.Start()
  	if err != nil {
- 		return fmt.Errorf("error starting fc process: %w", err)
- 	}
-+	zap.L().Sugar().Infof("[ResumeSandbox] fc spawn cost: %.3f ms, traceID=%s", time.Since(spawnStart).Seconds()*1000, traceID)
- 
- 	startCtx, cancelStart := context.WithCancelCause(ctx)
- 	defer cancelStart(fmt.Errorf("fc finished starting"))
-@@ -212,6 +296,7 @@ func (p *Process) configure(
- 	}()
- 
- 	// Wait for the FC process to start so we can use FC API
-+	socketStart := time.Now()
- 	err = socket.Wait(startCtx, p.firecrackerSocketPath)
- 	if err != nil {
- 		errMsg := fmt.Errorf("error waiting for fc socket: %w", err)
-@@ -220,6 +305,7 @@ func (p *Process) configure(
- 
- 		return errors.Join(errMsg, fcStopErr)
- 	}
-+	zap.L().Sugar().Infof("[ResumeSandbox] fc socket wait cost: %.3f ms, traceID=%s", time.Since(socketStart).Seconds()*1000, traceID)
- 
- 	return nil
- }
-@@ -271,19 +357,17 @@ func (p *Process) Create(
+@@ -271,19 +352,17 @@ func (p *Process) Create(
  		"ipv6.autoconf": "1",
  
  		// Wait 1 second before exiting FC after panic or reboot
@@ -8060,7 +8029,7 @@ index 687d14e..9fc1bdc 100644
  	if options.SystemdToKernelLogs {
  		args["systemd.journald.forward_to_console"] = ""
  	}
-@@ -317,7 +401,7 @@ func (p *Process) Create(
+@@ -317,7 +396,7 @@ func (p *Process) Create(
  	if err != nil {
  		fcStopErr := p.Stop(ctx)
  
@@ -8069,7 +8038,7 @@ index 687d14e..9fc1bdc 100644
  	}
  	telemetry.ReportEvent(ctx, "symlinked rootfs")
  
-@@ -374,6 +458,7 @@ func (p *Process) Resume(
+@@ -374,6 +453,7 @@ func (p *Process) Resume(
  	uffdReady chan struct{},
  	accessToken *string,
  	cgroupFD int,
@@ -8077,7 +8046,7 @@ index 687d14e..9fc1bdc 100644
  ) error {
  	ctx, span := tracer.Start(ctx, "resume-fc")
  	defer span.End()
-@@ -388,6 +473,7 @@ func (p *Process) Resume(
+@@ -388,6 +468,7 @@ func (p *Process) Resume(
  	eg, egCtx := errgroup.WithContext(ctx)
  
  	eg.Go(func() error {
@@ -8085,7 +8054,7 @@ index 687d14e..9fc1bdc 100644
  		err := p.configure(
  			egCtx,
  			sbxMetadata,
-@@ -398,6 +484,7 @@ func (p *Process) Resume(
+@@ -398,6 +479,7 @@ func (p *Process) Resume(
  		if err != nil {
  			return fmt.Errorf("error starting fc process: %w", err)
  		}
@@ -8093,7 +8062,7 @@ index 687d14e..9fc1bdc 100644
  
  		telemetry.ReportEvent(egCtx, "configured fc")
  
-@@ -405,17 +492,20 @@ func (p *Process) Resume(
+@@ -405,17 +487,20 @@ func (p *Process) Resume(
  	})
  
  	eg.Go(func() error {
@@ -8114,7 +8083,7 @@ index 687d14e..9fc1bdc 100644
  		rootfsPath, err := p.rootfsProvider.Path()
  		if err != nil {
  			return fmt.Errorf("error getting rootfs path: %w", err)
-@@ -427,6 +517,7 @@ func (p *Process) Resume(
+@@ -427,6 +512,7 @@ func (p *Process) Resume(
  		}
  
  		telemetry.ReportEvent(egCtx, "symlinked rootfs")
@@ -8122,7 +8091,7 @@ index 687d14e..9fc1bdc 100644
  
  		return nil
  	})
-@@ -437,7 +528,7 @@ func (p *Process) Resume(
+@@ -437,7 +523,7 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error waiting for uffd socket or symlinking rootfs: %w", err), fcStopErr)
  	}
@@ -8131,7 +8100,7 @@ index 687d14e..9fc1bdc 100644
  	err = p.client.loadSnapshot(
  		ctx,
  		uffdSocketPath,
-@@ -449,6 +540,8 @@ func (p *Process) Resume(
+@@ -449,6 +535,8 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error loading snapshot: %w", err), fcStopErr)
  	}
@@ -8140,7 +8109,7 @@ index 687d14e..9fc1bdc 100644
  
  	err = p.client.resumeVM(ctx)
  	if err != nil {
-@@ -456,6 +549,8 @@ func (p *Process) Resume(
+@@ -456,6 +544,8 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error resuming vm: %w", err), fcStopErr)
  	}
@@ -8149,7 +8118,7 @@ index 687d14e..9fc1bdc 100644
  
  	meta := &MmdsMetadata{
  		SandboxID:            sbxMetadata.SandboxID,
-@@ -475,6 +570,7 @@ func (p *Process) Resume(
+@@ -475,6 +565,7 @@ func (p *Process) Resume(
  
  		return errors.Join(fmt.Errorf("error setting mmds: %w", err), fcStopErr)
  	}

@@ -116,7 +116,7 @@ helper 由 `packages/orchestrator/Makefile` 的 `make build` 一并产出到 `bi
 e2b_fc_start_script_marker stage=inside_netns_before_firecracker_exec ns=<纳秒时间戳> socket=<api-sock> ...
 ```
 
-配合 orchestrator 侧 `fc spawn cost` 埋点，可以量出"shell 管线开始 → 即将 exec FC"这一段的真实耗时。
+配合 orchestrator 侧 `configured fc cost` 埋点，可以量出"shell 管线开始 → 即将 exec FC"这一段的真实耗时。
 
 ## 5. 本档没有解决什么（→ 档位 3）
 
@@ -140,8 +140,8 @@ grep E2B_FC_LAUNCH_MODE /opt/e2b-infra/rendered/template-manager.hcl
 #    且再无 unshare/第二次 mount("/",...MS_SLAVE...)/umount2("/sys")
 strace -f -e trace=clone,clone3,unshare,setns,mount,umount2,execve -p $(pgrep -f orchestrator) 2>&1 | grep -A3 fc-netns-exec
 
-# 3) 压测对比（benchmark/run_benchmark.py），看这几个日志 key：
-#    configured fc cost / fc spawn cost / fc socket wait cost
+# 3) 压测对比（benchmark/run_benchmark.py），看这个日志 key：
+#    configured fc cost
 ```
 
 ## 7. 文件清单
