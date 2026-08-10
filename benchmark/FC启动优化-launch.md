@@ -121,9 +121,9 @@ clone，在这把全局锁上排成车队。100 并发实测（MAX_STARTING=30�
 
 | 段 | netns-exec | launch v1 (Cloneflags) |
 |---|---|---|
-| └拉起FC进程 (`cmd.Start()`) | avg 6.6ms | avg **143ms** / p50 170 / max 233（≈30×7.5ms 排队斜坡；min 11.4ms 即单次裸成本） |
-| └等FC API socket | avg 138.4ms | avg 28.9ms（子进程侧优化完全达成） |
-| 等待firecracker启动（和） | **145.6ms** | 177.0ms（倒赔 31ms，经准入排队放大后端到端输 49ms） |
+| `cmd.Start()` 段（父进程 spawn） | avg 6.6ms | avg **143ms** / p50 170 / max 233（≈30×7.5ms 排队斜坡；min 11.4ms 即单次裸成本） |
+| `socket.Wait()` 段（等 FC API socket） | avg 138.4ms | avg 28.9ms（子进程侧优化完全达成） |
+| 等待firecracker启动 `configured fc`（两段之和） | **145.6ms** | 177.0ms（倒赔 31ms，经准入排队放大后端到端输 49ms） |
 
 教训：**把总功做少了没用，还得看剩下的活儿被放在了谁的关键路径上。** v1 做的命名空间
 工作严格少于 netns-exec（1 次 copy_tree vs 2 次 copy_tree + 2 次全树遍历），但它把这唯一
@@ -235,7 +235,7 @@ strace -f -e trace=clone,clone3,unshare,setns,mount,execve -p $(pgrep -f orchest
 grep -c '<沙箱目录前缀>' /proc/self/mountinfo
 
 # 3) 压测（benchmark/run_benchmark.py）关注：
-#    configured fc cost（总）/ fc spawn cost（clone+exec 段）/ fc socket wait cost（inotify 段）
+#    configured fc cost（clone+exec 段 + 等 socket 段的合计）
 ```
 
 ## 6. 局限与下一步

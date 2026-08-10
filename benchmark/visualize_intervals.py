@@ -33,7 +33,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # 与 parse_report.py 的 TIMELINE_STAGES 对应。
 STAGE_ORDER = [
     "acquire wait", "wait network slot", "get template metadata", "fc.NewProcess",
-    "fc spawn", "fc socket wait", "get uffd sock path", "get rootfs path",
+    "configured fc", "get uffd sock path", "get rootfs path",
     "load snapshot", "post resume", "set mmds", "start envd",
 ]
 STAGE_LABEL = {
@@ -41,8 +41,7 @@ STAGE_LABEL = {
     "wait network slot": "net slot",
     "get template metadata": "template meta",
     "fc.NewProcess": "fc.NewProcess",
-    "fc spawn": "fc spawn (cmd.Start)",
-    "fc socket wait": "fc socket wait",
+    "configured fc": "configured fc (fc startup)",
     "get uffd sock path": "uffd sock wait",
     "get rootfs path": "rootfs path",
     "load snapshot": "load snapshot",
@@ -55,10 +54,9 @@ STAGE_COLOR = {
     "wait network slot": "#aec7e8",
     "get template metadata": "#c5b0d5",
     "fc.NewProcess": "#17becf",       # cyan
-    "fc spawn": "#ff7f0e",            # orange
-    "fc socket wait": "#d62728",      # red（通常最大）
-    "get uffd sock path": "#1f77b4",  # blue（与 socket wait 并行）
-    "get rootfs path": "#bcbd22",     # olive（与 socket wait 并行）
+    "configured fc": "#d62728",       # red（通常最大）
+    "get uffd sock path": "#1f77b4",  # blue（与 configured fc 并行）
+    "get rootfs path": "#bcbd22",     # olive（与 configured fc 并行）
     "load snapshot": "#9467bd",       # purple
     "post resume": "#e377c2",
     "set mmds": "#8c564b",
