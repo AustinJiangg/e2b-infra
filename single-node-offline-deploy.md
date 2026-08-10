@@ -228,7 +228,7 @@ curl -s http://$SERVER_IP:4646/v1/status/leader
 |---|-----------|---------|:--------------:|
 | 场景一 | **彻底重来 / 换 ACL / 清状态** | `build.sh -d` → `-i` → `-s`（最慢） | 是 |
 | 场景二 | **Go 源码**（orchestrator / api / template-manager 等，通过 patch） | 重建 RPM → 重放 dep overlay（5.0）→ `cp` 二进制到 /usr/bin → `nomad job stop`+`run` 强制重启 | 否 |
-| 场景三 | **单个 job 的 env**（如 `E2B_FC_LAUNCH_MODE`、`MAX_STARTING_INSTANCES_PER_NODE`） | 改 `nomad/<job>.hcl` → `bash build.sh -r <job>` → 四层验证（`-r` 细节见第 11 节） | 否 |
+| 场景三 | **单个 job 的 env**（如 `E2B_FC_NETNS_EXEC_HELPER`、`MAX_STARTING_INSTANCES_PER_NODE`） | 改 `nomad/<job>.hcl` → `bash build.sh -r <job>` → 四层验证（`-r` 细节见第 11 节） | 否 |
 | 场景四 | **`.env` 部署变量** | `bash build.sh -f`（重新 render + 提交全部 job） | 否 |
 | 场景五 | **nomad / consul 配置**（如 `network_speed`、`network_interface`） | 改 `/etc/nomad.d/default.hcl` → `systemctl restart nomad` | 是（仅 nomad，不动别的） |
 | —— | **harbor / minio / postgres 等组件** | 单独 `systemctl restart` / `docker restart` 对应服务即可，无需专门场景 | 否 |
@@ -242,7 +242,7 @@ curl -s http://$SERVER_IP:4646/v1/status/leader
 | 路径 | 升级时 | 说明 |
 |---|:--:|---|
 | `bin/*`（orchestrator、envd、firecracker、vmlinux.bin、goose、migrations…） | ✅ 覆盖 | 新二进制正是从这里来的 |
-| `nomad/*.hcl`（render 模板） | ✅ 覆盖 | ⚠️ 被重置成「上游+patch 默认版」——`ORCHESTRATOR_SERVICES` 缺 `orchestrator`、`E2B_FC_LAUNCH_MODE` 整行消失（缺省=disabled）、`MAX_STARTING_INSTANCES_PER_NODE` 回 500。修复=重放 overlay（5.0） |
+| `nomad/*.hcl`（render 模板） | ✅ 覆盖 | ⚠️ 被重置成「上游+patch 默认版」——`ORCHESTRATOR_SERVICES` 缺 `orchestrator`、`E2B_FC_NETNS_EXEC_HELPER` 整行消失（缺省=默认开启）、`MAX_STARTING_INSTANCES_PER_NODE` 回 500。修复=重放 overlay（5.0） |
 | `deploy.sh`、`start-*.sh`、`run-*.sh`、`install-*.sh`、`uninstall-*.sh`、`init-client.sh`、`env.template`、`nomad.service` | ✅ 覆盖成**上游 iac 版** | ⚠️ 同类坑：dep/ 侧增强丢失——`deploy.sh` 丢 `--only`（之后 `build.sh -r` 报 `Unknown parameter: --only`）。修复=重放 overlay（5.0）。（定制 nbd 模块已固化到系统模块目录开机自动加载，见 0.2，不再受此影响） |
 | `dep/*`（含 `dep/.env`、`dep/template-manager.hcl`） | ✅ 覆盖 | 重置为仓库里的部署基线——重放 overlay 的**来源**就是这里 |
 | `build.sh`、`*.py`、`helm/*` | ✅ 覆盖（仓库版） | 与仓库同步，无坑——注意 `build.sh` 是新版而 `deploy.sh` 可能是旧版，两者错配正是上面坑的表现 |
@@ -327,7 +327,7 @@ ps -o pid,lstart,cmd -p $pid                                       # lstart 应�
 
 ### 场景三：改单个 job 的 env 变量（通用流程）
 
-适用于任何写在 job hcl `env {}` 块里的变量（如 `E2B_FC_LAUNCH_MODE`、`MAX_STARTING_INSTANCES_PER_NODE`、
+适用于任何写在 job hcl `env {}` 块里的变量（如 `E2B_FC_NETNS_EXEC_HELPER`、`MAX_STARTING_INSTANCES_PER_NODE`、
 `ORCHESTRATOR_SERVICES`……）。**先分清变量在哪一层，别走错场景**：
 
 - hcl 里值是**写死的字符串**（如 `= "launch"`）→ 本场景：改模板 → render → 重跑该 job
@@ -342,14 +342,14 @@ cd /opt/e2b-infra
 
 # 0)【一次性；以及每次 rpm -Uvh 之后】确认 overlay 没被 rpm 打回上游版
 #    快检两条，任一不过 ⇒ 先按 5.0 重放 dep overlay，再重套自定义值：
-grep -E 'ORCHESTRATOR_SERVICES|E2B_FC_LAUNCH_MODE|MAX_STARTING' nomad/template-manager.hcl
-#   ↑ ORCHESTRATOR_SERVICES 必须含 orchestrator、E2B_FC_LAUNCH_MODE 行必须存在
+grep -E 'ORCHESTRATOR_SERVICES|E2B_FC_NETNS_EXEC_HELPER|MAX_STARTING' nomad/template-manager.hcl
+#   ↑ ORCHESTRATOR_SERVICES 必须含 orchestrator、E2B_FC_NETNS_EXEC_HELPER 行必须存在
 grep -c -- '--only' deploy.sh
 #   ↑ 必须 ≥1；0 = deploy.sh 被重置（症状就是 build.sh -r 报 "Unknown parameter: --only"）
 
 # 1) 改 render 模板 nomad/<job>.hcl 里的目标变量
 #    ——不要改 rendered/（渲染产物，下次 render 就被覆盖）；手编或 sed 均可：
-sed -i -E 's/^(\s*E2B_FC_LAUNCH_MODE\s*=\s*).*/\1"netns-exec"/' nomad/template-manager.hcl
+sed -i -E 's#^(\s*E2B_FC_NETNS_EXEC_HELPER\s*=\s*).*#\1"/opt/e2b-infra/bin/fc-netns-exec"#' nomad/template-manager.hcl
 
 # 2) render + 重跑该 job（deploy.sh 自己会 source .env，这步不用手动 source）
 #    env 值变了 ⇒ job spec 有差异 ⇒ nomad 自动替换 allocation，本场景【不需要】stop。
@@ -366,14 +366,14 @@ tr '\0' '\n' < /proc/$pid/environ | grep 目标变量        # ④ 运行进程�
 ps -o pid,lstart,cmd -p $pid                            # lstart 应晚于本次 -r（证明 alloc 换过了）
 ```
 
-**多组值对照扫描**（例：3 种 `E2B_FC_LAUNCH_MODE` × 2 种 cap = 6 组）：每组 = 重复 1→3，然后跑一轮压测、
-记下本组参数（`run_benchmark.py --fc-launch-mode <mode>` 会写进 meta.json，其余参数可自己往
+**多组值对照扫描**（例：2 种 `E2B_FC_NETNS_EXEC_HELPER` × 2 种 cap = 4 组）：每组 = 重复 1→3，然后跑一轮压测、
+记下本组参数（`run_benchmark.py --fc-netns-exec-helper <值>` 会写进 meta.json，其余参数可自己往
 `runs/$(cat runs/.latest)/` 里放个备注文件）。相邻两组只要有**至少一个值不同**，spec 就有差异、
 alloc 就会被替换——按“蛇形”排列组合（每步只改一个变量）最稳。
 
 > 持久化提醒：`nomad/<job>.hcl` 会被下次 `rpm -Uvh` 覆盖（见 5.0）。扫描完想把某组值定为
 > 长期默认 → 改仓库 `e2b-deploy/dep/template-manager.hcl` → 重建 `e2b-deploy.tar.gz` → 重建 RPM。
-> 相关细节：`E2B_FC_LAUNCH_MODE` 背景见第 9 节，`MAX_STARTING_INSTANCES_PER_NODE` 见第 10 节，
+> 相关细节：`E2B_FC_NETNS_EXEC_HELPER` 背景见第 9 节，`MAX_STARTING_INSTANCES_PER_NODE` 见第 10 节，
 > `build.sh -r` 的实现与更多验证手段见第 11 节。
 
 ### 场景四：只改了 `.env` / 部署配置
@@ -530,19 +530,22 @@ while mountpoint -q /mnt/hugepages;     do umount /mnt/hugepages     || break; d
 
 ---
 
-## 9. Firecracker 启动优化档位（`E2B_FC_LAUNCH_MODE`）
+## 9. Firecracker 启动优化（`E2B_FC_NETNS_EXEC_HELPER`）
 
 高并发启动沙箱时，`[ResumeSandbox]` 的 `configured fc cost`（拉起 FC 进程 + 等 API socket）是主要瓶颈
-（100 并发实测 ~240ms，详见 `benchmark/启动耗时阶段分析.md`）。FC 启动优化（`0001` 补丁的一部分）
-给 orchestrator 加了一个**运行时开关** `E2B_FC_LAUNCH_MODE`，四档启动机制可**免重编**切换、A/B 对比
-（两个优化档的动机/原理/实现详解见 `benchmark/FC启动优化-netns-exec.md` 与 `benchmark/FC启动优化-launch.md`）：
+（100 并发实测 ~240ms，详见 `benchmark/启动耗时阶段分析.md`）。FC 启动优化（`0001` 补丁的一部分，
+openEuler 官方实现）给 orchestrator 加了一个**运行时开关** `E2B_FC_NETNS_EXEC_HELPER`，可**免重编**
+开关、A/B 对比（动机/原理/实现详解见 `benchmark/FC启动优化-netns-exec.md`）：
 
-| 档 | `E2B_FC_LAUNCH_MODE` | 机制 |
-|----|----------------------|------|
-| 1（默认，不优化） | `disabled` | 原始 `unshare -m -- bash -c "… ip netns exec <ns> firecracker"` 全 shell 管道；轮询等 socket。装完 RPM 未改就是这档，行为与上游一致 |
-| 2（中） | `netns-exec` | 同一条 shell 管道，但末尾 `ip netns exec` 换成 `fc-netns-exec` 助手（setns+execve），省掉 iproute2 的额外挂载/sysfs 开销 |
-| 3（强） | `launch` | 专用无 shell 的 `fc-launch` 助手，一个小进程里做完 挂载+setns+execve；经 `unshare --mount --propagation unchanged` 包装启动（要求 util-linux ≥ 2.26）——mount ns 在子进程创建且跳过 unshare(1) 默认的递归 remount，orchestrator 的 `cmd.Start()` 保持纯 vfork+execve（旧版用 `Cloneflags` 在父进程 clone(2) 时创建 ns，100 并发实测挂载表复制持全局 namespace_sem 锁在 spawn 路径上排成车队，spawn avg 143ms vs 6.6ms，已废弃，详见 `benchmark/FC启动优化-launch.md` §3.2）；由 fc-launch 只对承载 per-sandbox tmpfs 的挂载点做非递归 `MS_PRIVATE`（O(路径深度)）；等 socket 用 inotify 而非轮询 |
-| 4（最强） | `launch-c` | 档 3 的单线程 C 重写：`fc-launch-c`（~200 行，二进制 ~17KB）在 execve 后**自己** `unshare(CLONE_NEWNS)`（单线程合法；Go 因 runtime 多线程做不到，这正是档 3 需要 unshare(1) 包装的根因），orchestrator 直接 spawn——比档 3 再省一次 execve、Go runtime 自启动 ~1-2ms，且不依赖 util-linux 选项；plan 以有序 argv flags 传递（C 侧零解析）；传播保护/inotify 等 socket 与档 3 相同。详见 `benchmark/FC启动优化-launch-c.md` |
+| `E2B_FC_NETNS_EXEC_HELPER` | 机制 |
+|---|---|
+| `disabled` / `ip-netns-exec` / 空串 | 上游原样：`unshare -m -- bash -c "… ip netns exec <ns> firecracker"` 全 shell 管道 |
+| helper 路径（**不设置时的默认值** = `/opt/e2b-infra/bin/fc-netns-exec`） | 同一条 shell 管道，但末尾 `ip netns exec` 换成 `fc-netns-exec` 助手（setns+execve），省掉 iproute2 的额外挂载/sysfs 开销。仅作用于快照恢复路径，**模板构建的 VM 显式排除**，仍走 `ip netns exec` |
+
+> 曾经还有 `launch` / `launch-c` 两档本仓库自研的更激进优化（专用无 shell 助手 + inotify 等 socket），
+> 100 并发实测子进程侧确实从 138ms 压到 29ms，但父进程 `cmd.Start()` 段被 mount namespace 复制拖到
+> avg 143ms，合计比 `netns-exec` 倒赔约 31ms，因此已从 main 移除。存档在分支 `archive/fc-launch-modes`
+> （该分支 `attic/README.md` 有回放方法）。
 
 ### 9.1 在哪配
 
@@ -553,38 +556,39 @@ orchestrator + template-manager 两个 service**。所以开关加在它的 `env
 - 仓库源头（持久，扛得住 `build.sh -i` / `rpm -Uvh` 覆盖）：`e2b-deploy/dep/template-manager.hcl`
 - 部署机上被 `deploy.sh` 渲染的模板：`/opt/e2b-infra/nomad/template-manager.hcl`
 
-`env {}` 里加一行（**用字面量，别用 `${...}`**——`deploy.sh` 的 `envsubst` 有变量白名单，
-`${E2B_FC_LAUNCH_MODE}` 不在名单里会被清空成空串，反而回落到 `disabled`）：
+`env {}` 里写成一行（**用字面量，别用 `${...}`**——`deploy.sh` 的 `envsubst` 有变量白名单，
+`${E2B_FC_NETNS_EXEC_HELPER}` 不在名单里会被清空成空串，那反而正好回落到关闭状态）：
 
 ```hcl
       env {
         ...
         ORCHESTRATOR_SERVICES         = "orchestrator,template-manager"
-        E2B_FC_LAUNCH_MODE            = "launch"     # disabled | netns-exec | launch
+        E2B_FC_NETNS_EXEC_HELPER      = "/opt/e2b-infra/bin/fc-netns-exec"   # 或 "disabled" 关掉
         ...
       }
 ```
 
-> 本仓库已把默认值设为 `launch`。要换档/回退，改这一行的值即可（`disabled` = 关掉优化）。
+> 这一行其实与代码里的 envDefault 同值，写出来只是为了让开关一眼可见。要关掉改成 `"disabled"`。
 
-### 9.2 前置：助手二进制必须在位（档 2/档 3）
+### 9.2 前置：助手二进制必须在位
 
-`launch` / `netns-exec` 会去调 `/opt/e2b-infra/bin/{fc-launch,fc-netns-exec}`（路径可用
-`E2B_FC_LAUNCH_HELPER` / `E2B_FC_NETNS_EXEC_HELPER` 覆盖）。这两个助手由 orchestrator 的 Makefile
-`make build` 产出、spec 的 `packages/*/bin/*` glob 装到该路径，所以**当前 RPM 里已经有**。
-切档前先校验：
+**这个优化默认开启，且代码不校验 helper 文件是否存在**——路径直接拼进 shell。
+二进制缺失时 bash 报 command not found、FC 根本没起，orchestrator 日志里是
+`error waiting for fc process: exit status 127`。所以装完包先校验：
 
 ```bash
-ls -l /opt/e2b-infra/bin/fc-launch /opt/e2b-infra/bin/fc-netns-exec
+ls -l /opt/e2b-infra/bin/fc-netns-exec
 ```
 
-若**缺失** = 当前部署的二进制早于 FC 启动优化：先按「第 5 节·场景二」重建并刷新二进制
-（`rpmbuild -bb e2b-infra.spec …` → `rpm -Uvh --force` → `cp -f /opt/e2b-infra/bin/orchestrator /usr/bin/orchestrator`），
-再切档。`disabled` 不依赖助手，任何版本都能用。
+助手由 orchestrator 的 Makefile `make build` 产出、spec 的 `packages/*/bin/*` glob 装到该路径，
+所以**当前 RPM 里已经有**。若**缺失** = 当前部署的二进制早于 FC 启动优化：先按「第 5 节·场景二」
+重建并刷新二进制（`rpmbuild -bb e2b-infra.spec …` → `rpm -Uvh --force` →
+`cp -f /opt/e2b-infra/bin/orchestrator /usr/bin/orchestrator`），或先设 `disabled` 顶一下——
+`disabled` 不依赖助手，任何版本都能用。
 
 ### 9.3 怎么生效
 
-**只改 `E2B_FC_LAUNCH_MODE` 是 nomad job env 改动，不是 Go 源码改动**，对应「第 5 节·场景三」，
+**只改 `E2B_FC_NETNS_EXEC_HELPER` 是 nomad job env 改动，不是 Go 源码改动**，对应「第 5 节·场景三」，
 **不用 `rpmbuild`，也不用 `-i` / `-s`**。它只影响 template-manager 这一个 job，所以用第 11 节的
 快速重跑最省事——只 render + 重跑该 job，跳过整套 `build.sh -f` 的镜像构建：
 
@@ -614,31 +618,32 @@ bash build.sh -r template-manager        # 只 render+重跑该 job（见第 11 
 
 ```bash
 # 1) 文件层：源模板 + 渲染结果都带上了
-grep E2B_FC_LAUNCH_MODE /opt/e2b-infra/nomad/template-manager.hcl      # render 源头（持久）
-grep E2B_FC_LAUNCH_MODE /opt/e2b-infra/rendered/template-manager.hcl   # 本次渲染产物
+grep E2B_FC_NETNS_EXEC_HELPER /opt/e2b-infra/nomad/template-manager.hcl      # render 源头（持久）
+grep E2B_FC_NETNS_EXEC_HELPER /opt/e2b-infra/rendered/template-manager.hcl   # 本次渲染产物
 
 # 2) 进程层：真正在跑的进程 env 里生效了（父 bash 和子进程都继承 nomad 的 env）
 for pid in $(pgrep -f /usr/bin/template-manager); do
   echo "== pid $pid: $(tr '\0' ' ' </proc/$pid/cmdline)"
-  tr '\0' '\n' < /proc/$pid/environ | grep -E 'E2B_FC_LAUNCH_MODE|ORCHESTRATOR_SERVICES'
+  tr '\0' '\n' < /proc/$pid/environ | grep -E 'E2B_FC_NETNS_EXEC_HELPER|ORCHESTRATOR_SERVICES'
 done
 
 # 3) nomad 层（更权威）：提交的 job spec 带上了，且 alloc 是本次重跑之后重启的
 cd /opt/e2b-infra && source .env
-nomad job inspect -token "$NOMAD_ACL_TOKEN" template-manager-system | grep E2B_FC_LAUNCH_MODE
+nomad job inspect -token "$NOMAD_ACL_TOKEN" template-manager-system | grep E2B_FC_NETNS_EXEC_HELPER
 nomad job status  -token "$NOMAD_ACL_TOKEN" template-manager-system   # 看 Version 递增、Status=running
 ps -o pid,lstart,cmd -p $(pgrep -f /usr/bin/template-manager | head -1) # lstart 应是你本次重跑之后的时间
 
 # 4) 再跑 benchmark 对比 configured fc cost（benchmark/README.md）
 ```
 
-判定：进程 env 出现 `E2B_FC_LAUNCH_MODE=launch`、`nomad job inspect` 里有该键、且进程 `lstart`
+判定：进程 env 出现 `E2B_FC_NETNS_EXEC_HELPER=/opt/e2b-infra/bin/fc-netns-exec`、`nomad job inspect` 里有该键、且进程 `lstart`
 是本次重跑（`build.sh -r` 或 `-f`）之后的时间（说明 alloc 已按新 env 重启），即为生效。
 
 > env 改动**只对新起的进程生效**。若 `job status` 的 Version 没变 / 进程 `lstart` 还是老时间，
 > 说明 job 没重启：确认 `nomad/template-manager.hcl`（而非只改 `rendered/`）已带上该行，再 `build.sh -r template-manager`。
 
-回退：把值改回 `disabled`（或删掉这行）→ `build.sh -r template-manager`。
+回退：把值改成 `disabled` → `build.sh -r template-manager`。（**删掉这行不等于回退**——代码里的
+envDefault 会把它变回默认开启。）
 
 ---
 
@@ -654,7 +659,7 @@ orchestrator 用一个 `startingSandboxes` 信号量给「同时正在启动的�
 
 ### 10.1 在哪配
 
-和 `E2B_FC_LAUNCH_MODE`（第 9 节）一样：真正跑沙箱、执行 `ResumeSandbox` 的 orchestrator 逻辑在
+和 `E2B_FC_NETNS_EXEC_HELPER`（第 9 节）一样：真正跑沙箱、执行 `ResumeSandbox` 的 orchestrator 逻辑在
 **`template-manager.hcl`** 这个 job 里（`ORCHESTRATOR_SERVICES = "orchestrator,template-manager"`，
 一个进程同时跑 orchestrator + template-manager 两个 service），所以开关加在它的 `env {}` 块。
 
@@ -711,7 +716,7 @@ done
 
 ## 11. 快速重跑单个 job（`build.sh -r` / `deploy.sh --only`，免整套 `-f`）
 
-只改了某个 job 的 env（如 `E2B_FC_LAUNCH_MODE`、`MAX_STARTING_INSTANCES_PER_NODE`）时，
+只改了某个 job 的 env（如 `E2B_FC_NETNS_EXEC_HELPER`、`MAX_STARTING_INSTANCES_PER_NODE`）时，
 `build.sh -f`（= `deploy.sh`）其实做了很多用不上的活：**重新 `docker build` 并 push `bin/*.Dockerfile`
 的所有镜像、拉取/推 redis、重跑 redis/edge/api、跑 seed-db、改 tier 配额**。而 env 改动只需要：
 重新 render 这一个 hcl + `nomad job run` 重跑它。扫参数要跑很多轮时，这个差别很明显。
@@ -786,32 +791,30 @@ python visualize_intervals.py   # 可选：出 3 张图（timeline / total_gantt
 - 路径可用环境变量覆盖：`E2B_CONFIG_JSON=... NOMAD_DATA_DIR=... bash sync-env.sh`。
   `acl.token` 是 `chmod 600` 归 root，非 root 用户读它要 `sudo`。E2B token 取不到时先用 e2b CLI 登录。
 
-### 12.1 组合扫描示例：3 种 `E2B_FC_LAUNCH_MODE` × 2 种 cap = 6 组
+### 12.1 组合扫描示例：2 种 netns-exec 开关 × 2 种 cap = 4 组
 
-目标：对照测 `E2B_FC_LAUNCH_MODE`（disabled / netns-exec / launch，背景见第 9 节）×
+目标：对照测 `E2B_FC_NETNS_EXEC_HELPER`（helper 路径 / `disabled`，背景见第 9 节）×
 `MAX_STARTING_INSTANCES_PER_NODE`（30 / 100，背景见第 10 节）在 100 并发下的启动耗时差异。
-**每一组 = 「第 5 节·场景三」的一次 1→3 循环 + 一轮压测**，没有任何新机制；六组之间
+**每一组 = 「第 5 节·场景三」的一次 1→3 循环 + 一轮压测**，没有任何新机制；四组之间
 不碰 rpm / 二进制（若中途重装过 rpm，先按 5.0 重放 overlay 再继续）。
 
 **组合顺序**（蛇形：每步只改一个变量 ⇒ 相邻两组 spec 必有差异 ⇒ alloc 必被替换）：
 
-| 轮次 | mode | cap |
+| 轮次 | helper | cap |
 |:--:|---|:--:|
-| ① | launch | 30 |
-| ② | launch | 100 |
-| ③ | netns-exec | 100 |
-| ④ | netns-exec | 30 |
-| ⑤ | disabled | 30 |
-| ⑥ | disabled | 100 |
+| ① | `/opt/e2b-infra/bin/fc-netns-exec` | 30 |
+| ② | `/opt/e2b-infra/bin/fc-netns-exec` | 100 |
+| ③ | `disabled` | 100 |
+| ④ | `disabled` | 30 |
 
 **开跑前一次性确认**（都过了才开始）：
 
 ```bash
 cd /opt/e2b-infra
 # 场景三第 0 步快检：overlay 没被 rpm 打回上游版（任一不过 ⇒ 先按 5.0 重放）
-grep -E 'ORCHESTRATOR_SERVICES|E2B_FC_LAUNCH_MODE|MAX_STARTING' nomad/template-manager.hcl
+grep -E 'ORCHESTRATOR_SERVICES|E2B_FC_NETNS_EXEC_HELPER|MAX_STARTING' nomad/template-manager.hcl
 grep -c -- '--only' deploy.sh
-ls -l bin/fc-launch bin/fc-netns-exec        # 档 2/3 的助手二进制在位（见 9.2）
+ls -l bin/fc-netns-exec                      # 助手二进制在位（见 9.2）
 
 BENCH_DIR=/home/j30059180/projects/mye2b/e2b-oe/benchmark   # ← 换成你的 benchmark 目录
 cd "$BENCH_DIR" && bash sync-env.sh          # 凭据同步（见上文）
@@ -820,23 +823,23 @@ cd "$BENCH_DIR" && bash sync-env.sh          # 凭据同步（见上文）
 **每一组跑这一段**（只有 MODE/CAP 两个变量按上表换值，其余六组照抄）：
 
 ```bash
-MODE=launch; CAP=30                          # ← 按组合表换值
+HELPER=/opt/e2b-infra/bin/fc-netns-exec; CAP=30    # ← 按组合表换值（关掉时 HELPER=disabled）
 BENCH_DIR=/home/j30059180/projects/mye2b/e2b-oe/benchmark
 
 # 1) 改值 + 生效（场景三第 1、2 步；env 变了 nomad 自动替换 alloc，不需要 stop）
 cd /opt/e2b-infra
-sed -i -E "s/^(\s*E2B_FC_LAUNCH_MODE\s*=\s*).*/\1\"$MODE\"/"              nomad/template-manager.hcl
+sed -i -E "s#^(\s*E2B_FC_NETNS_EXEC_HELPER\s*=\s*).*#\1\"$HELPER\"#"     nomad/template-manager.hcl
 sed -i -E "s/^(\s*MAX_STARTING_INSTANCES_PER_NODE\s*=\s*).*/\1\"$CAP\"/" nomad/template-manager.hcl
 bash build.sh -r template-manager
 
 # 2) 验证（场景三第 3 步的第④层——进程真实 env 是最终裁决；两个值都要对上）
 pid=$(pgrep -f /usr/bin/template-manager | head -1)
-tr '\0' '\n' < /proc/$pid/environ | grep -E 'E2B_FC_LAUNCH_MODE|MAX_STARTING_INSTANCES_PER_NODE'
+tr '\0' '\n' < /proc/$pid/environ | grep -E 'E2B_FC_NETNS_EXEC_HELPER|MAX_STARTING_INSTANCES_PER_NODE'
 
-# 3) 压测 + 采集 + 报告（模板/count/并发六组必须一致，否则没有可比性）
+# 3) 压测 + 采集 + 报告（模板/count/并发四组必须一致，否则没有可比性）
 cd "$BENCH_DIR"
-python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3 --fc-launch-mode "$MODE"
-echo "mode=$MODE cap=$CAP" > "runs/$(cat runs/.latest)/combo.txt"   # cap 标注（mode 已由 --fc-launch-mode 写进 meta.json）
+python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3 --fc-netns-exec-helper "$HELPER"
+echo "helper=$HELPER cap=$CAP" > "runs/$(cat runs/.latest)/combo.txt"   # cap 标注（helper 已由 --fc-netns-exec-helper 写进 meta.json）
 bash collect_logs.sh
 python parse_report.py
 ```
@@ -845,8 +848,8 @@ python parse_report.py
 
 - **排队 vs FC 启动的此消彼长**：cap=100 时「准入排队」应≈0——若「等待firecracker启动」「恢复虚拟机」
   反而变大，说明信号量原本在保护已饱和的 CPU，真瓶颈在 FC 启动侧（这正是 cap 扫描要回答的问题）。
-- **各 mode 的差异**主要看「等待firecracker启动」（`configured fc`）一段；档位含义见第 9 节。
+- **开关前后的差异**主要看「等待firecracker启动」（`configured fc`）一段；机制见第 9 节。
 - **事后对比某一轮**：`python parse_report.py --run-dir runs/run_<时间戳>`；每轮的 `combo.txt` +
-  `meta.json` 里的 `fc_launch_mode` 能对上号。
-- **扫完定档**：把胜出组合写回仓库 `e2b-deploy/dep/template-manager.hcl` 作为长期默认
+  `meta.json` 里的 `fc_netns_exec_helper` 能对上号。
+- **扫完定值**：把胜出组合写回仓库 `e2b-deploy/dep/template-manager.hcl` 作为长期默认
   （场景三末尾的持久化提醒——`/opt` 下的改动会被下次 `rpm -Uvh` 覆盖）。

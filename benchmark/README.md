@@ -19,7 +19,7 @@
 | 沙箱恢复准备 | 获取网络槽位 | `wait network slot cost` | 从网络池取槽位 |
 | 沙箱恢复准备 | 获取 template 元数据 | `get template metadata cost` | |
 | 创建 firecracker 进程 | 创建 firecracker 进程 | `fc.NewProcess cost` | |
-| 创建 firecracker 进程 | 等待firecracker启动 | `configured fc cost` | `p.configure()` 整体：`cmd.Start()` fork/exec 拉起命令 + `socket.Wait()` 等 FC 的 API socket 就绪（含命名空间内脚本/exec + FC 启动）。受 `E2B_FC_LAUNCH_MODE` 4 档影响，档位机制详解见 `FC启动优化-netns-exec.md` / `FC启动优化-launch.md` / `FC启动优化-launch-c.md` |
+| 创建 firecracker 进程 | 等待firecracker启动 | `configured fc cost` | `p.configure()` 整体：`cmd.Start()` fork/exec 拉起命令 + `socket.Wait()` 等 FC 的 API socket 就绪（含命名空间内脚本/exec + FC 启动）。受 `E2B_FC_NETNS_EXEC_HELPER` 开关影响，机制详解见 `FC启动优化-netns-exec.md` |
 | 创建 firecracker 进程 | 等待uffd sock | `get uffd sock path cost` | |
 | firecracker 恢复虚拟机 | 加载快照 | `load snapshot cost` | |
 | firecracker 恢复虚拟机 | 调用恢复 | `post resume cost` | resumeVM API |
