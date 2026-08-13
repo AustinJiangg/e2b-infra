@@ -150,8 +150,21 @@ sudo mkdir -p /mnt/hugepages
 mountpoint -q /mnt/hugepages || mount -t hugetlbfs none /mnt/hugepages
 # Increase proactive compaction to reduce memory fragmentation for using overcomitted huge pages
 
-available_ram=$(grep MemTotal /proc/meminfo | awk '{print $2}') # in KiB
-available_ram=$(($available_ram / 1024))                        # in MiB
+# /proc/meminfo 的字段名不是唯一前缀：鲲鹏上的 openEuler 内核会多出一行
+# "RemoteMemTotal: 0 kB"，名字里同样含 "MemTotal" 子串。不加锚点的 grep 会把两行
+# 一起取出来，变量变成多行字符串，下面每一处算术展开都会报
+# "syntax error in expression"，并连带出 min_normal_percentage_ram: unbound variable。
+# 只按字段名精确匹配，并且只取第一行。
+meminfo_kib() {
+    awk -v key="$1:" '$1 == key { print $2; exit }' /proc/meminfo
+}
+
+available_ram=$(meminfo_kib MemTotal) # in KiB
+if [[ ! "$available_ram" =~ ^[0-9]+$ ]] || ((available_ram == 0)); then
+    echo "无法从 /proc/meminfo 读取 MemTotal（读到：'${available_ram}'）" >&2
+    exit 1
+fi
+available_ram=$((available_ram / 1024)) # in MiB
 echo "- Total memory: $available_ram MiB"
 
 min_normal_ram=$((4 * 1024))                             # 4 GiB
@@ -192,19 +205,21 @@ echo "- Reserved RAM: $reserved_normal_ram MiB"
 
 # The huge pages RAM should still be usable for normal pages in most cases.
 hugepages_ram=$(($available_ram - $reserved_normal_ram))
+# 内存小于保留量的机器上这里会是负数，nr_hugepages 写入会失败，直接归零。
+((hugepages_ram > 0)) || hugepages_ram=0
 hugepages_ram=$(remove_decimal $hugepages_ram)
 hugepages_ram=$(ensure_even $hugepages_ram)
 echo "- RAM for hugepages: $hugepages_ram MiB"
 
-hugepage_size_in_mib=$(grep -i "Hugepagesize" /proc/meminfo | awk '{print $2}')
-if [ -z "$hugepage_size_in_mib" ]; then
+hugepage_size_in_kib=$(meminfo_kib Hugepagesize) # in KiB
+if [[ ! "$hugepage_size_in_kib" =~ ^[0-9]+$ ]] || ((hugepage_size_in_kib == 0)); then
     echo "无法从/proc/meminfo获取大页,使用默认大小2M"
-    hugepage_size_in_mib=2
-else
-    hugepage_size_in_mib=$((hugepage_size_in_mib/1024))
+    hugepage_size_in_kib=2048
 fi
-echo "- Huge page size: $hugepage_size_in_mib MiB"
-hugepages=$(($hugepages_ram / $hugepage_size_in_mib))
+echo "- Huge page size: $hugepage_size_in_kib KiB"
+# 直接用 KiB 计算：arm64 64K 页内核的大页是 512 MiB，而先折算成 MiB 会在大页
+# 小于 1 MiB 的配置下取整成 0，除法直接崩掉。
+hugepages=$(($hugepages_ram * 1024 / $hugepage_size_in_kib))
 
 # This percentage will be permanently allocated for huge pages and in monitoring it will be shown as used.
 base_hugepages_percentage=20
