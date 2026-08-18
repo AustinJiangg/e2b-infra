@@ -178,6 +178,13 @@ plugin "raw_exec" { config { enabled = true } }   # template-manager-system 要�
    ```
    沙箱 VM 内存走大页（性能+避免碎片），启动早期趁内存未碎片化先占住。
    同时挂载 `hugetlbfs` 到 `/mnt/hugepages`（幂等）。
+
+   > 这段逻辑在 `start-client.sh` 和 `init-client.sh` 里**各有一份、逐字节相同**，`-s` 会先后
+   > 各跑一次。`echo N > nr_hugepages` 是绝对赋值不是累加、N 只由 `MemTotal` 决定，所以第二次
+   > 写的是同一个值，幂等、不会翻倍——最终生效的是后跑的 `init-client.sh`。
+   >
+   > 大页是**内核级预留**，`build.sh -d` 不释放它（下次 `-s` 要在还没碎片化的内存上重新凑
+   > 连续页，提前释放反而更亏）。要把这块内存还给系统：`build.sh --purge-hugepages`。
 9. **DNS 链路**：
    - `/etc/resolv.conf` 顶部保证**恰好一条** `nameserver 127.0.0.1`（先删重复再插入——
      旧版每跑一次叠一行的坑已修）；
@@ -341,3 +348,4 @@ ls /root/.e2b/config.json                              # SDK 凭据已生成（�
 | `build.sh -f` | 只有步骤⑪ `deploy.sh` 全量（镜像构建+渲染+全部 job+seed+配额）——改 `.env` 后用 |
 | `build.sh -r <job>` | `deploy.sh --only <job>`：只渲染+重跑一个 job，跳过镜像/seed——改单个 job env 后用（runbook §11） |
 | `build.sh -d` | 逆操作：purge 全部 job、卸 consul/nomad（**连数据目录带 ACL 状态一起删**）、kill 残留业务进程。`-d` 之后再 `-s` = 全新 bootstrap |
+| `build.sh --purge-hugepages` | 只归零 `nr_hugepages` / `nr_overcommit_hugepages` 并卸载 `/mnt/hugepages`，不动服务。`-d` **不含**这一步，长期不用 e2b 想把几百 G 内存还给系统时单独跑 |
