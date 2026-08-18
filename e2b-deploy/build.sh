@@ -738,6 +738,77 @@ function stop() {
     fi
 
     success "e2b-infra 服务停止完成！"
+
+    # 静态大页池是内核级预留，跟进程在不在没关系，stop 故意不动它：下次 -s 要在还没碎片化的
+    # 内存上重新凑连续页，提前释放反而更亏。确实要把这块内存还给系统时显式清理。
+    local hp_total hp_kb
+    hp_total=$(awk '/^HugePages_Total:/{print $2}' /proc/meminfo 2>/dev/null)
+    hp_kb=$(awk '/^Hugepagesize:/{print $2}' /proc/meminfo 2>/dev/null)
+    if [ -n "$hp_total" ] && [ "$hp_total" -gt 0 ] 2>/dev/null; then
+        info "静态大页池仍占用 $((hp_total * hp_kb / 1024)) MiB（不随服务停止释放）；要回收执行：$0 --purge-hugepages"
+    fi
+}
+
+function purge_hugepages() {
+    local hp_mount="/mnt/hugepages"
+    local hp_sys="/proc/sys/vm/nr_hugepages"
+    local hp_over="/proc/sys/vm/nr_overcommit_hugepages"
+
+    info "开始释放静态大页（HugeTLB）池..."
+
+    if [ ! -f "$hp_sys" ]; then
+        warn "内核未启用 HugeTLB（$hp_sys 不存在），无需清理"
+        return 0
+    fi
+
+    # Hugepagesize 单位 kB。aarch64 用 64K 基页时默认大页是 512 MiB 而不是 2 MiB，这里不写死。
+    local page_kb total_before
+    page_kb=$(awk '/^Hugepagesize:/{print $2}' /proc/meminfo)
+    [ -z "$page_kb" ] && page_kb=2048
+    total_before=$(awk '/^HugePages_Total:/{print $2}' /proc/meminfo)
+    echo "- 当前：HugePages_Total=$total_before 页 × $((page_kb / 1024)) MiB = $((total_before * page_kb / 1024)) MiB"
+
+    if [ "$total_before" -eq 0 ] && ! mountpoint -q "$hp_mount"; then
+        success "大页池本来就是空的，无需清理"
+        return 0
+    fi
+
+    # 占用检查：被占用的大页内核不会回收。这里只提示不中止——归零是安全的，
+    # 内核只回收空闲页，运行中的沙箱不会被抽走内存。
+    local fc_pids
+    fc_pids=$(pgrep -f '/fc-versions/.*/firecracker' 2>/dev/null)
+    if [ -n "$fc_pids" ]; then
+        warn "仍有 firecracker（沙箱）进程在跑，它们占用的大页不会被回收（PID：$(echo $fc_pids | tr '\n' ' ')）"
+        warn "要全部回收，请先执行：$0 -d"
+    fi
+    if [ -n "$(ls -A "$hp_mount" 2>/dev/null)" ]; then
+        warn "$hp_mount 下仍有文件，会把大页钉住：$(ls -A "$hp_mount" | tr '\n' ' ')"
+    fi
+
+    # 先关超售上限再归零常驻池；顺序反了可能在归零过程中又冒出 surplus 页
+    echo 0 >"$hp_over" 2>/dev/null || warn "写 $hp_over 失败"
+    echo 0 >"$hp_sys" 2>/dev/null || warn "写 $hp_sys 失败"
+
+    # 卸载 hugetlbfs（幂等；下次 build.sh -s 会自己挂回来）
+    if mountpoint -q "$hp_mount"; then
+        if umount "$hp_mount" 2>/dev/null; then
+            echo "- 已卸载 $hp_mount"
+        else
+            warn "$hp_mount 卸载失败（可能仍被占用）；大页池已归零，不影响内存回收"
+        fi
+    fi
+
+    grep -E 'HugePages_(Total|Free|Rsvd|Surp)|^Hugetlb' /proc/meminfo
+
+    local total_after
+    total_after=$(awk '/^HugePages_Total:/{print $2}' /proc/meminfo)
+    if [ "$total_after" -eq 0 ]; then
+        success "大页已全部释放，回收 $((total_before * page_kb / 1024)) MiB"
+    else
+        warn "仍有 $total_after 页（约 $((total_after * page_kb / 1024)) MiB）被占用；停掉占用者后再跑一次本命令即可"
+    fi
+
+    info "大页只写在 /proc/sys/vm/ 下，不是持久配置：重启即归零；下次 build.sh -s 会按 20% 重新预留"
 }
 
 function make_images() {
@@ -790,7 +861,7 @@ function make_images() {
 # ===================== 参数解析（完整修正）=====================
 # 定义正确的短/长选项：m: 表示 -m 需要接收参数；d对应stop
 OPTIONS="iusdfm:r:"
-LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:"  # make:/redeploy: 表示需要参数
+LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages"  # make:/redeploy: 表示需要参数
 
 # 解析参数（处理 getopt 结果）
 # 兼容不同系统的 getopt，增加 -o/-l 明确指定选项
@@ -823,6 +894,12 @@ while true; do
             ;;
         -d|--stop)
             stop
+            has_valid_param=1
+            shift
+            ;;
+        --purge-hugepages)
+            # 只释放静态大页池，不碰服务；停服后想把内存还给系统时用
+            purge_hugepages
             has_valid_param=1
             shift
             ;;
@@ -868,6 +945,7 @@ if [ $has_valid_param -eq 0 ]; then
     echo "  卸载所有组件：$0 --uninstall 或 $0 -u"
     echo "  启动 e2b-infra 服务：$0 --start 或 $0 -s"
     echo "  停止 e2b-infra 服务：$0 --stop 或 $0 -d"
+    echo "  释放静态大页池：$0 --purge-hugepages（只清 HugeTLB，不动服务；建议先 -d 停服）"
     echo "  部署 e2b-infra 服务：$0 --deploy 或 $0 -f"
     echo "  快速重跑单个 job：$0 --redeploy <job> 或 $0 -r <job>（例如：$0 -r template-manager，只 render+重跑该 job，跳过镜像构建）"
     echo "  构建镜像：$0 --make <镜像参数> 或 $0 -m <镜像参数>（例如：$0 -m ubuntu22.04）"
