@@ -282,7 +282,19 @@ function install_e2b() {
     cp -fv $DEP_DIR/build_api.py             $SITE/e2b/template_sync/
     cp -fv $DEP_DIR/main.py                  $SITE/e2b/template_sync/
 
-    python /opt/e2b-infra/patch_e2b.py
+    # 解析一次解释器，下面两个脚本共用。
+    # 它们都要改同一份 site-packages，必须是同一个解释器；而 `python` 这个名字
+    # 不是哪台机器上都有的（openEuler 上就只有 python3），写死会直接跑不起来。
+    local PY
+    PY=$(command -v python || command -v python3) || error "找不到 python 解释器"
+
+    # checkpoint/restore 的 SDK 能力：整文件覆盖进 site-packages，
+    # 见 dep/e2b-sdk-checkpoint/install.py。
+    # 必须排在 patch_e2b.py **之前** —— patch_e2b.py 对 connection_config.py 做
+    # 全局 https->http 替换，顺序反了会把这里铺进去的那份又改回 https。
+    "$PY" "$DEP_DIR/e2b-sdk-checkpoint/install.py" || error "checkpoint SDK 安装失败"
+
+    "$PY" /opt/e2b-infra/patch_e2b.py
 
     if ! grep -q "address=/.e2b.app/127.0.0.1" /etc/dnsmasq.conf; then
         echo "address=/.e2b.app/127.0.0.1" >> /etc/dnsmasq.conf
@@ -361,6 +373,10 @@ function uninstall_nomad() {
 
 function uninstall_e2b() {
     uninstall_nomad
+    # 先把 checkpoint SDK 从 site-packages 里撤掉再卸 e2b，顺序反了就撤不干净
+    [ -f "$DEP_DIR/e2b-sdk-checkpoint/install.py" ] && \
+        "$(command -v python || command -v python3)" \
+        "$DEP_DIR/e2b-sdk-checkpoint/install.py" --uninstall || true
     rpm -e e2b-infra
 }
 
