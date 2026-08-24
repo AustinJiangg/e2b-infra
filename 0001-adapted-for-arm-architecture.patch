@@ -8382,10 +8382,10 @@ index 000000000..4f306aeb0
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/service.go b/packages/orchestrator/internal/checkpoint/service.go
 new file mode 100644
-index 000000000..f984511de
+index 000000000..8e8139afa
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/service.go
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,504 @@
 +package checkpoint
 +
 +import (
@@ -8659,7 +8659,11 @@ index 000000000..f984511de
 +		zap.String("checkpoint_id", entry.ID),
 +		zap.String("mem_mode", memMode))
 +
-+	writeJSON(w, map[string]any{"checkpointId": entry.ID})
++	// memMode is reported so a caller can tell an incremental checkpoint from
++	// a full one. A full checkpoint on anything but a sandbox's first is what
++	// happens when the host is not tracking dirty pages: it costs one guest
++	// memory copy every time and is otherwise completely silent.
++	writeJSON(w, map[string]any{"checkpointId": entry.ID, "memMode": memMode})
 +
 +	return nil
 +}
@@ -8799,6 +8803,9 @@ index 000000000..f984511de
 +		}
 +		if e.Name != "" {
 +			info["name"] = e.Name
++		}
++		if e.MemMode != "" {
++			info["memMode"] = e.MemMode
 +		}
 +
 +		infos = append(infos, info)
