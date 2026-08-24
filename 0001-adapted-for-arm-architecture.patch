@@ -7113,10 +7113,10 @@ index 548d52bd5..b66907809 100644
  		&c.HostKernelsDir,
 diff --git a/packages/orchestrator/internal/checkpoint/bitmap.go b/packages/orchestrator/internal/checkpoint/bitmap.go
 new file mode 100644
-index 000000000..dbea21ebd
+index 000000000..78d59ffa9
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/bitmap.go
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,96 @@
 +package checkpoint
 +
 +import (
@@ -7213,36 +7213,15 @@ index 000000000..dbea21ebd
 +
 +	return syncFile(path)
 +}
-+
-+// contains reports whether the page's bit is set.
-+func (b *dirtyBitmap) contains(page uint64) bool {
-+	return b.words[page/64]&(1<<(page%64)) != 0
-+}
-+
-+// allOnesBitmap is the implicit epoch bitmap of a full capture: every page.
-+// Bits past numPages stay clear so unions with real sidecars agree.
-+func allOnesBitmap(pageSize uint64, numPages uint64) *dirtyBitmap {
-+	words := make([]uint64, (numPages+63)/64)
-+	for i := range words {
-+		words[i] = ^uint64(0)
-+	}
-+	if r := numPages % 64; r != 0 {
-+		words[len(words)-1] = (uint64(1) << r) - 1
-+	}
-+
-+	return &dirtyBitmap{pageSize: pageSize, numPages: numPages, words: words}
-+}
 diff --git a/packages/orchestrator/internal/checkpoint/bitmap_test.go b/packages/orchestrator/internal/checkpoint/bitmap_test.go
 new file mode 100644
-index 000000000..02acff76c
+index 000000000..75b7024aa
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/bitmap_test.go
-@@ -0,0 +1,281 @@
+@@ -0,0 +1,148 @@
 +package checkpoint
 +
 +import (
-+	"bytes"
-+	"context"
 +	"os"
 +	"path/filepath"
 +	"testing"
@@ -7315,209 +7294,305 @@ index 000000000..02acff76c
 +	assert.Error(t, a.merge(mismatched), "geometry mismatch must refuse, not corrupt")
 +}
 +
-+const (
-+	testPageSize = uint64(4096)
-+	testPages    = uint64(64)
++func TestRevertBitmapCoversTreePath(t *testing.T) {
++	s := newTestStore(t)
++	out := filepath.Join(t.TempDir(), "revert")
++
++	union := func(targetID string) []uint64 {
++		t.Helper()
++
++		wrote, err := s.RevertBitmapForTarget("sbx", targetID, out)
++		require.NoError(t, err)
++		require.True(t, wrote)
++
++		got, err := readDirtyBitmap(out)
++		require.NoError(t, err)
++
++		return got.words
++	}
++
++	// A chain e1 ← e2 ← e3; e1 is Full with an all-ones sidecar, the way a
++	// real first checkpoint looks.
++	e1 := prepareWithFiles(t, s, "sbx", "one", 1)
++	writeEpoch(t, e1, []uint64{^uint64(0)})
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
++
++	e2 := prepareWithFiles(t, s, "sbx", "two", 2)
++	writeEpoch(t, e2, []uint64{0b0100})
++	require.NoError(t, s.Commit(e2, MemModeIncremental, nil))
++
++	e3 := prepareWithFiles(t, s, "sbx", "three", 3)
++	writeEpoch(t, e3, []uint64{0b1000})
++	require.NoError(t, s.Commit(e3, MemModeIncremental, nil))
++
++	// Base is e3 (the last commit). Rolling back to the base itself needs no
++	// file: the live dirty set alone is the revert set.
++	wrote, err := s.RevertBitmapForTarget("sbx", e3.ID, out)
++	require.NoError(t, err)
++	assert.False(t, wrote)
++
++	// e3 → e1 walks e3, e2 down to the common ancestor e1, which is excluded:
++	// e1's all-ones sidecar is never read, or every rollback to the root
++	// would degenerate to rewriting all of guest memory.
++	assert.Equal(t, []uint64{0b1100}, union(e1.ID))
++
++	// A fork: restored to e1, a new checkpoint e4 branches off it.
++	s.SetBaseToEntry(e1)
++	e4 := prepareWithFiles(t, s, "sbx", "four", 4)
++	writeEpoch(t, e4, []uint64{0b10000})
++	require.NoError(t, s.Commit(e4, MemModeIncremental, nil))
++	require.Equal(t, e1.ID, e4.ParentID)
++
++	// e4 → e1 is e4's epoch alone: e2 and e3 are beside it, not between.
++	assert.Equal(t, []uint64{0b10000}, union(e1.ID))
++
++	// e4 → e3 crosses the fork: both branches down to e1. A time-ordered
++	// interval (e3..e4] would have missed e2 and e3 entirely — the exact
++	// mistake that let a guest Oops after a cross-branch restore.
++	assert.Equal(t, []uint64{0b11100}, union(e3.ID))
++	assert.Equal(t, []uint64{0b10100}, union(e2.ID))
++
++	// A deleted checkpoint inside the path keeps contributing its epoch.
++	require.NoError(t, s.Delete("sbx", e2.ID))
++	assert.Equal(t, []uint64{0b11100}, union(e3.ID))
++
++	// A hidden entry is not a target.
++	_, err = s.RevertBitmapForTarget("sbx", e2.ID, out)
++	assert.Error(t, err)
++
++	// A sidecar lost from disk on the path refuses the rollback instead of
++	// producing a smaller set; paths that avoid it are unaffected.
++	require.NoError(t, os.Remove(e2.MemBitmap))
++	_, err = s.RevertBitmapForTarget("sbx", e3.ID, out)
++	assert.Error(t, err, "an unreadable epoch must refuse, never shrink the revert set")
++	assert.Equal(t, []uint64{0b10000}, union(e1.ID))
++}
+diff --git a/packages/orchestrator/internal/checkpoint/clone.go b/packages/orchestrator/internal/checkpoint/clone.go
+new file mode 100644
+index 000000000..0fca67798
+--- /dev/null
++++ b/packages/orchestrator/internal/checkpoint/clone.go
+@@ -0,0 +1,156 @@
++package checkpoint
++
++import (
++	"fmt"
++	"io"
++	"os"
++
++	"golang.org/x/sys/unix"
 +)
 +
-+// fakeStartMem serves the start memory source as a repeated fill byte.
-+type fakeStartMem struct{ fill byte }
-+
-+func (f fakeStartMem) BlockSize() int64 { return 8192 } // odd size so the aligned window path runs
-+
-+func (f fakeStartMem) ReadAt(_ context.Context, b []byte, _ int64) (int, error) {
-+	for i := range b {
-+		b[i] = f.fill
++// CloneOrCopy makes dst an independent full copy of src, preferring a
++// filesystem reflink clone (FICLONE — metadata-only, instant, extents shared
++// copy-on-write) and falling back to a sparse-preserving byte copy. It
++// reports whether the fast path was taken so degradation shows up in logs and
++// metrics rather than only in latency.
++//
++// src must be immutable while this runs; the store's per-sandbox operation
++// lock guarantees that for base files.
++func CloneOrCopy(src string, dst string) (cloned bool, err error) {
++	in, err := os.Open(src)
++	if err != nil {
++		return false, fmt.Errorf("failed to open clone source: %w", err)
 +	}
++	defer in.Close()
 +
-+	return len(b), nil
-+}
-+
-+// commitDiff publishes a prepared entry as a diff checkpoint whose file
-+// holds fill-bytes at exactly the pages of bits, everything else holes.
-+func commitDiff(t *testing.T, s *Store, e *Entry, bits uint64, fill byte) {
-+	t.Helper()
-+
-+	writeDiffFiles(t, e, bits, fill)
-+	require.NoError(t, s.Commit(e, MemModeIncremental, nil))
-+}
-+
-+func writeDiffFiles(t *testing.T, e *Entry, bits uint64, fill byte) {
-+	t.Helper()
-+
-+	bm := &dirtyBitmap{pageSize: testPageSize, numPages: testPages, words: []uint64{bits}}
-+	require.NoError(t, bm.writeTo(e.TempMemBitmap()))
-+
-+	f, err := os.OpenFile(e.TempMemDiff(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
-+	require.NoError(t, err)
-+	defer f.Close()
-+
-+	page := bytes.Repeat([]byte{fill}, int(testPageSize))
-+	for p := uint64(0); p < testPages; p++ {
-+		if bits&(1<<p) == 0 {
-+			continue
++	out, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
++	if err != nil {
++		return false, fmt.Errorf("failed to create clone target: %w", err)
++	}
++	defer func() {
++		if closeErr := out.Close(); err == nil && closeErr != nil {
++			err = fmt.Errorf("failed to close clone target: %w", closeErr)
 +		}
-+		_, err := f.WriteAt(page, int64(p*testPageSize))
-+		require.NoError(t, err)
++	}()
++
++	if err := unix.IoctlFileClone(int(out.Fd()), int(in.Fd())); err == nil {
++		return true, nil
 +	}
++	// Not supported (ext4, cross-device, …) — fall through to a real copy.
++
++	if err := copySparse(in, out); err != nil {
++		return false, fmt.Errorf("failed to copy clone source: %w", err)
++	}
++
++	return false, nil
 +}
 +
-+func writeLiveBitmap(t *testing.T, dir string, bits uint64) string {
-+	t.Helper()
++// copySparse copies only the data extents of in, leaving holes as holes, so a
++// mostly-empty memory file does not balloon into its logical size.
++func copySparse(in *os.File, out *os.File) error {
++	st, err := in.Stat()
++	if err != nil {
++		return err
++	}
++	size := st.Size()
 +
-+	path := filepath.Join(dir, "live")
-+	bm := &dirtyBitmap{pageSize: testPageSize, numPages: testPages, words: []uint64{bits}}
-+	require.NoError(t, bm.writeTo(path))
++	var off int64
++	for off < size {
++		dataStart, err := in.Seek(off, unix.SEEK_DATA)
++		if err != nil {
++			if errno, ok := err.(*os.PathError); ok {
++				if errno.Err == unix.ENXIO {
++					// No more data before EOF.
++					break
++				}
++				if errno.Err == unix.EINVAL || errno.Err == unix.EOPNOTSUPP {
++					// Filesystem cannot enumerate holes; copy everything.
++					return copyDense(in, out, size)
++				}
++			}
 +
-+	return path
++			return err
++		}
++
++		holeStart, err := in.Seek(dataStart, unix.SEEK_HOLE)
++		if err != nil {
++			return err
++		}
++
++		if err := copyRange(in, out, dataStart, holeStart-dataStart); err != nil {
++			return err
++		}
++
++		off = holeStart
++	}
++
++	return out.Truncate(size)
 +}
 +
-+func pageOf(t *testing.T, mem []byte, p uint64) []byte {
-+	t.Helper()
++func copyDense(in *os.File, out *os.File, size int64) error {
++	if _, err := in.Seek(0, io.SeekStart); err != nil {
++		return err
++	}
++	if _, err := out.Seek(0, io.SeekStart); err != nil {
++		return err
++	}
 +
-+	return mem[p*testPageSize : (p+1)*testPageSize]
++	_, err := io.Copy(out, in)
++
++	return err
 +}
 +
-+func assertPageFill(t *testing.T, mem []byte, p uint64, fill byte, why string) {
-+	t.Helper()
-+	assert.Equal(t, bytes.Repeat([]byte{fill}, int(testPageSize)), pageOf(t, mem, p), why)
++// copyRange copies [off, off+length) from in to out at the same offset,
++// preferring in-kernel copy_file_range and falling back to buffered pread/
++// pwrite when the filesystem refuses.
++func copyRange(in *os.File, out *os.File, off int64, length int64) error {
++	roff, woff := off, off
++	remaining := length
++
++	for remaining > 0 {
++		chunk := remaining
++		if chunk > 1<<30 {
++			chunk = 1 << 30
++		}
++
++		n, err := unix.CopyFileRange(int(in.Fd()), &roff, int(out.Fd()), &woff, int(chunk), 0)
++		if err != nil {
++			return copyRangeBuffered(in, out, roff, off+length-roff)
++		}
++		if n == 0 {
++			break
++		}
++
++		remaining -= int64(n)
++	}
++
++	return nil
 +}
 +
-+// TestMaterializeRevertTreePath is the v3 core invariant in one scenario:
-+//
-+//	a(0b0011) ── b(0b0110)      ← branch abandoned by the restore
-+//	   └─────── c(0b1000)       ← current base after restoring to a
-+//
-+// Rolling back from c to b must revert exactly path(c..a] ∪ path(b..a] ∪
-+// live = c ∪ b ∪ live: the common ancestor a and everything below it stay
-+// out (the v3 form of "the Full sidecar is not read"), and each reverted
-+// page carries b-moment content — b's own pages from b, pages b never wrote
-+// resolved down its ancestor chain, ending at the start memory source.
-+func TestMaterializeRevertTreePath(t *testing.T) {
-+	s := newTestStore(t)
++func copyRangeBuffered(in *os.File, out *os.File, off int64, length int64) error {
++	buf := make([]byte, 1<<20)
 +
-+	a := prepareWithFiles(t, s, "sbx", "a", "")
-+	commitDiff(t, s, a, 0b0011, 0xAA) // pages 0,1
++	for length > 0 {
++		chunk := int64(len(buf))
++		if chunk > length {
++			chunk = length
++		}
 +
-+	b := prepareWithFiles(t, s, "sbx", "b", a.ID)
-+	commitDiff(t, s, b, 0b0110, 0xBB) // pages 1,2
++		n, err := in.ReadAt(buf[:chunk], off)
++		if err != nil && err != io.EOF {
++			return err
++		}
++		if n == 0 {
++			break
++		}
 +
-+	// Restore to a: the next checkpoint parents there, not on b.
-+	s.SetBaseToEntry(a)
++		if _, err := out.WriteAt(buf[:n], off); err != nil {
++			return err
++		}
 +
-+	c := prepareWithFiles(t, s, "sbx", "c", a.ID)
-+	commitDiff(t, s, c, 0b1000, 0xCC) // page 3
++		off += int64(n)
++		length -= int64(n)
++	}
 +
-+	live := writeLiveBitmap(t, t.TempDir(), 0b10000) // page 4
++	return nil
++}
+diff --git a/packages/orchestrator/internal/checkpoint/clone_test.go b/packages/orchestrator/internal/checkpoint/clone_test.go
+new file mode 100644
+index 000000000..d7202f6a7
+--- /dev/null
++++ b/packages/orchestrator/internal/checkpoint/clone_test.go
+@@ -0,0 +1,59 @@
++package checkpoint
 +
-+	memPath, bitmapPath, cleanup, err := s.MaterializeRevert(context.Background(), "sbx", b.ID, live, fakeStartMem{fill: 0xEE})
++import (
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++func TestCloneOrCopyPreservesContentAndSize(t *testing.T) {
++	dir := t.TempDir()
++	src := filepath.Join(dir, "src")
++	dst := filepath.Join(dir, "dst")
++
++	// A sparse file: data at the start, a hole, data in the middle, and a
++	// hole running to EOF — the shape of a diff-overwritten memory clone.
++	f, err := os.Create(src)
 +	require.NoError(t, err)
-+	defer cleanup()
-+
-+	revert, err := readDirtyBitmap(bitmapPath)
++	_, err = f.WriteAt([]byte("head"), 0)
 +	require.NoError(t, err)
-+	assert.Equal(t, []uint64{0b11110}, revert.words,
-+		"revert = c ∪ b ∪ live; the common ancestor a must not contribute")
-+
-+	mem, err := os.ReadFile(memPath)
++	_, err = f.WriteAt([]byte("middle"), 1<<20)
 +	require.NoError(t, err)
-+	require.Len(t, mem, int(testPages*testPageSize), "rollback validates the file length against guest memory")
++	require.NoError(t, f.Truncate(4<<20))
++	require.NoError(t, f.Close())
 +
-+	assertPageFill(t, mem, 0, 0x00, "page 0 is not in the revert set: hole")
-+	assertPageFill(t, mem, 1, 0xBB, "page 1 at the b moment comes from b itself")
-+	assertPageFill(t, mem, 2, 0xBB, "page 2 at the b moment comes from b itself")
-+	assertPageFill(t, mem, 3, 0xEE, "page 3 was never written before b: start memory source")
-+	assertPageFill(t, mem, 4, 0xEE, "live-dirtied page 4 was never checkpointed: start memory source")
++	_, err = CloneOrCopy(src, dst)
++	require.NoError(t, err)
 +
-+	cleanup()
-+	_, err = os.Stat(memPath)
-+	assert.True(t, os.IsNotExist(err), "cleanup removes the materialized files")
++	want, err := os.ReadFile(src)
++	require.NoError(t, err)
++	got, err := os.ReadFile(dst)
++	require.NoError(t, err)
++	assert.Equal(t, want, got)
++
++	st, err := os.Stat(dst)
++	require.NoError(t, err)
++	assert.Equal(t, int64(4<<20), st.Size())
 +}
 +
-+// TestMaterializeRevertResolvesThroughAncestors: a page reverted because a
-+// *newer* epoch dirtied it, but whose target-moment content lives in an
-+// *older* ancestor's diff.
-+func TestMaterializeRevertResolvesThroughAncestors(t *testing.T) {
-+	s := newTestStore(t)
++func TestCloneOrCopyTargetIsIndependent(t *testing.T) {
++	dir := t.TempDir()
++	src := filepath.Join(dir, "src")
++	dst := filepath.Join(dir, "dst")
 +
-+	a := prepareWithFiles(t, s, "sbx", "a", "")
-+	commitDiff(t, s, a, 0b0001, 0xAA) // page 0
++	require.NoError(t, os.WriteFile(src, []byte("original"), 0o644))
 +
-+	b := prepareWithFiles(t, s, "sbx", "b", a.ID)
-+	commitDiff(t, s, b, 0b0010, 0xBB) // page 1
-+
-+	c := prepareWithFiles(t, s, "sbx", "c", b.ID)
-+	commitDiff(t, s, c, 0b0001, 0xCC) // page 0 again, after b
-+
-+	// Base is c. Rolling back to b reverts c's page 0; its b-moment content
-+	// is a's version — the newest at or before b.
-+	live := writeLiveBitmap(t, t.TempDir(), 0)
-+
-+	memPath, bitmapPath, cleanup, err := s.MaterializeRevert(context.Background(), "sbx", b.ID, live, fakeStartMem{fill: 0xEE})
++	_, err := CloneOrCopy(src, dst)
 +	require.NoError(t, err)
-+	defer cleanup()
 +
-+	revert, err := readDirtyBitmap(bitmapPath)
++	// Overwriting the clone must not touch the source: checkpoint targets
++	// are written into while the base stays immutable.
++	require.NoError(t, os.WriteFile(dst, []byte("modified"), 0o644))
++
++	data, err := os.ReadFile(src)
 +	require.NoError(t, err)
-+	assert.Equal(t, []uint64{0b0001}, revert.words, "only c separates base from target")
-+
-+	mem, err := os.ReadFile(memPath)
-+	require.NoError(t, err)
-+	assertPageFill(t, mem, 0, 0xAA, "page 0 at the b moment is a's version, not c's")
-+}
-+
-+// TestMaterializeRevertFullRootTerminatesResolution: a full capture without
-+// a sidecar acts as the implicit all-ones root — resolution stops at it and
-+// the start memory source is never consulted.
-+func TestMaterializeRevertFullRootTerminatesResolution(t *testing.T) {
-+	s := newTestStore(t)
-+
-+	r := prepareWithFiles(t, s, "sbx", "root", "")
-+	writeDiffFiles(t, r, ^uint64(0), 0xDD) // full image, every page
-+	require.NoError(t, os.Remove(r.TempMemBitmap()))
-+	require.NoError(t, s.Commit(r, MemModeFull, nil))
-+	require.Empty(t, r.MemBitmap, "full capture without sidecar is legal")
-+
-+	c := prepareWithFiles(t, s, "sbx", "child", r.ID)
-+	commitDiff(t, s, c, 0b0010, 0xCC) // page 1
-+
-+	live := writeLiveBitmap(t, t.TempDir(), 0)
-+
-+	memPath, bitmapPath, cleanup, err := s.MaterializeRevert(context.Background(), "sbx", r.ID, live, fakeStartMem{fill: 0xEE})
-+	require.NoError(t, err)
-+	defer cleanup()
-+
-+	revert, err := readDirtyBitmap(bitmapPath)
-+	require.NoError(t, err)
-+	assert.Equal(t, []uint64{0b0010}, revert.words)
-+
-+	mem, err := os.ReadFile(memPath)
-+	require.NoError(t, err)
-+	assertPageFill(t, mem, 1, 0xDD, "the full root provides the page; 0xEE would mean the start source was consulted")
-+}
-+
-+// TestMaterializeRevertRefusals: the two states that must refuse instead of
-+// producing a plausible-but-wrong revert.
-+func TestMaterializeRevertRefusals(t *testing.T) {
-+	s := newTestStore(t)
-+
-+	a := prepareWithFiles(t, s, "sbx", "a", "")
-+	commitDiff(t, s, a, 0b0001, 0xAA)
-+
-+	// A diff checkpoint without a sidecar on the path poisons the revert.
-+	b := prepareWithFiles(t, s, "sbx", "b", a.ID)
-+	writeDiffFiles(t, b, 0b0010, 0xBB)
-+	require.NoError(t, os.Remove(b.TempMemBitmap()))
-+	require.Error(t, s.Commit(b, MemModeIncremental, nil),
-+		"a diff checkpoint without its sidecar must not even commit")
-+
-+	// A broken chain refuses every restore until a new root is taken.
-+	s.InvalidateBase("sbx")
-+
-+	live := writeLiveBitmap(t, t.TempDir(), 0)
-+	_, _, _, err := s.MaterializeRevert(context.Background(), "sbx", a.ID, live, fakeStartMem{fill: 0xEE})
-+	require.Error(t, err)
-+	assert.Contains(t, err.Error(), "chain is broken")
++	assert.Equal(t, "original", string(data))
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/header_agreement_test.go b/packages/orchestrator/internal/checkpoint/header_agreement_test.go
 new file mode 100644
@@ -8307,10 +8382,10 @@ index 000000000..4f306aeb0
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/service.go b/packages/orchestrator/internal/checkpoint/service.go
 new file mode 100644
-index 000000000..15b33f377
+index 000000000..f984511de
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/service.go
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,497 @@
 +package checkpoint
 +
 +import (
@@ -8470,32 +8545,10 @@ index 000000000..15b33f377
 +	return nil
 +}
 +
-+// create takes a checkpoint: memory as a sparse diff holding only the pages
-+// this epoch dirtied (Firecracker writes them straight into a fresh file —
-+// no base is cloned, so the cost is O(dirty pages) on any filesystem), disk
-+// as a sealed write layer, both under one pause of the VM.
-+//
-+// The checkpoint that roots a sandbox's tree captures full memory instead,
-+// so the tree resolves every page from its own files. See fullRootEnabled.
-+// fullRootEnabled reports whether the checkpoint that roots a sandbox's tree
-+// captures full memory (the default). A full root makes the tree resolve
-+// every page from its own files, at the cost of one full-memory write and
-+// guest-memory-sized storage on the sandbox's first checkpoint.
-+//
-+// Turning it off (CHECKPOINT_FULL_ROOT=false) makes that first checkpoint as
-+// cheap as every other one and saves the storage, but roots the tree on a
-+// diff against the sandbox's start memory source: restores then resolve
-+// pages that predate every checkpoint from the template memfile, which on a
-+// cluster means reaching the object store during a rollback.
-+func fullRootEnabled() bool {
-+	switch os.Getenv("CHECKPOINT_FULL_ROOT") {
-+	case "", "true", "1":
-+		return true
-+	default:
-+		return false
-+	}
-+}
-+
++// create takes a checkpoint: memory as a self-contained full view (a clone of
++// the previous base overwritten in place by a Diff snapshot, or a full memory
++// write when there is no base or no dirty tracking), disk as a sealed write
++// layer, both under one pause of the VM.
 +func (s *Service) create(w http.ResponseWriter, r *http.Request, sbx *sandbox.Sandbox, stats *callStats) error {
 +	// The VM is paused partway through. A client that gives up on the request
 +	// must not leave it that way, so the work is not tied to the request.
@@ -8521,36 +8574,48 @@ index 000000000..15b33f377
 +	unlock := s.store.LockSandbox(sandboxID)
 +	defer unlock()
 +
-+	// The diff is relative to the tree parent: the previous checkpoint, or
-+	// the restore target after a rollback. A checkpoint with no parent roots
-+	// a tree and captures full memory instead — as does any checkpoint taken
-+	// without dirty tracking or on a broken chain, which roots a fresh
-+	// subtree because nothing links it to what came before.
++	// A sandbox with no base — its first checkpoint, or the first after a
++	// broken chain — has nothing to clone from, so Firecracker captures all
++	// of guest memory and the entry becomes a tree root.
 +	parentID, broken := s.store.BaseState(sandboxID)
-+	rooting := parentID == "" && fullRootEnabled()
-+	diff := fc.TrackDirtyPagesEnabled() && !broken && !rooting
++	incremental := parentID != "" && !broken && fc.TrackDirtyPagesEnabled()
 +
-+	if !fc.TrackDirtyPagesEnabled() {
-+		logger.L().Warn(ctx, "dirty page tracking is off; every checkpoint captures full memory",
-+			logger.WithSandboxID(sandboxID))
-+	} else if broken {
-+		logger.L().Warn(ctx, "incremental chain is broken; capturing full memory as a new root",
-+			logger.WithSandboxID(sandboxID))
-+	} else if rooting {
-+		logger.L().Info(ctx, "rooting the checkpoint tree with a full memory capture",
++	if parentID != "" && !broken && !fc.TrackDirtyPagesEnabled() {
++		logger.L().Warn(ctx, "dirty page tracking is off; taking full memory snapshot instead of incremental",
 +			logger.WithSandboxID(sandboxID))
 +	}
-+
-+	memMode := MemModeIncremental
-+	if !diff {
-+		memMode = MemModeFull
-+		parentID = ""
-+	}
-+	stats.set("mem_mode", memMode)
 +
 +	entry, err := s.store.Prepare(sandboxID, req.Name, parentID)
 +	if err != nil {
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to prepare checkpoint: %s", err))
++	}
++
++	memMode := MemModeFull
++	stats.setBool("incremental", incremental)
++
++	if incremental {
++		basePath, ok := s.store.MemSource(sandboxID, parentID)
++		if !ok {
++			s.store.Discard(entry)
++			return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("memory base %s has no memory view", parentID))
++		}
++
++		// The base is immutable, so the copy runs while the VM still runs —
++		// the pause window only pays for the dirty pages. With reflink this
++		// is a metadata operation either way.
++		cloned, err := CloneOrCopy(basePath, entry.TempMemFull())
++		if err != nil {
++			s.store.Discard(entry)
++			return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to clone memory base: %s", err))
++		}
++
++		memMode = MemModeIncremental
++		stats.setBool("reflink", cloned)
++
++		if !cloned {
++			logger.L().Info(ctx, "memory base copied without reflink; checkpoint cost is O(memory) on this filesystem",
++				logger.WithSandboxID(sandboxID))
++		}
 +	}
 +
 +	layersDir, err := s.store.LayersDir(sandboxID)
@@ -8570,7 +8635,7 @@ index 000000000..15b33f377
 +	layerID := uuid.New()
 +	sealedLayerPath := filepath.Join(layersDir, "layer-"+layerID.String())
 +
-+	epochAdvanced, sealed, err := sbx.CheckpointToFiles(ctx, entry.TempSnapfile(), entry.TempMemDiff(), entry.TempMemBitmap(), diff, sealedLayerPath)
++	epochAdvanced, sealed, err := sbx.CheckpointToFiles(ctx, entry.TempSnapfile(), entry.TempMemFull(), entry.TempMemBitmap(), incremental, sealedLayerPath)
 +	if err != nil {
 +		s.failCreate(ctx, entry, memMode, epochAdvanced)
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to snapshot sandbox: %s", err))
@@ -8587,11 +8652,12 @@ index 000000000..15b33f377
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to record checkpoint: %s", err))
 +	}
 +
++	stats.set("mem_mode", memMode)
++
 +	logger.L().Info(ctx, "created checkpoint",
 +		logger.WithSandboxID(sandboxID),
 +		zap.String("checkpoint_id", entry.ID),
-+		zap.String("mem_mode", memMode),
-+		zap.String("parent_id", entry.ParentID))
++		zap.String("mem_mode", memMode))
 +
 +	writeJSON(w, map[string]any{"checkpointId": entry.ID})
 +
@@ -8599,17 +8665,18 @@ index 000000000..15b33f377
 +}
 +
 +// failCreate cleans up a failed checkpoint. When the Firecracker snapshot
-+// itself succeeded the epoch has advanced: the temp diff holds the only copy
-+// of that epoch's pages, so the entry is committed hidden and the tree stays
-+// sound. If even that fails, the chain is marked broken — the next
-+// checkpoint captures full memory as a new root, and restores are refused
-+// until it does, because an incomplete revert would be silent corruption.
++// itself succeeded the epoch has advanced: the temp memory file is the only
++// continuation of the incremental chain and the temp sidecar the only record
++// of the epoch's pages, so the entry is committed hidden and the ledger stays
++// sound. If even that fails the base is dropped — the next checkpoint
++// captures full memory, and restores are refused until it does, because an
++// incomplete revert would be silent corruption.
 +func (s *Service) failCreate(ctx context.Context, entry *Entry, memMode string, epochAdvanced bool) {
 +	if epochAdvanced {
 +		if err := s.store.CommitHidden(entry, memMode); err != nil {
 +			s.store.InvalidateBase(entry.SandboxID)
 +
-+			logger.L().Error(ctx, "failed to keep the advanced epoch; chain broken until a full checkpoint",
++			logger.L().Error(ctx, "failed to keep the advanced epoch; next checkpoint will capture full memory",
 +				logger.WithSandboxID(entry.SandboxID),
 +				zap.Error(err))
 +
@@ -8622,12 +8689,11 @@ index 000000000..15b33f377
 +	s.store.Discard(entry)
 +}
 +
-+// restore rolls the sandbox back onto a checkpoint in place: Firecracker
-+// writes the revert set back onto the live VM and the disk view is switched
-+// under the live NBD mount, all in one pause. This is the only route — the
-+// scenarios a rebuild would serve (a dead process, a torn VM) are explicitly
-+// outside what checkpoint restore promises and belong to e2b's own snapshot
-+// machinery.
++// restore puts the sandbox back on a checkpoint in place: Firecracker writes
++// the revert set — the pages that may differ between the current memory and
++// the target — onto the live guest from the target's full memory view,
++// restores vCPU and device state, and the disk view is swapped under the
++// live mount. The process, its KVM state and the network slot all stay.
 +func (s *Service) restore(w http.ResponseWriter, r *http.Request, sbx *sandbox.Sandbox, stats *callStats) error {
 +	// Same as create: a restore must not be abandoned mid-flight because the
 +	// client gave up.
@@ -8656,21 +8722,27 @@ index 000000000..15b33f377
 +		return writeError(w, http.StatusInternalServerError, "failed_precondition", fmt.Sprintf("checkpoint %s has no disk view and cannot be restored", id))
 +	}
 +
-+	// Pages older than every checkpoint on the target's ancestor chain
-+	// resolve to the memory the sandbox started from.
-+	baseDev, err := sbx.Template.Memfile(ctx)
++	// The revert set: the epoch bitmaps between the memory base and the
++	// target, unioned (the live dirty set Firecracker folds in itself). It is
++	// computed before the VM is paused, so a refusal costs the guest nothing.
++	revertPath := filepath.Join(entry.Dir, "revert_bitmap"+tempSuffix)
++	hasFile, err := s.store.RevertBitmapForTarget(sandboxID, entry.ID, revertPath)
 +	if err != nil {
-+		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to open start memory source: %s", err))
++		return writeError(w, http.StatusInternalServerError, "failed_precondition", fmt.Sprintf("cannot compute the revert set for checkpoint %s (the sandbox keeps running at its current state): %s", id, err))
 +	}
 +
-+	err = sbx.RollbackInPlace(ctx, entry.Snapfile, func(liveBitmapPath string) (string, string, func(), error) {
-+		return s.store.MaterializeRevert(ctx, sandboxID, entry.ID, liveBitmapPath, baseDev)
-+	}, layers)
-+	if err != nil {
++	bitmapPath := ""
++	if hasFile {
++		bitmapPath = revertPath
++		defer os.Remove(revertPath)
++	}
++	stats.setBool("revert_file", hasFile)
++
++	if err := sbx.RollbackInPlace(ctx, entry.Snapfile, entry.MemFull, bitmapPath, layers); err != nil {
 +		var torn sandbox.RollbackTornError
 +		if errors.As(err, &torn) {
 +			// Past the point of no return the guest is between two moments in
-+			// time; only recreating the sandbox helps.
++			// time (or stuck paused); only recreating the sandbox helps.
 +			return writeError(w, http.StatusInternalServerError, "data_loss", fmt.Sprintf("restore failed past the commit point; the sandbox must be recreated: %s", err))
 +		}
 +
@@ -8686,9 +8758,8 @@ index 000000000..15b33f377
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("sandbox restored but envd did not come back: %s", err))
 +	}
 +
-+	// Dirty tracking restarted from zero at rollback, so the next diff is
-+	// relative to exactly this entry: the tree grows a branch from here, and
-+	// the checkpoints newer than the target stay restorable on theirs.
++	// Dirty tracking restarted from zero at rollback, so the next Diff is
++	// relative to exactly this file.
 +	s.store.SetBaseToEntry(entry)
 +
 +	// The disk view was switched to the checkpoint's header; the next sealed
@@ -8707,7 +8778,7 @@ index 000000000..15b33f377
 +		}
 +	}
 +
-+	logger.L().Info(ctx, "restored checkpoint",
++	logger.L().Info(ctx, "restored checkpoint in place",
 +		logger.WithSandboxID(sandboxID),
 +		zap.String("checkpoint_id", entry.ID))
 +
@@ -8814,26 +8885,13 @@ index 000000000..15b33f377
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/store.go b/packages/orchestrator/internal/checkpoint/store.go
 new file mode 100644
-index 000000000..6c4633d65
+index 000000000..ee5961067
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/store.go
-@@ -0,0 +1,1012 @@
+@@ -0,0 +1,797 @@
 +// Package checkpoint implements the host side of sandbox checkpoint/rollback:
-+// a per-sandbox tree of diff checkpoints and the service that answers the
-+// in-sandbox checkpoint port (49984) on the host.
-+//
-+// Each checkpoint stores only the pages its epoch dirtied (a sparse diff
-+// file plus a bitmap sidecar); the tree roots at the sandbox's start memory
-+// source. A restore never re-materializes a full image on disk — the revert
-+// set is resolved page-by-page through the target's ancestor chain. This is
-+// what makes checkpoints O(dirty pages) on any filesystem: nothing here
-+// depends on reflink.
-+//
-+// Restoring rolls the live Firecracker process back in place; there is no
-+// rebuild route. Rolling back does not prune: checkpoints newer than the
-+// target stay restorable as branches (the next checkpoint's parent is the
-+// restore target), and deletion is an explicit API that hides entries still
-+// referenced by descendants instead of breaking their chains.
++// a flat store of self-contained checkpoint artifacts and the service that
++// answers the in-sandbox checkpoint port (49984) on the host.
 +//
 +// Checkpoints are host-local and live only as long as the sandbox does: the
 +// files sit under the store root, and an orchestrator restart takes every
@@ -8842,10 +8900,8 @@ index 000000000..6c4633d65
 +package checkpoint
 +
 +import (
-+	"context"
 +	"encoding/json"
 +	"fmt"
-+	"io"
 +	"os"
 +	"path/filepath"
 +	"sort"
@@ -8858,14 +8914,9 @@ index 000000000..6c4633d65
 +	indexFileName     = "index.json"
 +	manifestFileName  = "manifest.json"
 +	snapfileFileName  = "snapfile"
-+	memDiffFileName   = "mem_diff"
++	memFullFileName   = "mem_full"
 +	memBitmapFileName = "mem_bitmap"
 +	rootfsHeaderName  = "rootfs.header"
-+
-+	// Materialized rollback inputs, written next to the target checkpoint
-+	// for the duration of one restore.
-+	revertMemFileName    = "revert_mem"
-+	revertBitmapFileName = "revert_bitmap"
 +
 +	// layersDirName holds sealed rootfs write layers. They are sandbox-private
 +	// bookkeeping, not checkpoint artifacts: several checkpoints' views can
@@ -8883,19 +8934,13 @@ index 000000000..6c4633d65
 +	StateCommitted = "committed"
 +)
 +
-+// MemMode records what the memory file holds.
++// MemMode records how the memory file was produced. Both modes yield a
++// self-contained full view; the mode only matters for metrics and debugging.
 +const (
-+	// MemModeFull: Firecracker wrote the complete guest memory. A full
-+	// checkpoint is a self-sufficient tree root: content resolution
-+	// terminates at it and never consults anything older. Taken when the
-+	// incremental chain is unavailable (dirty tracking off) or broken (an
-+	// epoch was lost).
++	// MemModeFull: Firecracker wrote the complete guest memory.
 +	MemModeFull = "full"
-+	// MemModeIncremental: the file holds only the pages dirtied since the
-+	// parent checkpoint (or since the sandbox started, for a first
-+	// checkpoint), each at its guest-physical offset, holes elsewhere. Same
-+	// name as on the reflink branch, where the increment is written into a
-+	// clone of the parent instead of into a sparse file.
++	// MemModeIncremental: the file is a copy/clone of the previous base with
++	// this epoch's dirty pages overwritten in place by a Diff snapshot.
 +	MemModeIncremental = "incremental"
 +)
 +
@@ -8914,12 +8959,13 @@ index 000000000..6c4633d65
 +	Layers     []RootfsLayer `json:"layers,omitempty"`
 +}
 +
-+// Entry is one checkpoint of one sandbox — one node of the sandbox's
-+// checkpoint tree. ParentID names the checkpoint its diff is relative to;
-+// "" means the tree root, the sandbox's start memory source. The tree shape
-+// follows use: checkpoints chain linearly until a restore, after which the
-+// next checkpoint's parent is the restore target and the newer checkpoints
-+// remain as a branch.
++// Entry is one checkpoint of one sandbox. Every committed entry is
++// self-contained for restore: snapfile + mem_full + rootfs view bring the
++// moment back on their own. What entries share is the epoch ledger, a tree:
++// ParentID names the checkpoint this one's memory view was cloned from (the
++// base at creation time), and its sidecar records the pages dirtied between
++// that parent's moment and its own. An in-place rollback unions the sidecars
++// along the tree path from the current base to the target.
 +type Entry struct {
 +	ID        string    `json:"id"`
 +	Name      string    `json:"name,omitempty"`
@@ -8927,36 +8973,36 @@ index 000000000..6c4633d65
 +	CreatedAt time.Time `json:"created_at"`
 +	State     string    `json:"state"`
 +
-+	// ParentID is the checkpoint this entry's diff is relative to; "" for a
-+	// root (diff against the start memory source, or a full capture).
++	// ParentID is the checkpoint this entry's epoch counts from; "" for a
++	// root whose memory was captured in full.
 +	ParentID string `json:"parent_id,omitempty"`
 +
-+	// Hidden marks an entry that is part of the tree but not of the API:
-+	// deleted while descendants still resolve pages through it, or the
-+	// rescued epoch of a failed create. List never shows it and Get never
-+	// returns it; content resolution and revert unions use it like any
-+	// other committed entry.
++	// Hidden marks an entry that is part of the tree but not of the API —
++	// deleted while something still depends on it, or a failed create whose
++	// Firecracker snapshot had already advanced the epoch. Its snapfile and
++	// rootfs view are gone, its sidecar still takes part in revert unions,
++	// and its memory file stays only while it is the base.
 +	Hidden bool `json:"hidden,omitempty"`
 +
 +	Dir      string `json:"dir"`
-+	Snapfile string `json:"snapfile"`
-+	MemDiff  string `json:"mem_diff"`
++	Snapfile string `json:"snapfile,omitempty"`
++	MemFull  string `json:"mem_full"`
 +	MemMode  string `json:"mem_mode,omitempty"`
 +
 +	// MemBitmap is the sidecar recording which pages this checkpoint's
-+	// snapshot wrote — one epoch's dirty set. It is both the revert-set
-+	// ingredient and the page index of MemDiff; a diff checkpoint without
-+	// one is unusable. Full checkpoints may omit it (implicitly all ones).
-+	MemBitmap string `json:"mem_bitmap,omitempty"`
++	// snapshot wrote — one epoch's dirty set. Unioned along a tree path it
++	// forms the revert set for an in-place rollback. Mandatory: an epoch
++	// whose dirty set is unknown could never be crossed by a rollback.
++	MemBitmap string `json:"mem_bitmap"`
 +
 +	Rootfs *RootfsView `json:"rootfs,omitempty"`
 +}
 +
 +// TempSnapfile is where the snapshot is written before commit.
-+func (e *Entry) TempSnapfile() string { return e.Snapfile + tempSuffix }
++func (e *Entry) TempSnapfile() string { return filepath.Join(e.Dir, snapfileFileName+tempSuffix) }
 +
-+// TempMemDiff is where the memory diff is written before commit.
-+func (e *Entry) TempMemDiff() string { return e.MemDiff + tempSuffix }
++// TempMemFull is where the memory view is written before commit.
++func (e *Entry) TempMemFull() string { return e.MemFull + tempSuffix }
 +
 +// TempMemBitmap is where the dirty bitmap sidecar is written before commit.
 +func (e *Entry) TempMemBitmap() string { return e.MemBitmap + tempSuffix }
@@ -8964,20 +9010,21 @@ index 000000000..6c4633d65
 +// RootfsHeaderPath is where the merged rootfs header of this checkpoint goes.
 +func (e *Entry) RootfsHeaderPath() string { return filepath.Join(e.Dir, rootfsHeaderName) }
 +
-+// baseRef records what the next checkpoint's diff is relative to — its
-+// parent-to-be in the tree. Absent from the map: the sandbox has no
-+// checkpoints yet, so the next diff is relative to the start memory source
-+// (the root). invalid: an epoch was lost and the chain is broken — the next
-+// checkpoint must capture full memory and become a new self-sufficient root,
-+// and until it does the sandbox cannot roll back.
++// baseRef records where the sandbox sits in its checkpoint tree: entryID is
++// the entry — visible or hidden — whose memory view the next checkpoint
++// clones, whose moment Firecracker's live dirty bitmap counts from, and
++// which becomes the next checkpoint's parent. The zero value is a sandbox
++// with no checkpoint yet. invalid marks a broken chain: an epoch advanced
++// but its file could not be kept, so the next checkpoint must capture full
++// memory as a new root and restores are refused until then.
 +type baseRef struct {
 +	entryID string
 +	invalid bool
 +}
 +
 +// Store holds the checkpoints of every sandbox on this node, plus per-sandbox
-+// bookkeeping that is not part of any checkpoint: the parent-to-be of the
-+// next checkpoint and the per-sandbox operation lock.
++// bookkeeping that is not part of any checkpoint: the memory clone source and
++// the per-sandbox operation lock.
 +type Store struct {
 +	root string
 +
@@ -9039,10 +9086,10 @@ index 000000000..6c4633d65
 +	return dir, nil
 +}
 +
-+// BaseState reports the parent of the next checkpoint: the entry id ("" for
-+// the start-source root) and whether the chain is broken, in which case the
-+// next checkpoint must capture full memory and restores are refused until
-+// it does.
++// BaseState reports the parent of the next checkpoint: the entry id ("" when
++// the sandbox has no checkpoint yet) and whether the chain is broken, in
++// which case the next checkpoint must capture full memory as a new root and
++// restores are refused until it does.
 +func (s *Store) BaseState(sandboxID string) (parentID string, broken bool) {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
@@ -9052,10 +9099,27 @@ index 000000000..6c4633d65
 +	return b.entryID, b.invalid
 +}
 +
++// MemSource returns the memory view an entry's file holds, which the next
++// checkpoint clones and overwrites its dirty pages into. Hidden entries
++// answer too: a hidden base is exactly the case of an epoch that survived a
++// failed create.
++func (s *Store) MemSource(sandboxID string, entryID string) (string, bool) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	e, ok := s.bySandbox[sandboxID][entryID]
++	if !ok || e.MemFull == "" {
++		return "", false
++	}
++
++	return e.MemFull, true
++}
++
 +// Prepare reserves an entry, creates its directory and journals it as
 +// prepared, so the caller can write the snapshot into the temp files. The
 +// entry is not visible to Get or List until Commit. parentID is the
-+// checkpoint the diff is taken against — "" for a root capture.
++// checkpoint whose memory view this one is cloned from and whose moment its
++// epoch counts from — "" for a root capture.
 +func (s *Store) Prepare(sandboxID string, name string, parentID string) (*Entry, error) {
 +	if err := validateID(sandboxID); err != nil {
 +		return nil, fmt.Errorf("invalid sandbox id: %w", err)
@@ -9077,7 +9141,7 @@ index 000000000..6c4633d65
 +		ParentID:  parentID,
 +		Dir:       dir,
 +		Snapfile:  filepath.Join(dir, snapfileFileName),
-+		MemDiff:   filepath.Join(dir, memDiffFileName),
++		MemFull:   filepath.Join(dir, memFullFileName),
 +		MemBitmap: filepath.Join(dir, memBitmapFileName),
 +	}
 +
@@ -9090,56 +9154,15 @@ index 000000000..6c4633d65
 +	return e, nil
 +}
 +
-+// commitFiles moves the temp artifacts into their final names, durably. A
-+// diff checkpoint must have its sidecar: it is the only record of which
-+// pages the diff file holds, so without it neither content resolution nor
-+// revert sets can ever use the entry.
-+func commitFiles(e *Entry, memMode string, withSnapfile bool) error {
-+	files := [][2]string{
-+		{e.TempMemDiff(), e.MemDiff},
-+	}
-+	if withSnapfile {
-+		files = append(files, [2]string{e.TempSnapfile(), e.Snapfile})
-+	} else {
-+		// A hidden entry is never a restore target: only its diff and
-+		// sidecar take part in resolution and revert unions.
-+		os.Remove(e.TempSnapfile())
-+		e.Snapfile = ""
-+	}
-+	if _, err := os.Stat(e.TempMemBitmap()); err == nil {
-+		files = append(files, [2]string{e.TempMemBitmap(), e.MemBitmap})
-+	} else if memMode == MemModeIncremental {
-+		return fmt.Errorf("firecracker wrote no dirty bitmap sidecar; diff checkpoints need one")
-+	} else {
-+		e.MemBitmap = ""
-+	}
-+
-+	for _, f := range files {
-+		if err := syncFile(f[0]); err != nil {
-+			return fmt.Errorf("failed to sync %s: %w", f[0], err)
-+		}
-+
-+		if err := os.Rename(f[0], f[1]); err != nil {
-+			return fmt.Errorf("failed to move %s into place: %w", f[0], err)
-+		}
-+	}
-+
-+	if err := syncDir(e.Dir); err != nil {
-+		return fmt.Errorf("failed to sync checkpoint dir: %w", err)
-+	}
-+
-+	return nil
-+}
-+
 +// Commit publishes a prepared entry: temp files are fsynced and renamed into
-+// place, the manifest flips to committed, and the next checkpoint's parent
-+// becomes this entry. The caller must have finished writing the temp files,
-+// including having resumed the VM.
++// place, the manifest flips to committed, and the sandbox's memory base
++// advances to the new view. The caller must have finished writing the temp
++// files, including having resumed the VM.
 +func (s *Store) Commit(e *Entry, memMode string, rootfs *RootfsView) error {
 +	e.MemMode = memMode
 +	e.Rootfs = rootfs
 +
-+	if err := commitFiles(e, memMode, true); err != nil {
++	if err := commitFiles(e, true); err != nil {
 +		return err
 +	}
 +
@@ -9154,19 +9177,19 @@ index 000000000..6c4633d65
 +	return s.publishLocked(e)
 +}
 +
-+// CommitHidden publishes a failed checkpoint's artifacts as a hidden entry.
-+// Once Firecracker has written the snapshot the epoch has advanced: the diff
-+// file holds the only copy of that epoch's pages and the sidecar is the only
-+// record of which pages those are. As a hidden committed entry the epoch
-+// stays a sound part of the tree — content resolution and revert unions use
-+// it like any other — while the API never shows it. The create RPC still
-+// fails; only the epoch survives.
++// CommitHidden publishes a failed checkpoint's epoch as a hidden entry. Once
++// Firecracker has written the snapshot the epoch has advanced: the memory
++// file is the only continuation of the incremental chain and the sidecar the
++// only record of which pages the epoch dirtied. Kept hidden, the entry is a
++// sound node of the tree — clone source and parent of the next checkpoint,
++// its sidecar part of revert unions like any other's — that the API never
++// shows. The create RPC still fails.
 +func (s *Store) CommitHidden(e *Entry, memMode string) error {
 +	e.MemMode = memMode
 +	e.Hidden = true
 +	e.Rootfs = nil
 +
-+	if err := commitFiles(e, memMode, false); err != nil {
++	if err := commitFiles(e, false); err != nil {
 +		return err
 +	}
 +
@@ -9183,9 +9206,44 @@ index 000000000..6c4633d65
 +	return s.publishLocked(e)
 +}
 +
++// commitFiles moves an entry's artifacts from their temp names into place,
++// fsynced, so the manifest can claim the checkpoint exists. The sidecar is
++// mandatory: a revert union could never cross an epoch whose dirty set is
++// unknown, so a checkpoint without one must not come into existence. Hidden
++// entries are never restored, so their snapfile is dropped instead of kept.
++func commitFiles(e *Entry, withSnapfile bool) error {
++	if _, err := os.Stat(e.TempMemBitmap()); err != nil {
++		return fmt.Errorf("snapshot produced no dirty-page sidecar: %w", err)
++	}
++
++	files := [][2]string{
++		{e.TempMemFull(), e.MemFull},
++		{e.TempMemBitmap(), e.MemBitmap},
++	}
++	if withSnapfile {
++		files = append(files, [2]string{e.TempSnapfile(), e.Snapfile})
++	} else {
++		os.Remove(e.TempSnapfile())
++		e.Snapfile = ""
++	}
++
++	for _, f := range files {
++		if err := syncFile(f[0]); err != nil {
++			return fmt.Errorf("failed to sync %s: %w", f[0], err)
++		}
++
++		if err := os.Rename(f[0], f[1]); err != nil {
++			return fmt.Errorf("failed to move %s into place: %w", f[0], err)
++		}
++	}
++
++	return syncDir(e.Dir)
++}
++
 +// publishLocked records a committed entry and makes it the base: Firecracker
 +// cleared its dirty bitmap when it wrote the snapshot, so from now on the
-+// live set counts from this moment and the next increment is relative to it.
++// live set counts from this moment, and this memory view is what the next
++// checkpoint clones.
 +func (s *Store) publishLocked(e *Entry) error {
 +	entries, ok := s.bySandbox[e.SandboxID]
 +	if !ok {
@@ -9201,10 +9259,10 @@ index 000000000..6c4633d65
 +
 +// InvalidateBase marks the sandbox's incremental chain broken: the epoch
 +// advanced (Firecracker cleared its dirty bitmap) but the file it produced
-+// could not be kept, so no future diff can account for that epoch's pages.
-+// The next checkpoint must capture full memory and become a new root, and
-+// until it does restores are refused — an incomplete revert would be a
-+// silently corrupted guest, which is strictly worse than an error.
++// could not be kept, so no future increment can account for that epoch's
++// pages. The next checkpoint must capture full memory and become a new
++// root, and until it does restores are refused — an incomplete revert would
++// be a silently corrupted guest, which is strictly worse than an error.
 +func (s *Store) InvalidateBase(sandboxID string) {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
@@ -9212,10 +9270,10 @@ index 000000000..6c4633d65
 +	s.setBaseLocked(sandboxID, baseRef{invalid: true})
 +}
 +
-+// SetBaseToEntry makes a committed checkpoint the next checkpoint's parent.
-+// Called after a restore: dirty tracking restarted from zero at rollback, so
-+// the next diff is relative to exactly this entry — which is how a branch
-+// grows from the restore target instead of the abandoned tip.
++// SetBaseToEntry makes a committed checkpoint the base. Called after a
++// restore: dirty tracking restarted from zero at rollback, so the next
++// increment is relative to exactly this entry — which is how a branch grows
++// from the restore target instead of the abandoned tip.
 +func (s *Store) SetBaseToEntry(e *Entry) {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
@@ -9223,9 +9281,9 @@ index 000000000..6c4633d65
 +	s.setBaseLocked(e.SandboxID, baseRef{entryID: e.ID})
 +}
 +
-+// setBaseLocked moves the base. A hidden entry that stops being the base was
-+// kept only for that role plus whatever hangs off it, so it is pruned once
-+// nothing resolves through it any more.
++// setBaseLocked moves the base. A hidden entry that stops being the base
++// loses its memory file — it was kept for that role alone — and is pruned
++// if nothing references it any more.
 +func (s *Store) setBaseLocked(sandboxID string, b baseRef) {
 +	prev := s.bases[sandboxID]
 +	s.bases[sandboxID] = b
@@ -9239,12 +9297,13 @@ index 000000000..6c4633d65
 +		return
 +	}
 +
++	os.Remove(prevEntry.MemFull)
 +	s.pruneLocked(sandboxID, prevEntry)
 +}
 +
 +// pruneLocked removes e if it is hidden, has no children and is not the
-+// base — no ancestor chain and no revert path runs through it any more —
-+// and then its parent on the same terms, up the tree.
++// base — nothing resolves a revert path through it any more — and then its
++// parent on the same terms, up the tree.
 +func (s *Store) pruneLocked(sandboxID string, e *Entry) {
 +	entries := s.bySandbox[sandboxID]
 +	base := s.bases[sandboxID]
@@ -9257,6 +9316,17 @@ index 000000000..6c4633d65
 +
 +		cur = entries[parentID]
 +	}
++}
++
++// hasChildLocked reports whether any entry's epoch counts from id.
++func hasChildLocked(entries map[string]*Entry, id string) bool {
++	for _, e := range entries {
++		if e.ParentID == id {
++			return true
++		}
++	}
++
++	return false
 +}
 +
 +// ancestorChainLocked returns target and its ancestors, newest first,
@@ -9286,8 +9356,10 @@ index 000000000..6c4633d65
 +// moment: both tree branches walked down to (and excluding) their lowest
 +// common ancestor. A page in neither branch was written on neither side of
 +// the fork, so both moments inherited it unchanged from the common ancestor
-+// and it needs no revert. targetChain is target's ancestor chain; baseID ""
-+// (no checkpoint yet) makes the whole target chain the path.
++// and it needs no revert. A time-ordered interval would get this wrong as
++// soon as a checkpoint is taken after going back: the epochs of the
++// abandoned branch are neither before nor after the new one, they are
++// beside it. targetChain is target's ancestor chain.
 +func revertPathLocked(entries map[string]*Entry, baseID string, targetChain []*Entry) ([]*Entry, error) {
 +	inTargetChain := map[string]bool{"": true}
 +	for _, e := range targetChain {
@@ -9318,314 +9390,108 @@ index 000000000..6c4633d65
 +	return path, nil
 +}
 +
-+// StartMemSource is the sandbox's start memory device — the root of the
-+// checkpoint tree. It mirrors the relevant part of block.ReadonlyDevice
-+// without this package importing the sandbox packages. ReadAt only accepts
-+// BlockSize()-aligned ranges (the template memfile is served by a chunker
-+// with that contract), so the materializer reads aligned windows and slices.
-+type StartMemSource interface {
-+	ReadAt(ctx context.Context, b []byte, off int64) (int, error)
-+	BlockSize() int64
-+}
-+
-+// entryBitmap loads a checkpoint's epoch bitmap: its sidecar, or the
-+// implicit all-ones bitmap of a full capture written without one. A diff
-+// checkpoint without a sidecar is unusable — nothing records which pages
-+// its file holds — and poisons any restore whose path or resolution
-+// reaches it.
-+// entryContentBitmap says which pages a checkpoint's memory file can serve
-+// when resolving content for a restore. For a diff capture that is its epoch
-+// sidecar; a full capture holds every page whatever its sidecar records, so
-+// it terminates resolution and nothing below it is ever read.
-+func entryContentBitmap(e *Entry, pageSize uint64, numPages uint64) (*dirtyBitmap, error) {
-+	if e.MemMode == MemModeFull {
-+		return allOnesBitmap(pageSize, numPages), nil
-+	}
-+
-+	return entryBitmap(e, pageSize, numPages)
-+}
-+
-+func entryBitmap(e *Entry, pageSize uint64, numPages uint64) (*dirtyBitmap, error) {
-+	if e.MemBitmap == "" {
-+		if e.MemMode == MemModeFull {
-+			return allOnesBitmap(pageSize, numPages), nil
-+		}
-+
-+		return nil, fmt.Errorf("checkpoint %s has no dirty bitmap sidecar", e.ID)
-+	}
-+
-+	bm, err := readDirtyBitmap(e.MemBitmap)
-+	if err != nil {
-+		return nil, fmt.Errorf("failed to read sidecar of checkpoint %s: %w", e.ID, err)
-+	}
-+	if bm.pageSize != pageSize || bm.numPages != numPages {
-+		return nil, fmt.Errorf(
-+			"sidecar of checkpoint %s describes %d pages of %d bytes, guest has %d pages of %d",
-+			e.ID, bm.numPages, bm.pageSize, numPages, pageSize,
-+		)
-+	}
-+
-+	return bm, nil
-+}
-+
-+// MaterializeRevert builds the two files an in-place rollback to target
-+// needs: the revert bitmap — every page that may differ between the
-+// sandbox's memory now and the target moment, i.e. the union of the epoch
-+// bitmaps on the tree path from the current base to the target plus the
-+// live dirty set Firecracker just exported — and a sparse memory file
-+// holding the target-moment content of exactly those pages, each at its
-+// guest-physical offset. Firecracker then writes back precisely these pages
-+// and re-derives the same union itself, so nothing it touches can fall into
-+// a file hole.
++// RevertBitmapForTarget writes the revert set for an in-place rollback to
++// the target checkpoint: the union of the epoch bitmaps along the tree path
++// from the current base to the target, hidden epochs included.
 +//
-+// Content is resolved per page through the target's ancestor chain: the
-+// newest checkpoint at or before the target whose bitmap holds the page
-+// provides it from its memory file. A full capture roots the chain and holds
-+// every page, so resolution stops there; baseDev, the sandbox's start memory
-+// source, is only reached by trees rooted on a diff (CHECKPOINT_FULL_ROOT
-+// off, or checkpoints taken before it existed).
++// The sandbox's memory is the base moment plus the live dirty set
++// (Firecracker resets its bitmap on every snapshot and rollback, and folds
++// the live set into the revert on its own). Any page where the base and
++// target moments differ was written in some epoch on the path between them
++// through their common ancestor, so the path union covers exactly what the
++// live set cannot. Epochs off the path — including a Full root's all-ones
++// sidecar, unless the path crosses it — contribute nothing and are not
++// read; this is what keeps the revert set proportional to actual divergence
++// instead of guest size.
 +//
-+// The returned cleanup removes both files and is safe to call no matter how
-+// the rollback went.
-+func (s *Store) MaterializeRevert(ctx context.Context, sandboxID string, targetID string, liveBitmapPath string, baseDev StartMemSource) (memPath string, bitmapPath string, cleanup func(), err error) {
++// wroteFile=false means the path is empty — the base is the target — and
++// the live dirty set alone is the revert set, so there is no file to pass.
++// An error means the set cannot be computed and the restore must not
++// proceed: an incomplete revert would be a silently corrupted guest.
++func (s *Store) RevertBitmapForTarget(sandboxID, targetID, path string) (wroteFile bool, err error) {
 +	s.mu.Lock()
-+
 +	entries := s.bySandbox[sandboxID]
 +	target, ok := entries[targetID]
-+	if !ok || target.State != StateCommitted {
++	if !ok || target.Hidden {
 +		s.mu.Unlock()
 +
-+		return "", "", nil, fmt.Errorf("checkpoint %s not found", targetID)
++		return false, fmt.Errorf("checkpoint %s not found", targetID)
 +	}
 +
-+	base := s.bases[sandboxID]
-+	if base.invalid {
++	b := s.bases[sandboxID]
++	if b.invalid {
 +		s.mu.Unlock()
 +
-+		return "", "", nil, fmt.Errorf("the incremental chain is broken (an epoch was lost); take a new checkpoint before restoring")
++		return false, fmt.Errorf("the incremental chain is broken (a failed checkpoint lost an epoch); take a new checkpoint first")
++	}
++	if b.entryID == "" {
++		s.mu.Unlock()
++
++		return false, fmt.Errorf("the sandbox has no memory base")
 +	}
 +
-+	chain, err := ancestorChainLocked(entries, target)
++	if b.entryID == target.ID {
++		s.mu.Unlock()
++
++		return false, nil
++	}
++
++	targetChain, err := ancestorChainLocked(entries, target)
 +	if err != nil {
 +		s.mu.Unlock()
 +
-+		return "", "", nil, err
++		return false, err
 +	}
 +
-+	pathEntries, err := revertPathLocked(entries, base.entryID, chain)
++	revertPath, err := revertPathLocked(entries, b.entryID, targetChain)
 +	if err != nil {
 +		s.mu.Unlock()
 +
-+		return "", "", nil, err
++		return false, err
++	}
++
++	var sidecars []string
++	for _, e := range revertPath {
++		if e.MemBitmap == "" {
++			s.mu.Unlock()
++
++			return false, fmt.Errorf("checkpoint %s on the revert path has no dirty-page sidecar", e.ID)
++		}
++		sidecars = append(sidecars, e.MemBitmap)
 +	}
 +	s.mu.Unlock()
 +
-+	live, err := readDirtyBitmap(liveBitmapPath)
-+	if err != nil {
-+		return "", "", nil, fmt.Errorf("failed to read live dirty bitmap: %w", err)
-+	}
-+
-+	revert := live.clone()
-+	for _, e := range pathEntries {
-+		epoch, err := entryBitmap(e, revert.pageSize, revert.numPages)
++	var union *dirtyBitmap
++	for _, sc := range sidecars {
++		epoch, err := readDirtyBitmap(sc)
 +		if err != nil {
-+			return "", "", nil, err
++			return false, fmt.Errorf("failed to read epoch sidecar: %w", err)
 +		}
-+
-+		if err := revert.merge(epoch); err != nil {
-+			return "", "", nil, err
-+		}
-+	}
-+
-+	chainBitmaps := make([]*dirtyBitmap, len(chain))
-+	for i, e := range chain {
-+		bm, err := entryContentBitmap(e, revert.pageSize, revert.numPages)
-+		if err != nil {
-+			return "", "", nil, err
-+		}
-+
-+		chainBitmaps[i] = bm
-+	}
-+
-+	memPath = filepath.Join(target.Dir, revertMemFileName+tempSuffix)
-+	bitmapPath = filepath.Join(target.Dir, revertBitmapFileName+tempSuffix)
-+	cleanup = func() {
-+		os.Remove(memPath)
-+		os.Remove(bitmapPath)
-+	}
-+
-+	if err := writeRevertMem(ctx, memPath, revert, chain, chainBitmaps, baseDev); err != nil {
-+		cleanup()
-+
-+		return "", "", nil, err
-+	}
-+
-+	if err := revert.writeTo(bitmapPath); err != nil {
-+		cleanup()
-+
-+		return "", "", nil, fmt.Errorf("failed to write revert bitmap: %w", err)
-+	}
-+
-+	return memPath, bitmapPath, cleanup, nil
-+}
-+
-+// revertExtentPages caps how many pages one read/write covers, so a huge
-+// revert run does not demand a huge buffer.
-+const revertExtentPages = 1024
-+
-+// readAlignedFromBase fills b from the start memory source, whose ReadAt
-+// contract is block-aligned offsets and lengths: the covering aligned window
-+// is read block by block into a scratch buffer and the requested span copied
-+// out. memSize clamps the window — the device ends with guest memory.
-+func readAlignedFromBase(ctx context.Context, dev StartMemSource, b []byte, off int64, memSize int64) (int, error) {
-+	bs := dev.BlockSize()
-+	if bs <= 0 || (off%bs == 0 && int64(len(b))%bs == 0) {
-+		return dev.ReadAt(ctx, b, off)
-+	}
-+
-+	lo := off / bs * bs
-+	hi := (off + int64(len(b)) + bs - 1) / bs * bs
-+	if hi > memSize {
-+		hi = memSize
-+	}
-+
-+	scratch := make([]byte, hi-lo)
-+	for blockOff := lo; blockOff < hi; blockOff += bs {
-+		blockLen := min(bs, hi-blockOff)
-+		if _, err := dev.ReadAt(ctx, scratch[blockOff-lo:blockOff-lo+blockLen], blockOff); err != nil {
-+			return 0, err
-+		}
-+	}
-+
-+	return copy(b, scratch[off-lo:]), nil
-+}
-+
-+// writeRevertMem writes the target-moment content of every page set in
-+// revert into a sparse file at path, sized to the full guest memory (the
-+// rollback endpoint validates the length). Runs of consecutive pages
-+// resolved from the same source move as single extents.
-+func writeRevertMem(ctx context.Context, path string, revert *dirtyBitmap, chain []*Entry, chainBitmaps []*dirtyBitmap, baseDev StartMemSource) (e error) {
-+	out, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
-+	if err != nil {
-+		return fmt.Errorf("failed to create revert memory file: %w", err)
-+	}
-+	defer func() {
-+		if closeErr := out.Close(); e == nil && closeErr != nil {
-+			e = fmt.Errorf("failed to close revert memory file: %w", closeErr)
-+		}
-+	}()
-+
-+	pageSize := revert.pageSize
-+	if err := out.Truncate(int64(revert.numPages * pageSize)); err != nil {
-+		return fmt.Errorf("failed to size revert memory file: %w", err)
-+	}
-+
-+	diffFiles := make(map[int]*os.File)
-+	defer func() {
-+		for _, f := range diffFiles {
-+			f.Close()
-+		}
-+	}()
-+
-+	// resolve returns the chain index providing a page's target-moment
-+	// content, or -1 for the start memory source.
-+	resolve := func(page uint64) int {
-+		for i, bm := range chainBitmaps {
-+			if bm.contains(page) {
-+				return i
-+			}
-+		}
-+
-+		return -1
-+	}
-+
-+	buf := make([]byte, revertExtentPages*pageSize)
-+
-+	memSize := int64(revert.numPages * pageSize)
-+
-+	copyExtent := func(startPage uint64, endPage uint64, src int) error {
-+		var readAt func(b []byte, off int64) (int, error)
-+		if src < 0 {
-+			readAt = func(b []byte, off int64) (int, error) {
-+				return readAlignedFromBase(ctx, baseDev, b, off, memSize)
-+			}
-+		} else {
-+			f, ok := diffFiles[src]
-+			if !ok {
-+				var err error
-+				f, err = os.Open(chain[src].MemDiff)
-+				if err != nil {
-+					return fmt.Errorf("failed to open diff of checkpoint %s: %w", chain[src].ID, err)
-+				}
-+				diffFiles[src] = f
-+			}
-+			readAt = f.ReadAt
-+		}
-+
-+		for page := startPage; page < endPage; page += revertExtentPages {
-+			pages := min(endPage-page, revertExtentPages)
-+			b := buf[:pages*pageSize]
-+			off := int64(page * pageSize)
-+
-+			// A diff file's data at these offsets is present by construction
-+			// (the page is in its bitmap). A short read can only mean the
-+			// file ends early; the bytes past it are zeros, and the buffer
-+			// is reused, so its tail must be cleared explicitly.
-+			n, err := readAt(b, off)
-+			if err != nil && err != io.EOF {
-+				return fmt.Errorf("failed to read revert content at offset %d: %w", off, err)
-+			}
-+			clear(b[n:])
-+
-+			if _, err := out.WriteAt(b, off); err != nil {
-+				return fmt.Errorf("failed to write revert content at offset %d: %w", off, err)
-+			}
-+		}
-+
-+		return nil
-+	}
-+
-+	var runStart uint64
-+	runSrc := 0
-+	inRun := false
-+
-+	for page := uint64(0); page < revert.numPages; page++ {
-+		if !revert.contains(page) {
-+			if inRun {
-+				if err := copyExtent(runStart, page, runSrc); err != nil {
-+					return err
-+				}
-+				inRun = false
-+			}
++		if union == nil {
++			union = epoch
 +
 +			continue
 +		}
-+
-+		src := resolve(page)
-+		if inRun && src == runSrc {
-+			continue
-+		}
-+
-+		if inRun {
-+			if err := copyExtent(runStart, page, runSrc); err != nil {
-+				return err
-+			}
-+		}
-+
-+		runStart, runSrc, inRun = page, src, true
-+	}
-+
-+	if inRun {
-+		if err := copyExtent(runStart, revert.numPages, runSrc); err != nil {
-+			return err
++		if err := union.merge(epoch); err != nil {
++			return false, fmt.Errorf("failed to union epoch sidecars: %w", err)
 +		}
 +	}
 +
-+	return nil
++	if union == nil {
++		// Unreachable — a path between two distinct nodes has at least one
++		// edge — but an empty union must never pass for "live set only".
++		return false, fmt.Errorf("revert path from %s to %s holds no epoch", b.entryID, target.ID)
++	}
++
++	if err := union.writeTo(path); err != nil {
++		return false, fmt.Errorf("failed to write revert bitmap: %w", err)
++	}
++
++	return true, nil
 +}
 +
 +// Discard removes a prepared entry's directory. It is for cleaning up after a
-+// failed snapshot; any epoch rescue (CommitHidden) must happen before this.
++// failed snapshot whose epoch did not advance (or could not be kept).
 +func (s *Store) Discard(e *Entry) {
 +	if e == nil || e.Dir == "" || e.State != StatePrepared {
 +		return
@@ -9634,8 +9500,7 @@ index 000000000..6c4633d65
 +	os.RemoveAll(e.Dir)
 +}
 +
-+// Get returns a committed, visible checkpoint. Hidden entries are tree
-+// bookkeeping, not API objects: they cannot be restored to or deleted.
++// Get returns a committed, visible checkpoint.
 +func (s *Store) Get(sandboxID string, id string) (*Entry, bool) {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
@@ -9645,7 +9510,7 @@ index 000000000..6c4633d65
 +		return nil, false
 +	}
 +
-+	return e, ok
++	return e, true
 +}
 +
 +// List returns a sandbox's visible checkpoints, oldest first.
@@ -9658,7 +9523,6 @@ index 000000000..6c4633d65
 +		if e.Hidden {
 +			continue
 +		}
-+
 +		entries = append(entries, e)
 +	}
 +
@@ -9669,23 +9533,14 @@ index 000000000..6c4633d65
 +	return entries
 +}
 +
-+// hasChildLocked reports whether any entry's diff is relative to id.
-+func hasChildLocked(entries map[string]*Entry, id string) bool {
-+	for _, e := range entries {
-+		if e.ParentID == id {
-+			return true
-+		}
-+	}
-+
-+	return false
-+}
-+
-+// Delete removes a checkpoint from the API. An entry that descendants still
-+// resolve pages through — one with children, or the parent-to-be of the
-+// next checkpoint — is hidden instead of removed: deleting its files would
-+// silently break every chain through it (the gsd implementation does exactly
-+// that). A leaf is removed physically, and hidden ancestors that just lost
-+// their last child are reclaimed with it.
++// Delete removes a checkpoint from the API. An entry that revert paths still
++// run through — one with children, or the base — is hidden instead of
++// removed: its snapfile and rootfs view go, its memory file stays only while
++// it is the base, and its sidecar stays because every rollback across this
++// epoch needs it (dropping it would make those rollbacks silently skip the
++// pages this epoch dirtied). A leaf is removed physically, and hidden
++// ancestors that just lost their last child go with it. Layer files are
++// untouched — they are sandbox-private, not checkpoint-owned.
 +func (s *Store) Delete(sandboxID string, id string) error {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
@@ -9703,14 +9558,15 @@ index 000000000..6c4633d65
 +	base := s.bases[sandboxID]
 +
 +	if hasChildLocked(entries, id) || base.entryID == id {
-+		// Hidden entries are never restore targets, so the snapfile and the
-+		// rootfs view go; the diff and its sidecar stay, because descendants
-+		// resolve pages through them.
 +		e.Hidden = true
 +		e.Rootfs = nil
 +		os.Remove(e.Snapfile)
 +		os.Remove(e.RootfsHeaderPath())
 +		e.Snapfile = ""
++
++		if base.entryID != id {
++			os.Remove(e.MemFull)
++		}
 +
 +		if err := writeManifest(e); err != nil {
 +			return err
@@ -9832,10 +9688,10 @@ index 000000000..6c4633d65
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/store_test.go b/packages/orchestrator/internal/checkpoint/store_test.go
 new file mode 100644
-index 000000000..cf3685bfb
+index 000000000..1a31bb769
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/store_test.go
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,372 @@
 +package checkpoint
 +
 +import (
@@ -9843,6 +9699,7 @@ index 000000000..cf3685bfb
 +	"os"
 +	"path/filepath"
 +	"testing"
++	"time"
 +
 +	"github.com/stretchr/testify/assert"
 +	"github.com/stretchr/testify/require"
@@ -9857,21 +9714,61 @@ index 000000000..cf3685bfb
 +	return s
 +}
 +
-+func prepareWithFiles(t *testing.T, s *Store, sandboxID, name, parentID string) *Entry {
++var testStamp = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
++
++// prepareWithFiles prepares an entry with every temp artifact a Firecracker
++// snapshot produces, including a sidecar, stamped seq seconds into the test
++// epoch so listing order never depends on the clock.
++func prepareWithFiles(t *testing.T, s *Store, sandboxID, name string, seq int) *Entry {
 +	t.Helper()
 +
++	parentID, _ := s.BaseState(sandboxID)
 +	e, err := s.Prepare(sandboxID, name, parentID)
 +	require.NoError(t, err)
++	e.CreatedAt = testStamp.Add(time.Duration(seq) * time.Second)
 +	require.NoError(t, os.WriteFile(e.TempSnapfile(), []byte("snapfile-"+e.ID), 0o644))
-+	require.NoError(t, os.WriteFile(e.TempMemDiff(), []byte("memory-"+e.ID), 0o644))
++	require.NoError(t, os.WriteFile(e.TempMemFull(), []byte("memory-"+e.ID), 0o644))
++	writeEpoch(t, e, []uint64{0})
 +
 +	return e
++}
++
++func writeEpoch(t *testing.T, e *Entry, words []uint64) {
++	t.Helper()
++
++	b := &dirtyBitmap{pageSize: 4096, numPages: 64, words: words}
++	require.NoError(t, b.writeTo(e.TempMemBitmap()))
++}
++
++// baseMem is the clone source of the next checkpoint: what the old Base()
++// returned, now assembled from the two calls that replaced it.
++func baseMem(t *testing.T, s *Store, sandboxID string) (string, bool) {
++	t.Helper()
++
++	parentID, broken := s.BaseState(sandboxID)
++	if broken || parentID == "" {
++		return "", false
++	}
++
++	return s.MemSource(sandboxID, parentID)
++}
++
++func exists(t *testing.T, path string) bool {
++	t.Helper()
++
++	_, err := os.Stat(path)
++	if err == nil {
++		return true
++	}
++	require.True(t, os.IsNotExist(err), "unexpected stat error for %s: %v", path, err)
++
++	return false
 +}
 +
 +func TestPrepareIsInvisibleUntilCommit(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	e := prepareWithFiles(t, s, "sbx", "first", "")
++	e := prepareWithFiles(t, s, "sbx", "first", 1)
 +
 +	_, ok := s.Get("sbx", e.ID)
 +	assert.False(t, ok)
@@ -9888,15 +9785,14 @@ index 000000000..cf3685bfb
 +func TestCommitMovesFilesAndWritesManifest(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	e := prepareWithFiles(t, s, "sbx", "", "")
++	e := prepareWithFiles(t, s, "sbx", "", 1)
 +	require.NoError(t, s.Commit(e, MemModeFull, nil))
 +
 +	snap, err := os.ReadFile(e.Snapfile)
 +	require.NoError(t, err)
 +	assert.Equal(t, "snapfile-"+e.ID, string(snap))
-+
-+	_, err = os.Stat(e.TempSnapfile())
-+	assert.True(t, os.IsNotExist(err))
++	assert.False(t, exists(t, e.TempSnapfile()))
++	assert.True(t, exists(t, e.MemBitmap))
 +
 +	var manifest Entry
 +	data, err := os.ReadFile(filepath.Join(e.Dir, manifestFileName))
@@ -9904,265 +9800,269 @@ index 000000000..cf3685bfb
 +	require.NoError(t, json.Unmarshal(data, &manifest))
 +	assert.Equal(t, StateCommitted, manifest.State)
 +	assert.Equal(t, e.ID, manifest.ID)
++	assert.False(t, manifest.Hidden)
++	assert.Empty(t, manifest.ParentID, "the first checkpoint is a root")
 +}
 +
-+func TestCommitAdvancesBaseAndParentsChain(t *testing.T) {
++func TestCommitRequiresSidecar(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	parentID, broken := s.BaseState("sbx")
-+	assert.Empty(t, parentID, "a virgin sandbox roots at the start memory source")
-+	assert.False(t, broken)
++	e := prepareWithFiles(t, s, "sbx", "", 1)
++	require.NoError(t, os.Remove(e.TempMemBitmap()))
 +
-+	e1 := prepareWithFiles(t, s, "sbx", "one", parentID)
++	assert.Error(t, s.Commit(e, MemModeFull, nil), "an epoch without a dirty set could never be crossed by a rollback")
++	_, ok := baseMem(t, s, "sbx")
++	assert.False(t, ok)
++}
++
++func TestCommitAdvancesBase(t *testing.T) {
++	s := newTestStore(t)
++
++	_, ok := baseMem(t, s, "sbx")
++	assert.False(t, ok, "a fresh sandbox has no memory base")
++
++	e := prepareWithFiles(t, s, "sbx", "", 1)
++	require.NoError(t, s.Commit(e, MemModeFull, nil))
++
++	base, ok := baseMem(t, s, "sbx")
++	require.True(t, ok)
++	assert.Equal(t, e.MemFull, base)
++}
++
++func TestPrepareRecordsParentAndForksAfterRestore(t *testing.T) {
++	s := newTestStore(t)
++
++	e1 := prepareWithFiles(t, s, "sbx", "one", 1)
 +	require.NoError(t, s.Commit(e1, MemModeFull, nil))
 +
-+	parentID, broken = s.BaseState("sbx")
-+	assert.Equal(t, e1.ID, parentID, "the next checkpoint parents on the last committed one")
-+	assert.False(t, broken)
++	e2 := prepareWithFiles(t, s, "sbx", "two", 2)
++	assert.Equal(t, e1.ID, e2.ParentID, "the next checkpoint counts from the base")
++	require.NoError(t, s.Commit(e2, MemModeIncremental, nil))
 +
-+	e2 := prepareWithFiles(t, s, "sbx", "two", parentID)
-+	commitDiff(t, s, e2, 0b0001, 0x11)
-+	assert.Equal(t, e1.ID, e2.ParentID)
-+
-+	parentID, _ = s.BaseState("sbx")
-+	assert.Equal(t, e2.ID, parentID)
-+}
-+
-+func TestSetBaseToEntryBranchesTheTree(t *testing.T) {
-+	s := newTestStore(t)
-+
-+	e1 := prepareWithFiles(t, s, "sbx", "one", "")
-+	commitDiff(t, s, e1, 0b0001, 0x11)
-+	e2 := prepareWithFiles(t, s, "sbx", "two", e1.ID)
-+	commitDiff(t, s, e2, 0b0010, 0x22)
-+
-+	// Restore to e1: the next checkpoint must parent there, so e2 becomes a
-+	// branch instead of being pruned.
++	// Restored to e1: the next checkpoint branches off e1, not e2.
 +	s.SetBaseToEntry(e1)
-+
-+	parentID, _ := s.BaseState("sbx")
-+	assert.Equal(t, e1.ID, parentID)
-+
-+	e3 := prepareWithFiles(t, s, "sbx", "three", parentID)
-+	commitDiff(t, s, e3, 0b0100, 0x33)
++	e3 := prepareWithFiles(t, s, "sbx", "three", 3)
 +	assert.Equal(t, e1.ID, e3.ParentID)
-+
-+	_, ok := s.Get("sbx", e2.ID)
-+	assert.True(t, ok, "the abandoned branch stays restorable")
++	base, ok := baseMem(t, s, "sbx")
++	require.True(t, ok)
++	assert.Equal(t, e1.MemFull, base, "and is cloned from e1's memory view")
 +}
 +
-+func TestCommitHiddenRescuesAdvancedEpoch(t *testing.T) {
++func TestCommitHiddenKeepsEpochOnFailedCreate(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	e1 := prepareWithFiles(t, s, "sbx", "one", "")
-+	commitDiff(t, s, e1, 0b0001, 0x11)
++	e1 := prepareWithFiles(t, s, "sbx", "", 1)
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
 +
-+	// A create whose snapshot succeeded but whose commit failed: the epoch
-+	// advanced, so the entry goes in hidden — the tree stays sound, the API
-+	// never shows it.
-+	e2 := prepareWithFiles(t, s, "sbx", "two", e1.ID)
-+	writeDiffFiles(t, e2, 0b0010, 0x22)
++	// The snapshot succeeded (epoch advanced) but the create fails.
++	e2 := prepareWithFiles(t, s, "sbx", "", 2)
 +	require.NoError(t, s.CommitHidden(e2, MemModeIncremental))
 +
 +	_, ok := s.Get("sbx", e2.ID)
-+	assert.False(t, ok, "hidden entries are not API objects")
++	assert.False(t, ok, "a hidden entry is not restorable")
 +	assert.Len(t, s.List("sbx"), 1)
 +
-+	parentID, broken := s.BaseState("sbx")
-+	assert.Equal(t, e2.ID, parentID, "the hidden epoch is still the next diff's parent")
-+	assert.False(t, broken)
++	base, ok := baseMem(t, s, "sbx")
++	require.True(t, ok)
++	assert.Equal(t, e2.MemFull, base, "the epoch's memory view is the only valid continuation of the chain")
++	data, err := os.ReadFile(base)
++	require.NoError(t, err)
++	assert.Equal(t, "memory-"+e2.ID, string(data))
 +
-+	// A diff epoch that lost its sidecar cannot be rescued: nothing records
-+	// which pages its file holds.
-+	e3 := prepareWithFiles(t, s, "sbx", "three", e2.ID)
-+	require.Error(t, s.CommitHidden(e3, MemModeIncremental))
++	assert.True(t, exists(t, e2.MemBitmap), "the epoch's dirty set stays in the ledger")
++	assert.False(t, exists(t, e2.TempSnapfile()))
++	assert.False(t, exists(t, filepath.Join(e2.Dir, snapfileFileName)), "a hidden entry is never restored; no snapfile")
++
++	var manifest Entry
++	raw, err := os.ReadFile(filepath.Join(e2.Dir, manifestFileName))
++	require.NoError(t, err)
++	require.NoError(t, json.Unmarshal(raw, &manifest))
++	assert.True(t, manifest.Hidden)
++	assert.Equal(t, StateCommitted, manifest.State)
++
++	// The next checkpoint counts from the hidden epoch, and rolling back to
++	// e1 from it crosses exactly that epoch.
++	e3 := prepareWithFiles(t, s, "sbx", "", 3)
++	assert.Equal(t, e2.ID, e3.ParentID)
++
++	out := filepath.Join(t.TempDir(), "revert")
++	wrote, err := s.RevertBitmapForTarget("sbx", e1.ID, out)
++	require.NoError(t, err)
++	assert.True(t, wrote)
 +}
 +
-+func TestInvalidateBaseBreaksChainUntilFullRoot(t *testing.T) {
++func TestDeleteOfBaseOwnerKeepsBaseAlive(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	e1 := prepareWithFiles(t, s, "sbx", "one", "")
-+	commitDiff(t, s, e1, 0b0001, 0x11)
-+
-+	s.InvalidateBase("sbx")
-+
-+	_, broken := s.BaseState("sbx")
-+	assert.True(t, broken)
-+
-+	// A full capture as a new root repairs the chain.
-+	e2 := prepareWithFiles(t, s, "sbx", "two", "")
-+	require.NoError(t, s.Commit(e2, MemModeFull, nil))
-+
-+	parentID, broken := s.BaseState("sbx")
-+	assert.Equal(t, e2.ID, parentID)
-+	assert.False(t, broken)
-+}
-+
-+func TestDeleteHidesWhileReferencedAndCascades(t *testing.T) {
-+	s := newTestStore(t)
-+
-+	e1 := prepareWithFiles(t, s, "sbx", "one", "")
-+	commitDiff(t, s, e1, 0b0001, 0x11)
-+	e2 := prepareWithFiles(t, s, "sbx", "two", e1.ID)
-+	commitDiff(t, s, e2, 0b0010, 0x22)
-+
-+	// A separate root, so the base pins neither e1 nor e2.
-+	e3 := prepareWithFiles(t, s, "sbx", "three", "")
-+	require.NoError(t, s.Commit(e3, MemModeFull, nil))
-+
-+	// e1 has a child: deleting it hides it, files stay.
-+	require.NoError(t, s.Delete("sbx", e1.ID))
-+
-+	_, ok := s.Get("sbx", e1.ID)
-+	assert.False(t, ok)
-+	_, err := os.Stat(e1.MemDiff)
-+	assert.NoError(t, err, "a hidden entry's files must survive: descendants resolve pages through them")
-+
-+	// Deleting a hidden entry again is not found: it is no API object.
-+	assert.Error(t, s.Delete("sbx", e1.ID))
-+
-+	// e2 is a leaf and not the base: physically removed, and the hidden
-+	// parent that just lost its last child goes with it.
-+	require.NoError(t, s.Delete("sbx", e2.ID))
-+
-+	_, err = os.Stat(e2.Dir)
-+	assert.True(t, os.IsNotExist(err))
-+	_, err = os.Stat(e1.Dir)
-+	assert.True(t, os.IsNotExist(err), "cascade reclaims hidden ancestors with no remaining children")
-+
-+	// The base itself can only be hidden, never removed: the next diff's
-+	// parent must stay resolvable.
-+	require.NoError(t, s.Delete("sbx", e3.ID))
-+
-+	_, ok = s.Get("sbx", e3.ID)
-+	assert.False(t, ok)
-+	_, err = os.Stat(e3.MemDiff)
-+	assert.NoError(t, err)
-+}
-+
-+func TestDeleteUnknownCheckpoint(t *testing.T) {
-+	s := newTestStore(t)
-+
-+	assert.Error(t, s.Delete("sbx", "nope"))
-+
-+	e := prepareWithFiles(t, s, "sbx", "one", "")
++	e := prepareWithFiles(t, s, "sbx", "", 1)
 +	require.NoError(t, s.Commit(e, MemModeFull, nil))
-+	assert.Error(t, s.Delete("sbx", "still-nope"))
++
++	require.NoError(t, s.Delete("sbx", e.ID))
++
++	_, ok := s.Get("sbx", e.ID)
++	assert.False(t, ok)
++	assert.Error(t, s.Delete("sbx", e.ID), "deleting twice is not found")
++
++	base, ok := baseMem(t, s, "sbx")
++	require.True(t, ok)
++	assert.Equal(t, e.MemFull, base)
++	data, err := os.ReadFile(base)
++	require.NoError(t, err)
++	assert.Equal(t, "memory-"+e.ID, string(data), "the base survives deleting the checkpoint that held it")
++	assert.False(t, exists(t, filepath.Join(e.Dir, snapfileFileName)))
++}
++
++func TestDeleteHidesReferencedEntries(t *testing.T) {
++	s := newTestStore(t)
++
++	e1 := prepareWithFiles(t, s, "sbx", "one", 1)
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
++	e2 := prepareWithFiles(t, s, "sbx", "two", 2)
++	require.NoError(t, s.Commit(e2, MemModeIncremental, nil))
++	e3 := prepareWithFiles(t, s, "sbx", "three", 3)
++	require.NoError(t, s.Commit(e3, MemModeIncremental, nil))
++
++	// e2 has a child: hidden, sidecar kept, memory view and snapfile gone.
++	require.NoError(t, s.Delete("sbx", e2.ID))
++	assert.True(t, exists(t, e2.MemBitmap), "e3's revert paths run through e2's epoch")
++	assert.False(t, exists(t, e2.MemFull))
++	assert.False(t, exists(t, filepath.Join(e2.Dir, snapfileFileName)))
++
++	got := s.List("sbx")
++	require.Len(t, got, 2)
++	assert.Equal(t, e1.ID, got[0].ID)
++	assert.Equal(t, e3.ID, got[1].ID)
++
++	// e3 is a leaf but the base: hidden with its memory view kept.
++	require.NoError(t, s.Delete("sbx", e3.ID))
++	assert.True(t, exists(t, e3.MemFull))
++	assert.True(t, exists(t, e3.MemBitmap))
++
++	out := filepath.Join(t.TempDir(), "revert")
++	wrote, err := s.RevertBitmapForTarget("sbx", e1.ID, out)
++	require.NoError(t, err)
++	assert.True(t, wrote, "base e3 → e1 still crosses two (hidden) epochs")
++
++	// Once the base moves to e1, e3 is an unreferenced hidden leaf and e2 a
++	// hidden node that just lost its last child: both are pruned.
++	s.SetBaseToEntry(e1)
++	assert.False(t, exists(t, e3.Dir))
++	assert.False(t, exists(t, e2.Dir))
++	assert.True(t, exists(t, e1.MemFull))
++}
++
++func TestDeleteLeafCascadesHiddenAncestors(t *testing.T) {
++	s := newTestStore(t)
++
++	e1 := prepareWithFiles(t, s, "sbx", "one", 1)
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
++	e2 := prepareWithFiles(t, s, "sbx", "two", 2)
++	require.NoError(t, s.Commit(e2, MemModeIncremental, nil))
++	e3 := prepareWithFiles(t, s, "sbx", "three", 3)
++	require.NoError(t, s.Commit(e3, MemModeIncremental, nil))
++
++	require.NoError(t, s.Delete("sbx", e2.ID)) // hidden: e3 hangs off it
++	s.SetBaseToEntry(e1)                       // restored to e1: e3 is no longer the base
++
++	// A leaf that nothing references goes physically, and takes the hidden
++	// ancestors that only existed for it.
++	require.NoError(t, s.Delete("sbx", e3.ID))
++	assert.False(t, exists(t, e3.Dir))
++	assert.False(t, exists(t, e2.Dir))
++	assert.True(t, exists(t, e1.MemFull), "the visible root stays")
++
++	lst := s.List("sbx")
++	require.Len(t, lst, 1)
++	assert.Equal(t, e1.ID, lst[0].ID)
++}
++
++func TestSetBaseToEntryAfterRestore(t *testing.T) {
++	s := newTestStore(t)
++
++	e1 := prepareWithFiles(t, s, "sbx", "one", 1)
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
++	e2 := prepareWithFiles(t, s, "sbx", "two", 2)
++	require.NoError(t, s.Commit(e2, MemModeIncremental, nil))
++
++	// Restoring e1 makes it the clone source for the next increment.
++	s.SetBaseToEntry(e1)
++
++	base, ok := baseMem(t, s, "sbx")
++	require.True(t, ok)
++	assert.Equal(t, e1.MemFull, base)
++	assert.True(t, exists(t, e2.MemFull), "a visible entry keeps its files when it stops being the base")
 +}
 +
 +func TestRemoveSandboxDropsEverything(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	e := prepareWithFiles(t, s, "sbx", "one", "")
++	e := prepareWithFiles(t, s, "sbx", "", 1)
 +	require.NoError(t, s.Commit(e, MemModeFull, nil))
 +
 +	require.NoError(t, s.RemoveSandbox("sbx"))
 +
 +	assert.Empty(t, s.List("sbx"))
-+	_, broken := s.BaseState("sbx")
-+	assert.False(t, broken)
-+	_, err := os.Stat(filepath.Join(s.Root(), "sbx"))
-+	assert.True(t, os.IsNotExist(err))
++	_, ok := baseMem(t, s, "sbx")
++	assert.False(t, ok)
++	assert.False(t, exists(t, filepath.Join(s.Root(), "sbx")))
 +}
 +
 +func TestValidateIDRejectsTraversal(t *testing.T) {
-+	s := newTestStore(t)
++	for _, id := range []string{"", "a/b", `a\b`, "..", "a..b"} {
++		assert.Error(t, validateID(id), "id %q must be rejected", id)
++	}
 +
-+	_, err := s.Prepare("../escape", "", "")
-+	assert.Error(t, err)
-+
-+	_, err = s.Prepare("a/b", "", "")
-+	assert.Error(t, err)
++	assert.NoError(t, validateID("ckpt_123"))
 +}
 +
-+// prepareWithSidecar is prepareWithFiles plus the dirty-page sidecar every
-+// real incremental checkpoint carries.
-+func prepareWithSidecar(t *testing.T, s *Store, sandboxID, name, parentID string) *Entry {
-+	t.Helper()
-+
-+	e := prepareWithFiles(t, s, sandboxID, name, parentID)
-+	b := &dirtyBitmap{pageSize: 4096, numPages: 64, words: []uint64{0}}
-+	require.NoError(t, b.writeTo(e.TempMemBitmap()))
-+
-+	return e
-+}
-+
-+func TestHiddenEntriesDropWhatCanNeverBeRead(t *testing.T) {
++func TestInvalidateBaseForcesFullRootAndRefusesRestores(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	// A failed create whose epoch advanced: no snapfile, no rootfs view —
-+	// a hidden entry is never a restore target — but the diff and its
-+	// sidecar stay, because the next checkpoint resolves pages through them.
-+	e1 := prepareWithSidecar(t, s, "sbx", "one", "")
-+	require.NoError(t, s.CommitHidden(e1, MemModeIncremental))
++	e1 := prepareWithFiles(t, s, "sbx", "", 1)
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
++	_, ok := baseMem(t, s, "sbx")
++	require.True(t, ok)
 +
-+	assert.NoFileExists(t, filepath.Join(e1.Dir, snapfileFileName))
-+	assert.NoFileExists(t, e1.RootfsHeaderPath())
-+	assert.FileExists(t, e1.MemDiff)
-+	assert.FileExists(t, e1.MemBitmap)
-+	assert.Nil(t, e1.Rootfs)
++	s.InvalidateBase("sbx")
 +
-+	// Same for an entry hidden by Delete because a child hangs off it.
-+	e2 := prepareWithSidecar(t, s, "sbx", "two", e1.ID)
-+	require.NoError(t, os.WriteFile(e2.RootfsHeaderPath(), []byte("header"), 0o644))
-+	require.NoError(t, s.Commit(e2, MemModeIncremental, &RootfsView{HeaderPath: e2.RootfsHeaderPath()}))
-+	e3 := prepareWithSidecar(t, s, "sbx", "three", e2.ID)
-+	require.NoError(t, s.Commit(e3, MemModeIncremental, nil))
++	_, ok = baseMem(t, s, "sbx")
++	assert.False(t, ok, "without a base the next checkpoint has to capture full memory")
++	assert.True(t, exists(t, e1.MemFull), "the file belongs to a visible checkpoint and stays")
 +
-+	require.NoError(t, s.Delete("sbx", e2.ID))
-+	assert.NoFileExists(t, filepath.Join(e2.Dir, snapfileFileName))
-+	assert.NoFileExists(t, e2.RootfsHeaderPath())
-+	assert.FileExists(t, e2.MemDiff, "e3 resolves pages through e2's diff")
-+	assert.FileExists(t, e2.MemBitmap)
++	out := filepath.Join(t.TempDir(), "revert")
++	_, err := s.RevertBitmapForTarget("sbx", e1.ID, out)
++	assert.Error(t, err, "no revert can be anchored on a broken chain")
++
++	// The next checkpoint is a new root; from it the old tree is reachable
++	// again, through both roots' epochs.
++	e2 := prepareWithFiles(t, s, "sbx", "", 2)
++	assert.Empty(t, e2.ParentID)
++	require.NoError(t, s.Commit(e2, MemModeFull, nil))
++
++	wrote, err := s.RevertBitmapForTarget("sbx", e1.ID, out)
++	require.NoError(t, err)
++	assert.True(t, wrote)
 +}
 +
-+func TestBaseMoveReclaimsUnreferencedHiddenEntries(t *testing.T) {
++func TestInvalidateBasePrunesHiddenOwner(t *testing.T) {
 +	s := newTestStore(t)
 +
-+	e1 := prepareWithSidecar(t, s, "sbx", "one", "")
-+	require.NoError(t, s.Commit(e1, MemModeIncremental, nil))
-+
-+	// A rescued epoch nobody built on: while it is the base it stays, and
-+	// the moment a restore moves the base back to e1 nothing can resolve
-+	// through it any more, so it goes with its whole directory.
-+	e2 := prepareWithSidecar(t, s, "sbx", "two", e1.ID)
-+	require.NoError(t, s.CommitHidden(e2, MemModeIncremental))
-+	assert.DirExists(t, e2.Dir)
-+
-+	s.SetBaseToEntry(e1)
-+	assert.NoDirExists(t, e2.Dir, "a hidden, childless ex-base is unreachable")
-+	assert.DirExists(t, e1.Dir)
-+
-+	parentID, broken := s.BaseState("sbx")
-+	assert.Equal(t, e1.ID, parentID)
-+	assert.False(t, broken)
-+
-+	// A hidden chain deeper than one link is reclaimed all the way up.
-+	e3 := prepareWithSidecar(t, s, "sbx", "three", e1.ID)
-+	require.NoError(t, s.CommitHidden(e3, MemModeIncremental))
-+	e4 := prepareWithSidecar(t, s, "sbx", "four", e3.ID)
-+	require.NoError(t, s.CommitHidden(e4, MemModeIncremental))
-+
-+	s.SetBaseToEntry(e1)
-+	assert.NoDirExists(t, e4.Dir)
-+	assert.NoDirExists(t, e3.Dir, "e3 lost its last child with e4")
-+	assert.Len(t, s.List("sbx"), 1)
-+}
-+
-+func TestBrokenChainReclaimsHiddenBase(t *testing.T) {
-+	s := newTestStore(t)
-+
-+	e1 := prepareWithSidecar(t, s, "sbx", "one", "")
-+	require.NoError(t, s.Commit(e1, MemModeIncremental, nil))
-+	e2 := prepareWithSidecar(t, s, "sbx", "two", e1.ID)
++	e1 := prepareWithFiles(t, s, "sbx", "", 1)
++	require.NoError(t, s.Commit(e1, MemModeFull, nil))
++	e2 := prepareWithFiles(t, s, "sbx", "", 2)
 +	require.NoError(t, s.CommitHidden(e2, MemModeIncremental))
 +
 +	s.InvalidateBase("sbx")
 +
-+	assert.NoDirExists(t, e2.Dir, "nothing will ever resolve through the lost epoch's neighbour")
-+	_, broken := s.BaseState("sbx")
-+	assert.True(t, broken)
-+	assert.DirExists(t, e1.Dir, "the visible checkpoint stays; only restores are refused until a new root")
++	assert.False(t, exists(t, e2.Dir), "a hidden, childless ex-base is gone with the base")
++	assert.True(t, exists(t, e1.MemFull))
++}
++
++func TestInvalidateBaseIsIdempotent(t *testing.T) {
++	s := newTestStore(t)
++
++	s.InvalidateBase("never-seen")
++	s.InvalidateBase("never-seen")
 +}
 diff --git a/packages/orchestrator/internal/proxy/proxy.go b/packages/orchestrator/internal/proxy/proxy.go
 index 49229c695..d740636ef 100644
@@ -11120,17 +11020,16 @@ index 0df559681..a6dc64b56 100644
  
 diff --git a/packages/orchestrator/internal/sandbox/checkpoint.go b/packages/orchestrator/internal/sandbox/checkpoint.go
 new file mode 100644
-index 000000000..6ff597fc9
+index 000000000..00dd7ccc6
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/checkpoint.go
-@@ -0,0 +1,262 @@
+@@ -0,0 +1,238 @@
 +package sandbox
 +
 +import (
 +	"context"
 +	"errors"
 +	"fmt"
-+	"os"
 +	"path/filepath"
 +	"time"
 +
@@ -11201,12 +11100,7 @@ index 000000000..6ff597fc9
 +	// The disk is sealed inside the same pause window, so the layer and the
 +	// memory file are images of the same instant — anything the guest had not
 +	// flushed to disk yet is in the memory image, exactly as it was.
-+	newCachePath := filepath.Join(
-+		filepath.Dir(s.files.SandboxCacheRootfsPath(s.config.StorageConfig)),
-+		fmt.Sprintf("rootfs-%s-%s.cow", s.Runtime.SandboxID, uuid.NewString()),
-+	)
-+
-+	layer, err := sealer.SealLayer(ctx, newCachePath, sealedLayerPath)
++	layer, err := sealer.SealLayer(ctx, s.newCowPath(), sealedLayerPath)
 +	if err != nil {
 +		// The snapshot exists, so the epoch has advanced regardless.
 +		return true, nil, fmt.Errorf("failed to seal rootfs write layer: %w", err)
@@ -11263,32 +11157,28 @@ index 000000000..6ff597fc9
 +	)
 +}
 +
-+// RevertMaterializer builds the two files an in-place rollback needs, given
-+// the live dirty bitmap Firecracker just exported: the revert bitmap and a
-+// sparse memory file holding the target-moment content of exactly those
-+// pages. cleanup removes them and runs however the rollback ends.
-+type RevertMaterializer func(liveBitmapPath string) (memPath string, revertBitmapPath string, cleanup func(), err error)
-+
 +// RollbackTornError marks a rollback that failed after guest state had
-+// already moved: memory is (partly) at the target but the disk view or the
-+// resume is not. The sandbox cannot continue and must be recreated.
++// already moved — memory is (partly) at the target but the disk view or the
++// resume is not — or that left the VM paused for good. The sandbox cannot
++// continue and must be recreated.
 +type RollbackTornError struct{ Err error }
 +
 +func (e RollbackTornError) Error() string {
-+	return fmt.Sprintf("rollback left the sandbox torn between two moments: %s", e.Err)
++	return fmt.Sprintf("rollback left the sandbox unusable: %s", e.Err)
 +}
 +
 +func (e RollbackTornError) Unwrap() error { return e.Err }
 +
 +// RollbackInPlace rewinds the sandbox to a checkpoint without replacing the
-+// Firecracker process: FC writes back the revert set onto its live objects
-+// (cost proportional to the set), and the disk view is swapped underneath
++// Firecracker process: FC writes the revert set back onto its live objects
++// from the checkpoint's full memory view (cost proportional to the set),
++// restores vCPU and device state, and the disk view is swapped underneath
 +// the live NBD mount inside the same pause window. All host resources —
 +// process, KVM fds, tap, network slot, NBD device — stay.
 +//
-+// The live dirty bitmap is exported and the revert files are materialized
-+// only after the pause: paused, the live set cannot grow, so the
-+// materialized content covers everything Firecracker will write back.
++// revertBitmapPath carries the pages dirtied in earlier epochs since the
++// target; empty means the target is the current epoch's base and the live
++// dirty set, which Firecracker folds in itself, is the whole revert set.
 +//
 +// Failures before the rollback's commit point resume the VM: the sandbox
 +// keeps running at its current state. Failures past it come back as
@@ -11296,7 +11186,8 @@ index 000000000..6ff597fc9
 +func (s *Sandbox) RollbackInPlace(
 +	ctx context.Context,
 +	snapfilePath string,
-+	materialize RevertMaterializer,
++	memfilePath string,
++	revertBitmapPath string,
 +	layers []RestoreLayer,
 +) (e error) {
 +	ctx, span := tracer.Start(ctx, "sandbox-rollback-in-place")
@@ -11313,28 +11204,6 @@ index 000000000..6ff597fc9
 +		return fmt.Errorf("failed to pause VM: %w", err)
 +	}
 +
-+	// resumeOnError puts the VM back as it was, for failures that have not
-+	// touched guest state yet.
-+	resumeOnError := func(err error) error {
-+		if resumeErr := process.ResumeVM(context.WithoutCancel(ctx)); resumeErr != nil {
-+			err = errors.Join(err, fmt.Errorf("failed to resume VM: %w", resumeErr))
-+		}
-+
-+		return err
-+	}
-+
-+	liveBitmapPath := filepath.Join(filepath.Dir(snapfilePath), "live_bitmap.tmp")
-+	if err := process.SaveDirtyBitmap(ctx, liveBitmapPath); err != nil {
-+		return resumeOnError(fmt.Errorf("failed to export live dirty bitmap: %w", err))
-+	}
-+	defer os.Remove(liveBitmapPath)
-+
-+	memfilePath, revertBitmapPath, cleanup, err := materialize(liveBitmapPath)
-+	if err != nil {
-+		return resumeOnError(fmt.Errorf("failed to materialize revert files: %w", err))
-+	}
-+	defer cleanup()
-+
 +	// The rollback endpoint distinguishes failures before its commit point
 +	// (VM untouched, resumable) from after (VM faulted).
 +	result, err := process.RollbackSnapshot(ctx, snapfilePath, memfilePath, revertBitmapPath)
@@ -11344,7 +11213,14 @@ index 000000000..6ff597fc9
 +			return RollbackTornError{Err: fmt.Errorf("in-place rollback failed: %w", err)}
 +		}
 +
-+		return resumeOnError(fmt.Errorf("in-place rollback failed: %w", err))
++		if resumeErr := process.ResumeVM(context.WithoutCancel(ctx)); resumeErr != nil {
++			return RollbackTornError{Err: errors.Join(
++				fmt.Errorf("in-place rollback failed: %w", err),
++				fmt.Errorf("failed to resume VM after rollback refusal: %w", resumeErr),
++			)}
++		}
++
++		return fmt.Errorf("in-place rollback failed: %w", err)
 +	}
 +
 +	telemetry.ReportEvent(ctx, fmt.Sprintf(
@@ -11577,7 +11453,7 @@ index 54cd2cf06..2189924d8 100644
  		VcpuCount:       &vCPUCount,
  		MemSizeMib:      &memoryMB,
 diff --git a/packages/orchestrator/internal/sandbox/fc/process.go b/packages/orchestrator/internal/sandbox/fc/process.go
-index 687d14e48..c6a060cd9 100644
+index 687d14e48..f97a142db 100644
 --- a/packages/orchestrator/internal/sandbox/fc/process.go
 +++ b/packages/orchestrator/internal/sandbox/fc/process.go
 @@ -7,6 +7,7 @@ import (
@@ -11733,7 +11609,7 @@ index 687d14e48..c6a060cd9 100644
  
  	telemetry.SetAttributes(
  		ctx,
-@@ -575,10 +586,58 @@ func (p *Process) Pause(ctx context.Context) error {
+@@ -575,10 +586,45 @@ func (p *Process) Pause(ctx context.Context) error {
  	return p.client.pauseVM(ctx)
  }
  
@@ -11756,7 +11632,7 @@ index 687d14e48..c6a060cd9 100644
  
 -	return p.client.createSnapshot(ctx, snapfilePath)
 +	return p.client.createSnapshot(ctx, snapfilePath, "", "", false)
- }
++}
 +
 +// CreateSnapshotWithMemFile VM needs to be paused before creating a snapshot.
 +//
@@ -11773,32 +11649,19 @@ index 687d14e48..c6a060cd9 100644
 +
 +// RollbackSnapshot rewinds the paused VM to a snapshot in place, keeping this
 +// process. Only the forked Firecracker knows the endpoint; an unmodified one
-+// yields RollbackUnsupportedError and the restore fails — there is no
-+// rebuild route.
++// yields RollbackUnsupportedError.
 +func (p *Process) RollbackSnapshot(ctx context.Context, snapfilePath string, memFilePath string, revertBitmapPath string) (*RollbackResult, error) {
 +	ctx, childSpan := tracer.Start(ctx, "rollback-snapshot-fc")
 +	defer childSpan.End()
 +
 +	return p.client.rollbackSnapshot(ctx, p.firecrackerSocketPath, snapfilePath, memFilePath, revertBitmapPath)
-+}
-+
-+// SaveDirtyBitmap has the forked Firecracker write the live dirty bitmap —
-+// the pages dirtied since the last snapshot or rollback — to path in the
-+// FCDB sidecar format. The VM must be paused. The export does not disturb
-+// dirty tracking: the set stays visible to the next snapshot or rollback.
-+func (p *Process) SaveDirtyBitmap(ctx context.Context, path string) error {
-+	ctx, childSpan := tracer.Start(ctx, "save-dirty-bitmap-fc")
-+	defer childSpan.End()
-+
-+	return p.client.saveDirtyBitmap(ctx, p.firecrackerSocketPath, path)
-+}
-+
+ }
 diff --git a/packages/orchestrator/internal/sandbox/fc/rollback.go b/packages/orchestrator/internal/sandbox/fc/rollback.go
 new file mode 100644
-index 000000000..ee6568edd
+index 000000000..96b29bd8c
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/fc/rollback.go
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,141 @@
 +package fc
 +
 +import (
@@ -11810,7 +11673,6 @@ index 000000000..ee6568edd
 +	"net"
 +	"net/http"
 +	"time"
-+
 +)
 +
 +// RollbackResult is the forked Firecracker's response to a successful
@@ -11830,8 +11692,8 @@ index 000000000..ee6568edd
 +}
 +
 +// RollbackUnsupportedError marks a Firecracker that does not know the
-+// rollback endpoint — an unmodified binary. The orchestrator and Firecracker
-+// ship as a pair; mismatched binaries fail the restore rather than degrade.
++// rollback endpoint — an unmodified binary. Checkpoint restore needs the
++// fork; there is no other way to bring a sandbox back.
 +type RollbackUnsupportedError struct{}
 +
 +func (RollbackUnsupportedError) Error() string {
@@ -11840,7 +11702,7 @@ index 000000000..ee6568edd
 +
 +// RollbackFaultedError marks a rollback that failed past its commit point:
 +// the VM is torn between two moments in time, refuses to resume, and must be
-+// replaced. The caller's only move is the kill-and-rebuild fallback.
++// replaced — the sandbox has to be recreated.
 +type RollbackFaultedError struct {
 +	Message string
 +}
@@ -11940,56 +11802,6 @@ index 000000000..ee6568edd
 +
 +		return nil, fmt.Errorf("rollback failed with status %d: %s", res.StatusCode, message)
 +	}
-+}
-+
-+// saveDirtyBitmap calls the forked Firecracker's PUT
-+// /snapshot/save-dirty-bitmap: the live dirty bitmap is written to path in
-+// the FCDB sidecar format. Requires the VM to be paused.
-+func (c *apiClient) saveDirtyBitmap(ctx context.Context, socketPath string, path string) error {
-+	payload, err := json.Marshal(map[string]any{"path": path})
-+	if err != nil {
-+		return fmt.Errorf("error encoding save-dirty-bitmap request: %w", err)
-+	}
-+
-+	httpClient := &http.Client{
-+		Transport: &http.Transport{
-+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-+				var d net.Dialer
-+
-+				return d.DialContext(ctx, "unix", socketPath)
-+			},
-+			// Same reason as rollbackSnapshot: this client lives for one
-+			// call, and pooled connections would pile up against
-+			// Firecracker's connection cap.
-+			DisableKeepAlives: true,
-+		},
-+		Timeout: 30 * time.Second,
-+	}
-+	defer httpClient.CloseIdleConnections()
-+
-+	req, err := http.NewRequestWithContext(
-+		ctx,
-+		http.MethodPut,
-+		"http://localhost/snapshot/save-dirty-bitmap",
-+		bytes.NewReader(payload),
-+	)
-+	if err != nil {
-+		return fmt.Errorf("error building save-dirty-bitmap request: %w", err)
-+	}
-+	req.Header.Set("Content-Type", "application/json")
-+
-+	res, err := httpClient.Do(req)
-+	if err != nil {
-+		return fmt.Errorf("error calling save-dirty-bitmap: %w", err)
-+	}
-+	defer res.Body.Close()
-+
-+	resBody, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-+	if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusNoContent {
-+		return nil
-+	}
-+
-+	return fmt.Errorf("save-dirty-bitmap failed with status %d: %s", res.StatusCode, string(resBody))
 +}
 diff --git a/packages/orchestrator/internal/sandbox/fc/script_builder.go b/packages/orchestrator/internal/sandbox/fc/script_builder.go
 index dcd2662a9..6254abb4b 100644
@@ -12407,7 +12219,7 @@ index 48a4c3da4..06e6d81c2 100644
  func flush(ctx context.Context, path string) error {
  	ctx, span := tracer.Start(ctx, "flush", trace.WithAttributes(attribute.String("path", path)))
 diff --git a/packages/orchestrator/internal/sandbox/sandbox.go b/packages/orchestrator/internal/sandbox/sandbox.go
-index 0ff28c260..531207ee9 100644
+index 0ff28c260..579c8d255 100644
 --- a/packages/orchestrator/internal/sandbox/sandbox.go
 +++ b/packages/orchestrator/internal/sandbox/sandbox.go
 @@ -44,6 +44,7 @@ var (
@@ -12432,15 +12244,6 @@ index 0ff28c260..531207ee9 100644
  type internalConfig struct {
  	EnvdInitRequestTimeout time.Duration
  }
-@@ -391,7 +399,7 @@ func (f *Factory) CreateSandbox(
- 		ctx, span := tracer.Start(execCtx, "sandbox-exit-wait")
- 		defer span.End()
- 
--		// If the process exists, stop the sandbox properly
-+		// If the process exits, stop the sandbox properly
- 		fcErr := fcHandle.Exit.Wait()
- 		err := sbx.Stop(ctx)
- 
 @@ -425,6 +433,13 @@ func (f *Factory) ResumeSandbox(
  	defer span.End()
  	defer handleSpanError(span, &e)
@@ -12527,15 +12330,6 @@ index 0ff28c260..531207ee9 100644
  
  	telemetry.ReportEvent(execCtx, "envd initialized")
  
-@@ -950,7 +973,7 @@ func (s *Sandbox) Pause(
- 		buildID,
- 		originalRootfs.Header(),
- 		&RootfsDiffCreator{
--			rootfs:    s.rootfs,
-+			rootfs:    s.Rootfs(),
- 			closeHook: s.Close,
- 		},
- 		s.config.DefaultCacheDir,
 diff --git a/packages/orchestrator/internal/sandbox/socket/socket.go b/packages/orchestrator/internal/sandbox/socket/socket.go
 index a6ade10dd..700d7a4f6 100644
 --- a/packages/orchestrator/internal/sandbox/socket/socket.go
