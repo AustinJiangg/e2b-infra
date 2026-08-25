@@ -753,6 +753,13 @@ function stop() {
         echo "ℹ️  未找到运行中的 firecracker 进程"
     fi
 
+    # 进程都停了才清网络：orchestrator 的暖池（NewSlotsPoolSize 32 + ReusedSlotsPoolSize 100）
+    # 里最多有 132 个已创建但闲置的槽位，进程被杀时来不及走 networkPool.Close()，netns 和 veth
+    # 就留在宿主机上。更麻烦的是 StorageLocal 启动时会把 /var/run/netns 里已存在的条目记成
+    # foreignNs 永久跳过，所以槽位号只增不减——攒到几千个网卡后 nomad 的 client fingerprint
+    # 要走几分钟，4646 迟迟不开，表现就是 build.sh -s 卡在"端口未启动"。
+    purge_sandbox_netns
+
     success "e2b-infra 服务停止完成！"
 
     # 静态大页池是内核级预留，跟进程在不在没关系，stop 故意不动它：下次 -s 要在还没碎片化的
@@ -763,6 +770,100 @@ function stop() {
     if [ -n "$hp_total" ] && [ "$hp_total" -gt 0 ] 2>/dev/null; then
         info "静态大页池仍占用 $((hp_total * hp_kb / 1024)) MiB（不随服务停止释放）；要回收执行：$0 --purge-hugepages"
     fi
+}
+
+# 清理沙箱残留的网络资源。命名规则来自 orchestrator 的
+# internal/sandbox/network/slot.go：netns 叫 ns-<idx>、宿主机侧 veth 叫 veth-<idx>。
+# 严格锚定这两个模式——同机可能还跑着别的东西（flannel 的 vethXXXX、containerd 的
+# cni-<uuid>、cni0、docker0、virbr0），误删会把别人的网络一起端掉。
+function purge_sandbox_netns() {
+    info "清理沙箱网络资源（netns / veth）..."
+
+    local ns_list veth_list ns_count=0 veth_count=0 failed=0
+
+    ns_list=$(ip netns list 2>/dev/null | awk '{print $1}' | grep -E '^ns-[0-9]+$')
+    veth_list=$(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^veth-[0-9]+$')
+
+    [ -n "$ns_list" ] && ns_count=$(printf '%s\n' "$ns_list" | wc -l)
+    [ -n "$veth_list" ] && veth_count=$(printf '%s\n' "$veth_list" | wc -l)
+
+    if [ "$ns_count" -eq 0 ] && [ "$veth_count" -eq 0 ]; then
+        echo "ℹ️  没有残留的沙箱 netns / veth"
+        return 0
+    fi
+
+    echo "- 待清理：netns $ns_count 个，veth $veth_count 个"
+
+    local n l
+    for n in $ns_list; do
+        ip netns delete "$n" 2>/dev/null || failed=$((failed + 1))
+    done
+
+    # 删掉 netns 后对端 veth 通常会跟着消失，这里补删仍留在宿主机侧的孤儿
+    for l in $veth_list; do
+        ip link show "$l" >/dev/null 2>&1 || continue
+        ip link delete "$l" 2>/dev/null || failed=$((failed + 1))
+    done
+
+    local ns_left veth_left
+    ns_left=$(ip netns list 2>/dev/null | awk '{print $1}' | grep -cE '^ns-[0-9]+$')
+    veth_left=$(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^veth-[0-9]+$')
+
+    if [ "$ns_left" -eq 0 ] && [ "$veth_left" -eq 0 ]; then
+        echo "- netns / veth 已清空（netns $ns_count、veth $veth_count）；当前宿主机网卡数：$(ip -o link 2>/dev/null | wc -l)"
+    else
+        warn "仍残留 netns $ns_left 个、veth $veth_left 个（删除失败 $failed 次）——确认没有 firecracker 在跑后重跑 $0 -d"
+    fi
+
+    purge_sandbox_iptables
+}
+
+# 删掉 netns / veth 并不会带走 orchestrator 为每个槽位写进 iptables 的规则。每个槽位在
+# 宿主机上留 7 条 nat + 2 条 filter（见 orchestrator internal/sandbox/network 的
+# network.go 与 tcpproxy.go）：
+#   nat/PREROUTING   -i veth-<n> …  hyperloop 80→5010、NFS 2049→5011、portmapper 111→5012，
+#                                   以及 TCP 代理三条 80→5016 / 443→5017 / 其余→5018
+#   nat/POSTROUTING  -s 10.11.x.y/32 -o <网卡> -j MASQUERADE   （10.11.0.0/16 是
+#                                   orchestrator 的 defaultHostNetworkCIDR）
+#   filter/FORWARD   -i veth-<n> -o <网卡> -j ACCEPT 和反向一条
+# 网卡没了这些规则也不会自动消失，只是永远不匹配。攒到几万条之后每次 iptables 调用都要
+# 把整张表读出来再写回去，部署收尾会明显变慢（同机再跑个 k3s，kube-proxy 抢 xtables 锁
+# 会让这一步从瞬间变成一两分钟）。
+function purge_sandbox_iptables() {
+    command -v iptables-save >/dev/null 2>&1 || { warn "没有 iptables-save，跳过规则清理"; return 0; }
+
+    local nat_before filter_before nat_after filter_after nat_del filter_del
+    nat_before=$(iptables -t nat -S 2>/dev/null | wc -l)
+    filter_before=$(iptables -t filter -S 2>/dev/null | wc -l)
+
+    nat_del=$(iptables-save -t nat 2>/dev/null \
+        | grep -E -e '^-A PREROUTING .*-i veth-[0-9]+( |$)' \
+                  -e '^-A POSTROUTING -s 10\.11\.[0-9]+\.[0-9]+/32 .*-j MASQUERADE' \
+        | sed 's/^-A /-D /')
+
+    filter_del=$(iptables-save -t filter 2>/dev/null \
+        | grep -E '^-A FORWARD .*-[io] veth-[0-9]+( |$)' \
+        | sed 's/^-A /-D /')
+
+    if [ -z "$nat_del" ] && [ -z "$filter_del" ]; then
+        echo "ℹ️  没有残留的沙箱 iptables 规则"
+        return 0
+    fi
+
+    # 逐条 iptables -D 的话上万条要跑几小时。iptables-restore --noflush 只应用给出的
+    # 这些 -D 行、不清空整张表，所以同机 k3s / docker 的规则不受影响。
+    if [ -n "$nat_del" ]; then
+        printf '*nat\n%s\nCOMMIT\n' "$nat_del" | iptables-restore --noflush 2>/dev/null \
+            || warn "批量删除 nat 规则失败（可能 iptables-restore 不支持 -D），残留规则需手工处理"
+    fi
+    if [ -n "$filter_del" ]; then
+        printf '*filter\n%s\nCOMMIT\n' "$filter_del" | iptables-restore --noflush 2>/dev/null \
+            || warn "批量删除 filter 规则失败，残留规则需手工处理"
+    fi
+
+    nat_after=$(iptables -t nat -S 2>/dev/null | wc -l)
+    filter_after=$(iptables -t filter -S 2>/dev/null | wc -l)
+    success "沙箱网络资源清理完成；iptables 规则 nat $nat_before → $nat_after、filter $filter_before → $filter_after"
 }
 
 function purge_hugepages() {
