@@ -340,6 +340,26 @@ ls /root/.e2b/config.json                              # SDK 凭据已生成（�
 
 然后构建首个模板（`python /opt/e2b-infra/build_prod.py base`）→ `Sandbox.create("base")`。
 
+> **为什么 `-d` 要清 netns / veth**：orchestrator 的网络槽位暖池最多留 132 个已创建但闲置的
+> 槽位（`NewSlotsPoolSize` 32 + `ReusedSlotsPoolSize` 100）。进程被杀时来不及走
+> `networkPool.Close()`，`ns-<n>` 和 `veth-<n>` 就留在宿主机上。而 `StorageLocal` 启动时会把
+> `/var/run/netns` 里**已存在**的条目记成 `foreignNs` 永久跳过——槽位号只增不减，每轮部署叠一批。
+> 攒到几千块网卡后，nomad 的 client fingerprint 要枚举所有网卡、耗时几分钟，而 HTTP API 要等
+> client 初始化完才开，症状就是 `build.sh -s` 卡在「⏳ 端口未启动，继续等待…（永不超时）」。
+> 清理只认 `^ns-[0-9]+$` / `^veth-[0-9]+$` 两个模式（命名见 orchestrator
+> `internal/sandbox/network/slot.go`），同机的 `cni0`、`flannel.1`、`cni-<uuid>`、`docker0` 不会被碰。
+>
+> **同时要清 iptables**：删网卡不会带走规则。每个槽位在宿主机留 7 条 nat + 2 条 filter
+> （`network.go` / `tcpproxy.go`）——`nat/PREROUTING` 六条 `-i veth-<n>`（hyperloop 80→5010、
+> NFS 2049→5011、portmapper 111→5012、TCP 代理 80→5016 / 443→5017 / 其余→5018）、
+> `nat/POSTROUTING` 一条 `-s 10.11.x.y/32 … MASQUERADE`、`filter/FORWARD` 两条。网卡没了规则
+> 只是永不匹配、不会自动消失，几万条之后每次 `iptables` 调用都要整表读写，`-s` 收尾会从瞬间
+> 变成一两分钟（同机再跑 k3s，kube-proxy 抢 xtables 锁会更明显）。批量删用
+> `iptables-restore --noflush` 一次提交，逐条 `-D` 上万条要跑几小时。
+
+> **另一半在 job 侧**：`template-manager.hcl` 的 `kill_timeout = "30s"`（默认只有 5s）。
+> 给足时间，orchestrator 退出前自己就把暖池拆干净了，上面那套清扫只是兜底。
+
 ## 13. `-s` / `-f` / `-r` / `-d` 的关系（收束）
 
 | 命令 | 范围 |
@@ -347,5 +367,5 @@ ls /root/.e2b/config.json                              # SDK 凭据已生成（�
 | `build.sh -s` | 上面全部 ①~⑫（重路径，全新搭建/彻底重来用） |
 | `build.sh -f` | 只有步骤⑪ `deploy.sh` 全量（镜像构建+渲染+全部 job+seed+配额）——改 `.env` 后用 |
 | `build.sh -r <job>` | `deploy.sh --only <job>`：只渲染+重跑一个 job，跳过镜像/seed——改单个 job env 后用（runbook §11） |
-| `build.sh -d` | 逆操作：purge 全部 job、卸 consul/nomad（**连数据目录带 ACL 状态一起删**）、kill 残留业务进程。`-d` 之后再 `-s` = 全新 bootstrap |
+| `build.sh -d` | 逆操作：purge 全部 job、卸 consul/nomad（**连数据目录带 ACL 状态一起删**）、kill 残留业务进程，最后清掉残留的沙箱 `ns-<n>` / `veth-<n>`（见下）。`-d` 之后再 `-s` = 全新 bootstrap |
 | `build.sh --purge-hugepages` | 只归零 `nr_hugepages` / `nr_overcommit_hugepages` 并卸载 `/mnt/hugepages`，不动服务。`-d` **不含**这一步，长期不用 e2b 想把几百 G 内存还给系统时单独跑 |

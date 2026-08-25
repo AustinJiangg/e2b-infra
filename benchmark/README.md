@@ -127,6 +127,15 @@ python run_benchmark.py --template base --count 100 --concurrency 100 --warmup 3
 客户端整体耗时统计与**简化后的两步后续命令**，直接复制执行即可。后续的采集与分析会
 自动定位到这个运行目录，无需再传时间窗口/数量。
 
+> **压测末尾的网络体检**：`run_benchmark.py` 清完沙箱后会打印一行
+> `== 宿主机网络体检: 沙箱 netns N / veth N / 网卡总数 M`，并写进 `meta.json` 的 `host_net`。
+> 沙箱销毁后槽位会回 orchestrator 的暖池待复用（`NewSlotsPoolSize` 32 + `ReusedSlotsPoolSize`
+> 100），netns/veth 不立即拆，所以**残留 ≤132 是正常的**。超过就会告警——那是
+> orchestrator 被强杀时没来得及 `networkPool.Close()` 留下的泄漏，只增不减（下次启动会把它们
+> 记成 `foreignNs` 永久跳过）。攒到上千个之后 nomad 的 client fingerprint 要枚举所有网卡，
+> 4646 迟迟不开，`build.sh -s` 会卡在「⏳ 端口未启动」。清理方式：停服时 `build.sh -d`
+> （细节见 `deploy-docs/05-build.sh-s-启动部署详解.md` §13）。
+
 ### 3.3 采集 orchestrator 日志
 
 ```bash
