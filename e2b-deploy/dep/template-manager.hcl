@@ -60,6 +60,16 @@ job "template-manager-system" {
         MINIO_ACCESS_KEY = "${MINIO_ACCESS_KEY}"
         MINIO_SECRET_KEY = "${MINIO_SECRET_KEY}"
         SSL_CERT_FILE = "/etc/docker/certs.d/harbor:443/ca.crt" 
+
+        # 这一套的 checkpoint 靠 reflink 克隆内存基线，所以数据必须落在开了
+        # reflink 的 XFS 卷上。不设这一行就走默认的 /orchestrator —— 在 950 上
+        # 那是根盘 ext4，reflink 用不了，每次 checkpoint 会退化成整份内存拷贝，
+        # 功能照常、代价几十倍，且只有 orchestrator 启动那行日志会说。
+        #
+        # 卷用 test-950/02-prepare-loop-volume.sh --fs xfs --mnt /mnt/xfsdev 造。
+        # 换到别的挂载点就改这里 —— 写的是字面路径不是 ${...}，因为
+        # deploy.sh 的 envsubst 用的是白名单，没列进去的变量会原样留下。
+        ORCHESTRATOR_BASE_PATH = "/mnt/xfsdev/orchestrator"
      }
 
       config {
