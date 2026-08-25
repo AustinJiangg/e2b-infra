@@ -11445,40 +11445,10 @@ index 4b5de9147..96c258f88 100644
  	if response.StatusCode != http.StatusNoContent {
  		logger.L().Error(ctx, "envd init request failed",
 diff --git a/packages/orchestrator/internal/sandbox/fc/client.go b/packages/orchestrator/internal/sandbox/fc/client.go
-index 54cd2cf06..2189924d8 100644
+index 54cd2cf06..a01ac10b8 100644
 --- a/packages/orchestrator/internal/sandbox/fc/client.go
 +++ b/packages/orchestrator/internal/sandbox/fc/client.go
-@@ -10,6 +10,7 @@ import (
- 
- 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/template"
- 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/uffd/memory"
-+	"github.com/e2b-dev/infra/packages/shared/pkg/env"
- 	"github.com/e2b-dev/infra/packages/shared/pkg/fc/client"
- 	"github.com/e2b-dev/infra/packages/shared/pkg/fc/client/operations"
- 	"github.com/e2b-dev/infra/packages/shared/pkg/fc/models"
-@@ -18,6 +19,21 @@ import (
- 	"github.com/e2b-dev/infra/packages/shared/pkg/utils"
- )
- 
-+// trackDirtyPagesEnabled arms KVM dirty page tracking on every microVM this
-+// orchestrator starts, which is what lets Firecracker produce Diff snapshots.
-+//
-+// Off by default. Where the host has no hardware dirty state tracking, arming
-+// it costs a VM exit on the first write to each clean page, which is a pure
-+// loss for sandboxes that never take an incremental snapshot.
-+var trackDirtyPagesEnabled = env.GetEnv("FC_TRACK_DIRTY_PAGES", "false") == "true"
-+
-+// TrackDirtyPagesEnabled reports whether VMs on this orchestrator are started
-+// with dirty page tracking armed, which is what makes incremental (Diff)
-+// snapshots possible.
-+func TrackDirtyPagesEnabled() bool {
-+	return trackDirtyPagesEnabled
-+}
-+
- type apiClient struct {
- 	client *client.Firecracker
- }
-@@ -52,19 +68,9 @@ func (c *apiClient) loadSnapshot(
+@@ -52,19 +52,9 @@ func (c *apiClient) loadSnapshot(
  
  	telemetry.ReportEvent(ctx, "got snapfile path")
  
@@ -11500,7 +11470,7 @@ index 54cd2cf06..2189924d8 100644
  	}
  
  	telemetry.ReportEvent(ctx, "loaded snapshot")
-@@ -81,6 +87,33 @@ func (c *apiClient) loadSnapshot(
+@@ -81,6 +71,33 @@ func (c *apiClient) loadSnapshot(
  	return nil
  }
  
@@ -11534,7 +11504,7 @@ index 54cd2cf06..2189924d8 100644
  func (c *apiClient) resumeVM(ctx context.Context) error {
  	ctx, span := tracer.Start(ctx, "resume-vm")
  	defer span.End()
-@@ -118,15 +151,35 @@ func (c *apiClient) pauseVM(ctx context.Context) error {
+@@ -118,15 +135,35 @@ func (c *apiClient) pauseVM(ctx context.Context) error {
  	return nil
  }
  
@@ -11572,7 +11542,7 @@ index 54cd2cf06..2189924d8 100644
  		},
  	}
  
-@@ -232,8 +285,8 @@ func (c *apiClient) setMachineConfig(
+@@ -232,8 +269,8 @@ func (c *apiClient) setMachineConfig(
  	memoryMB int64,
  	hugePages bool,
  ) error {
@@ -11583,6 +11553,83 @@ index 54cd2cf06..2189924d8 100644
  	machineConfig := &models.MachineConfiguration{
  		VcpuCount:       &vCPUCount,
  		MemSizeMib:      &memoryMB,
+diff --git a/packages/orchestrator/internal/sandbox/fc/dirtytracking.go b/packages/orchestrator/internal/sandbox/fc/dirtytracking.go
+new file mode 100644
+index 000000000..508624108
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/dirtytracking.go
+@@ -0,0 +1,71 @@
++package fc
++
++import (
++	"fmt"
++	"os"
++
++	"golang.org/x/sys/unix"
++)
++
++// KVM 的 arm64 硬件脏状态跟踪能力号。x/sys/unix 里没有这两个常量，而且
++// KVM_CHECK_EXTENSION 的参数是按值传的能力号，所以这里都写出来。
++const (
++	kvmCapArmHWDirtyStateTrack = 502
++	kvmCheckExtension          = 0xAE03 // _IO(KVMIO, 0x03)
++)
++
++// trackDirtyPagesEnabled decides whether every microVM this orchestrator
++// starts arms dirty page tracking. That is what lets Firecracker produce Diff
++// snapshots, and therefore what makes an incremental checkpoint incremental:
++// with it off every checkpoint silently copies all of guest memory instead,
++// which on a 2 GiB sandbox is the difference between 40 MiB and 2 GiB written,
++// and between tens of milliseconds and a second and a half.
++//
++// FC_TRACK_DIRTY_PAGES forces the answer either way. Left unset it follows the
++// hardware, because the cost does:
++//
++//   - where the CPU tracks dirty state itself (arm64 HDBSS, KVM capability
++//     502) arming it is close to free, so it defaults on and a host that can
++//     do incremental checkpoints does them without anyone having to know;
++//   - where it does not, the kernel write-protects every clean page and takes
++//     a VM exit on its first write, a pure loss for sandboxes that never
++//     checkpoint, so it defaults off.
++var trackDirtyPagesEnabled, trackDirtyPagesReason = resolveTrackDirtyPages()
++
++func resolveTrackDirtyPages() (bool, string) {
++	if raw, ok := os.LookupEnv("FC_TRACK_DIRTY_PAGES"); ok {
++		return raw == "true", fmt.Sprintf("FC_TRACK_DIRTY_PAGES=%q", raw)
++	}
++
++	if hardwareDirtyTracking() {
++		return true, "hardware dirty state tracking present (KVM capability 502)"
++	}
++
++	return false, "no hardware dirty state tracking; software tracking costs a VM exit per clean page"
++}
++
++// hardwareDirtyTracking asks KVM whether this host tracks guest dirty state in
++// hardware. KVM_CHECK_EXTENSION only queries: no VM is created and nothing is
++// enabled, so this is safe to run at startup anywhere, including on a host
++// with no /dev/kvm at all.
++func hardwareDirtyTracking() bool {
++	f, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
++	if err != nil {
++		return false
++	}
++	defer f.Close()
++
++	ret, _, errno := unix.Syscall(unix.SYS_IOCTL, f.Fd(), kvmCheckExtension, kvmCapArmHWDirtyStateTrack)
++
++	return errno == 0 && ret > 0
++}
++
++// TrackDirtyPagesEnabled reports whether VMs on this orchestrator are started
++// with dirty page tracking armed, which is what makes incremental (Diff)
++// snapshots possible.
++func TrackDirtyPagesEnabled() bool { return trackDirtyPagesEnabled }
++
++// TrackDirtyPagesReason explains how TrackDirtyPagesEnabled got its value. A
++// deployment that quietly lost incremental checkpoints should be able to say
++// why from its logs, instead of only being slow.
++func TrackDirtyPagesReason() string { return trackDirtyPagesReason }
 diff --git a/packages/orchestrator/internal/sandbox/fc/process.go b/packages/orchestrator/internal/sandbox/fc/process.go
 index 687d14e48..c6a060cd9 100644
 --- a/packages/orchestrator/internal/sandbox/fc/process.go
@@ -13095,7 +13142,7 @@ index 76202a81a..516185a6d 100644
  echo "Finished configuration script"
 +
 diff --git a/packages/orchestrator/main.go b/packages/orchestrator/main.go
-index 049067509..086da189e 100644
+index 049067509..b1f0c5b3a 100644
 --- a/packages/orchestrator/main.go
 +++ b/packages/orchestrator/main.go
 @@ -9,6 +9,7 @@ import (
@@ -13114,7 +13161,15 @@ index 049067509..086da189e 100644
  	"github.com/e2b-dev/infra/packages/orchestrator/internal/events"
  	"github.com/e2b-dev/infra/packages/orchestrator/internal/factories"
  	e2bhealthcheck "github.com/e2b-dev/infra/packages/orchestrator/internal/healthcheck"
-@@ -386,11 +388,21 @@ func run(config cfg.Config) (success bool) {
+@@ -37,6 +39,7 @@ import (
+ 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox"
+ 	blockmetrics "github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/block/metrics"
+ 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/cgroup"
++	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/fc"
+ 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/nbd"
+ 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/network"
+ 	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/template"
+@@ -386,11 +389,26 @@ func run(config cfg.Config) (success bool) {
  	}
  	closers = append(closers, closer{"sandbox observer", sandboxObserver.Close})
  
@@ -13127,6 +13182,11 @@ index 049067509..086da189e 100644
 +	checkpointService := checkpoint.NewService(checkpointStore, sandboxes)
 +	sandboxes.Subscribe(checkpointService)
 +
++	// Say up front what this node is actually able to do. Losing dirty page
++	// tracking is silent: every checkpoint goes on working, it just copies all
++	// of guest memory each time instead of the pages that changed.
++	reportCheckpointCapabilities(ctx, filepath.Join(config.DefaultCacheDir, "checkpoints"))
++
  	// sandbox proxy
 -	sandboxProxy, err := proxy.NewSandboxProxy(tel.MeterProvider, config.ProxyPort, sandboxes, featureFlags)
 +	sandboxProxy, err := proxy.NewSandboxProxy(tel.MeterProvider, config.ProxyPort, sandboxes, featureFlags, checkpointService)
@@ -13137,6 +13197,27 @@ index 049067509..086da189e 100644
  	startService("sandbox proxy", func() error {
  		err := sandboxProxy.Start(ctx)
  		if errors.Is(err, http.ErrServerClosed) {
+@@ -715,3 +733,20 @@ func newStorage(ctx context.Context, nodeID string, config network.Config) (netw
+ 
+ 	return network.NewStorageKV(nodeID, config)
+ }
++
++// reportCheckpointCapabilities logs, once at startup, whether this host can
++// take incremental checkpoints at all.
++func reportCheckpointCapabilities(ctx context.Context, storeDir string) {
++	fields := []zap.Field{
++		zap.String("store", storeDir),
++		zap.Bool("track_dirty_pages", fc.TrackDirtyPagesEnabled()),
++		zap.String("track_dirty_pages_reason", fc.TrackDirtyPagesReason()),
++	}
++
++	logger.L().Info(ctx, "checkpoint capabilities", fields...)
++
++	if !fc.TrackDirtyPagesEnabled() {
++		logger.L().Warn(ctx, "dirty page tracking is off: every checkpoint will copy all of guest memory. "+
++			"Set FC_TRACK_DIRTY_PAGES=true to force it on.", fields...)
++	}
++}
 diff --git a/packages/orchestrator/vendor/github.com/e2b-dev/infra/packages/shared/pkg/fc/models/snapshot_create_params.go b/packages/orchestrator/vendor/github.com/e2b-dev/infra/packages/shared/pkg/fc/models/snapshot_create_params.go
 index b839c1925..71b385234 100644
 --- a/packages/orchestrator/vendor/github.com/e2b-dev/infra/packages/shared/pkg/fc/models/snapshot_create_params.go
