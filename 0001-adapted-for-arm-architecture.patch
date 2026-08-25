@@ -8414,10 +8414,10 @@ index 000000000..4f306aeb0
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/service.go b/packages/orchestrator/internal/checkpoint/service.go
 new file mode 100644
-index 000000000..8e8139afa
+index 000000000..f57cb81b7
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/service.go
-@@ -0,0 +1,504 @@
+@@ -0,0 +1,556 @@
 +package checkpoint
 +
 +import (
@@ -8603,6 +8603,9 @@ index 000000000..8e8139afa
 +
 +	sandboxID := sbx.Runtime.SandboxID
 +
++	timings := sandbox.PhaseTimings{}
++	opStart := time.Now()
++
 +	unlock := s.store.LockSandbox(sandboxID)
 +	defer unlock()
 +
@@ -8617,7 +8620,9 @@ index 000000000..8e8139afa
 +			logger.WithSandboxID(sandboxID))
 +	}
 +
++	prepareStart := time.Now()
 +	entry, err := s.store.Prepare(sandboxID, req.Name, parentID)
++	timings.Mark("prepare", prepareStart)
 +	if err != nil {
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to prepare checkpoint: %s", err))
 +	}
@@ -8635,7 +8640,9 @@ index 000000000..8e8139afa
 +		// The base is immutable, so the copy runs while the VM still runs —
 +		// the pause window only pays for the dirty pages. With reflink this
 +		// is a metadata operation either way.
++		cloneStart := time.Now()
 +		cloned, err := CloneOrCopy(basePath, entry.TempMemFull())
++		timings.Mark("clone", cloneStart)
 +		if err != nil {
 +			s.store.Discard(entry)
 +			return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to clone memory base: %s", err))
@@ -8658,7 +8665,9 @@ index 000000000..8e8139afa
 +
 +	// The base header seeds the disk bookkeeping on the sandbox's first
 +	// checkpoint; later ones ignore it.
++	headerStart := time.Now()
 +	baseHeader, err := sbx.RootfsHeader()
++	timings.Mark("rootfs_header", headerStart)
 +	if err != nil {
 +		s.store.Discard(entry)
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to get rootfs header: %s", err))
@@ -8667,29 +8676,39 @@ index 000000000..8e8139afa
 +	layerID := uuid.New()
 +	sealedLayerPath := filepath.Join(layersDir, "layer-"+layerID.String())
 +
-+	epochAdvanced, sealed, err := sbx.CheckpointToFiles(ctx, entry.TempSnapfile(), entry.TempMemFull(), entry.TempMemBitmap(), incremental, sealedLayerPath)
++	snapStart := time.Now()
++	epochAdvanced, sealed, err := sbx.CheckpointToFiles(ctx, entry.TempSnapfile(), entry.TempMemFull(), entry.TempMemBitmap(), incremental, sealedLayerPath, timings)
++	timings.Mark("checkpoint_to_files", snapStart)
 +	if err != nil {
 +		s.failCreate(ctx, entry, memMode, epochAdvanced)
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to snapshot sandbox: %s", err))
 +	}
 +
++	appendStart := time.Now()
 +	rootfsView, err := s.store.AppendLayer(sandboxID, baseHeader, layerID, sealed, entry.RootfsHeaderPath())
++	timings.Mark("append_layer", appendStart)
 +	if err != nil {
 +		s.failCreate(ctx, entry, memMode, epochAdvanced)
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to record rootfs layer: %s", err))
 +	}
 +
++	commitStart := time.Now()
 +	if err := s.store.Commit(entry, memMode, rootfsView); err != nil {
 +		s.failCreate(ctx, entry, memMode, epochAdvanced)
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("failed to record checkpoint: %s", err))
 +	}
++	timings.Mark("commit", commitStart)
 +
 +	stats.set("mem_mode", memMode)
++
++	timings.Mark("total", opStart)
++	writeTimings(filepath.Join(entry.Dir, "timings.json"), timings)
 +
 +	logger.L().Info(ctx, "created checkpoint",
 +		logger.WithSandboxID(sandboxID),
 +		zap.String("checkpoint_id", entry.ID),
-+		zap.String("mem_mode", memMode))
++		zap.String("mem_mode", memMode),
++		zap.Any("timings_ms", map[string]float64(timings)))
 +
 +	// memMode is reported so a caller can tell an incremental checkpoint from
 +	// a full one. A full checkpoint on anything but a sandbox's first is what
@@ -8742,6 +8761,9 @@ index 000000000..8e8139afa
 +
 +	sandboxID := sbx.Runtime.SandboxID
 +
++	timings := sandbox.PhaseTimings{}
++	opStart := time.Now()
++
 +	unlock := s.store.LockSandbox(sandboxID)
 +	defer unlock()
 +
@@ -8774,7 +8796,9 @@ index 000000000..8e8139afa
 +	}
 +	stats.setBool("revert_file", hasFile)
 +
-+	if err := sbx.RollbackInPlace(ctx, entry.Snapfile, entry.MemFull, bitmapPath, layers); err != nil {
++	if err := timings.Timed("rollback_in_place", func() error {
++		return sbx.RollbackInPlace(ctx, entry.Snapfile, entry.MemFull, bitmapPath, layers, timings)
++	}); err != nil {
 +		var torn sandbox.RollbackTornError
 +		if errors.As(err, &torn) {
 +			// Past the point of no return the guest is between two moments in
@@ -8790,9 +8814,11 @@ index 000000000..8e8139afa
 +	// The guest woke up with the clock of checkpoint time; envd init brings
 +	// the wall clock back to now, same as the pause/resume path. Monotonic
 +	// time staying rolled back is part of restore semantics.
++	envdStart := time.Now()
 +	if err := sbx.WaitForEnvd(ctx, envdRestoreTimeout); err != nil {
 +		return writeError(w, http.StatusInternalServerError, "internal", fmt.Sprintf("sandbox restored but envd did not come back: %s", err))
 +	}
++	timings.Mark("wait_envd", envdStart)
 +
 +	// Dirty tracking restarted from zero at rollback, so the next Diff is
 +	// relative to exactly this file.
@@ -8814,9 +8840,13 @@ index 000000000..8e8139afa
 +		}
 +	}
 +
++	timings.Mark("total", opStart)
++	writeTimings(filepath.Join(s.store.Root(), sandboxID, lastRestoreTimingsName), timings)
++
 +	logger.L().Info(ctx, "restored checkpoint in place",
 +		logger.WithSandboxID(sandboxID),
-+		zap.String("checkpoint_id", entry.ID))
++		zap.String("checkpoint_id", entry.ID),
++		zap.Any("timings_ms", map[string]float64(timings)))
 +
 +	writeJSON(w, map[string]any{"success": true})
 +
@@ -8921,6 +8951,28 @@ index 000000000..8e8139afa
 +	})
 +
 +	return errors.New(message)
++}
++
++// lastRestoreTimingsName is where a sandbox's most recent restore leaves its
++// host-side phase breakdown. Restores repeat and overwrite; a checkpoint's own
++// timings.json is written once and stays.
++const lastRestoreTimingsName = "last-restore-timings.json"
++
++// writeTimings drops a host-side phase breakdown next to what it describes.
++//
++// It goes in a file rather than only into the log because that is what a
++// benchmark can read: the client wall clock and the guest freeze window are
++// both measurable from outside, but where the time went inside the host is
++// not, and scraping it back out of log lines is a worse contract than a small
++// JSON file. Failure to write it is not worth failing an otherwise good
++// checkpoint over.
++func writeTimings(path string, t sandbox.PhaseTimings) {
++	blob, err := json.Marshal(t)
++	if err != nil {
++		return
++	}
++
++	_ = os.WriteFile(path, blob, 0o644)
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/store.go b/packages/orchestrator/internal/checkpoint/store.go
 new file mode 100644
@@ -11059,10 +11111,10 @@ index 0df559681..a6dc64b56 100644
  
 diff --git a/packages/orchestrator/internal/sandbox/checkpoint.go b/packages/orchestrator/internal/sandbox/checkpoint.go
 new file mode 100644
-index 000000000..00dd7ccc6
+index 000000000..435d5e4e4
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/checkpoint.go
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,263 @@
 +package sandbox
 +
 +import (
@@ -11100,7 +11152,7 @@ index 000000000..00dd7ccc6
 +// clears its dirty-page bitmap, so from that point on the memory file is the
 +// only valid base for the next Diff and must be preserved even if a later
 +// step fails.
-+func (s *Sandbox) CheckpointToFiles(ctx context.Context, snapfilePath string, memfilePath string, dirtyBitmapPath string, diff bool, sealedLayerPath string) (epochAdvanced bool, layer *rootfs.SealedLayer, e error) {
++func (s *Sandbox) CheckpointToFiles(ctx context.Context, snapfilePath string, memfilePath string, dirtyBitmapPath string, diff bool, sealedLayerPath string, timings PhaseTimings) (epochAdvanced bool, layer *rootfs.SealedLayer, e error) {
 +	ctx, span := tracer.Start(ctx, "sandbox-checkpoint-to-files")
 +	defer span.End()
 +
@@ -11117,7 +11169,7 @@ index 000000000..00dd7ccc6
 +	// long the whole operation takes — so it is measured on its own.
 +	pausedAt := time.Now()
 +
-+	if err := process.Pause(ctx); err != nil {
++	if err := timings.Timed("pause", func() error { return process.Pause(ctx) }); err != nil {
 +		return false, nil, fmt.Errorf("failed to pause VM: %w", err)
 +	}
 +
@@ -11125,21 +11177,26 @@ index 000000000..00dd7ccc6
 +	// meanwhile — a paused VM everyone believes is running is worse than a
 +	// missing snapshot.
 +	defer func() {
-+		if err := process.ResumeVM(context.WithoutCancel(ctx)); err != nil {
++		if err := timings.Timed("resume", func() error { return process.ResumeVM(context.WithoutCancel(ctx)) }); err != nil {
 +			e = errors.Join(e, fmt.Errorf("failed to resume VM after snapshot: %w", err))
 +		}
 +
++		timings.Mark("frozen", pausedAt)
 +		checkpointPausedHistogram.Record(ctx, time.Since(pausedAt).Milliseconds())
 +	}()
 +
-+	if err := process.CreateSnapshotWithMemFile(ctx, snapfilePath, memfilePath, dirtyBitmapPath, diff); err != nil {
++	if err := timings.Timed("snapshot", func() error {
++		return process.CreateSnapshotWithMemFile(ctx, snapfilePath, memfilePath, dirtyBitmapPath, diff)
++	}); err != nil {
 +		return false, nil, fmt.Errorf("failed to create snapshot: %w", err)
 +	}
 +
 +	// The disk is sealed inside the same pause window, so the layer and the
 +	// memory file are images of the same instant — anything the guest had not
 +	// flushed to disk yet is in the memory image, exactly as it was.
++	sealStart := time.Now()
 +	layer, err := sealer.SealLayer(ctx, s.newCowPath(), sealedLayerPath)
++	timings.Mark("seal", sealStart)
 +	if err != nil {
 +		// The snapshot exists, so the epoch has advanced regardless.
 +		return true, nil, fmt.Errorf("failed to seal rootfs write layer: %w", err)
@@ -11228,6 +11285,7 @@ index 000000000..00dd7ccc6
 +	memfilePath string,
 +	revertBitmapPath string,
 +	layers []RestoreLayer,
++	timings PhaseTimings,
 +) (e error) {
 +	ctx, span := tracer.Start(ctx, "sandbox-rollback-in-place")
 +	defer span.End()
@@ -11239,13 +11297,17 @@ index 000000000..00dd7ccc6
 +
 +	process := s.process
 +
-+	if err := process.Pause(ctx); err != nil {
++	rollbackPausedAt := time.Now()
++
++	if err := timings.Timed("pause", func() error { return process.Pause(ctx) }); err != nil {
 +		return fmt.Errorf("failed to pause VM: %w", err)
 +	}
 +
 +	// The rollback endpoint distinguishes failures before its commit point
 +	// (VM untouched, resumable) from after (VM faulted).
++	fcStart := time.Now()
 +	result, err := process.RollbackSnapshot(ctx, snapfilePath, memfilePath, revertBitmapPath)
++	timings.Mark("fc_rollback", fcStart)
 +	if err != nil {
 +		var faulted fc.RollbackFaultedError
 +		if errors.As(err, &faulted) {
@@ -11262,6 +11324,17 @@ index 000000000..00dd7ccc6
 +		return fmt.Errorf("in-place rollback failed: %w", err)
 +	}
 +
++	// Firecracker measures its own half of the rollback and reports it. That
++	// half is the bulk of the downtime, so surface the breakdown instead of
++	// leaving the biggest phase as one opaque number.
++	timings.SetUs("fc_validate", result.TimingsUs.Validate)
++	timings.SetUs("fc_quiesce", result.TimingsUs.Quiesce)
++	timings.SetUs("fc_memory", result.TimingsUs.Memory)
++	timings.SetUs("fc_vcpus", result.TimingsUs.Vcpus)
++	timings.SetUs("fc_gic", result.TimingsUs.Gic)
++	timings.SetUs("fc_devices", result.TimingsUs.Devices)
++	timings.SetUs("fc_total", result.TimingsUs.Total)
++
 +	telemetry.ReportEvent(ctx, fmt.Sprintf(
 +		"rolled back memory in place: %d pages, fc total %dus",
 +		result.RestoredPages, result.TimingsUs.Total,
@@ -11271,26 +11344,30 @@ index 000000000..00dd7ccc6
 +	// of the same instant. A failure here is past the memory rollback: the
 +	// guest is already at the target moment while the disk is not, so the
 +	// sandbox is torn and no resume happens.
++	assembleStart := time.Now()
 +	device, err := s.assembleView(ctx, layers)
++	timings.Mark("assemble_view", assembleStart)
 +	if err != nil {
 +		return RollbackTornError{Err: fmt.Errorf("failed to assemble checkpoint disk view: %w", err)}
 +	}
 +
-+	if err := resetter.ResetView(ctx, device, s.newCowPath()); err != nil {
++	if err := timings.Timed("reset_view", func() error { return resetter.ResetView(ctx, device, s.newCowPath()) }); err != nil {
 +		return RollbackTornError{Err: fmt.Errorf("failed to reset rootfs view: %w", err)}
 +	}
 +
 +	// The quiescent moment for connection tracking: VM paused, no traffic
 +	// can re-create an entry the rollback invalidates.
-+	if err := s.Slot.FlushConntrack(ctx); err != nil {
++	if err := timings.Timed("conntrack", func() error { return s.Slot.FlushConntrack(ctx) }); err != nil {
 +		logger.L().Warn(ctx, "failed to flush conntrack during in-place rollback",
 +			logger.WithSandboxID(s.Runtime.SandboxID),
 +			zap.Error(err))
 +	}
 +
-+	if err := process.ResumeVM(ctx); err != nil {
++	if err := timings.Timed("resume", func() error { return process.ResumeVM(ctx) }); err != nil {
 +		return RollbackTornError{Err: fmt.Errorf("failed to resume VM after rollback: %w", err)}
 +	}
++
++	timings.Mark("frozen", rollbackPausedAt)
 +
 +	return nil
 +}
@@ -12165,6 +12242,59 @@ index a2539a1f4..317929d94 100644
  		}
  	}
  }
+diff --git a/packages/orchestrator/internal/sandbox/phasetimings.go b/packages/orchestrator/internal/sandbox/phasetimings.go
+new file mode 100644
+index 000000000..8fc5d5ef1
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/phasetimings.go
+@@ -0,0 +1,47 @@
++package sandbox
++
++import "time"
++
++// PhaseTimings records where the time went inside the host during one
++// checkpoint or one rollback, in milliseconds.
++//
++// It is the third of three clocks and the only one that says what to fix. The
++// client's wall clock is what an SDK call takes; the guest-visible freeze is
++// what the workload actually feels; this is where either of them went. When a
++// latency target is missed, the first two say by how much and this one says
++// where.
++//
++// A nil map is a working no-op, so a caller that does not want the breakdown
++// passes nil and pays nothing for it.
++type PhaseTimings map[string]float64
++
++// Mark records the time from start until now under name.
++func (t PhaseTimings) Mark(name string, start time.Time) {
++	if t == nil {
++		return
++	}
++
++	t[name] = float64(time.Since(start).Microseconds()) / 1000
++}
++
++// SetUs records a duration already expressed in microseconds. Firecracker
++// reports its own internal rollback breakdown that way.
++func (t PhaseTimings) SetUs(name string, us uint64) {
++	if t == nil {
++		return
++	}
++
++	t[name] = float64(us) / 1000
++}
++
++// Timed runs fn and records how long it took. It exists so a phase can be
++// measured by wrapping the call in place, without restructuring the error
++// handling around it -- which matters here because several of these calls sit
++// inside error branches that would be awkward to split.
++func (t PhaseTimings) Timed(name string, fn func() error) error {
++	start := time.Now()
++	err := fn()
++	t.Mark(name, start)
++
++	return err
++}
 diff --git a/packages/orchestrator/internal/sandbox/rootfs/nbd.go b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
 index 61b574e82..62e13008e 100644
 --- a/packages/orchestrator/internal/sandbox/rootfs/nbd.go
