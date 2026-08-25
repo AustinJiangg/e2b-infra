@@ -29,6 +29,12 @@ job "template-manager-system" {
     task "start" {
       driver = "raw_exec"
       kill_signal  = "SIGTERM"
+      # 停服时 orchestrator 要在退出前跑 networkPool.Close()，把网络槽位暖池
+      # （NewSlotsPoolSize 32 + ReusedSlotsPoolSize 100）里的 netns / veth / iptables
+      # 规则逐个拆掉。默认 kill_timeout 只有 5s，132 个槽位常常拆不完就被 SIGKILL，
+      # 剩下的会永久留在宿主机上（StorageLocal 下次启动会把它们记成 foreignNs 跳过，
+      # 槽位号只增不减）。30s 是 Nomad 客户端 max_kill_timeout 的默认上限。
+      kill_timeout = "30s"
 
       resources {
         memory     = 8192

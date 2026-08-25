@@ -101,6 +101,48 @@ def parse_args():
     return ap.parse_args()
 
 
+# 网络槽位暖池上限：orchestrator 的 NewSlotsPoolSize(32) + ReusedSlotsPoolSize(100)。
+# 沙箱销毁后槽位会回暖池待复用，netns/veth 不立即拆——所以压测后残留 ≤132 是正常的。
+WARM_POOL_LIMIT = 132
+
+
+def host_net_health() -> dict:
+    """压测后顺手体检宿主机的沙箱网络资源。
+
+    orchestrator 进程被强杀时来不及跑 networkPool.Close()，暖池里的 netns/veth 会留在
+    宿主机上；下次启动它把这些记成 foreignNs 永久跳过，于是只增不减。攒到几千个之后
+    nomad 的 client fingerprint 要枚举所有网卡，4646 迟迟不开，表现为 build.sh -s 卡死。
+    这里只读不改，任何异常都静默跳过——体检不该影响压测本身。
+    """
+    import subprocess
+
+    def _count(cmd: str) -> int:
+        try:
+            out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=15)
+            return int((out.stdout or "").strip() or 0)
+        except Exception:
+            return -1
+
+    return {
+        "sandbox_netns": _count(r"ip netns list 2>/dev/null | awk '{print $1}' | grep -cE '^ns-[0-9]+$'"),
+        "sandbox_veth": _count(r"ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^veth-[0-9]+$'"),
+        "host_links": _count(r"ip -o link 2>/dev/null | wc -l"),
+    }
+
+
+def print_host_net_health(health: dict) -> None:
+    ns, veth, links = health["sandbox_netns"], health["sandbox_veth"], health["host_links"]
+    if links <= 0:
+        # 连网卡都数不出来 = 没有 ip 命令或没权限（例如压测跑在非部署机上），不打扰
+        return
+
+    print(f"== 宿主机网络体检: 沙箱 netns {ns} / veth {veth} / 网卡总数 {links}")
+    if max(ns, veth) > WARM_POOL_LIMIT:
+        print(f"   ⚠️  超过暖池上限 {WARM_POOL_LIMIT}，说明有泄漏。上千之后 nomad 起不来、"
+              f"build.sh -s 会卡在“端口未启动”。")
+        print("   清理：停服时 bash /opt/e2b-infra/build.sh -d（见 deploy-docs/05 §13）")
+
+
 def main():
     args = parse_args()
 
@@ -211,6 +253,9 @@ def main():
         print(f"== 清理完成: killed={killed} failed={failed_kill}"
               + ("（失败的会在 timeout 后自动过期）" if failed_kill else ""))
 
+    net_health = host_net_health()
+    print_host_net_health(net_health)
+
     # ---- 客户端统计 ----
     bench_ok = sorted(r["client_ms"] for r in results if not r["warmup"] and r["ok"])
     bench_fail = sum(1 for r in results if not r["warmup"] and not r["ok"])
@@ -223,6 +268,7 @@ def main():
         "concurrency": args.concurrency,
         "interval": args.interval,
         "warmup": args.warmup,
+        "host_net": net_health,  # 压测后的沙箱网络资源残留，用于观察泄漏趋势
         "fc_netns_exec_helper": args.fc_netns_exec_helper,  # netns-exec 开关标注，仅记录
 
         "bench_window_since": iso(bench_start - timedelta(seconds=2)),
