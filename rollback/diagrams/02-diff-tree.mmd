@@ -1,0 +1,20 @@
+%% 内存产物：差分树 —— 每代只存自己写脏的页
+flowchart TD
+    CK1["<b>ck1</b><br/>全量捕获（树根）<br/>整棵树自给自足，回滚不回头依赖模板"]
+    CK2["<b>ck2</b><br/>增量：仅本代脏页"]
+    CK3["<b>ck3</b><br/>增量：仅本代脏页"]
+    CK4["<b>ck4</b><br/>增量：仅本代脏页"]
+    CK5["<b>ck5</b><br/>增量：仅本代脏页<br/>当前基准"]
+
+    CK1 --> CK2 --> CK3
+    CK1 --> CK4 --> CK5
+
+    CK3 -. "曾回滚到 ck1，旁支 ck2 / ck3 保留" .-> CK1
+    CK5 == "本次：ck5 → ck3，跨分支回滚，经最近公共祖先 ck1" ==> CK3
+
+    classDef root fill:#e8f0fe,stroke:#4285f4,stroke-width:2px
+    classDef base fill:#fef7e0,stroke:#f9ab00,stroke-width:2px
+    classDef inc  fill:#ffffff,stroke:#9fb4cc
+    class CK1 root
+    class CK5 base
+    class CK2,CK3,CK4 inc

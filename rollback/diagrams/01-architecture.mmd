@@ -1,0 +1,70 @@
+%% E2B ARM Checkpoint / Restore —— 950 ext4 架构与优化点
+%% 渲染：slidev 内 ```mermaid 代码块，或任何支持 mermaid 的编辑器
+flowchart TB
+    SDK["Python SDK<br/>create / restore / list / delete&nbsp;&nbsp;→&nbsp;&nbsp;sandbox:49984"]
+
+    subgraph HOST["宿主 orchestrator 进程"]
+        direction LR
+        PX["Proxy 拦截<br/>端口 49984 不转发进沙箱<br/>宿主直接应答 + 校验 token"]
+        SVC["Checkpoint Service<br/>按沙箱串行 · 决定全量 / 增量<br/>失败分级 · 分阶段计时"]
+        LED["内存差分树账本<br/>父指针 · 纪元位图 · 最近公共祖先"]
+        RLE["磁盘层账本<br/>合并 header · 层清单"]
+        PX --> SVC
+        SVC --> LED
+        SVC --> RLE
+    end
+
+    subgraph FCP["Firecracker 进程（沙箱）—— 全程不重建，进程 / KVM fd / tap / 网络槽位 / NBD 设备全部保留"]
+        direction LR
+        VC["vCPU · GIC · virtio 设备<br/>逻辑状态写回活对象<br/>vCPU 固定 reinit 路线"]
+        MEM["Guest Memory<br/>差分页直接写回活映射<br/>无需重新缺页换入工作集"]
+        DSK["磁盘视图 Overlay（挂在 live NBD 之下）<br/>模板底座 + 封存层 × k + 活写层"]
+    end
+
+    subgraph HW["KVM · 鲲鹏 950"]
+        HD["HDBSS 硬件标脏（KVM cap 502）<br/>启动时探测：有硬件跟踪则自动启用<br/>无则安全退回软件写保护"]
+    end
+
+    subgraph STO["宿主本地存储　checkpoints / 沙箱 / 检查点"]
+        direction LR
+        F1["snapfile<br/>vCPU 与设备状态"]
+        F2["mem_diff<br/>稀疏，仅本代脏页"]
+        F3["mem_bitmap<br/>本代纪元位图"]
+        F4["rootfs.header + layers/<br/>封存写层，多代共享"]
+    end
+
+    SDK --> PX
+    SVC -- "create：暂停 → 写差分 ‖ 封存层 → 恢复" --> FCP
+    FCP -- "restore：暂停 → 算回滚集 → 原地写回 → 切视图 → 恢复" --> SVC
+    HD -. "脏页日志" .-> MEM
+    MEM --> F2
+    MEM --> F3
+    VC --> F1
+    DSK --> F4
+
+    O1(["⚡ 优化 ① 接口在宿主侧接管，沙箱内零 daemon"])
+    O2(["⚡ 优化 ② 失败语义分级：「可继续运行」与「须重建」严格区分"])
+    O3(["⚡ 优化 ③ 树形历史，不是线性链<br/>回滚不删除后代，可再前滚、可跨分支跳；链一旦断开则拒绝恢复"])
+    O4(["⚡ 优化 ④ 进程内原地回滚：代价与回退跨度成正比，而非与虚机规格成正比"])
+    O5(["⚡ 优化 ⑤ 写层就地封存 / 视图活体切换：打快照与回滚都不停沙箱"])
+    O6(["⚡ 优化 ⑥ 脏页判据取自硬件与内核日志<br/>绕开 uffd，补回 ARM 适配中丢掉的精确增量"])
+    O7(["⚡ 优化 ⑦ 每代只写本代脏页；树根存一次全量，使整棵树自给自足"])
+
+    O1 -.- PX
+    O2 -.- SVC
+    O3 -.- LED
+    O4 -.- MEM
+    O5 -.- DSK
+    O6 -.- HD
+    O7 -.- F2
+
+    classDef opt fill:#fff4e6,stroke:#f0b26b,color:#b45309,font-size:13px
+    classDef host fill:#f4f7fb,stroke:#b9c8db
+    classDef fc fill:#fff8f0,stroke:#e0b98a
+    classDef hw fill:#f2f0fb,stroke:#b8aede
+    classDef sto fill:#f2faf3,stroke:#a8ceac
+    class O1,O2,O3,O4,O5,O6,O7 opt
+    class PX,SVC,LED,RLE host
+    class VC,MEM,DSK fc
+    class HD hw
+    class F1,F2,F3,F4 sto

@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="900" viewBox="0 0 1640 900" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC','Segoe UI',sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#5a6b7c"/>
+    </marker>
+    <marker id="arR" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#c5221f"/>
+    </marker>
+    <marker id="arG" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#137333"/>
+    </marker>
+    <style>
+      .title { font-size: 27px; font-weight: 700; fill: #14202e; }
+      .subtl { font-size: 14.5px; fill: #6b7a8c; }
+      .lane  { font-size: 16px; font-weight: 700; fill: #55636f; }
+      .nd    { font-size: 18px; font-weight: 700; fill: #14202e; }
+      .sb    { font-size: 13.5px; fill: #55636f; }
+      .mono  { font-size: 13px; fill: #3b4a5a; font-family: 'Cascadia Mono','Consolas','DejaVu Sans Mono',monospace; }
+      .step  { font-size: 15px; font-weight: 600; fill: #14202e; }
+      .stepn { font-size: 13.5px; fill: #55636f; }
+      .opt   { font-size: 14px; font-weight: 700; fill: #b45309; }
+      .optn  { font-size: 13.5px; fill: #8a6a2f; }
+      .tag   { font-size: 13px; font-weight: 700; fill: #c5221f; }
+      .good  { font-size: 13.5px; fill: #137333; font-weight: 600; }
+    </style>
+  </defs>
+
+  <rect width="1640" height="900" fill="#ffffff"/>
+
+  <text class="title" x="40" y="44">内存产物：差分树 —— 每代只存自己写脏的页</text>
+  <text class="subtl" x="40" y="70">成本只与改动量有关，与内存规格和文件系统都无关；ext4 上不需要 reflink</text>
+
+  <!-- ================= 左：树结构 ================= -->
+  <rect x="40" y="92" width="770" height="700" rx="10" fill="#fbfcfe" stroke="#c9d3df"/>
+  <text class="lane" x="58" y="118">一个沙箱的 checkpoint 树</text>
+  <text class="sb"   x="58" y="140">打了 ck1→ck2→ck3，回滚到 ck1，再打 ck4→ck5，于是长出两条分支</text>
+
+  <!-- ck1 全量根 -->
+  <rect x="330" y="162" width="210" height="82" rx="8" fill="#e8f0fe" stroke="#4285f4" stroke-width="2"/>
+  <text class="nd"   x="435" y="190" text-anchor="middle">ck1</text>
+  <text class="sb"   x="435" y="212" text-anchor="middle">全量捕获（树根）</text>
+  <text class="mono" x="435" y="232" text-anchor="middle">mem_diff = 全部内存</text>
+
+  <rect x="562" y="166" width="230" height="74" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="578" y="188">树根存一次全量</text>
+  <text class="optn" x="578" y="208">整棵树自给自足，回滚不</text>
+  <text class="optn" x="578" y="227">回头依赖模板与对象存储</text>
+
+  <!-- ck2 -->
+  <rect x="130" y="320" width="200" height="82" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="nd"   x="230" y="348" text-anchor="middle">ck2</text>
+  <text class="sb"   x="230" y="370" text-anchor="middle">增量</text>
+  <text class="mono" x="230" y="390" text-anchor="middle">仅本代脏页</text>
+
+  <!-- ck3 -->
+  <rect x="130" y="470" width="200" height="82" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="nd"   x="230" y="498" text-anchor="middle">ck3</text>
+  <text class="sb"   x="230" y="520" text-anchor="middle">增量</text>
+  <text class="mono" x="230" y="540" text-anchor="middle">仅本代脏页</text>
+
+  <!-- ck4 -->
+  <rect x="540" y="320" width="200" height="82" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="nd"   x="640" y="348" text-anchor="middle">ck4</text>
+  <text class="sb"   x="640" y="370" text-anchor="middle">增量</text>
+  <text class="mono" x="640" y="390" text-anchor="middle">仅本代脏页</text>
+
+  <!-- ck5 -->
+  <rect x="540" y="470" width="200" height="82" rx="8" fill="#fef7e0" stroke="#f9ab00" stroke-width="2"/>
+  <text class="nd"   x="640" y="498" text-anchor="middle">ck5</text>
+  <text class="sb"   x="640" y="520" text-anchor="middle">当前基准</text>
+  <text class="mono" x="640" y="540" text-anchor="middle">仅本代脏页</text>
+
+  <!-- 边 -->
+  <line x1="400" y1="244" x2="255" y2="316" stroke="#5a6b7c" stroke-width="1.8" marker-end="url(#ar)"/>
+  <line x1="470" y1="244" x2="615" y2="316" stroke="#5a6b7c" stroke-width="1.8" marker-end="url(#ar)"/>
+  <line x1="230" y1="402" x2="230" y2="466" stroke="#5a6b7c" stroke-width="1.8" marker-end="url(#ar)"/>
+  <line x1="640" y1="402" x2="640" y2="466" stroke="#5a6b7c" stroke-width="1.8" marker-end="url(#ar)"/>
+
+  <!-- 曾经的回滚 -->
+  <path d="M330 500 C 400 500, 420 300, 400 250" fill="none" stroke="#c5221f" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arR)"/>
+  <text class="tag" x="352" y="440">曾回滚到 ck1</text>
+  <text class="tag" x="352" y="459">旁支 ck2/ck3 保留</text>
+
+  <!-- 本次回滚 -->
+  <path d="M540 512 C 460 512, 420 512, 336 512" fill="none" stroke="#137333" stroke-width="2.2" marker-end="url(#arG)"/>
+  <text class="good" x="360" y="580" text-anchor="middle">本次：ck5 → ck3</text>
+  <text class="good" x="440" y="600" text-anchor="middle">跨分支回滚，经最近公共祖先 ck1</text>
+
+  <rect x="58" y="628" width="734" height="146" rx="8" fill="#f4f7fb" stroke="#b9c8db"/>
+  <text class="lane" x="76" y="654">树带来的三件事</text>
+  <text class="sb"   x="76" y="682">·  回滚不剪枝：比目标更新的 checkpoint 保留在旁支，随时可以再前滚回去</text>
+  <text class="sb"   x="76" y="706">·  跨分支跳转：任意两点之间都能回，路径由最近公共祖先决定</text>
+  <text class="sb"   x="76" y="730">·  删除是显式操作：仍被后代依赖的节点转为隐藏保留，不会打断后代的解析链</text>
+  <text class="sb"   x="76" y="758">对比：线性链方案里，一旦回滚，后面的快照就再也回不去了</text>
+
+  <!-- ================= 右：回滚集怎么算 ================= -->
+  <rect x="840" y="92" width="760" height="700" rx="10" fill="#fbfcfe" stroke="#c9d3df"/>
+  <text class="lane" x="858" y="118">一次回滚（ck5 → ck3）在宿主侧怎么算</text>
+
+  <rect x="858" y="136" width="724" height="96" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="step"  x="876" y="162">① 求回滚范围</text>
+  <text class="stepn" x="876" y="186">两条分支各自走到最近公共祖先（不含），把沿途每一代的纪元位图并起来，</text>
+  <text class="stepn" x="876" y="208">再并上虚机此刻还没落盘的活跃脏页。</text>
+
+  <rect x="858" y="246" width="724" height="70" rx="6" fill="#f2faf3" stroke="#a8ceac"/>
+  <text class="mono"  x="876" y="272">回滚集 = 位图(ck5) ∪ 位图(ck4) ∪ 位图(ck3) ∪ 位图(ck2) ∪ 活跃脏页</text>
+  <text class="good"  x="876" y="300">不在这个集合里的页：两侧都没写过 ⇒ 内容本来就一样 ⇒ 一个字节都不用动</text>
+
+  <rect x="858" y="332" width="724" height="120" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="step"  x="876" y="358">② 逐页解析「目标时刻」的内容</text>
+  <text class="stepn" x="876" y="382">沿目标的祖先链 ck3 → ck2 → ck1，找第一个位图里含这一页的那一代去读；</text>
+  <text class="stepn" x="876" y="404">ck1 是全量，一定含有，所以解析必然终止在树内。</text>
+  <text class="good"  x="876" y="432">查找只在已加载的位图上走，真正读文件只有命中的那一次</text>
+
+  <rect x="858" y="466" width="724" height="94" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="step"  x="876" y="492">③ 写成一个稀疏文件交给 Firecracker</text>
+  <text class="stepn" x="876" y="516">连续同源的页合成一次读写；Firecracker 拿到后一次性写回活着的虚机内存，</text>
+  <text class="stepn" x="876" y="538">随后恢复 vCPU、中断控制器与设备逻辑状态，并重置脏页基线。</text>
+
+  <rect x="858" y="576" width="724" height="94" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"   x="876" y="602">关键结论：恢复成本与历史链的长度无关</text>
+  <text class="optn"  x="876" y="626">恢复代价只取决于「回退跨度里改动了多少页」。链再长，也不需要合并各代、</text>
+  <text class="optn"  x="876" y="648">不需要在磁盘上重建一份完整内存镜像，因此无需周期性压平历史。</text>
+
+  <rect x="858" y="686" width="724" height="88" rx="8" fill="#f4f7fb" stroke="#b9c8db"/>
+  <text class="lane"  x="876" y="712">失败时怎么办</text>
+  <text class="sb"    x="876" y="738">写回内存之前出错 ⇒ 虚机状态未被触碰，原样恢复运行；写回之后出错 ⇒ 明确报告</text>
+  <text class="sb"    x="876" y="762">「已撕裂、须重建」。绝不出现「看起来成功、实际数据已坏」的中间态。</text>
+</svg>
