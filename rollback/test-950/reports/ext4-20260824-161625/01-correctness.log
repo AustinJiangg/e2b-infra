@@ -1,0 +1,17 @@
+Response 500
+Traceback (most recent call last):
+  File "/home/j30059180/projects/e2b-repo/test-950/correctness.py", line 21, in <module>
+    b = lib.Box()
+        ^^^^^^^^^
+  File "/home/j30059180/projects/e2b-repo/test-950/lib.py", line 168, in __init__
+    self.sbx = Sandbox.create(template=template, timeout=timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/e2b/sandbox_sync/main.py", line 232, in create
+    sandbox = cls._create(
+              ^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/e2b/sandbox_sync/main.py", line 919, in _create
+    response = SandboxApi._create_sandbox(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/e2b/sandbox_sync/sandbox_api.py", line 205, in _create_sandbox
+    raise handle_api_exception(res)
+e2b.exceptions.SandboxException: 500: Failed to place sandbox

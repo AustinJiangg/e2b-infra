@@ -29,7 +29,7 @@ mem_diff，那一格就空着 —— 空着比给一个错的数强。
 restore 的档位曲线一并拿到，每跳验代号标记。
 
 每档只测一次，单次会抖 —— 节点刚重启后的第一轮尤其明显。要分位数和分布，用
-test-950/bench-ckpt.py。功能正确性在 checkpoint_verify.py —— 两个脚本分开跑。
+rollback/test-950/bench-ckpt.py。功能正确性在 checkpoint_verify.py —— 两个脚本分开跑。
 
 依赖（与本目录其它脚本一致）:
     pip install e2b==2.20.0 python-dotenv
@@ -598,7 +598,7 @@ def main():
             print("差值 %.3f s 是「写完立刻拍」的时机成本，不是快照机制的成本。"
                   % (now_e2e[maxmb] - se[maxmb]))
         print("每档只测一次。单次会抖 —— 节点刚重启后的第一轮尤其明显，见过同一档差 2~4 倍。")
-        print("要分位数和分布，用 test-950/bench-ckpt.py；功能正确性用 checkpoint_verify.py。")
+        print("要分位数和分布，用 rollback/test-950/bench-ckpt.py；功能正确性用 checkpoint_verify.py。")
         if backend == "kvm-wp":
             print("注意：本次跑在软件写保护上，不是硬件标脏，checkpoint 的数字含 VM exit 开销。")
         elif backend == "off":

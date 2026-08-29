@@ -1,0 +1,5 @@
+store        : /home/j30059180/projects/e2b-repo/xfsdev/orchestrator/build/checkpoints (fstype xfs)
+base path    : /home/j30059180/projects/e2b-repo/xfsdev/orchestrator
+full root    : True
+track dirty  : true
+hdbss order  : <未设,默认1>

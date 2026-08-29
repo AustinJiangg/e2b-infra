@@ -1,0 +1,5 @@
+# 被测二进制是构建产物，可从 infra-arm / KASandbox 的对应 commit 重建。
+# 两个 orchestrator 各 108 MB，超过 GitHub 的单文件上限，整个目录不进仓库；
+# 只保留校验和，用来对上「当时验的是哪一版」。
+bin/*
+!bin/SHA256SUMS
