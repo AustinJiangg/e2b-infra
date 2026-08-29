@@ -1,0 +1,43 @@
+%% checkpoint 与 restore 的冻结窗口 —— 灰底区间是唯一对业务可见的代价
+sequenceDiagram
+    autonumber
+    participant S as Python SDK
+    participant O as orchestrator<br/>Checkpoint Service
+    participant F as Firecracker<br/>（同一个进程，全程不重建）
+    participant K as KVM / HDBSS
+    participant D as 宿主本地存储
+
+    Note over S,D: ① 打一个 checkpoint
+    S->>O: create（端口 49984，被宿主拦截，不进沙箱）
+    O->>O: 按沙箱串行；决定本次是全量还是增量
+    rect rgb(234, 243, 255)
+        Note over F: 冻结窗口开始
+        O->>F: 暂停虚机
+        K-->>F: 硬件 / 内核脏页日志
+        O->>F: 写快照（Diff + 脏页位图，一次调用）
+        F->>D: snapfile · mem_diff（稀疏）· mem_bitmap
+        O->>F: 写层就地封存为只读层，挂上新的空写层
+        F->>D: layer 文件（改名入库，不做拷贝、不等待落盘）
+        O->>F: 恢复虚机
+        Note over F: 冻结窗口结束
+    end
+    O->>O: 合并 header、提交树账本（父指针 = 上一代）
+    O-->>S: checkpointId + 本次是全量还是增量
+
+    Note over S,D: ② 回到某个 checkpoint
+    S->>O: restore(checkpointId)
+    rect rgb(234, 243, 255)
+        Note over F: 冻结窗口开始
+        O->>F: 暂停虚机
+        O->>F: 导出当前活跃脏页位图
+        O->>O: 回滚集 = 树路径各代位图并集 ∪ 活跃脏页
+        D-->>O: 沿目标祖先链逐页解析目标时刻内容
+        O->>F: 原地写回：内存差异页 → vCPU → 中断控制器 → 设备状态
+        O->>F: 挂载不动，整体切换磁盘视图
+        O->>O: 清理连接跟踪表（此刻不可能有流量重建它）
+        O->>F: 恢复虚机
+        Note over F: 冻结窗口结束
+    end
+    O->>F: 等待 guest 内 envd 应答
+    O->>O: 基准切到该 checkpoint，树从这里长出新分支
+    O-->>S: success

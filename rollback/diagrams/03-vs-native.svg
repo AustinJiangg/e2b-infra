@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="1100" viewBox="0 0 1640 1100" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC','Segoe UI',sans-serif">
+  <defs>
+    <marker id="a1" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto">
+      <path d="M0,0 L7.5,3 L0,6 z" fill="#8a97a5"/>
+    </marker>
+    <style>
+      .title { font-size: 27px; font-weight: 700; fill: #14202e; }
+      .subtl { font-size: 14.5px; fill: #6b7a8c; }
+      .sect  { font-size: 19px; font-weight: 700; fill: #14202e; }
+      .lane  { font-size: 15px; font-weight: 700; fill: #55636f; }
+      .who   { font-size: 15px; font-weight: 700; fill: #14202e; }
+      .st    { font-size: 14.5px; font-weight: 700; fill: #14202e; }
+      .sn    { font-size: 12.5px; fill: #55636f; }
+      .snr   { font-size: 12.5px; fill: #a50e0e; }
+      .sng   { font-size: 12.5px; fill: #0d652d; }
+      .note  { font-size: 13.5px; fill: #55636f; }
+      .win   { font-size: 14px; font-weight: 700; fill: #137333; }
+      .bad   { font-size: 14px; font-weight: 700; fill: #c5221f; }
+      .th    { font-size: 13.5px; font-weight: 700; fill: #14202e; }
+    </style>
+  </defs>
+
+  <rect width="1640" height="1100" fill="#ffffff"/>
+
+  <text class="title" x="40" y="44">与 e2b 原生 snapshot / resume 的路径对比</text>
+  <text class="subtl" x="40" y="70">对比基准是我们实际所基于的 <tspan font-weight="700">ARM 适配版</tspan>；与 x86 原生的差异单列在下方「脏页判据的三方差异」　　红色 = 代价与虚机规格挂钩或造成沙箱中断，绿色 = 代价只与本次改动量挂钩</text>
+
+  <!-- ==================== 上半：打一次快照 ==================== -->
+  <rect x="40" y="90" width="1560" height="490" rx="10" fill="#fbfcfe" stroke="#c9d3df"/>
+  <text class="sect" x="58" y="122">打一次快照</text>
+
+  <text class="who"  x="58" y="158">e2b 原生</text>
+  <text class="lane" x="58" y="178">create_snapshot</text>
+
+  <rect x="180" y="140" width="200" height="80" rx="7" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="st" x="280" y="170" text-anchor="middle">暂停虚机</text>
+  <text class="sn" x="280" y="194" text-anchor="middle">pause</text>
+
+  <rect x="400" y="140" width="230" height="80" rx="7" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="st" x="515" y="166" text-anchor="middle">写 vmstate</text>
+  <text class="sn" x="515" y="188" text-anchor="middle">再单独取一次</text>
+  <text class="sn" x="515" y="206" text-anchor="middle">脏页位图</text>
+
+  <rect x="650" y="140" width="240" height="80" rx="7" fill="#fce8e6" stroke="#d93025"/>
+  <text class="st"  x="770" y="166" text-anchor="middle">从 FC 进程逐页拷出</text>
+  <text class="snr" x="770" y="188" text-anchor="middle">ARM 适配版：换入即算脏，</text>
+  <text class="snr" x="770" y="206" text-anchor="middle">量下限 ≈ 整个工作集（见下）</text>
+
+  <rect x="910" y="140" width="220" height="80" rx="7" fill="#fce8e6" stroke="#d93025"/>
+  <text class="st"  x="1020" y="166" text-anchor="middle">停掉沙箱</text>
+  <text class="snr" x="1020" y="188" text-anchor="middle">才能导出磁盘写层</text>
+  <text class="snr" x="1020" y="206" text-anchor="middle">（业务中断，x86 亦然）</text>
+
+  <rect x="1150" y="140" width="180" height="80" rx="7" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="st" x="1240" y="170" text-anchor="middle">上传对象存储</text>
+  <text class="sn" x="1240" y="194" text-anchor="middle">跨节点可用</text>
+
+  <rect x="1350" y="140" width="230" height="80" rx="7" fill="#fce8e6" stroke="#d93025"/>
+  <text class="st"  x="1465" y="166" text-anchor="middle">新建 FC 进程 + UFFD</text>
+  <text class="snr" x="1465" y="188" text-anchor="middle">加载快照顶上，再靠缺页</text>
+  <text class="snr" x="1465" y="206" text-anchor="middle">把工作集重新换入</text>
+
+  <line x1="380" y1="180" x2="396" y2="180" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="630" y1="180" x2="646" y2="180" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="890" y1="180" x2="906" y2="180" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="1130" y1="180" x2="1146" y2="180" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="1330" y1="180" x2="1346" y2="180" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <rect x="180" y="238" width="1400" height="50" rx="6" fill="#fef7f6" stroke="#e8a9a4"/>
+  <text class="bad"  x="198" y="258">结果：对外 SandboxID 不变，但底层已是全新的 Firecracker 进程（这一点 x86 与 ARM 相同）</text>
+  <text class="note" x="198" y="278">在 ARM 适配版上，重新换入的整个工作集又会被算成脏页 —— 这就是「与改动量无关的下限」的来源；x86 上它们是干净页，不计入增量</text>
+
+  <text class="who"  x="58" y="336">我们的做法</text>
+  <text class="lane" x="58" y="356">checkpoint</text>
+
+  <rect x="180" y="308" width="200" height="80" rx="7" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="st" x="280" y="338" text-anchor="middle">暂停虚机</text>
+  <text class="sn" x="280" y="362" text-anchor="middle">pause</text>
+
+  <rect x="400" y="308" width="290" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="545" y="334" text-anchor="middle">FC 一次写出稀疏差分 + 脏页位图</text>
+  <text class="sng" x="545" y="356" text-anchor="middle">位图随快照同一次调用落地，</text>
+  <text class="sng" x="545" y="374" text-anchor="middle">省掉一轮往返和一次全内存扫描</text>
+
+  <rect x="710" y="308" width="290" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="855" y="334" text-anchor="middle">写层就地封存 + 挂新写层</text>
+  <text class="sng" x="855" y="356" text-anchor="middle">沙箱不停，挂载不卸载；</text>
+  <text class="sng" x="855" y="374" text-anchor="middle">封存不等待落盘</text>
+
+  <rect x="1020" y="308" width="240" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="1140" y="340" text-anchor="middle">恢复虚机</text>
+  <text class="sng" x="1140" y="364" text-anchor="middle">同一个进程，从头到尾没换过</text>
+
+  <line x1="380" y1="348" x2="396" y2="348" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="690" y1="348" x2="706" y2="348" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="1000" y1="348" x2="1016" y2="348" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <rect x="1290" y="308" width="290" height="80" rx="7" fill="#f2faf3" stroke="#a8ceac"/>
+  <text class="win"  x="1310" y="334">没有第 5、6 步</text>
+  <text class="sng"  x="1310" y="356">不上传、不重建进程；</text>
+  <text class="sng"  x="1310" y="374">产物驻留宿主本地，随沙箱回收</text>
+
+  <rect x="180" y="404" width="1400" height="60" rx="6" fill="#f2faf3" stroke="#a8ceac"/>
+  <text class="win"  x="198" y="426">我们改动的两处根因</text>
+  <text class="note" x="198" y="450">① 沙箱不重建 —— 不存在「重新换入工作集」这件事（对 x86 与 ARM 同样成立）；　② 脏页判据绕开 uffd，改取 KVM / HDBSS 的硬件与内核日志 —— 把 ARM 适配中丢掉的精确增量补回来</text>
+
+  <!-- 三方差异 -->
+  <rect x="180" y="480" width="1400" height="86" rx="6" fill="#f7f5fc" stroke="#b8aede"/>
+  <text class="th"   x="198" y="502">脏页判据的三方差异 —— 这一条是「修复 ARM 适配引入的退化」，不是「超越 x86 原生」</text>
+  <text class="note" x="198" y="526">e2b x86 原生</text>
+  <text class="note" x="400" y="526">uffd 写保护位区分读 / 写缺页，只有真正被写过的页算脏　→　增量精确</text>
+  <text class="note" x="198" y="546">ARM 适配版（我们的基线）</text>
+  <text class="note" x="400" y="546">该写保护路径在 arm64 上走不通被注释掉，凡被换入过的页都算脏　→　增量退化为工作集的超集</text>
+  <text class="note" x="198" y="566" font-weight="700" fill="#137333">我们</text>
+  <text class="note" x="400" y="566" fill="#137333">不经过 uffd，直接取 KVM / HDBSS 脏日志　→　ARM 上恢复精确增量；950 上进一步由 CPU 硬件记录，省掉软件写保护的逐页陷入</text>
+
+  <!-- ==================== 下半：回到一个快照 ==================== -->
+  <rect x="40" y="598" width="1560" height="404" rx="10" fill="#fbfcfe" stroke="#c9d3df"/>
+  <text class="sect" x="58" y="630">回到一个快照</text>
+
+  <text class="who"  x="58" y="666">e2b 原生</text>
+  <text class="lane" x="58" y="686">resume</text>
+
+  <rect x="180" y="648" width="240" height="80" rx="7" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="st" x="300" y="678" text-anchor="middle">取回快照文件</text>
+  <text class="sn" x="300" y="702" text-anchor="middle">可能要走对象存储</text>
+
+  <rect x="440" y="648" width="300" height="80" rx="7" fill="#fce8e6" stroke="#d93025"/>
+  <text class="st"  x="590" y="674" text-anchor="middle">新建 Firecracker 进程</text>
+  <text class="snr" x="590" y="696" text-anchor="middle">连同 UFFD、网络、磁盘设备</text>
+  <text class="snr" x="590" y="714" text-anchor="middle">全部重建一遍</text>
+
+  <rect x="760" y="648" width="300" height="80" rx="7" fill="#fce8e6" stroke="#d93025"/>
+  <text class="st"  x="910" y="674" text-anchor="middle">靠缺页把工作集换回内存</text>
+  <text class="snr" x="910" y="696" text-anchor="middle">代价与虚机规格挂钩，</text>
+  <text class="snr" x="910" y="714" text-anchor="middle">与「回退了多少」无关</text>
+
+  <line x1="420" y1="688" x2="436" y2="688" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="740" y1="688" x2="756" y2="688" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <rect x="1090" y="648" width="490" height="80" rx="7" fill="#fef7f6" stroke="#e8a9a4"/>
+  <text class="bad"  x="1110" y="674">这条路解决的是「沙箱离场后再回来」</text>
+  <text class="note" x="1110" y="696">跨节点迁移、长期持久化、进程崩溃后的恢复 —— 这些仍然</text>
+  <text class="note" x="1110" y="716">只有原生 snapshot 能做，我们没有也不打算取代它。</text>
+
+  <text class="who"  x="58" y="844">我们的做法</text>
+  <text class="lane" x="58" y="864">restore</text>
+
+  <rect x="180" y="816" width="170" height="80" rx="7" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="st" x="265" y="846" text-anchor="middle">暂停虚机</text>
+  <text class="sn" x="265" y="870" text-anchor="middle">pause</text>
+
+  <rect x="370" y="816" width="260" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="500" y="842" text-anchor="middle">算出回滚范围</text>
+  <text class="sng" x="500" y="864" text-anchor="middle">树路径上各代位图的并集</text>
+  <text class="sng" x="500" y="882" text-anchor="middle">∪ 当前活跃脏页</text>
+
+  <rect x="650" y="816" width="260" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="780" y="842" text-anchor="middle">物化目标时刻内容</text>
+  <text class="sng" x="780" y="864" text-anchor="middle">只处理回滚范围内的页，</text>
+  <text class="sng" x="780" y="882" text-anchor="middle">沿祖先链逐页解析</text>
+
+  <rect x="930" y="816" width="290" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="1075" y="842" text-anchor="middle">原地写回活着的虚机</text>
+  <text class="sng" x="1075" y="864" text-anchor="middle">内存差异页 + vCPU + 中断控制器</text>
+  <text class="sng" x="1075" y="882" text-anchor="middle">+ 设备逻辑状态</text>
+
+  <rect x="1240" y="816" width="340" height="80" rx="7" fill="#e6f4ea" stroke="#137333"/>
+  <text class="st"  x="1410" y="842" text-anchor="middle">切磁盘视图 → 恢复虚机</text>
+  <text class="sng" x="1410" y="864" text-anchor="middle">挂载不动、整体换视图；顺带清理连接</text>
+  <text class="sng" x="1410" y="882" text-anchor="middle">跟踪表 —— 此刻不可能有流量重建它</text>
+
+  <line x1="350" y1="856" x2="366" y2="856" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="630" y1="856" x2="646" y2="856" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="910" y1="856" x2="926" y2="856" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+  <line x1="1220" y1="856" x2="1236" y2="856" stroke="#8a97a5" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <rect x="180" y="912" width="1400" height="72" rx="6" fill="#f2faf3" stroke="#a8ceac"/>
+  <text class="win"  x="198" y="934">步骤更多，但每一步都只碰「差异」</text>
+  <text class="note" x="198" y="956">进程、KVM 句柄、网卡、网络槽位、NBD 设备全部保留，没有任何重建；恢复后也不需要把工作集重新换页拉回。</text>
+  <text class="note" x="198" y="976">恢复代价因此与「回退跨度」成正比，而不是与虚机规格成正比 —— 这正是高频回滚场景需要的成本曲线。</text>
+
+  <!-- 底部一句话 -->
+  <rect x="40" y="1022" width="1560" height="56" rx="8" fill="#f4f7fb" stroke="#b9c8db"/>
+  <text class="note" x="58" y="1046" font-weight="700">分工：跨节点迁移、长期持久化、进程崩溃后的恢复 —— 归 e2b 原生 snapshot；</text>
+  <text class="note" x="58" y="1068">沙箱活着时的高频快速回退 —— 归这套 checkpoint / restore。两者并存，我们没有改动原生路径。</text>
+</svg>

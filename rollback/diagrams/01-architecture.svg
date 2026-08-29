@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="970" viewBox="0 0 1640 970" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC','Segoe UI',sans-serif">
+  <defs>
+    <marker id="arrGray" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L8,3.2 L0,6.4 z" fill="#7b8794"/>
+    </marker>
+    <style>
+      .title  { font-size: 27px; font-weight: 700; fill: #14202e; }
+      .subtl  { font-size: 14.5px; fill: #6b7a8c; }
+      .lane   { font-size: 15px; font-weight: 700; fill: #55636f; }
+      .bx     { font-size: 17px; font-weight: 600; fill: #14202e; }
+      .sb     { font-size: 13px; fill: #55636f; }
+      .mono   { font-size: 13px; fill: #3b4a5a; font-family: 'Cascadia Mono','Consolas','DejaVu Sans Mono',monospace; }
+      .opt    { font-size: 13.5px; font-weight: 600; fill: #b45309; }
+      .optn   { font-size: 13px; fill: #8a6a2f; }
+      .flowb  { font-size: 14px; font-weight: 700; fill: #1a73e8; }
+      .flowr  { font-size: 14px; font-weight: 700; fill: #c5221f; }
+      .flowg  { font-size: 12.5px; fill: #7b8794; }
+    </style>
+  </defs>
+
+  <rect width="1640" height="970" fill="#ffffff"/>
+
+  <text class="title" x="40" y="44">E2B ARM Checkpoint / Restore —— 950 ext4 执行路径与优化点</text>
+  <text class="subtl" x="40" y="70">沙箱全程不重建 · 内存差分树 · 磁盘分层封存 · 硬件标脏 · 产物驻留宿主本地</text>
+
+  <!-- ============ 带 1：调用方 ============ -->
+  <rect x="40" y="95" width="1130" height="62" rx="8" fill="#f4f7fb" stroke="#b9c8db"/>
+  <text class="lane" x="58" y="120">调用方</text>
+  <text class="bx"   x="150" y="123">Python SDK</text>
+  <text class="mono" x="290" y="122">create / restore / list / delete  →  sandbox:49984</text>
+  <rect x="760" y="107" width="390" height="38" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="776" y="131">优化 ① 接口在宿主侧接管，沙箱内零 daemon</text>
+
+  <!-- ============ 带 2：orchestrator ============ -->
+  <rect x="40" y="180" width="1130" height="190" rx="10" fill="#f4f7fb" stroke="#b9c8db"/>
+  <text class="lane" x="58" y="204">宿主 orchestrator 进程</text>
+
+  <rect x="60" y="218" width="240" height="86" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="bx"  x="180" y="248" text-anchor="middle">Proxy 拦截</text>
+  <text class="sb"  x="180" y="270" text-anchor="middle">端口 49984 不转发进沙箱</text>
+  <text class="sb"  x="180" y="288" text-anchor="middle">宿主直接应答 + 校验 token</text>
+
+  <rect x="320" y="218" width="290" height="86" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="bx"  x="465" y="248" text-anchor="middle">Checkpoint Service</text>
+  <text class="sb"  x="465" y="270" text-anchor="middle">按沙箱串行 · 决定全量 / 增量</text>
+  <text class="sb"  x="465" y="288" text-anchor="middle">失败分级 · 分阶段计时</text>
+
+  <rect x="630" y="218" width="520" height="86" rx="8" fill="#ffffff" stroke="#9fb4cc"/>
+  <text class="lane" x="890" y="236" text-anchor="middle">账本（内存中，随沙箱生死）</text>
+  <line x1="890" y1="244" x2="890" y2="296" stroke="#d7e0ea"/>
+  <text class="bx"  x="758" y="266" text-anchor="middle">内存差分树</text>
+  <text class="sb"  x="758" y="286" text-anchor="middle">父指针 · 纪元位图 · LCA</text>
+  <text class="bx"  x="1022" y="266" text-anchor="middle">磁盘层账本</text>
+  <text class="sb"  x="1022" y="286" text-anchor="middle">合并 header · 层清单</text>
+
+  <rect x="320" y="314" width="290" height="50" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="336" y="334">优化 ② 失败语义分级</text>
+  <text class="optn" x="336" y="354">「可继续运行」与「须重建」严格区分</text>
+
+  <rect x="630" y="314" width="520" height="50" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="646" y="334">优化 ③ 树形历史，不是线性链</text>
+  <text class="optn" x="646" y="354">回滚不删除后代，可再前滚、可跨分支跳；链一旦断开则拒绝恢复，不做静默降级</text>
+
+  <!-- 带 2 与带 3 之间的流向条 -->
+  <text class="flowb" x="58"  y="392">▼ create：暂停 → 写差分 ‖ 封存写层 → 恢复</text>
+  <text class="flowr" x="560" y="392">▲ restore：暂停 → 算回滚集 → 原地写回 → 切磁盘视图 → 恢复</text>
+
+  <!-- ============ 带 3：Firecracker ============ -->
+  <rect x="40" y="400" width="1130" height="265" rx="10" fill="#fff8f0" stroke="#e0b98a"/>
+  <text class="lane" x="58" y="424">Firecracker 进程（沙箱）—— 全程不重建，进程 / KVM fd / tap / 网络槽位 / NBD 设备全部保留</text>
+
+  <rect x="60" y="438" width="250" height="88" rx="8" fill="#ffffff" stroke="#d9a86a"/>
+  <text class="bx"  x="185" y="468" text-anchor="middle">vCPU · GIC · virtio 设备</text>
+  <text class="sb"  x="185" y="490" text-anchor="middle">逻辑状态写回活对象</text>
+  <text class="sb"  x="185" y="508" text-anchor="middle">vCPU 固定 reinit 路线</text>
+
+  <rect x="330" y="438" width="270" height="88" rx="8" fill="#ffffff" stroke="#d9a86a"/>
+  <text class="bx"  x="465" y="468" text-anchor="middle">Guest Memory</text>
+  <text class="sb"  x="465" y="490" text-anchor="middle">差分页直接写回活映射</text>
+  <text class="sb"  x="465" y="508" text-anchor="middle">无需重新缺页换入工作集</text>
+
+  <rect x="620" y="438" width="530" height="88" rx="8" fill="#ffffff" stroke="#d9a86a"/>
+  <text class="bx"  x="885" y="462" text-anchor="middle">磁盘视图（Overlay，挂在 live NBD 之下）</text>
+  <rect x="640" y="474" width="180" height="38" rx="5" fill="#f7f2ea" stroke="#d9c3a4"/>
+  <text class="sb"  x="730" y="498" text-anchor="middle">模板底座（只读）</text>
+  <rect x="828" y="474" width="200" height="38" rx="5" fill="#f7f2ea" stroke="#d9c3a4"/>
+  <text class="sb"  x="928" y="498" text-anchor="middle">封存层 × k（只读）</text>
+  <rect x="1036" y="474" width="98" height="38" rx="5" fill="#eaf3ff" stroke="#9fb4cc"/>
+  <text class="sb"  x="1085" y="498" text-anchor="middle">活写层</text>
+
+  <rect x="60" y="540" width="1090" height="50" rx="6" fill="#fdf3e6" stroke="#e0b98a"/>
+  <text class="lane" x="76" y="570">分叉的 FC 接口</text>
+  <text class="mono" x="215" y="570">PUT /snapshot/create（Diff + dirty_bitmap_path）</text>
+  <text class="mono" x="617" y="570">PUT /snapshot/save-dirty-bitmap</text>
+  <text class="mono" x="905" y="570">PUT /snapshot/rollback</text>
+
+  <rect x="60" y="602" width="530" height="52" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="76" y="623">优化 ④ 进程内原地回滚</text>
+  <text class="optn" x="76" y="643">代价与回退跨度成正比，而非与虚机规格成正比</text>
+
+  <rect x="620" y="602" width="530" height="52" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="636" y="623">优化 ⑤ 写层就地封存 / 视图活体切换</text>
+  <text class="optn" x="636" y="643">打快照与回滚都不停沙箱，挂载全程不卸载</text>
+
+  <!-- ============ 带 4：KVM / HDBSS ============ -->
+  <rect x="40" y="688" width="1130" height="66" rx="10" fill="#f2f0fb" stroke="#b8aede"/>
+  <text class="lane" x="58" y="713">KVM · 鲲鹏 950</text>
+  <text class="bx"   x="200" y="717">HDBSS 硬件标脏（KVM cap 502）</text>
+  <text class="sb"   x="200" y="739">启动时探测能力：有硬件跟踪则自动启用；无则安全退回软件写保护，可配置为「必须硬件否则报错」</text>
+  <rect x="760" y="698" width="390" height="46" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="776" y="717">优化 ⑥ 脏页判据取自硬件 / 内核日志</text>
+  <text class="optn" x="776" y="736">绕开 uffd，补回 ARM 适配中丢掉的精确增量</text>
+
+  <!-- ============ 右区：宿主本地存储 ============ -->
+  <rect x="1200" y="180" width="400" height="574" rx="10" fill="#f2faf3" stroke="#a8ceac"/>
+  <text class="lane" x="1218" y="204">宿主本地存储</text>
+  <text class="mono" x="1218" y="228">checkpoints / 沙箱 / 检查点</text>
+
+  <rect x="1218" y="244" width="364" height="140" rx="8" fill="#ffffff" stroke="#8fc095"/>
+  <text class="bx"   x="1236" y="268">每个 checkpoint 一个目录</text>
+  <text class="mono" x="1236" y="294">snapfile</text>
+  <text class="sb"   x="1370" y="294">vCPU / 设备状态</text>
+  <text class="mono" x="1236" y="318">mem_diff</text>
+  <text class="sb"   x="1370" y="318">稀疏，仅本代脏页</text>
+  <text class="mono" x="1236" y="342">mem_bitmap</text>
+  <text class="sb"   x="1370" y="342">本代纪元位图</text>
+  <text class="mono" x="1236" y="366">rootfs.header</text>
+  <text class="sb"   x="1370" y="366">该时刻的磁盘视图</text>
+
+  <rect x="1218" y="396" width="364" height="80" rx="8" fill="#ffffff" stroke="#8fc095"/>
+  <text class="bx"   x="1236" y="420">layers/</text>
+  <text class="mono" x="1236" y="444">layer-uuid</text>
+  <text class="sb"   x="1370" y="444">封存写层，多代共享</text>
+  <text class="sb"   x="1236" y="466">同一文件系统内改名入库，不做拷贝</text>
+
+  <rect x="1218" y="488" width="364" height="60" rx="8" fill="#ffffff" stroke="#8fc095"/>
+  <text class="bx"   x="1236" y="512">timings.json</text>
+  <text class="sb"   x="1236" y="534">宿主侧分阶段耗时，供定位与验收</text>
+
+  <rect x="1218" y="560" width="364" height="76" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="1236" y="582">优化 ⑦ 只存改动量</text>
+  <text class="optn" x="1236" y="603">每代只写本代脏页；树根存一次全量，</text>
+  <text class="optn" x="1236" y="622">使整棵树自给自足，回滚不回头依赖模板</text>
+
+  <rect x="1218" y="648" width="364" height="94" rx="6" fill="#eef4fa" stroke="#9fb4cc"/>
+  <text class="sb"   x="1236" y="672">产物驻留宿主本地、随沙箱生命周期回收，</text>
+  <text class="sb"   x="1236" y="694">不进对象存储 —— 为换取速度做的取舍。</text>
+  <text class="sb"   x="1236" y="716">跨节点迁移与持久化仍归 e2b 原生 snapshot。</text>
+
+  <!-- ============ 连线 ============ -->
+  <line x1="180" y1="157" x2="180" y2="214" stroke="#7b8794" stroke-width="1.6" marker-end="url(#arrGray)"/>
+  <line x1="300" y1="261" x2="316" y2="261" stroke="#7b8794" stroke-width="1.6" marker-end="url(#arrGray)"/>
+  <line x1="610" y1="261" x2="626" y2="261" stroke="#7b8794" stroke-width="1.6" marker-end="url(#arrGray)"/>
+  <line x1="1150" y1="261" x2="1196" y2="261" stroke="#7b8794" stroke-width="1.6" marker-end="url(#arrGray)"/>
+  <line x1="1150" y1="482" x2="1196" y2="482" stroke="#7b8794" stroke-width="1.6" marker-end="url(#arrGray)"/>
+  <line x1="465" y1="665" x2="465" y2="684" stroke="#7b8794" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arrGray)"/>
+  <text class="flowg" x="478" y="681">脏页日志</text>
+
+  <!-- ============ 底部：一次暂停窗口内做完 ============ -->
+  <rect x="40" y="782" width="1560" height="160" rx="10" fill="#fbfcfe" stroke="#c9d3df"/>
+  <text class="lane" x="58" y="807">优化 ⑧　内存与磁盘在同一次暂停窗口内完成 —— 两者是同一瞬间的镜像，不会半新半旧</text>
+
+  <line x1="80" y1="868" x2="1560" y2="868" stroke="#c9d3df" stroke-width="1.5"/>
+  <circle cx="300" cy="868" r="6" fill="#1a73e8"/>
+  <circle cx="1180" cy="868" r="6" fill="#1a73e8"/>
+  <rect x="300" y="842" width="880" height="52" rx="6" fill="#eaf3ff" stroke="#9fb4cc"/>
+  <text class="sb" x="740" y="863" text-anchor="middle" font-weight="600">冻结窗口（唯一对业务可见的代价）</text>
+  <text class="sb" x="740" y="884" text-anchor="middle">create：写内存差分 ‖ 封存写层　　restore：取活跃脏图 → 物化 → 写回内存 → 切磁盘视图 → 清连接跟踪</text>
+  <text class="sb" x="150" y="860" text-anchor="middle">暂停</text>
+  <text class="sb" x="150" y="880" text-anchor="middle">pause</text>
+  <text class="sb" x="1390" y="860" text-anchor="middle">恢复</text>
+  <text class="sb" x="1390" y="880" text-anchor="middle">resume</text>
+  <text class="sb" x="58" y="925">优化 ⑨　封存不等待落盘（不强制刷盘），封存耗时不再随改动量增长；连接跟踪表在虚机停住时清理，此时不可能有流量重建一条刚被作废的表项。</text>
+</svg>
