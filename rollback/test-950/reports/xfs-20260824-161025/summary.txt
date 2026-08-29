@@ -1,0 +1,21 @@
+########## 汇总 ##########
+ALL CORRECT
+ALL PASS
+STABLE
+
+--- 链深汇总 ---
+=== 汇总 (xfs, store on xfs, full_root=True) ===
+    深度  create p50    df ΔMB      深集↓      深集↑       浅集 p50
+     5       0.118      2237    0.023    0.079        0.020
+    20       0.145      2999    0.044    0.144        0.021
+    50       0.179      2136    0.084    0.251        0.024
+JSON {"scheme": "xfs", "store_fs": "xfs", "full_root": true, "sweep": [{"name": "g1", "dirty_mb": 0, "time": 1.816, "df_mb": 2048, "mode": "full"}, {"name": "g2", "dirty_mb": 64, "time": 0.107, "df_mb": 112, "mode": "incremental"}, {"name": "g3", "dirty_mb": 256, "time": 0.252, "df_mb": 309, "mode": "incremental"}, {"name": "g4", "dirty_mb": 512, "time": 0.469, "df_mb": 571, "mode": "incremental"}, {"name": "g5", "dirty_mb": 0, "time": 0.132, "df_mb": 53, "mode": "incremental"}, {"name": "g5", "restore": 0.02}, {"name": "g4", "restore": 0.048}, {"name": "g3", "restore": 0.304}, {"name": "g2", "restore": 0.229}, {"name": "g1", "restore": 0.024}], "depths": {"5": {"create_p50": 0.118, "create_max": 1.389, "df_delta_mb": 2237, "deep_down": 0.023, "deep_up": 0.079, "shallow_p50": 0.02, "shallow_max": 0.061}, "20": {"create_p50": 0.145, "create_max": 1.663, "df_delta_mb": 2999, "deep_down": 0.044, "deep_up": 0.144, "shallow_p50": 0.021, "shallow_max": 0.068}, "50": {"create_p50": 0.179, "create_max": 2.209, "df_delta_mb": 2136, "deep_down": 0.084, "deep_up": 0.251, "shallow_p50": 0.024, "shallow_max": 0.071}}}
+
+--- 稳定性 ---
+=== 结果 (xfs, 两个检查点交替) ===
+  次数       : 200
+  failures   : 0
+  p50 / p90  : 0.020s / 0.023s
+  min / max  : 0.018s / 0.034s
+  >1s 的次数 : 0 []
+  总墙钟     : 190.5s

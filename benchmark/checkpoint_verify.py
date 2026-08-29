@@ -36,7 +36,7 @@ checkpoint / restore 功能正确性 + API 耗时。
       性能分开跑：正确性现场不给性能垫噪声，性能档位也不拖慢正确性。
 
 更复杂的树形语义（分叉、跨分支、删除语义、失败语义）不在这个脚本里，在
-test-950/correctness.py。这里只走一条直链，图的是好读、跑得快。
+rollback/test-950/correctness.py。这里只走一条直链，图的是好读、跑得快。
 
 依赖（与本目录其它脚本一致）:
     pip install e2b==2.20.0 python-dotenv
