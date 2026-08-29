@@ -42,6 +42,7 @@ rollback/test-950/bench-ckpt.py。功能正确性在 checkpoint_verify.py ——
 用法:
     python checkpoint_bench.py
     python checkpoint_bench.py --tiers 0,16,32,64,128,256 --split 3:1
+    python checkpoint_bench.py --out reports/           # 整份记录同时落盘
 """
 
 from dotenv import load_dotenv
@@ -49,6 +50,7 @@ load_dotenv()
 
 import argparse
 import glob
+import io
 import json
 import os
 import socket
@@ -95,6 +97,49 @@ def fmt_ms(x):
 # 这两个函数和 checkpoint_verify.py 里的是同一份。宁可重复也不 import：本目录的
 # 脚本是一个个单独拷到目标机上跑的，跨文件依赖会在版本对不齐时**静默降级成
 # "未知"**，而不是报错——已经踩过一次了。
+
+# --------------------------------------------------------------- 记录落盘
+
+# Tee 与 open_transcript 在两个脚本里各有一份，没有抽成公共模块——
+# 和宿主探针同一个理由：这两个文件是一个一个拷到目标机器上的，
+# 少拷一个依赖就静默变成"没有这个参数"，不如各自自带。
+
+class _Tee:
+    """stdout 写两份：终端一份，文件一份。
+
+    每写一次就 flush。这个脚本要跑好几分钟，中途崩了最不该丢的就是崩之前那几行——
+    正是它们说明崩在哪。
+    """
+
+    def __init__(self, stream, fh):
+        self.stream = stream
+        self.fh = fh
+
+    def write(self, s):
+        n = self.stream.write(s)
+        self.fh.write(s)
+        self.fh.flush()
+        return n
+
+    def flush(self):
+        self.stream.flush()
+        self.fh.flush()
+
+    def isatty(self):
+        return self.stream.isatty()
+
+
+def open_transcript(spec, stem):
+    """--out 的取值：给目录就自动起名，否则原样当文件名。返回 (文件对象, 路径)。"""
+    if spec.endswith(os.sep) or spec.endswith("/") or os.path.isdir(spec):
+        path = os.path.join(spec, "%s-%s.log" % (stem, time.strftime("%Y%m%d-%H%M%S")))
+    else:
+        path = spec
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    return io.open(path, "w", encoding="utf-8"), path
+
 
 def fc_get(sandbox_id, path="/"):
     """向这个沙箱的 Firecracker API 套接字发一个 GET。
@@ -392,7 +437,16 @@ def main():
     ap.add_argument("--split", default=DEFAULT_SPLIT,
                     help="总量按 内存:文件 拆的比例（默认 %s）" % DEFAULT_SPLIT)
     ap.add_argument("--timeout", type=int, default=3600, help="沙箱存活秒数")
+    ap.add_argument("--out", metavar="路径",
+                    help="把整份终端记录同时写进这个文件；给的是目录就自动命名为 "
+                         "checkpoint-bench-<时间戳>.log")
     args = ap.parse_args()
+
+    transcript = real_stdout = out_path = None
+    if args.out:
+        transcript, out_path = open_transcript(args.out, "checkpoint-bench")
+        real_stdout = sys.stdout
+        sys.stdout = _Tee(real_stdout, transcript)
 
     tiers = [int(x) for x in args.tiers.split(",") if x.strip() != ""]
     maxmb = max(tiers) if tiers else 0
@@ -620,6 +674,10 @@ def main():
             print("沙箱已删除")
         except Exception:
             pass
+        if transcript is not None:
+            print("终端记录 → %s" % out_path)
+            sys.stdout = real_stdout
+            transcript.close()
 
     return rc
 
