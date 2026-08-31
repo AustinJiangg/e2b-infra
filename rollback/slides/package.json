@@ -1,0 +1,23 @@
+{
+  "name": "e2b-checkpoint-slides",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "mkdir -p public/diagrams && cp ../diagrams/*.svg public/diagrams/",
+    "predev": "npm run sync",
+    "dev": "slidev --remote --port 3030",
+    "prebuild": "npm run sync",
+    "build": "slidev build",
+    "export": "slidev export",
+    "check": "node check-overflow.mjs"
+  },
+  "dependencies": {
+    "@slidev/cli": "^52.19.1",
+    "@slidev/theme-default": "^0.25.0",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "playwright-chromium": "^1.62.1"
+  }
+}

@@ -7,11 +7,13 @@
 |---|---|---|
 | [`docs/`](docs/) | **技术文档系列**，23 篇，从「这是个什么问题」到「怎么在它上面继续开发」 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
+| [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
 | [`test-950/`](test-950/) | 开发态验证工具箱：宿主自检 / 造数据卷 / 两套之间切换 / 穷举与劣化排查脚本，以及 11 份实测报告 | 我们自己，做上机验证与排查 |
-| **[Releases](https://github.com/AustinJiangg/e2b-infra/releases)** | 文档的打包件：单文件 HTML（双击即看）与 zip / tar.gz | 要把文档发给别人的人 |
+| **[Releases](https://github.com/AustinJiangg/e2b-infra/releases)** | 文档打包件与汇报稿 PDF，下载下来直接发给别人 | 要把材料发出去的人 |
 
-> `slides/`（Slidev 汇报稿）与 `dist/`（文档打包件）在 WSL 工作区里，**不进本仓库**：
-> 前者带 560+ MB 的 `node_modules`，后者是每次重新生成都会换一个几 MB 二进制 blob 的构建产物。
+> 构建产物一律不进仓库：`slides/` 只跟踪源文件（`node_modules`、`dist/`、
+> 同步过来的 `public/diagrams/`、导出的 PDF 都不跟踪），`dist/`（文档打包件）整个不跟踪。
+> 它们的成品在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 里。
 
 ## 从哪读起
 
