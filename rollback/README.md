@@ -7,9 +7,11 @@
 |---|---|---|
 | [`docs/`](docs/) | **技术文档系列**，23 篇，从「这是个什么问题」到「怎么在它上面继续开发」 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
-| [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
 | [`test-950/`](test-950/) | 开发态验证工具箱：宿主自检 / 造数据卷 / 两套之间切换 / 穷举与劣化排查脚本，以及 11 份实测报告 | 我们自己，做上机验证与排查 |
-| [`dist/`](dist/) | 文档的打包件：单文件 HTML（双击即看）与 zip / tar.gz | 要把文档发给别人的人 |
+| **[Releases](https://github.com/AustinJiangg/e2b-infra/releases)** | 文档的打包件：单文件 HTML（双击即看）与 zip / tar.gz | 要把文档发给别人的人 |
+
+> `slides/`（Slidev 汇报稿）与 `dist/`（文档打包件）在 WSL 工作区里，**不进本仓库**：
+> 前者带 560+ MB 的 `node_modules`，后者是每次重新生成都会换一个几 MB 二进制 blob 的构建产物。
 
 ## 从哪读起
 
@@ -45,6 +47,29 @@
 性能分档基准尚未在 950 上跑过；920B 上的全部历史数字来自软件写保护路径，两者口径不同。
 
 详见 [`docs/17-observability-and-verification.md §4`](docs/17-observability-and-verification.md#4-当前实测状态)。
+
+## 把文档发给别人
+
+去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
+
+| 附件 | 大小 | 给谁 |
+|---|---|---|
+| `checkpoint-restore-docs.html` | 4.1 MB | **推荐**。单文件，双击用浏览器打开，不联网、不装任何东西 |
+| `checkpoint-restore-docs.zip` | 1.4 MB | 要 Markdown 原文的人（Windows 友好） |
+| `checkpoint-restore-docs.tar.gz` | 1.4 MB | 同上，Linux 习惯 |
+| `checkpoint-restore-slides.pdf` | 1.4 MB | 汇报稿 |
+
+HTML 版把 704 条跨篇链接全部改写成了页内锚点，7 张 mermaid 图内联渲染、
+三张 SVG 内嵌在附录，所以怎么传都不会断；浏览器 Ctrl+P 可直接存 PDF。
+
+改完 `docs/` 之后重新生成（在 WSL 工作区 `e2b-repo/` 下跑）：
+
+```bash
+python3 tmp/build_docs_html.py e2b-infra/rollback/docs e2b-infra/rollback/diagrams e2b-infra/rollback/slides/node_modules/mermaid/dist/mermaid.min.js e2b-infra/rollback/dist/checkpoint-restore-docs.html
+```
+
+打包与两个校验脚本（`mdlinks.py` 查链接与中文锚点、`mdmermaid.mjs` 查 mermaid 语法）
+也在 `e2b-repo/tmp/`，尚未随本仓库同步。生成完新建一个 Release 传上去即可。
 
 ## 关于 `test-950/bin/`
 
