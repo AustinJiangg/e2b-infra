@@ -537,6 +537,24 @@ def main():
                               if any(k in tm for k in ks) else None)
             return tot(memks), tot(diskks), tm.get("frozen")
 
+        def disk_read_mb(tm):
+            """这一跳从块层真读回来的量（MB）。恢复的输入是普通带缓冲的读：
+            orchestrator 从各代差分里物化回滚集，Firecracker 再把物化出来的文件
+            搬回 guest 内存，两段都可能全在页缓存里命中。近 0 就是全命中 ——
+            没有这一列，一次真读了盘的恢复和一次没读的长得一模一样，只是慢些，
+            「恢复成本与链深无关」也就分不清是结论还是「链正好还热着」。"""
+            if not tm:
+                return None
+            ks = [k for k in ("materialize_disk_read_mb", "fc_rollback_disk_read_mb") if k in tm]
+
+            return sum(tm[k] for k in ks) if ks else None
+
+        def fmt_read(mb):
+            if mb is None:
+                return "-"
+
+            return "0" if mb < 0.05 else "%.1f MB" % mb
+
         def ck_block(tag, rows, base=None):
             """一遍一小块。名义两列是写了多少；实测两列是服务端真写下了多少；
             然后是用户等到的 e2e，再把冻结窗口拆成内存快照和封层两段。"""
@@ -592,8 +610,8 @@ def main():
             print("  %s" % tag)
             hdr = [lpad("撤销内存", 10), lpad("撤销文件", 10), rpad("实测内存", 10),
                    rpad("实测文件", 10), rpad("e2e 耗时", 10), rpad("内存回滚", 11),
-                   rpad("换盘视图", 10), rpad("冻结", 10)]
-            bar = 88
+                   rpad("换盘视图", 10), rpad("冻结", 10), rpad("读盘", 9)]
+            bar = 98
             if base is not None:
                 hdr.append(rpad("相对①段", 10))
                 bar += 11
@@ -611,7 +629,8 @@ def main():
                 row = [lpad("%d MB" % m, 10), lpad("%d MB" % f, 10),
                        rpad(fmt_mb(mm), 10), rpad(fmt_mb(md), 10),
                        rpad("%.3f s" % dt, 10), rpad(fmt_ms(pm), 11),
-                       rpad(fmt_ms(pd), 10), rpad(fmt_ms(fr), 10)]
+                       rpad(fmt_ms(pd), 10), rpad(fmt_ms(fr), 10),
+                       rpad(fmt_read(disk_read_mb(rest_tm[kind].get(mb))), 9)]
                 if base is not None:
                     row.append(rpad("%.2f×" % (dt / base[mb]) if base.get(mb) else "-", 10))
                 print("    " + " ".join(row))
@@ -628,6 +647,12 @@ def main():
         print("    实测两列 = 被退掉那一代快照时实际写下的量（mem_diff 与封层实占），")
         print("    正是这一跳要搬回去/丢掉的东西。撤销集里另含恢复时刻的现场新脏页，")
         print("    扫描间隙只有底噪那几 MB，未单列。")
+        print()
+        print("    「读盘」= 这一跳真从块层读回来的字节：服务端两个进程 /proc/<pid>/io")
+        print("    的 read_bytes 差值之和，页缓存命中不计。恢复的输入全是普通带缓冲的")
+        print("    读，刚写下的差分通常还热着，所以这一列正常接近 0。它不为 0 时，同一")
+        print("    行的耗时里含真盘 I/O —— 要看链深的真实代价，挑这一列为 0 的行比。")
+        print("    显示 - 是服务端没记（老 orchestrator，或读不到 /proc）。")
         print()
         print("    restore 的两段：「内存回滚」= 存下当前脏页位图 + 把回滚集从各代差分")
         print("    里物化出来 + Firecracker 搬回去（物化那步常比搬运还贵）；「换盘视图」")
