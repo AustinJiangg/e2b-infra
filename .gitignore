@@ -6,3 +6,17 @@ e2b-deploy/dep/ubuntu-22.04-custom.tar.gz
 
 # 2) 压缩包内自带的 git 仓库：二进制且无法 diff，保留还会让 e2b-deploy/ 被当成子模块
 e2b-deploy/.git/
+
+# 3) rollback/slides/ 是 slidev 工程，node_modules 有 560+ MB。
+# 该目录自己有一份 .gitignore，但那只在目录被跟踪时生效——目前它整个未跟踪，
+# 一次 `git add -A` 就会把 node_modules 提交进来，push 上去基本救不回来。
+# 这里再兜一道，与目录内那份重复是有意的。
+rollback/slides/node_modules/
+rollback/slides/dist/
+rollback/slides/.slidev/
+rollback/slides/.local-libs/
+
+# 4) rollback/dist/ 是 rollback/docs/ 的构建产物（单文件 HTML + zip + tar.gz）。
+# 每次重新生成都会产生一个几 MB 的全新二进制 blob，进 git 只会让仓库越来越胖。
+# 分发走 GitHub Release，源在 rollback/docs/。
+rollback/dist/
