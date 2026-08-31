@@ -90,6 +90,6 @@
 |---|---|
 | [`OUTLINE.md`](OUTLINE.md) | 本系列的编写计划与写作规约，给维护者看 |
 | [`../diagrams/`](../diagrams/) | 三张汇报用 SVG 与 mermaid 图源 |
-| `../slides/` | Slidev 汇报稿（在 WSL 工作区，不进本仓库；导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
+| [`../slides/`](../slides/) | Slidev 汇报稿（导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
 | [`../test-950/`](../test-950/) | 开发态验证工具箱与实测报告 |
 | `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能） |

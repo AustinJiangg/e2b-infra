@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.slidev/
+.local-libs/
+public/diagrams/
+*.log
+
+# npm run export 的产物，已作为 release 附件分发，不进仓库
+checkpoint-restore.pdf
