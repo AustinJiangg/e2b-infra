@@ -34,6 +34,6 @@ create 增量 p50 0.113 s（2 次）、restore p50 0.100 s / min 0.089 / max 0.1
    分档基准要跑 `checkpoint_bench.py`，950 上还没跑过。
 2. **不能和 920B 的数字相减。** 两边的模板大小、存储介质（真盘 vs 调优 loop 卷）、
    脏页后端（HDBSS vs 软件写保护）三项全都不同，差值不能归因于 HDBSS。
-3. **这份记录是从终端手工抄回来的** —— 跑的时候脚本还没有 `--out`。
-   之后两个验收脚本都加了 `--out`，下次直接
-   `python checkpoint_verify.py --out reports/` 就会自己落盘，不必再抄。
+3. **这份记录是从终端手工抄回来的。** 两个验收脚本只打屏、自己不落盘，
+   下次上机用 shell 接一份，别再靠 scrollback：
+   `python checkpoint_verify.py 2>&1 | tee reports/<机器>-verify-<日期>.log`。
