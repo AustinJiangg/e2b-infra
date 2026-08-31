@@ -49,7 +49,6 @@ rollback/test-950/correctness.py。这里只走一条直链，图的是好读、
 用法:
     python checkpoint_verify.py
     python checkpoint_verify.py --mem-mb 256 --disk-mb 64 --rounds 5
-    python checkpoint_verify.py --out reports/          # 整份记录同时落盘
 """
 
 from dotenv import load_dotenv
@@ -57,7 +56,6 @@ load_dotenv()
 
 import argparse
 import glob
-import io
 import json
 import os
 import socket
@@ -207,49 +205,6 @@ def median(xs):
     if not n:
         return 0.0
     return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2.0
-
-
-# --------------------------------------------------------------- 记录落盘
-
-# Tee 与 open_transcript 在两个脚本里各有一份，没有抽成公共模块——
-# 和宿主探针同一个理由：这两个文件是一个一个拷到目标机器上的，
-# 少拷一个依赖就静默变成"没有这个参数"，不如各自自带。
-
-class _Tee:
-    """stdout 写两份：终端一份，文件一份。
-
-    每写一次就 flush。这个脚本要跑好几分钟，中途崩了最不该丢的就是崩之前那几行——
-    正是它们说明崩在哪。
-    """
-
-    def __init__(self, stream, fh):
-        self.stream = stream
-        self.fh = fh
-
-    def write(self, s):
-        n = self.stream.write(s)
-        self.fh.write(s)
-        self.fh.flush()
-        return n
-
-    def flush(self):
-        self.stream.flush()
-        self.fh.flush()
-
-    def isatty(self):
-        return self.stream.isatty()
-
-
-def open_transcript(spec, stem):
-    """--out 的取值：给目录就自动起名，否则原样当文件名。返回 (文件对象, 路径)。"""
-    if spec.endswith(os.sep) or spec.endswith("/") or os.path.isdir(spec):
-        path = os.path.join(spec, "%s-%s.log" % (stem, time.strftime("%Y%m%d-%H%M%S")))
-    else:
-        path = spec
-    d = os.path.dirname(path)
-    if d:
-        os.makedirs(d, exist_ok=True)
-    return io.open(path, "w", encoding="utf-8"), path
 
 
 # ------------------------------------------------------------------ 断言
@@ -484,16 +439,7 @@ def main():
     ap.add_argument("--disk-mb", type=int, default=32, help="每代写的根文件系统文件 MB（默认 32）")
     ap.add_argument("--rounds", type=int, default=3, help="A/C 交替回滚的轮数（默认 3）")
     ap.add_argument("--timeout", type=int, default=3600, help="沙箱存活秒数")
-    ap.add_argument("--out", metavar="路径",
-                    help="把整份终端记录同时写进这个文件；给的是目录就自动命名为 "
-                         "checkpoint-verify-<时间戳>.log")
     args = ap.parse_args()
-
-    transcript = real_stdout = out_path = None
-    if args.out:
-        transcript, out_path = open_transcript(args.out, "checkpoint-verify")
-        real_stdout = sys.stdout
-        sys.stdout = _Tee(real_stdout, transcript)
 
     check = Check()
     print("模板 = %s   每代脏内存 = %d MB   每代根文件系统写入 = %d MB"
@@ -656,10 +602,6 @@ def main():
             print("沙箱已删除")
         except Exception:
             pass
-        if transcript is not None:
-            print("终端记录 → %s" % out_path)
-            sys.stdout = real_stdout
-            transcript.close()
 
     return rc
 
