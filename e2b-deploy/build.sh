@@ -703,11 +703,14 @@ function stop() {
     bash "$E2B_DIR/uninstall-consul.sh" --force || warn "停止 Consul 失败（非致命）"
     bash "$E2B_DIR/uninstall-nomad.sh" --force || warn "停止 Nomad 失败（非致命）"
 
-    # 兜底：确保 consul / nomad agent 进程确实退出（与 uninstall_nomad() 对称）
-    pkill nomad 2>/dev/null || true
-    pkill consul 2>/dev/null || true
-
-    tasks=("redis" "/client-proxy" "/api" "template-manager")
+    # 业务进程要在 pkill nomad 之前清：raw_exec 任务是 nomad executor 的子进程，
+    # executor 的进程名同样是 "nomad"，先 pkill 会把它一起带走，orchestrator 随即
+    # 变成孤儿进程继续跑，端口一直不放（兜底的 pkill 移到 firecracker 清理之后）。
+    #
+    # pgrep -f 匹配的是完整命令行，模式又锚了 ^，所以这里必须写进程实际的启动路径：
+    # orchestrator/template-manager 的命令行是 "/usr/bin/template-manager --port 5008"，
+    # 早先写成 "template-manager" 永远匹配不到，-d 报停止成功但进程还活着。
+    tasks=("redis" "/client-proxy" "/api" "/usr/bin/template-manager" "/usr/bin/orchestrator")
 
     # 遍历数组（复用定义的列表，避免冗余）
     for task in "${tasks[@]}"; do
@@ -753,12 +756,19 @@ function stop() {
         echo "ℹ️  未找到运行中的 firecracker 进程"
     fi
 
+    # 兜底：业务进程都清完了，再确保 consul / nomad agent 本身退出
+    # （与 uninstall_nomad() 对称；顺序见上面 tasks 那段的说明）。
+    pkill nomad 2>/dev/null || true
+    pkill consul 2>/dev/null || true
+
     # 进程都停了才清网络：orchestrator 的暖池（NewSlotsPoolSize 32 + ReusedSlotsPoolSize 100）
     # 里最多有 132 个已创建但闲置的槽位，进程被杀时来不及走 networkPool.Close()，netns 和 veth
     # 就留在宿主机上。更麻烦的是 StorageLocal 启动时会把 /var/run/netns 里已存在的条目记成
     # foreignNs 永久跳过，所以槽位号只增不减——攒到几千个网卡后 nomad 的 client fingerprint
     # 要走几分钟，4646 迟迟不开，表现就是 build.sh -s 卡在"端口未启动"。
     purge_sandbox_netns
+
+    check_ports_free || warn "端口未完全释放，直接跑 -s 大概率会失败（见上面的处置建议）"
 
     success "e2b-infra 服务停止完成！"
 
@@ -770,6 +780,44 @@ function stop() {
     if [ -n "$hp_total" ] && [ "$hp_total" -gt 0 ] 2>/dev/null; then
         info "静态大页池仍占用 $((hp_total * hp_kb / 1024)) MiB（不随服务停止释放）；要回收执行：$0 --purge-hugepages"
     fi
+}
+
+# 停服收尾自检：确认 e2b 用到的端口都放开了。
+# 没放开的后果不是"下次启动慢一点"，而是整轮部署失败且现象具有迷惑性：
+# orchestrator 启动时要一次性 listen 5007/5008/5010/5016-5018，任何一个被占就
+# "bind: address already in use" → FATAL 退出 → nomad 重试 2 次耗尽 →
+# template-manager-system 的 alloc 直接 failed。而 api 的 /health 只有在
+# orch.NodeCount() != 0 时才返回 200（packages/api/internal/handlers/store.go），
+# 于是 api 一直 503，最终表现是 deploy.sh 卡在 api 的 deployment 上 10 分钟后
+# "Failed due to progress deadline"——排查方向很容易被带偏到 api 或数据库上。
+function check_ports_free() {
+    # api 3000/5009、edge 3001-3003、redis 6379、
+    # orchestrator 5007(sandbox proxy) 5008(grpc) 5010(hyperloop) 5016-5018(tcp egress firewall)
+    local ports=(3000 3001 3002 3003 5007 5008 5009 5010 5016 5017 5018 6379)
+    local busy=() p
+
+    # 没有 ss 就别假装检查过了——静默返回 0 会把"端口没放开"伪装成"一切正常"，
+    # 比不检查更糟。
+    command -v ss >/dev/null 2>&1 || { warn "没有 ss 命令，跳过端口自检"; return 0; }
+
+    for p in "${ports[@]}"; do
+        if [ -n "$(ss -lnt "sport = :$p" 2>/dev/null | tail -n +2)" ]; then
+            busy+=("$p")
+        fi
+    done
+
+    if [ ${#busy[@]} -eq 0 ]; then
+        echo "✅ e2b 相关端口已全部释放"
+        return 0
+    fi
+
+    warn "以下端口仍被占用：${busy[*]}"
+    for p in "${busy[@]}"; do
+        ss -lntp "sport = :$p" 2>/dev/null | tail -n +2 | sed 's/^/    /'
+    done
+    warn "处置：确认是上一轮的残留后 kill -9 掉，再跑 $0 -s；否则 orchestrator 会 bind 失败，"
+    warn "      表现为部署最后卡在 api 的 deployment 并超时失败。"
+    return 1
 }
 
 # 清理沙箱残留的网络资源。命名规则来自 orchestrator 的
