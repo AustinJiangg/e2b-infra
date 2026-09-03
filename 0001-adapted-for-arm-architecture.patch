@@ -9162,10 +9162,85 @@ index 49229c695..d740636ef 100644
  		proxy:   proxy,
  		limiter: limiter,
 diff --git a/packages/orchestrator/internal/sandbox/block/cache.go b/packages/orchestrator/internal/sandbox/block/cache.go
-index 8080841cc..8504d09b8 100644
+index 8080841cc..b155cb19d 100644
 --- a/packages/orchestrator/internal/sandbox/block/cache.go
 +++ b/packages/orchestrator/internal/sandbox/block/cache.go
-@@ -263,24 +263,195 @@ func (c *Cache) setIsCached(off, length int64) {
+@@ -158,6 +158,74 @@ func (c *Cache) ExportToDiff(ctx context.Context, out io.Writer) (*header.DiffMe
+ 	return builder.Build(), nil
+ }
+ 
++// ExportLayersToDiff is ExportToDiff for a stack of write layers, given
++// bottom-most first. It writes one diff holding every block any layer has,
++// each taken from the top-most layer that has it — the stack flattened, the
++// way the sandbox itself read it. A stack of one layer yields exactly what
++// that layer's own ExportToDiff would.
++func ExportLayersToDiff(ctx context.Context, layers []*Cache, out io.Writer) (*header.DiffMetadata, error) {
++	ctx, childSpan := tracer.Start(ctx, "export-layers-to-diff")
++	defer childSpan.End()
++
++	if len(layers) == 0 {
++		return nil, fmt.Errorf("no layers to export")
++	}
++
++	for _, c := range layers {
++		c.mu.Lock()
++		defer c.mu.Unlock()
++
++		if c.isClosed() {
++			return nil, NewErrCacheClosed(c.filePath)
++		}
++
++		if c.mmap == nil {
++			continue
++		}
++
++		if err := c.mmap.Flush(); err != nil {
++			return nil, fmt.Errorf("error flushing mmap of %s: %w", c.filePath, err)
++		}
++	}
++
++	top := layers[len(layers)-1]
++
++	// The union of every layer's blocks, in device order.
++	var offsets []int64
++	seen := make(map[int64]struct{})
++	for _, c := range layers {
++		for _, off := range c.dirtySortedKeys() {
++			if _, dup := seen[off]; dup {
++				continue
++			}
++			seen[off] = struct{}{}
++			offsets = append(offsets, off)
++		}
++	}
++	slices.Sort(offsets)
++
++	builder := header.NewDiffMetadataBuilder(top.size, top.blockSize)
++
++	for _, offset := range offsets {
++		// Newest layer wins, same as a read through the overlay.
++		for i := len(layers) - 1; i >= 0; i-- {
++			c := layers[i]
++			if _, has := c.dirty.Load(offset); !has || c.mmap == nil {
++				continue
++			}
++
++			block := (*c.mmap)[offset : offset+c.blockSize]
++			if err := builder.Process(ctx, block, out, offset); err != nil {
++				return nil, fmt.Errorf("error processing block %d from %s: %w", offset, c.filePath, err)
++			}
++
++			break
++		}
++	}
++
++	return builder.Build(), nil
++}
++
+ func (c *Cache) ReadAt(b []byte, off int64) (int, error) {
+ 	c.mu.RLock()
+ 	defer c.mu.RUnlock()
+@@ -263,24 +331,195 @@ func (c *Cache) setIsCached(off, length int64) {
  }
  
  // When using WriteAtWithoutLock you must ensure thread safety, ideally by only writing to the same block once and the exposing the slice.
@@ -9365,13 +9440,14 @@ index 8080841cc..8504d09b8 100644
  // Key represents a block offset.
  func (c *Cache) dirtySortedKeys() []int64 {
 diff --git a/packages/orchestrator/internal/sandbox/block/overlay.go b/packages/orchestrator/internal/sandbox/block/overlay.go
-index 40c6f8f0b..7e6118a51 100644
+index 40c6f8f0b..80a881a9b 100644
 --- a/packages/orchestrator/internal/sandbox/block/overlay.go
 +++ b/packages/orchestrator/internal/sandbox/block/overlay.go
-@@ -4,12 +4,17 @@ import (
+@@ -4,16 +4,25 @@ import (
  	"context"
  	"errors"
  	"fmt"
++	"slices"
 +	"sync"
  	"sync/atomic"
  
@@ -9386,7 +9462,15 @@ index 40c6f8f0b..7e6118a51 100644
  	device       ReadonlyDevice
  	cache        *Cache
  	cacheEjected atomic.Bool
-@@ -29,10 +34,14 @@ func NewOverlay(device ReadonlyDevice, cache *Cache) *Overlay {
+-	blockSize    int64
++	// layersEjected is set by EjectLayers: the sealed layers under this
++	// overlay have been handed to the caller, so Close leaves them mapped.
++	layersEjected atomic.Bool
++	blockSize     int64
+ }
+ 
+ var _ Device = (*Overlay)(nil)
+@@ -29,10 +38,14 @@ func NewOverlay(device ReadonlyDevice, cache *Cache) *Overlay {
  }
  
  func (o *Overlay) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
@@ -9402,7 +9486,7 @@ index 40c6f8f0b..7e6118a51 100644
  		if err == nil {
  			continue
  		}
-@@ -41,7 +50,7 @@ func (o *Overlay) ReadAt(ctx context.Context, p []byte, off int64) (int, error)
+@@ -41,7 +54,7 @@ func (o *Overlay) ReadAt(ctx context.Context, p []byte, off int64) (int, error)
  			return n, fmt.Errorf("error reading from cache: %w", err)
  		}
  
@@ -9411,7 +9495,7 @@ index 40c6f8f0b..7e6118a51 100644
  		if err != nil {
  			return n, fmt.Errorf("error reading from device: %w", err)
  		}
-@@ -55,9 +64,71 @@ func (o *Overlay) EjectCache() (*Cache, error) {
+@@ -55,9 +68,102 @@ func (o *Overlay) EjectCache() (*Cache, error) {
  		return nil, fmt.Errorf("cache already ejected")
  	}
  
@@ -9421,6 +9505,37 @@ index 40c6f8f0b..7e6118a51 100644
  	return o.cache, nil
  }
  
++// EjectLayers is EjectCache for an overlay that may have been sealed. It
++// returns every write layer the sandbox has produced, bottom-most first: the
++// sealed layers in the order they were sealed, then the current write layer
++// last. That is the whole set of blocks the sandbox has written on top of its
++// template — what a snapshot of the sandbox has to carry, and what
++// EjectCache alone stops describing after the first Seal, when the earlier
++// layers have moved under the write layer as SealedViews.
++//
++// An overlay that was never sealed returns exactly the one cache EjectCache
++// would. Like EjectCache, this takes the layers off Close: the top layer is
++// the caller's to Close, the sealed ones (whose files belong to the
++// checkpoint store) the caller's to CloseKeepFile.
++func (o *Overlay) EjectLayers() ([]*Cache, error) {
++	if !o.cacheEjected.CompareAndSwap(false, true) {
++		return nil, fmt.Errorf("cache already ejected")
++	}
++
++	o.mu.RLock()
++	defer o.mu.RUnlock()
++
++	// The chain is walked from the newest sealed layer down to the oldest.
++	var layers []*Cache
++	for view, ok := o.device.(*SealedView); ok; view, ok = view.device.(*SealedView) {
++		layers = append(layers, view.cache)
++	}
++	slices.Reverse(layers)
++	o.layersEjected.Store(true)
++
++	return append(layers, o.cache), nil
++}
++
 +// Seal freezes the current write layer and installs newCache as a fresh empty
 +// one. The sealed layer stays on the read path: it is folded into the device
 +// below as a SealedView, exactly like OverlayFS demoting an upper to a
@@ -9483,7 +9598,7 @@ index 40c6f8f0b..7e6118a51 100644
  // This method will not be very optimal if the length is not the same as the block size, because we cannot be just exposing the cache slice,
  // but creating and copying the bytes from the cache and device to the new slice.
  //
-@@ -67,10 +138,17 @@ func (o *Overlay) Slice(_ context.Context, _, _ int64) ([]byte, error) {
+@@ -67,10 +173,17 @@ func (o *Overlay) Slice(_ context.Context, _, _ int64) ([]byte, error) {
  }
  
  func (o *Overlay) WriteAt(p []byte, off int64) (int, error) {
@@ -9502,7 +9617,7 @@ index 40c6f8f0b..7e6118a51 100644
  	return o.cache.Size()
  }
  
-@@ -79,13 +157,28 @@ func (o *Overlay) BlockSize() int64 {
+@@ -79,13 +192,29 @@ func (o *Overlay) BlockSize() int64 {
  }
  
  func (o *Overlay) Close() error {
@@ -9520,8 +9635,9 @@ index 40c6f8f0b..7e6118a51 100644
  
 -	return o.cache.Close()
 +	// Sealed layers accumulated under this overlay are unmapped here; their
-+	// files belong to the checkpoint store and stay.
-+	if view, ok := device.(*SealedView); ok {
++	// files belong to the checkpoint store and stay. Unless EjectLayers
++	// handed them out, in which case they are still being read.
++	if view, ok := device.(*SealedView); ok && !o.layersEjected.Load() {
 +		errs = append(errs, view.Close())
 +	}
 +
@@ -9664,10 +9780,10 @@ index 0df559681..a6dc64b56 100644
  
 diff --git a/packages/orchestrator/internal/sandbox/checkpoint.go b/packages/orchestrator/internal/sandbox/checkpoint.go
 new file mode 100644
-index 000000000..435d5e4e4
+index 000000000..bf2069b71
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/checkpoint.go
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,287 @@
 +package sandbox
 +
 +import (
@@ -9856,11 +9972,35 @@ index 000000000..435d5e4e4
 +		return fmt.Errorf("failed to pause VM: %w", err)
 +	}
 +
++	// Where the restore's inputs came from — page cache or the disk.
++	// Firecracker reads the target's memory image back into guest memory with
++	// ordinary buffered reads, so a warm image makes the rollback nearly
++	// free. That is the normal case and also the reason the numbers need a
++	// witness: a restore that quietly went to disk looks exactly like one
++	// that did not, only slower, and "recovery cost does not grow with chain
++	// depth" cannot be told apart from "the chain happened to still be
++	// cached". Firecracker is a separate process, so the counter is its own.
++	fcPid, fcPidErr := process.Pid()
++
++	var (
++		fcBefore uint64
++		fcOK     bool
++	)
++
++	if fcPidErr == nil {
++		fcBefore, fcOK = diskReadBytes(fcPid)
++	}
++
 +	// The rollback endpoint distinguishes failures before its commit point
 +	// (VM untouched, resumable) from after (VM faulted).
 +	fcStart := time.Now()
 +	result, err := process.RollbackSnapshot(ctx, snapfilePath, memfilePath, revertBitmapPath)
 +	timings.Mark("fc_rollback", fcStart)
++
++	if mb, ok := diskReadSince(fcPid, fcBefore, fcOK); ok {
++		timings.SetMB("fc_rollback_disk_read_mb", mb)
++	}
++
 +	if err != nil {
 +		var faulted fc.RollbackFaultedError
 +		if errors.As(err, &faulted) {
@@ -9946,6 +10086,76 @@ index 05cf03853..8e88f1e8d 100644
  )
  
  type Checks struct {
+diff --git a/packages/orchestrator/internal/sandbox/diskreads.go b/packages/orchestrator/internal/sandbox/diskreads.go
+new file mode 100644
+index 000000000..1de30fe77
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/diskreads.go
+@@ -0,0 +1,64 @@
++package sandbox
++
++import (
++	"bufio"
++	"os"
++	"strconv"
++	"strings"
++)
++
++// diskReadBytes reports how many bytes a process has actually fetched from
++// the storage layer, read out of /proc/<pid>/io. A page-cache hit adds
++// nothing to it, which is the whole point: it is what separates "this restore
++// read its inputs out of cache" from "this restore went to the disk".
++//
++// Three things to know before reading a number out of it:
++//   - it includes readahead the kernel issued on the process's behalf, so it
++//     is an upper bound on what was strictly needed;
++//   - it is accounted when the read is submitted, not when it completes;
++//   - work done in another process's context (an NBD server thread, say)
++//     lands on that process, not this one.
++//
++// So the signal is the order of magnitude — near zero versus tens of
++// megabytes — not the exact byte count.
++//
++// ok is false when the counter cannot be read: no /proc, the process already
++// gone, permissions. Callers skip the measurement then. An unreadable counter
++// must never fail the operation it was there to measure.
++func diskReadBytes(pid int) (uint64, bool) {
++	f, err := os.Open("/proc/" + strconv.Itoa(pid) + "/io")
++	if err != nil {
++		return 0, false
++	}
++	defer f.Close()
++
++	scanner := bufio.NewScanner(f)
++	for scanner.Scan() {
++		value, found := strings.CutPrefix(scanner.Text(), "read_bytes:")
++		if !found {
++			continue
++		}
++
++		n, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
++		if err != nil {
++			return 0, false
++		}
++
++		return n, true
++	}
++
++	return 0, false
++}
++
++// diskReadSince returns the megabytes pid fetched from storage since before,
++// and whether both ends of the measurement were readable. The counter is
++// monotonic per process, so a decrease means the two ends did not come from
++// the same process and the reading is discarded rather than reported as zero.
++func diskReadSince(pid int, before uint64, beforeOK bool) (float64, bool) {
++	after, ok := diskReadBytes(pid)
++	if !beforeOK || !ok || after < before {
++		return 0, false
++	}
++
++	return float64(after-before) / (1024 * 1024), true
++}
 diff --git a/packages/orchestrator/internal/sandbox/envd.go b/packages/orchestrator/internal/sandbox/envd.go
 index 4b5de9147..96c258f88 100644
 --- a/packages/orchestrator/internal/sandbox/envd.go
@@ -10797,10 +11007,10 @@ index a2539a1f4..317929d94 100644
  }
 diff --git a/packages/orchestrator/internal/sandbox/phasetimings.go b/packages/orchestrator/internal/sandbox/phasetimings.go
 new file mode 100644
-index 000000000..8fc5d5ef1
+index 000000000..029521ffc
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/phasetimings.go
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,61 @@
 +package sandbox
 +
 +import "time"
@@ -10813,6 +11023,11 @@ index 000000000..8fc5d5ef1
 +// what the workload actually feels; this is where either of them went. When a
 +// latency target is missed, the first two say by how much and this one says
 +// where.
++//
++// Values are milliseconds unless the key says otherwise: a key ending in
++// `_mb` holds megabytes. Mixing the two in one map is deliberate — these are
++// read together, and a phase's duration means little without knowing whether
++// it went to the disk.
 +//
 +// A nil map is a working no-op, so a caller that does not want the breakdown
 +// passes nil and pays nothing for it.
@@ -10837,6 +11052,15 @@ index 000000000..8fc5d5ef1
 +	t[name] = float64(us) / 1000
 +}
 +
++// SetMB records a byte count in megabytes, for the `_mb` keys.
++func (t PhaseTimings) SetMB(name string, mb float64) {
++	if t == nil {
++		return
++	}
++
++	t[name] = mb
++}
++
 +// Timed runs fn and records how long it took. It exists so a phase can be
 +// measured by wrapping the call in place, without restructuring the error
 +// handling around it -- which matters here because several of these calls sit
@@ -10849,10 +11073,52 @@ index 000000000..8fc5d5ef1
 +	return err
 +}
 diff --git a/packages/orchestrator/internal/sandbox/rootfs/nbd.go b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
-index 61b574e82..5f606d647 100644
+index 61b574e82..b00ca53e6 100644
 --- a/packages/orchestrator/internal/sandbox/rootfs/nbd.go
 +++ b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
-@@ -112,6 +112,95 @@ func (o *NBDProvider) ExportDiff(
+@@ -77,10 +77,15 @@ func (o *NBDProvider) ExportDiff(
+ 	ctx, span := tracer.Start(ctx, "cow-export")
+ 	defer span.End()
+ 
+-	cache, err := o.overlay.EjectCache()
++	// Every write layer the sandbox has, not only the current one: a
++	// checkpoint seals the write layer and opens a fresh one, so after the
++	// first checkpoint the current layer holds only the writes since. The
++	// snapshot has to carry all of them.
++	layers, err := o.overlay.EjectLayers()
+ 	if err != nil {
+ 		return nil, fmt.Errorf("error ejecting cache: %w", err)
+ 	}
++	cache, sealed := layers[len(layers)-1], layers[:len(layers)-1]
+ 
+ 	// the error is already logged in go routine in SandboxCreate handler
+ 	go func() {
+@@ -97,7 +102,13 @@ func (o *NBDProvider) ExportDiff(
+ 	}
+ 	telemetry.ReportEvent(ctx, "sandbox stopped")
+ 
+-	m, err := cache.ExportToDiff(ctx, out)
++	var m *header.DiffMetadata
++	if len(sealed) == 0 {
++		// Never checkpointed: the one write layer, exported as always.
++		m, err = cache.ExportToDiff(ctx, out)
++	} else {
++		m, err = block.ExportLayersToDiff(ctx, layers, out)
++	}
+ 	if err != nil {
+ 		return nil, fmt.Errorf("error exporting cache: %w", err)
+ 	}
+@@ -109,9 +120,105 @@ func (o *NBDProvider) ExportDiff(
+ 		return nil, fmt.Errorf("error closing cache: %w", err)
+ 	}
+ 
++	// Sealed layer files belong to the checkpoint store; only the mappings go.
++	for _, layer := range sealed {
++		if err := layer.CloseKeepFile(); err != nil {
++			return nil, fmt.Errorf("error unmapping sealed layer: %w", err)
++		}
++	}
++
  	return m, nil
  }
  
