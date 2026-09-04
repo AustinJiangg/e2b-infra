@@ -11,7 +11,8 @@ e2b-deploy/.git/
 # 该目录自己有一份 .gitignore，但那只在目录被跟踪时生效——目前它整个未跟踪，
 # 一次 `git add -A` 就会把 node_modules 提交进来，push 上去基本救不回来。
 # 这里再兜一道，与目录内那份重复是有意的。
-rollback/slides/node_modules/
+# 不带尾斜杠：docs worktree 里这一项是指回主工作区的软链接，带斜杠只匹配目录会漏掉它。
+rollback/slides/node_modules
 rollback/slides/dist/
 rollback/slides/.slidev/
 rollback/slides/.local-libs/

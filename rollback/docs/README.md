@@ -1,4 +1,6 @@
-# Checkpoint / Restore 技术文档
+# Checkpoint / Restore 技术手册
+
+> **v0.1.0** · 2026-09-04 · 江路路（j30059180）
 
 一套关于**在不中断沙箱的前提下，把一台正在运行的虚拟机回退到过去某一时刻**的系统文档。
 
@@ -93,3 +95,19 @@
 | [`../slides/`](../slides/) | Slidev 汇报稿（导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
 | [`../test-950/`](../test-950/) | 开发态验证工具箱与实测报告 |
 | `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能） |
+
+---
+
+## 版本
+
+| 版本 | 日期 | 说明 |
+|---|---|---|
+| v0.1.0 | 2026-09-04 | 首个署名版本：23 篇正文 + 编写规约 |
+
+版本号只描述**本套文档**，与 `infra-arm` / `KASandbox` 的代码版本不绑定 ——
+文档讲的是设计与机制，代码改动未必引起文档改版。
+内容修订进 0.1.x，新增或重写章节进 0.2.0，通读定稿后发 1.0.0。
+
+发布件（单文件 HTML、zip、tar.gz）从本目录生成，挂在
+[Releases](https://github.com/AustinJiangg/e2b-infra/releases)，
+tag 与此处版本号一致 —— 拿到任何一份产物都能对上是哪一版。
