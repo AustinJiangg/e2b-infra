@@ -37,6 +37,7 @@
 | [`09-增量快照实现与ARM实测分析.md`](09-增量快照实现与ARM实测分析.md) | 快照存了哪些文件、三套实现对比（FC 原生 / e2b x86 / 本仓库 ARM）、UFFD 写保护如何决定增量精度、ARM 上「读过即脏」的实测数据与优化方向；配套脚本 `benchmark/snapshot.py` |
 | [`10-模板与快照存储位置梳理.md`](10-模板与快照存储位置梳理.md) | 模板/快照到底存在哪：本地缓存 vs 持久化存储的分层、`STORAGE_PROVIDER` 如何选 provider、为什么 `.env` 里的 MinIO 在 nomad 单机路径下没生效、想换成 MinIO 的完整改法与回滚 |
 | [`11-沙箱绑核与NUMA亲和.md`](11-沙箱绑核与NUMA亲和.md) | 多核大内存机器上怎么把沙箱限制到指定 CPU：两棵 cgroup 树的结构（为什么沙箱不受 hcl 的 resources 约束）、三个方案对比、cpuset 绑核的完整操作（持久化是可选项，默认不绑才是常态）、按大页余量换算并发上限 |
+| [`12-orchestrator资源配额调优.md`](12-orchestrator资源配额调优.md) | `template-manager.hcl` 里 `resources { memory, cpu }` 管什么（只管 orchestrator 与模板构建，不管沙箱）、怎么量实测峰值定值、改动必须同步的三个文件、配额不足时从 OOM 到 api 恒 503 的连锁反应链 |
 
 ## 推荐阅读路径
 
