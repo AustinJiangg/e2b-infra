@@ -13137,3 +13137,101 @@ index 1f372b9ce..6b74c2a83 100644
  	TCPFirewallConnectionDurationHistogramName:    "ms",
  	TCPFirewallConnectionsPerSandboxHistogramName: "{connection}",
  
+diff --git a/packages/orchestrator/internal/sandbox/network/storage_local.go b/packages/orchestrator/internal/sandbox/network/storage_local.go
+index 90a7aee..d452e0e 100644
+--- a/packages/orchestrator/internal/sandbox/network/storage_local.go
++++ b/packages/orchestrator/internal/sandbox/network/storage_local.go
+@@ -6,6 +6,7 @@ import (
+ 	"os"
+ 	"path/filepath"
+ 	"strconv"
++	"strings"
+ 	"sync"
+ 	"time"
+ 
+@@ -32,11 +33,44 @@ func NewStorageLocal(ctx context.Context, config Config) (*StorageLocal, error)
+ 	}
+ 
+ 	foreignNsMap := make(map[string]struct{})
++	reclaimed := 0
++
+ 	for _, ns := range foreignNs {
++		// A namespace named ns-<idx> inside our slot range was created by a
++		// previous orchestrator run on this host: CreateNetwork makes it before
++		// any host-side networking and RemoveNetwork drops it last, so finding
++		// one at startup means that run died without tearing the slot down
++		// (OOM kill, SIGKILL after kill_timeout expires, panic).
++		//
++		// Recording it as foreign strands the index permanently: the next run
++		// starts allocating past the leak, so every crash adds a full warm pool
++		// worth of dead namespaces, veth pairs and ~9 iptables rules each. A
++		// node that has crashed a few times ends up carrying thousands of them,
++		// which slows every iptables call and every Nomad client fingerprint.
++		//
++		// Tear it down instead. Whatever cannot be reclaimed, and whatever does
++		// not match our own naming scheme (CNI, libvirt, an operator's netns),
++		// stays foreign and is never touched.
++		if idx, ok := slotIndexFromNamespace(ns); ok {
++			if err := reclaimLeakedSlot(idx, config); err != nil {
++				logger.L().Warn(ctx, "Failed to reclaim leaked network namespace, treating it as foreign",
++					zap.String("namespace", ns), zap.Error(err))
++			} else {
++				reclaimed++
++
++				continue
++			}
++		}
++
+ 		foreignNsMap[ns] = struct{}{}
+ 		logger.L().Info(ctx, fmt.Sprintf("Found foreign namespace: %s", ns))
+ 	}
+ 
++	if reclaimed > 0 {
++		logger.L().Info(ctx, "Reclaimed leaked network slots left by a previous run",
++			zap.Int("count", reclaimed))
++	}
++
+ 	return &StorageLocal{
+ 		config:       config,
+ 		foreignNs:    foreignNsMap,
+@@ -157,6 +191,40 @@ func getForeignNamespaces() ([]string, error) {
+ 	return ns, nil
+ }
+ 
++// slotIndexFromNamespace parses a namespace name back into its slot index,
++// accepting only the "ns-<idx>" form getSlotName produces and only indexes
++// NewSlot would accept. Foreign namespaces never resolve to a slot, so the
++// caller cannot mistake someone else's namespace for one of ours.
++func slotIndexFromNamespace(name string) (int, bool) {
++	const prefix = "ns-"
++
++	if !strings.HasPrefix(name, prefix) {
++		return 0, false
++	}
++
++	idx, err := strconv.Atoi(name[len(prefix):])
++	if err != nil {
++		return 0, false
++	}
++
++	if idx < 1 || idx > vrtSlotsSize {
++		return 0, false
++	}
++
++	return idx, true
++}
++
++// reclaimLeakedSlot runs the same teardown the normal sandbox stop path uses,
++// so a reclaimed index is immediately allocatable again.
++func reclaimLeakedSlot(slotIdx int, config Config) error {
++	slot, err := NewSlot(fmt.Sprintf("startup-reclaim-%d", slotIdx), slotIdx, config)
++	if err != nil {
++		return fmt.Errorf("error building slot for reclaim: %w", err)
++	}
++
++	return slot.RemoveNetwork()
++}
++
+ func getSlotName(slotIdx int) string {
+ 	slotIdxStr := strconv.Itoa(slotIdx)
+ 
