@@ -36,27 +36,11 @@ job "template-manager-system" {
       # 槽位号只增不减）。30s 是 Nomad 客户端 max_kill_timeout 的默认上限。
       kill_timeout = "30s"
 
-      # 这个配额约束的是 orchestrator 进程所在的 Nomad task cgroup
-      # (/nomad.slice/share.slice/<allocID>.start.scope)，也就是**模板构建**这条路径：
-      # 解压基础镜像的层、拼 rootfs、往 /mnt/snapshot-cache(tmpfs) 写快照产生的
-      # page cache 与 shmem 页全部记在这里。
-      #
-      # 沙箱不在这个 cgroup 里——orchestrator 自己建了 /sys/fs/cgroup/e2b 那棵树
-      # (sandbox/cgroup/manager.go)，而且沙箱 VM 内存走 hugepages，连常规 memcg 的账
-      # 都不走。所以"并发几十个沙箱毫无压力"完全不能说明这个值够用。
-      #
-      # 8192 太小：构建一个 200 MB 的基础镜像（skip_cache=True 全量重建）就会
-      # memcg OOM，内核挑 cgroup 里最大的进程杀，表现为
-      #   Terminated Exit Code: 137, Signal: 9
-      # 而 dmesg 里 anon-rss 只有几十 MB —— 吃掉配额的是 page cache 和 tmpfs 页，
-      # 不是进程堆，很容易误判成"进程没吃内存为什么被杀"。
-      # 再往上的连锁反应：orchestrator 反复重启 → api 的 orch.NodeCount() 为 0 →
-      # /health 恒 503 → 部署卡在 api 的 deployment 上超时失败，根因离现象很远。
-      #
-      # 复核实际峰值再按需调整（构建跑完后读）：
-      #   cat /sys/fs/cgroup/nomad.slice/share.slice/*.start.scope/memory.peak
-      # 建议取峰值的 3~4 倍。别无脑调到几百 G：这个上限的意义就是"跑飞了别把
-      # 整台机器拖垮"，共享机器上尤其如此。
+      # 只约束 orchestrator 进程（Nomad task cgroup），即模板构建这条路径；
+      # 沙箱在 /sys/fs/cgroup/e2b 那棵独立的树下，不受这里限制。
+      # 太小会 memcg OOM（Exit 137）并连锁到 api 恒 503、部署超时失败。
+      # 怎么量峰值、怎么改、三处路径分别在哪，见
+      # deploy-docs/12-orchestrator资源配额调优.md
       resources {
         memory     = 32768
         cpu        = 2048
