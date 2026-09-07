@@ -767,6 +767,7 @@ function stop() {
     # foreignNs 永久跳过，所以槽位号只增不减——攒到几千个网卡后 nomad 的 client fingerprint
     # 要走几分钟，4646 迟迟不开，表现就是 build.sh -s 卡在"端口未启动"。
     purge_sandbox_netns
+    purge_sandbox_iptables
 
     check_ports_free || warn "端口未完全释放，直接跑 -s 大概率会失败（见上面的处置建议）"
 
@@ -820,6 +821,20 @@ function check_ports_free() {
     return 1
 }
 
+# 在用的槽位：netns 里还有进程（就是 firecracker）说明沙箱正在跑，清理必须绕开它。
+#
+# 只能识别"运行中"这一种。orchestrator 建完 netns 就把 fd 关了（CreateNetwork 里的
+# defer ns.Close()），暖池那几百个空闲槽位只靠 /var/run/netns 下的 bind mount 活着，
+# 在宿主机上跟真正的泄漏残留长得一模一样，谁属于活着的 orchestrator 只有它自己内存里
+# 的 channel 知道。要连暖池一起保住，就先 -d 停服再清。
+function busy_slot_indexes() {
+    local n
+    for n in $(ip netns list 2>/dev/null | awk '{print $1}' | grep -E '^ns-[0-9]+$'); do
+        [ -n "$(ip netns pids "$n" 2>/dev/null)" ] && echo "${n#ns-}"
+    done
+    return 0
+}
+
 # 清理沙箱残留的网络资源。命名规则来自 orchestrator 的
 # internal/sandbox/network/slot.go：netns 叫 ns-<idx>、宿主机侧 veth 叫 veth-<idx>。
 # 严格锚定这两个模式——同机可能还跑着别的东西（flannel 的 vethXXXX、containerd 的
@@ -831,6 +846,16 @@ function purge_sandbox_netns() {
 
     ns_list=$(ip netns list 2>/dev/null | awk '{print $1}' | grep -E '^ns-[0-9]+$')
     veth_list=$(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^veth-[0-9]+$')
+
+    # 有沙箱在跑的槽位整条链路都保留：netns、veth 和它的 iptables 规则
+    local busy busy_count=0
+    busy=$(busy_slot_indexes)
+    if [ -n "$busy" ]; then
+        busy_count=$(printf '%s\n' "$busy" | wc -l)
+        ns_list=$(printf '%s\n' "$ns_list" | grep -vxF "$(printf 'ns-%s\n' $busy)")
+        veth_list=$(printf '%s\n' "$veth_list" | grep -vxF "$(printf 'veth-%s\n' $busy)")
+        info "跳过 $busy_count 个在用槽位（netns 里有进程，沙箱正在跑）"
+    fi
 
     [ -n "$ns_list" ] && ns_count=$(printf '%s\n' "$ns_list" | wc -l)
     [ -n "$veth_list" ] && veth_count=$(printf '%s\n' "$veth_list" | wc -l)
@@ -854,16 +879,17 @@ function purge_sandbox_netns() {
     done
 
     local ns_left veth_left
-    ns_left=$(ip netns list 2>/dev/null | awk '{print $1}' | grep -cE '^ns-[0-9]+$')
-    veth_left=$(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^veth-[0-9]+$')
+    ns_left=$(( $(ip netns list 2>/dev/null | awk '{print $1}' | grep -cE '^ns-[0-9]+$') - busy_count ))
+    veth_left=$(( $(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^veth-[0-9]+$') - busy_count ))
+    # 清理期间恰好有沙箱退出的话，减出来会是负数，夹到 0
+    [ "$ns_left" -lt 0 ] && ns_left=0
+    [ "$veth_left" -lt 0 ] && veth_left=0
 
     if [ "$ns_left" -eq 0 ] && [ "$veth_left" -eq 0 ]; then
         echo "- netns / veth 已清空（netns $ns_count、veth $veth_count）；当前宿主机网卡数：$(ip -o link 2>/dev/null | wc -l)"
     else
-        warn "仍残留 netns $ns_left 个、veth $veth_left 个（删除失败 $failed 次）——确认没有 firecracker 在跑后重跑 $0 -d"
+        warn "仍残留 netns $ns_left 个、veth $veth_left 个（删除失败 $failed 次）——确认没有 firecracker 在跑、且当前用户是 root 后重跑 $0 --purge-netns"
     fi
-
-    purge_sandbox_iptables
 }
 
 # 删掉 netns / veth 并不会带走 orchestrator 为每个槽位写进 iptables 的规则。每个槽位在
@@ -892,6 +918,18 @@ function purge_sandbox_iptables() {
     filter_del=$(iptables-save -t filter 2>/dev/null \
         | grep -E '^-A FORWARD .*-[io] veth-[0-9]+( |$)' \
         | sed 's/^-A /-D /')
+
+    # 在用槽位的规则原样留下。veth-<n> 按名字排除（带尾随空格，免得 veth-5 连 veth-50
+    # 一起匹配）；POSTROUTING 那条不带网卡名，只能按槽位的宿主机 IP 排除——
+    # 10.11.0.0/16 依次分配，槽位 n 拿到 10.11.<n/256>.<n%256>（见 slot.go 的注释）。
+    local busy keep i
+    busy=$(busy_slot_indexes)
+    if [ -n "$busy" ]; then
+        keep=$( printf -- 'veth-%s \n' $busy
+                for i in $busy; do printf -- '-s 10.11.%d.%d/32 \n' $((i / 256)) $((i % 256)); done )
+        nat_del=$(printf '%s\n' "$nat_del" | grep -vF "$keep")
+        filter_del=$(printf '%s\n' "$filter_del" | grep -vF "$keep")
+    fi
 
     if [ -z "$nat_del" ] && [ -z "$filter_del" ]; then
         echo "ℹ️  没有残留的沙箱 iptables 规则"
@@ -1026,7 +1064,7 @@ function make_images() {
 # ===================== 参数解析（完整修正）=====================
 # 定义正确的短/长选项：m: 表示 -m 需要接收参数；d对应stop
 OPTIONS="iusdfm:r:"
-LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages"  # make:/redeploy: 表示需要参数
+LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages,purge-netns"  # make:/redeploy: 表示需要参数
 
 # 解析参数（处理 getopt 结果）
 # 兼容不同系统的 getopt，增加 -o/-l 明确指定选项
@@ -1059,6 +1097,14 @@ while true; do
             ;;
         -d|--stop)
             stop
+            has_valid_param=1
+            shift
+            ;;
+        --purge-netns)
+            # 只清沙箱网络垃圾（netns/veth/iptables），不动服务；-d 里跑的就是这两个函数。
+            # 运行中的沙箱会跳过；暖池里的空闲槽位跟泄漏残留区分不了，要保住就先 -d 停服。
+            purge_sandbox_netns
+            purge_sandbox_iptables
             has_valid_param=1
             shift
             ;;
@@ -1111,6 +1157,7 @@ if [ $has_valid_param -eq 0 ]; then
     echo "  启动 e2b-infra 服务：$0 --start 或 $0 -s"
     echo "  停止 e2b-infra 服务：$0 --stop 或 $0 -d"
     echo "  释放静态大页池：$0 --purge-hugepages（只清 HugeTLB，不动服务；建议先 -d 停服）"
+    echo "  清理沙箱网络垃圾：$0 --purge-netns（netns/veth/iptables；跳过运行中沙箱，暖池保不住，建议先 -d）"
     echo "  部署 e2b-infra 服务：$0 --deploy 或 $0 -f"
     echo "  快速重跑单个 job：$0 --redeploy <job> 或 $0 -r <job>（例如：$0 -r template-manager，只 render+重跑该 job，跳过镜像构建）"
     echo "  构建镜像：$0 --make <镜像参数> 或 $0 -m <镜像参数>（例如：$0 -m ubuntu22.04）"
