@@ -14,10 +14,12 @@ correctness.py      正确性 e2e（线性 / 前滚 / 分叉 / 删除 / 失败�
 hdbss_evidence.py   HDBSS 三级证据：能力 / FC 自报 / 数据面
 timing.py           耗时与存储：逐代 create、逐级 restore、链深 5/20/50 对照
 loop.py             稳定性：N 次回滚的成功率与分位数
+pause_verify.py     checkpoint 之后 pause/resume，磁盘数据必须原样回来（O_DIRECT 读回）
+compat_matrix.py    checkpoint/restore 与原生 create/connect/pause/kill 的组合矩阵
 bench-ckpt.py       耗时基准：全量 vs 增量各档分布、虚机冻结窗口、restore、持续速率
 probe-ramp.py       判别连打劣化是"链变深"还是"写得多"（把脏页量拉开做同样多次）
 freeze_probe.py     被 bench-ckpt.py 推进 guest 里跑的时钟采样器，用来量虚机冻结窗口
-run-all.sh          一条命令跑完一套（correctness → timing → loop → bench），产出一份报告
+run-all.sh          一条命令跑完一套（correctness → timing → loop → bench → pause → compat），产出一份报告
 耗时基准结论.md      两套的耗时对照与三个发现（连打劣化 / cowextsize / 冻结窗口口径）
 数据卷与loop.md      为什么用 loop、三项调优、nodiscard 的坑、两台机器为什么不对称
 ```
@@ -91,7 +93,11 @@ bash 01-check-host.sh                      # 先看清楚这台机器有什么
 bash 03-switch.sh ext4 --yes
 bash 04-verify-runtime.sh ext4 /
 python3 hdbss_evidence.py                  # HDBSS 三级证据，只需跑一次
-bash run-all.sh ext4 /
+bash run-all.sh ext4 /                     # 六个脚本一条龙，含 pause 与兼容矩阵
+
+# 也可以单独跑（两个都不需要参数，用上面那两个环境变量）：
+#   python3 pause_verify.py                # checkpoint 之后 pause/resume 的数据一致性
+#   python3 compat_matrix.py               # 与原生生命周期操作的兼容矩阵
 
 # --- XFS 套：950 上只能 loop，先造卷 ---
 bash 02-prepare-loop-volume.sh --fs xfs --mnt /mnt/xfsdev --size 300G
@@ -120,6 +126,8 @@ bash 03-switch.sh restore                  # 跑完把 950 还原成切换前的
 | loop | `failures: 0` |
 | bench | 末行 `BENCH OK`；各档 `mem_mode` 全是 incremental（出现 full 就是脏页跟踪没生效）；冻结窗口那张表里每档都标着「可区分 ✓」（标⚠说明冻结太短、被测量底噪淹没，数字不作数） |
 | hdbss_evidence | L1 `supported` + L2 `hdbss` + L3 冷/热接近 1（写保护时是 4~5） |
+| pause_verify | 末行 `✓ 全部通过`；尤其那条「**checkpoint 之前**写的 16MB 在 pause/resume 后完好」——它守的是一个**静默**的数据损坏（走 guest page cache 读会完全盖住，必须 O_DIRECT） |
+| compat_matrix | 末行 `✓ 没有 BROKEN`。**`BROKEN` 一项都不能有** —— 那意味着某个 e2b 原生能力被 checkpoint/restore 弄坏了。`REFUSED` 是边界不是故障（当前已知两条：pause/resume 之后回不到 pause 之前的 checkpoint；kill 之后不能 connect，后者与我们无关） |
 
 任何一步不过就停下来，把该步的输出和
 `/data/nomad/alloc/*/alloc/logs/start.stdout.0` 的相关片段一起看。
