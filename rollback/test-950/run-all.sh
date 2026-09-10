@@ -54,6 +54,12 @@ run() {
 run 01-correctness python3 correctness.py "$SCHEME" "$MOUNT"
 run 02-timing      python3 timing.py "$SCHEME" "$MOUNT"
 run 03-loop        python3 loop.py "$SCHEME" "$LOOPS"
+# checkpoint 之后 pause/resume，磁盘数据要原样回来。O_DIRECT 读回，绕开 guest
+# page cache —— 走缓存会把磁盘层的问题完全盖住，这个 bug 当初就是这么假通过的。
+run 05-pause       python3 pause_verify.py
+# checkpoint/restore 与原生 create/connect/pause/kill 的组合矩阵：
+# 哪些能做、哪些是边界、有没有把原生能力弄坏。
+run 06-compat      python3 compat_matrix.py
 # 耗时基准：全量 vs 增量各档的分布、虚机冻结窗口、restore、持续速率。
 # 前三个脚本回答"对不对"，这个回答"多久" —— 是要拿去对性能指标、给客户看的那份数据。
 # 报告另落在 reports/bench-<方案>-<时间戳>/，路径记进本轮汇总。
@@ -73,6 +79,9 @@ echo "########## 汇总 ##########" | tee "$OUT/summary.txt"
 	echo "--- 耗时基准（全量 vs 增量）---"
 	sed -n '/^| | 创建 p50/,/^$/p' "$OUT/bench/报告.md" 2>/dev/null
 	echo "完整基准报告: $OUT/bench/报告.md"
+	echo
+	echo "--- 与原生操作的兼容矩阵 ---"
+	sed -n '/OK .* 项 \/ REFUSED/,$p' "$OUT/06-compat.log" 2>/dev/null
 } | tee -a "$OUT/summary.txt"
 
 echo

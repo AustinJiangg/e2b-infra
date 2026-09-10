@@ -876,6 +876,12 @@ class Sandbox(SandboxApi):
         if envd_access_token is not None and not isinstance(envd_access_token, Unset):
             sandbox_headers["X-Access-Token"] = envd_access_token
 
+        # 与 _create 保持一致。少了这两个头，沙箱代理无法把请求路由到具体沙箱，
+        # 凡是走 header 定址的服务（checkpoint 守护进程就是）都会收到
+        # "missing header"。envd 自己不受影响，因为它的地址里带了沙箱 ID。
+        sandbox_headers["E2b-Sandbox-Id"] = sandbox.sandbox_id
+        sandbox_headers["E2b-Sandbox-Port"] = str(ConnectionConfig.envd_port)
+
         connection_config = ConnectionConfig(
             extra_sandbox_headers=sandbox_headers,
             **opts,
