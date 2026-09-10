@@ -467,10 +467,11 @@ Firecracker 侧的主体，`PUT /snapshot/rollback` 的九个阶段。
 4. **gsd/CRIU 那套（phz 的进程级实现）**：24 篇只写方法、口径与定性结论，实测数字只在 25 的一张附表里带条件给出。
    措辞是「快照范围不同所以快的地方不同」，不写优劣。
 
-**必须写进去的一个事实**：KASandbox_0904 那版 SDK 的 `CheckpointInfo` 没有 `mem_mode` 字段，
-三个交付态脚本在它上面全报 `mem_mode=?`（`benchmark/checkpoint-bench-对比.md` §5.1）——
-防「增量静默退化成全量」的那道判据**本身**静默失效了。08-29 在 950 上跑出 `full / incremental / incremental`
-的那轮用的是带 `mem_mode` 的 SDK。这件事 21 §1 当例子讲，22 §2 说清判据依赖哪版 SDK，25 §2 结果表标注。
+**必须写进去的一个事实**：`checkpoint_verify.py` 的 `mem_mode` 断言依赖 SDK 透出该字段，字段缺失时脚本**跳过两条断言**，
+59 项静默变成 57 项。交付的 SDK 覆盖层与 KASandbox_0904 的 py-sdk 都有该字段（`install.py --check` 会自检），
+但 2026-09-08 那轮 920B 基准环境里装的那版没有，三个脚本全报 `mem_mode=?`（`benchmark/checkpoint-bench-对比.md` §5.1）——
+防「增量静默退化成全量」的那道判据**本身**静默失效了。920B 09-04 三轮日志（59/59 vs 57/57）是现成对照。
+这件事 21 §1.4 当例子讲，22 §2.4 说清判据依赖哪版 SDK，25 §2 结果表逐轮标注 SDK 与判据是否有效。
 
 **源材料**（写作时读，不搬原文）
 
