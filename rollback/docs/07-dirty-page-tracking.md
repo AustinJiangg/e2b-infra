@@ -338,7 +338,7 @@ pub enum DirtyTrackingBackend { Off, KvmWriteProtect, Hdbss }
 
 > **当前限制**：这个决策是**整个 orchestrator 一个值**（包级变量，启动时算一次），
 > 不是每沙箱一个。做成「按沙箱按需武装」需要在创建沙箱时就知道它会不会打 checkpoint，
-> 目前的 API 里没有这个信息。这是一个明确的可扩展点，见[第 21 篇](21-extending.md)。
+> 目前的 API 里没有这个信息。这是一个明确的可扩展点，见[第 27 篇](27-extending.md)。
 
 ---
 

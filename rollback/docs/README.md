@@ -22,6 +22,7 @@
 | 工程师，要接手或参与 | 全书；机制最短路径是 **06 → 07 → 08 → 10 → 11 → 13** |
 | 系统工程师 / 运维 | **02 → 05 → 19 → 17** |
 | 使用方，要判断什么时候用它 | **00 → 16 → 20** |
+| 评审 / 客户，要看证据 | **00 → 25 → 21**，再按需进 22 / 23 |
 
 ---
 
@@ -75,12 +76,25 @@
 | 19 | [`19-kunpeng-platform.md`](19-kunpeng-platform.md) | 鲲鹏平台：HDBSS 原理、920B 与 950、部署检查清单 |
 | 20 | [`20-vs-native.md`](20-vs-native.md) | 与原生 snapshot 的完整对比，以及两者如何配合使用 |
 
-### 第五部分　继续开发
+### 第五部分　测试与验证
+
+怎么证明它对、它快。方法（21–24）与数据（25）分开；全书的实测数字只在 25 一处。
 
 | # | 文档 | 内容 |
 |---|---|---|
-| 21 | [`21-extending.md`](21-extending.md) | 代码地图、改动指引、不能破坏的不变量、已知缺口 |
-| 22 | [`22-glossary-and-code-map.md`](22-glossary-and-code-map.md) | 术语表、代码索引、文件格式索引、环境变量与 API 总表 |
+| 21 | [`21-test-overview.md`](21-test-overview.md) | 测试体系总览：三种静默失效、三层测试、测试矩阵、测量纪律 |
+| 22 | [`22-functional-tests.md`](22-functional-tests.md) | 功能正确性：三重证据、59 项校验、树语义、pause 兼容、兼容矩阵、HDBSS 取证、稳定性 |
+| 23 | [`23-performance-methodology.md`](23-performance-methodology.md) | 性能测试的指标口径、负载构造、各脚本回答什么、怎么读报告 |
+| 24 | [`24-cross-implementation.md`](24-cross-implementation.md) | 与进程级快照和 e2b 原生 snapshot 并排：什么能比、什么不能比 |
+| 25 | [`25-results-and-compliance.md`](25-results-and-compliance.md) | 全书的实测数据、对照 200 / 100 ms 的逐档判定、已知劣化、尚未覆盖 |
+| 26 | [`26-acceptance-runbook.md`](26-acceptance-runbook.md) | 拿到交付件后在目标机上怎么跑、看什么、发回什么 |
+
+### 第六部分　继续开发
+
+| # | 文档 | 内容 |
+|---|---|---|
+| 27 | [`27-extending.md`](27-extending.md) | 代码地图、改动指引、不能破坏的不变量、已知缺口 |
+| 28 | [`28-glossary-and-code-map.md`](28-glossary-and-code-map.md) | 术语表、代码索引、文件格式索引、环境变量与 API 总表 |
 
 ---
 

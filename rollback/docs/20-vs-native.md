@@ -284,4 +284,4 @@ x86 上 e2b 的增量是精确的。把这条说成「e2b 的设计问题」是�
 | 原生 diff 元数据 | `packages/shared/pkg/storage/header` — `DiffMetadataBuilder` |
 | 本方案的对应实现 | 见[第 8](08-memory-diff-tree.md)、[10](10-disk-layering.md)、[11 篇](11-in-place-rollback.md) |
 
-**下一部分**：[21 · 在这套方案上继续开发](21-extending.md)。
+**下一部分**：[21 · 在这套方案上继续开发](27-extending.md)。

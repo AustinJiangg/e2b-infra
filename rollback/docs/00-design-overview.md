@@ -664,7 +664,7 @@ Firecracker 1.12.1，产物落在根盘 ext4 的 `/orchestrator/build/checkpoint
 | 补背景（不熟悉 microVM / e2b / 快照） | [01](01-what-and-why.md) → [02](02-microvm-and-e2b.md) → [03](03-snapshot-fundamentals.md) → [04](04-e2b-native-snapshot.md) |
 | 判断能不能用、边界在哪 | [16 生命周期与边界](16-lifecycle-and-portability.md) → [20 与原生的对比配合](20-vs-native.md) |
 | 部署与验收 | [19 鲲鹏平台](19-kunpeng-platform.md) → [17 可观测与验证](17-observability-and-verification.md) |
-| 接手继续开发 | [14 失败语义](14-failure-semantics.md) → [15 状态与并发](15-state-and-concurrency.md) → [21 继续开发](21-extending.md) |
+| 接手继续开发 | [14 失败语义](14-failure-semantics.md) → [15 状态与并发](15-state-and-concurrency.md) → [21 继续开发](27-extending.md) |
 
 完整目录见 [README.md](README.md)。
 
@@ -692,7 +692,7 @@ Firecracker 1.12.1，产物落在根盘 ext4 的 `/orchestrator/build/checkpoint
 | HDBSS 启用与脏跟踪后端选择 | `src/vmm/src/arch/aarch64/vm.rs`、`src/vmm/src/vstate/vm.rs` |
 | 快照写出与位图侧车 | `src/vmm/src/vstate/vm.rs`、`src/vmm/src/vstate/memory.rs` |
 
-完整索引见[第 22 篇](22-glossary-and-code-map.md)。
+完整索引见[第 28 篇](28-glossary-and-code-map.md)。
 
 ## 附录 B：验收脚本
 
