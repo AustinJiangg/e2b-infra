@@ -108,6 +108,9 @@ checkpoint 会把当前写层封存、另开一层（[第 10 篇 §3](10-disk-la
 （[第 7 篇 §5.4](07-dirty-page-tracking.md#54-本方案怎么绕开)、
 [第 20 篇 §6.3](20-vs-native.md#63-e2b-的增量快照有一个与改动量无关的下限)）。
 所以同一台机器上，我们的内存差分随档位线性增长，原生的不增长。
+这条链的完整推导、三套脏页判据的并排，以及它为什么不影响本方案，在
+[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)；
+实测那一列产物大小在[第 25 篇 §3.3](25-results-and-compliance.md#33-跨实现对照在-950-上的状态)。
 
 ### 1.4 判据本身静默失效
 
@@ -256,10 +259,10 @@ XFS 方案没有按代 `mem_diff`），传错了就用错的规则去判对的�
 | 持续连打 60 秒 | `bench-ckpt.py` | 前 1/3 与后 1/3 对比，劣化倍数如实记录 | 待测 | ✅ |
 | 连打劣化归因（链深还是写入量） | `probe-ramp.py` | 两种归一化哪种收拢；判定：跟代数走 | 待测 | ✅ |
 | 分档扫描 + 时机成本 + 产物实占 | `checkpoint_bench.py` | 每一跳落到目标代；「写完立刻拍」− 「冲干净再拍」= 时机成本 | 待测 | ✅ |
-| 三套方案横向对照 | `checkpoint_bench_v2.py`、`native_snapshot_bench.py` | 同一张档位表、同样的负载造法；只并列不作差 | `checkpoint_bench_v2.py` 部分数据、`native_snapshot_bench.py` ✅ | ✅ |
+| 三套方案横向对照 | `checkpoint_bench_v2.py`、`native_snapshot_bench.py` | 同一张档位表、同样的负载造法；只并列不作差 | `native_snapshot_bench.py` ✅、`checkpoint_bench_v2.py` 待测 | `checkpoint_bench_v2.py` ✅（与进程级并列）、原生待测 |
 
 > **950 = 鲲鹏 950，HDBSS 硬件标脏，产物落根盘 ext4（真盘）；920B = 鲲鹏 920，
-> 无 HDBSS 走 KVM 软件写保护，ext4 方案落调优过的 loop 卷。**
+> 无 HDBSS 走 KVM 软件写保护，产物视轮次落调优过的 loop 卷或根盘 XFS（真盘）。**
 > 两台机器的差异表见[第 25 篇 §1](25-results-and-compliance.md#1-条件标签)，
 > 平台差异见[第 19 篇 §4](19-kunpeng-platform.md#4-两台机器的实测对照)。
 

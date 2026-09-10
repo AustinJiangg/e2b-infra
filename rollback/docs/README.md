@@ -107,7 +107,7 @@
 | [`../diagrams/`](../diagrams/) | 三张汇报用 SVG 与 mermaid 图源 |
 | [`../slides/`](../slides/) | Slidev 汇报稿（导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
 | [`../test-950/`](../test-950/) | 开发态验证工具箱与实测报告 |
-| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能），以及两个横向对照脚本 |
+| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能）；同目录另有两个跨实现对照脚本（第 24 篇），不属于交付态验收流程 |
 
 ---
 

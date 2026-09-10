@@ -491,7 +491,8 @@ if _, err := out.WriteAt(b, off); err != nil { return ... }
 | 920B · loop-ext4 | KVM 软件写保护 | 链深 5 / 20 / 50 全部正确，恢复耗时**无随链深增长趋势**；200 次回滚 0 失败 |
 
 两组数字口径不同（模板大小、存储介质、脏页后端三项全不一样），**不能相减**。
-详见[第 17 篇](17-observability-and-verification.md)。
+完整结果、条件标签与达标判定见[第 25 篇](25-results-and-compliance.md)，
+两台机器的差异表见[第 25 篇 §1](25-results-and-compliance.md#1-条件标签)。
 
 ---
 

@@ -229,6 +229,7 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 | **按沙箱按需武装脏页跟踪** | 现在是整个 orchestrator 一个值；要按沙箱得在创建时知道它会不会打 checkpoint | 中 |
 | **结构化的 Faulted 标识** | 现在客户端靠字符串匹配识别（[第 9 篇 §3.3](09-firecracker-api-contract.md#33-客户端侧的三个细节)） | **低，建议顺手做** |
 | **层文件的全零块回收** | 恒等映射不剔除全零块（[第 10 篇 §4.1](10-disk-layering.md#41-不紧凑化带来的简化)） | 中 |
+| **`manifest.json` 的层列表改为引用父代** | 现在每个 checkpoint 把截止到自己的全部层完整记一遍，是持续连打劣化里那块 O(链深) 记账的来源（[第 25 篇 §7.1](25-results-and-compliance.md#71-持续连打60-秒里慢-28-倍)） | 中 |
 | **跟上游合并** | 分叉小是有意的，但上游会动 | 持续 |
 
 ---
