@@ -357,6 +357,10 @@ pub enum DirtyTrackingBackend { Off, KvmWriteProtect, Hdbss }
 > **必须明确：这是修复 ARM 适配引入的退化，不是超越 x86 原生。**
 > 在 x86 上 e2b 的增量本来就是精确的。
 
+再加上进程级快照（gsd / CRIU）用的内核 soft-dirty，一共四条判据；
+把它们并排成一张表、以及这个差异在同一台机器同一份负载下测出来是什么形状，
+见[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)。
+
 ### 5.1 退化是怎么发生的
 
 ARM 适配版里，`UFFDIO_COPY` 的写保护模式被注释掉了：

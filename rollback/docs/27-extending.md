@@ -1,6 +1,6 @@
 # 27 · 在这套方案上继续开发
 
-> 前二十篇讲的是「它是什么」。本篇讲「你要动它的时候该知道什么」：
+> 前面各篇讲的是「它是什么」「怎么证明它对」。本篇讲「你要动它的时候该知道什么」：
 > 代码在哪、按任务该改哪里、哪些不变量碰不得、以及已知还差什么。
 >
 > **读者**：要接手或参与这个项目的工程师。
@@ -161,14 +161,22 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 ### 4.1 三层
 
-| 层 | 跑什么 | 在哪 |
-|---|---|---|
-| 单元测试 | `go test ./internal/checkpoint/...` | 开发机 |
-| 正确性验收 | `benchmark/checkpoint_verify.py` | 目标机（950 / 920B） |
-| 性能基准 | `benchmark/checkpoint_bench.py` | 目标机 |
+| 层 | 跑什么 | 在哪 | 判据讲解 |
+|---|---|---|---|
+| 单元测试 | `go test ./internal/checkpoint/...` | 开发机 | [15 §8](15-state-and-concurrency.md#8-单元测试守着哪些不变量) |
+| 正确性验收 | `benchmark/checkpoint_verify.py` | 目标机（950 / 920B） | [22 §2](22-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
+| 性能基准 | `benchmark/checkpoint_bench.py` | 目标机 | [23 §3](23-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
 
-**深入排查**用开发态工具箱 `rollback/test-950/`（穷举语义、劣化排查、分位数），
-它与交付态脚本**不要混用**。
+**深入排查**用开发态工具箱 `rollback/test-950/`：`correctness.py`（树语义）、
+`timing.py`（O(脏页) 与链深）、`loop.py`（稳定性）、`pause_verify.py`（checkpoint 之后 pause）、
+`compat_matrix.py`（与原生生命周期的组合）、`bench-ckpt.py` + `freeze_probe.py`（分位数与冻结窗口）、
+`probe-ramp.py`（连打劣化归因）、`hdbss_evidence.py`（HDBSS 三级证据），
+`run-all.sh` 一条命令跑完一套。它与交付态脚本**不要混用** —— 位置参数顺序敏感，
+传错会用错的规则去判对的产物、报假 FAIL（[第 21 篇 §2.4](21-test-overview.md#24-为什么两套不混用)）。
+
+**上机的完整流程**（前置条件、三条命令、期望末行、结果回传规范）见
+[第 26 篇](26-acceptance-runbook.md)；要证的每条性质分别由哪个脚本、
+用什么判据、在哪台机器上证到了哪一步，见[第 21 篇 §3](21-test-overview.md#3-测试矩阵)。
 
 ### 4.2 换二进制的流程
 
@@ -188,15 +196,12 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 ### 4.3 至少要看的三个信号
 
-改完之后，第一次跑起来先确认：
-
-| 信号 | 期望 |
-|---|---|
-| 启动日志的 `checkpoint capabilities` | `track_dirty_pages: true`，理由符合预期 |
-| 第二个 checkpoint 的 `memMode` | `incremental`（不是 `full`） |
-| `dmesg \| grep 'Enable HDBSS success'` | 950 上应该有，PID 是 Firecracker 的 |
-
-三个里任何一个不对，后面的数字都不用看了。
+改完之后第一次跑起来，先确认启动日志的 `checkpoint capabilities` 是
+`track_dirty_pages: true` 且理由符合预期、第二个 checkpoint 的 `memMode` 是 `incremental`
+（不是 `full`）、950 上 `dmesg | grep 'Enable HDBSS success'` 有输出且 PID 是 Firecracker 的。
+**三个里任何一个不对，后面的数字都不用看了** —— 尤其是第二个：它是防「增量静默退化成全量」
+的主力判据，而这条判据本身也会失效（[第 21 篇 §1](21-test-overview.md#1-为什么这套方案的测试要格外小心)）。
+每个数字还要带哪些条件标签才允许被引用，见[第 21 篇 §4](21-test-overview.md#4-测量纪律)。
 
 ---
 
@@ -204,22 +209,18 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 ### 5.1 测试
 
-| 缺口 | 说明 |
-|---|---|
-| **跨树回滚** | 断链后新根开新树，跨树回滚会退化成全量。逻辑上正确（[第 8 篇 §4.5](08-memory-diff-tree.md#45-最近公共祖先怎么求)），但**没有测试** |
-| **并发操作同一沙箱** | 依赖 `opLocks`，没有针对性的竞态测试 |
-| **HDBSS 武装时序** | 不变量 #13 只靠调用点位置保证，没有断言 |
+三处**代码侧**的缺口，动到相关区域时要一并想到：**跨树回滚**没有测试
+（断链后新根开新树，跨树回滚会退化成全量；逻辑上正确，见
+[第 8 篇 §4.5](08-memory-diff-tree.md#45-最近公共祖先怎么求)）、
+**并发操作同一沙箱**只依赖 `opLocks` 而没有针对性的竞态测试、
+**HDBSS 武装时序**（不变量 #13）只靠调用点位置保证而没有断言。
 
-### 5.2 实测
+**尚未跑到的实测**（950 上的分档基准、HDBSS 与软件写保护的收益对照、
+`FC_HDBSS_ORDER` 取 1 / 2 / 4 的调优、完整 `rpmbuild` 流程）连同上面三项，
+统一在[第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖)维护**一份**清单 ——
+缺口散在多篇里就一定会各自过期，所以只在那一处更新。
 
-| 缺口 | 说明 |
-|---|---|
-| **950 上的分档基准** | `checkpoint_bench.py` 还没在 950 上跑过 |
-| **HDBSS vs 软件写保护** | 收益尚未量化。`perf` 只有 950 有，`kvm_exit` 计数是最硬的证据 |
-| **`FC_HDBSS_ORDER` 1/2/4** | 写密集负载下 buffer 溢出吃掉多少收益，不知道 |
-| **完整 rpmbuild** | 尚未端到端跑通 |
-
-### 5.3 可能的方向
+### 5.2 可能的方向
 
 | 方向 | 动机 | 难度 |
 |---|---|---|
@@ -265,9 +266,9 @@ vCPU 只写寄存器、不做完整复位，直觉上更快。实测 p95 是 145
 2. 改动指引按任务组织；加设备时**必读**[第 12 篇 §8](12-rollback-pitfalls.md#8-检查表还有哪些地方可能有同类问题) 的检查表。
 3. 自查清单 8 条，第 8 条（不变量）最重要 —— **9 条不变量被破坏后是静默的**。
 4. 验证分三层；换完二进制**一定要验实际跑起来的是哪一版**。
-5. 已知缺口：三项测试、四项实测、六个可能的方向。
-   其中「结构化的 Faulted 标识」难度低，建议顺手做掉。
+5. 已知缺口清单只在[第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖)维护一份；
+   六个可能的方向里，「结构化的 Faulted 标识」难度低，建议顺手做掉。
 
 ---
 
-**下一篇**：[22 · 术语表与代码地图](28-glossary-and-code-map.md) —— 全书的查询入口。
+**下一篇**：[28 · 术语表与代码地图](28-glossary-and-code-map.md) —— 全书的查询入口。
