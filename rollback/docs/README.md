@@ -22,7 +22,8 @@
 | 工程师，要接手或参与 | 全书；机制最短路径是 **06 → 07 → 08 → 10 → 11 → 13** |
 | 系统工程师 / 运维 | **02 → 05 → 19 → 17** |
 | 使用方，要判断什么时候用它 | **00 → 16 → 20** |
-| 评审 / 客户，要看证据 | **00 → 25 → 21**，再按需进 22 / 23 |
+| 评审 / 客户，要看证据 | **00 → 25**（结论与逐档判定）→ **21**（方法与测试矩阵），细节按需进 22 / 23 / 24 |
+| 拿到交付件，要在机器上验收 | **26**，判据讲解回看 22 / 23 |
 
 ---
 
@@ -66,7 +67,7 @@
 | 14 | [`14-failure-semantics.md`](14-failure-semantics.md) | 失败语义与不变量：提交点、纪元不能丢、断链拒绝恢复 |
 | 15 | [`15-state-and-concurrency.md`](15-state-and-concurrency.md) | 状态管理与并发：如何在运行中的机器上换零件 |
 | 16 | [`16-lifecycle-and-portability.md`](16-lifecycle-and-portability.md) | 生命周期与可移植性边界：产物何时失效、为什么脱离沙箱恢复不了 |
-| 17 | [`17-observability-and-verification.md`](17-observability-and-verification.md) | 三个时钟、静默退化的检测、验收脚本的设计与实测口径 |
+| 17 | [`17-observability-and-verification.md`](17-observability-and-verification.md) | 三个时钟、静默退化的检测、交付态验收脚本的设计原则 |
 
 ### 第四部分　平台与方案选择
 
@@ -82,9 +83,9 @@
 
 | # | 文档 | 内容 |
 |---|---|---|
-| 21 | [`21-test-overview.md`](21-test-overview.md) | 测试体系总览：三种静默失效、三层测试、测试矩阵、测量纪律 |
+| 21 | [`21-test-overview.md`](21-test-overview.md) | 测试体系总览：四种静默失效、三层测试、测试矩阵、测量纪律 |
 | 22 | [`22-functional-tests.md`](22-functional-tests.md) | 功能正确性：三重证据、59 项校验、树语义、pause 兼容、兼容矩阵、HDBSS 取证、稳定性 |
-| 23 | [`23-performance-methodology.md`](23-performance-methodology.md) | 性能测试的指标口径、负载构造、各脚本回答什么、怎么读报告 |
+| 23 | [`23-performance-methodology.md`](23-performance-methodology.md) | 性能测试：判定口径（200 / 100 ms 怎么钉死）、负载构造、各脚本回答什么、怎么读报告 |
 | 24 | [`24-cross-implementation.md`](24-cross-implementation.md) | 与进程级快照和 e2b 原生 snapshot 并排：什么能比、什么不能比 |
 | 25 | [`25-results-and-compliance.md`](25-results-and-compliance.md) | 全书的实测数据、对照 200 / 100 ms 的逐档判定、已知劣化、尚未覆盖 |
 | 26 | [`26-acceptance-runbook.md`](26-acceptance-runbook.md) | 拿到交付件后在目标机上怎么跑、看什么、发回什么 |
@@ -93,7 +94,7 @@
 
 | # | 文档 | 内容 |
 |---|---|---|
-| 27 | [`27-extending.md`](27-extending.md) | 代码地图、改动指引、不能破坏的不变量、已知缺口 |
+| 27 | [`27-extending.md`](27-extending.md) | 代码地图、改动指引、不能破坏的不变量、一次改动怎么验证 |
 | 28 | [`28-glossary-and-code-map.md`](28-glossary-and-code-map.md) | 术语表、代码索引、文件格式索引、环境变量与 API 总表 |
 
 ---
@@ -106,7 +107,7 @@
 | [`../diagrams/`](../diagrams/) | 三张汇报用 SVG 与 mermaid 图源 |
 | [`../slides/`](../slides/) | Slidev 汇报稿（导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
 | [`../test-950/`](../test-950/) | 开发态验证工具箱与实测报告 |
-| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能） |
+| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能），以及两个横向对照脚本 |
 
 ---
 

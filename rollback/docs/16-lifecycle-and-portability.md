@@ -78,7 +78,16 @@ os.RemoveAll(filepath.Join(s.root, sandboxID))   // ← 整个目录，连同 la
 | orchestrator 重启 | 同上 —— 重启本来就会带走这台机器上的所有沙箱 |
 | 宿主重启或宕机 | 同上 |
 | 沙箱迁移到别的节点 | checkpoint **不跟随**，留在原节点直至清理 |
+| 沙箱被 `pause` 再 `connect`（等同 resume） | pause 之前的 checkpoint **回不去**（`checkpoint ... not found`）；resume 起来的是新实例，账本不跨 pause。pause 之后**新建**的 checkpoint 一切正常 |
 | 单个 checkpoint 被显式删除 | 仍被后代依赖则转为隐藏保留，否则物理删除并级联回收祖先（[第 14 篇 §7](14-failure-semantics.md#7-删除依赖感知的回收)） |
+
+pause 那一行是这张表里唯一**不是「沙箱没了」**的失效原因，值得多说一句：
+pause 把当时的层栈整体压进沙箱快照，账本又不从磁盘加载（[§3.3](#33-账本不从磁盘加载)），
+两件事叠加就得到「跨 pause 的 checkpoint id 无效」。这条边界有实测印证 ——
+兼容矩阵把它判成 `REFUSED`（明确拒绝、不留半吊子状态），不是 `BROKEN`，
+同一轮里 `checkpoint.list` 返回 0 个、pause 之后新建的 checkpoint 能正常 restore
+（[第 22 篇 §5](22-functional-tests.md#5-compat_matrixpy与原生生命周期的组合矩阵)）。
+**checkpoint 与原生生命周期操作并存但不交叉**，是边界，不是缺陷。
 
 ---
 

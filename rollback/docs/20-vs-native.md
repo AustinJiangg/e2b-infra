@@ -143,6 +143,9 @@ resumedSbx, err := s.sandboxFactory.ResumeSandbox(ctx, template, sbx.Config,
 
 **这个下限是 ARM 适配版特有的，x86 上不成立** —— 那里换入的是干净页，不计入增量。
 
+> 三套方案的脏页判据并排，以及这个下限在实测里长什么样（名义脏内存一路涨、
+> 原生导出的 memfile 几乎不动），见[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)。
+
 ---
 
 ## 4. 优化点汇总
@@ -256,7 +259,9 @@ resumedSbx, err := s.sandboxFactory.ResumeSandbox(ctx, template, sbx.Config,
 ### 6.3 「e2b 的增量快照有一个与改动量无关的下限」
 
 **这只在 ARM 适配版上成立**（[§3.2](#32-一个反直觉的现象)）。
-x86 上 e2b 的增量是精确的。把这条说成「e2b 的设计问题」是不准确的。
+x86 上 e2b 的增量是精确的。把这条说成「e2b 的设计问题」是不准确的 ——
+它是一处**成本模型差异**，而且对本方案没有影响，本方案根本不走那条判据
+（三套判据并排与实测形状见[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)）。
 
 ---
 

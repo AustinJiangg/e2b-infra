@@ -29,7 +29,7 @@
 | **合并 header** | merged header | 「模板映射 + 各封存层恒等映射」的序列化结果 | [10 §4.2](10-disk-layering.md#42-合并-header) |
 | **提交点** | commit point | 回滚中「开始改 guest 状态」的那一刻 | [11 §3.4](11-in-place-rollback.md#34-提交点) |
 | **撕裂** | torn / `Faulted` | 虚机介于两个时刻之间，只能重建 | [14 §2](14-failure-semantics.md#2-提交点把失败切成两半) |
-| **冻结窗口** | freeze window | 虚机暂停到恢复的这段时间 | [03 §2.1](03-snapshot-fundamentals.md#21-唯一的正确做法一次暂停内完成) |
+| **冻结窗口** | freeze window | 虚机暂停到恢复的这段时间；业务感受到的停顿，但**不用来判定达标** | [03 §2.1](03-snapshot-fundamentals.md#21-唯一的正确做法一次暂停内完成)、[23 §1.2](23-performance-methodology.md#12-口径定义表) |
 | **账本污染** | poisoned | 账本与活的层栈不一致，此后拒绝服务 | [10 §8](10-disk-layering.md#8-账本与污染) |
 
 ### 1.2 平台与底层
@@ -59,6 +59,19 @@
 | **envd** | guest 里执行命令、读写文件的守护进程 | 同上 |
 | **orchestrator** | 宿主上管沙箱生命周期、网络、存储、代理的进程 | [06](06-architecture.md) |
 | **SandboxID / ExecutionID / LifecycleID** | 三个不同层次的身份标识 | [20 §1.3](20-vs-native.md#13-三个-id) |
+
+### 1.4 测试与测量
+
+| 术语 | 英文 / 标识 | 一句话 | 首次出现 |
+|---|---|---|---|
+| **静默失效** | silent failure | 断言全过、内容全对，坏掉的是成本、覆盖范围、或判据本身 —— **测试通过 ≠ 测的是那个东西** | [21 §1](21-test-overview.md#1-为什么这套方案的测试要格外小心) |
+| **`mem_mode`** | `memMode` | 服务端每次 checkpoint 回报本次是 `full` 还是 `incremental`；除了沙箱的第一个 checkpoint，出现 `full` 就是有问题 | [17 §2.1](17-observability-and-verification.md#21-memmode每次调用都回报)、[22 §2.4](22-functional-tests.md#24-mem_mode-断言以及它依赖哪一版-sdk) |
+| **条件标签** | —— | 一个耗时或体积数字必须随身携带的六项：机型、脏页后端、产物文件系统与介质、模板规格、二进制 sha、脚本与参数。不带就不允许被引用 | [21 §4.2](21-test-overview.md#42-一个数字要带的条件标签) |
+| **时机成本** | —— | 「写完立刻拍」减「冲干净再拍」的差值 —— 回写争用的代价，不是快照机制本身的代价 | [23 §3.2](23-performance-methodology.md#32-两遍拍①-减-②-就是时机成本) |
+| **浅集 / 深集** | shallow / deep revert set | restore 的两种形态：回退一步（浅）与回到链根（深）。把「回滚集大小」和「链深」两个变量拆开 | [23 §4.4](23-performance-methodology.md#44-restore浅集与深集) |
+| **底噪** | noise floor | 冻结窗口采样器自身的采样间隔抖动。冻结窗口小于底噪时那一格标 ⚠，数字不作数 | [23 §4.3](23-performance-methodology.md#43-c冻结窗口怎么测) |
+| **工作集**（对比**脏页**） | working set | 「自上次恢复以来被**碰过**的页集」。脏页是「被**写过**的页集」；把读也算脏时，增量就退化成工作集 | [07 §5.3](07-dirty-page-tracking.md#53-与改动量无关的下限)、[24 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏) |
+| **`REFUSED` / `BROKEN`** | —— | 兼容矩阵的两种非 OK 判定：`REFUSED` 是服务端明确拒绝且没留下半吊子状态（**边界，不是缺陷**）；`BROKEN` 是能调用但结果不对、或本该能做的原生操作被弄坏了（唯一的真问题） | [22 §5](22-functional-tests.md#5-compat_matrixpy与原生生命周期的组合矩阵) |
 
 ---
 
@@ -103,16 +116,35 @@
 | 动作分发 | `src/vmm/src/rpc_interface.rs` | `VmmAction::{RollbackSnapshot, SaveDirtyBitmap}` |
 | 退化的那一行（orchestrator 侧） | `internal/sandbox/uffd/userfaultfd/userfaultfd.go` | 被注释的 `UFFDIO_COPY_MODE_WP` |
 
-### 2.3 测试与脚本
+### 2.3 测试脚本
 
-| 用途 | 位置 |
-|---|---|
-| 单元测试 | `internal/checkpoint/{store,bitmap,rootfs,header_agreement}_test.go` |
-| 交付态正确性验收 | `e2b-infra/benchmark/checkpoint_verify.py` |
-| 交付态性能基准 | `e2b-infra/benchmark/checkpoint_bench.py` |
-| 开发态工具箱 | `e2b-infra/rollback/test-950/` |
-| 汇报配图 | `e2b-infra/rollback/diagrams/` |
-| 汇报稿 | `e2b-infra/rollback/slides/` |
+**交付态**：`e2b-infra/benchmark/` 下四个脚本，各自单文件、零共享依赖。
+
+| 关注点 | 文件 | 讲解 |
+|---|---|---|
+| 正确性验收（59 项，一条直链） | `checkpoint_verify.py` | [22 §2](22-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
+| 分档扫描 + 时机成本 + 直接量产物 | `checkpoint_bench.py` | [23 §3](23-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
+| 与进程级那套逐格对齐的对照组 | `checkpoint_bench_v2.py` | [24 §2.1](24-cross-implementation.md#21-主力基准与对照组) |
+| e2b 原生 snapshot 的两个模式 | `native_snapshot_bench.py` | [24 §2.3](24-cross-implementation.md#23-原生那份的两个模式) |
+
+**开发态**：`e2b-infra/rollback/test-950/`，共享 `lib.py`，`run-all.sh` 一条命令跑完一套，
+报告落 `reports/<方案>-<时间戳>/`。**与交付态脚本不混用**
+（[21 §2.4](21-test-overview.md#24-为什么两套不混用)）。
+
+| 关注点 | 文件 | 讲解 |
+|---|---|---|
+| 树语义：线性 / 前滚 / 跨 LCA / 删除 / 失败（31 项） | `correctness.py` | [22 §3](22-functional-tests.md#3-correctnesspy树形语义的-31-项) |
+| checkpoint 之后 pause，磁盘数据必须原样回来 | `pause_verify.py` | [22 §4](22-functional-tests.md#4-pause_verifypy一个自洽的静默损坏) |
+| 与原生 create / connect / pause / kill 的组合矩阵 | `compat_matrix.py` | [22 §5](22-functional-tests.md#5-compat_matrixpy与原生生命周期的组合矩阵) |
+| HDBSS 三级证据（能力 / 自报 / 数据面） | `hdbss_evidence.py` | [22 §6](22-functional-tests.md#6-hdbss_evidencepy能力不等于数据面) |
+| 稳定性：N 次回滚，任何内容错误立即停 | `loop.py` | [22 §7](22-functional-tests.md#7-looppy稳定性) |
+| O(脏页)、df 增量、链深 5 / 20 / 50 | `timing.py` | [23 §5](23-performance-methodology.md#5-timingpyo脏页-与链深解耦) |
+| 分档分布、冻结窗口、restore 浅深、60 秒连打 | `bench-ckpt.py` + `freeze_probe.py` | [23 §4](23-performance-methodology.md#4-bench-ckptpy分布冻结窗口连打) |
+| 连打劣化归因：链深还是写入量 | `probe-ramp.py` | [23 §6](23-performance-methodology.md#6-probe-ramppy一个判别式设计) |
+| 宿主自检 / 造数据卷 / 换二进制 / 切换后冒烟 | `01-check-host.sh`、`02-prepare-loop-volume.sh`、`03-switch.sh`、`04-verify-runtime.sh` | [26 §4](26-acceptance-runbook.md#4-开发态流程摘要) |
+
+**其他**：单元测试在 `internal/checkpoint/{store,bitmap,rootfs,header_agreement}_test.go`
+（不进交付 patch）；汇报配图在 `e2b-infra/rollback/diagrams/`、汇报稿在 `e2b-infra/rollback/slides/`。
 
 ---
 
@@ -248,5 +280,11 @@
 | 18 | [ext4 与 XFS](18-ext4-vs-xfs.md) | 两套方案的差异与选择 |
 | 19 | [鲲鹏平台](19-kunpeng-platform.md) | HDBSS、920B 与 950 |
 | 20 | [与原生的对比与配合](20-vs-native.md) | 两条路径怎么一起用 |
-| 21 | [继续开发](27-extending.md) | 改动指引与已知缺口 |
-| 22 | 本篇 | 查询入口 |
+| 21 | [测试体系总览](21-test-overview.md) | 四种静默失效、三层测试、测试矩阵、测量纪律 |
+| 22 | [功能正确性测试](22-functional-tests.md) | 怎么证明「回到了那一刻」 |
+| 23 | [性能测试：指标与方法](23-performance-methodology.md) | 判定口径、负载构造、各脚本回答什么 |
+| 24 | [性能测试：三套方案的横向对照](24-cross-implementation.md) | 什么能比、什么不能比 |
+| 25 | [实测结果与达标判定](25-results-and-compliance.md) | 全书的实测数字只在这里 |
+| 26 | [上机验收操作](26-acceptance-runbook.md) | 拿到交付件后怎么跑 |
+| 27 | [继续开发](27-extending.md) | 改动指引与已知缺口 |
+| 28 | 本篇 | 查询入口 |
