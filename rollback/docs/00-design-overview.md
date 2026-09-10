@@ -641,9 +641,12 @@ p50 196 ms 只剩 3.8 ms 余量，并列的 p99
 
 ## 附录 A：代码位置
 
-分支：`infra-arm@jll`（orchestrator）、`KASandbox@jll`（Firecracker）。
-交付形态是 `e2b-infra` 仓库的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`；
-**单元测试只在 `infra-arm`**，不进 patch（rpmbuild 的 `%build` 只做 `go build`）。
+**上游**：openEuler KASandbox 的 [`deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入），
+orchestrator、Firecracker、Python SDK 同仓 —— 下表 orchestrator 的路径以 `packages/orchestrator/` 起，
+Firecracker 的路径以 `firecracker/` 起。**开发分支**：`infra-arm@jll`（orchestrator）、`KASandbox@jll`（Firecracker）；
+XFS 方案（`jll-xfs`）未合入上游。**交付形态**是 `e2b-infra` 仓库的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`。
+**单元测试只在 `infra-arm`**：不进 patch（rpmbuild 的 `%build` 只做 `go build`），也未随 MR 合入上游。
+三处的关系见[第 27 篇 §1.1](27-extending.md#11-三个地方)。
 
 | 关注点 | 位置 |
 |---|---|

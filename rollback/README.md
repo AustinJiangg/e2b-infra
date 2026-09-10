@@ -1,7 +1,8 @@
 # rollback —— checkpoint / restore 的文档、配图与验证工具箱
 
 沙箱活着时的高频快速回退。本目录是这套功能的**文档与验证材料**；
-实现代码在仓库根的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm` 里。
+实现代码在仓库根的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm` 里；
+上游归宿是 openEuler [KASandbox `deltabox`](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入）。
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|

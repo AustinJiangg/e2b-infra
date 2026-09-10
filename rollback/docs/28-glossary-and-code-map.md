@@ -77,6 +77,8 @@
 
 ## 2. 代码地图
 
+路径相对各自仓库根；在上游 openEuler KASandbox `deltabox`（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)）里，orchestrator 的路径前面加 `packages/orchestrator/`，Firecracker 的加 `firecracker/`，其余完全一致。三处代码的关系见[第 27 篇 §1.1](27-extending.md#11-三个地方)。
+
 ### 2.1 orchestrator（`infra-arm@jll`）
 
 | 关注点 | 文件 | 关键符号 |
