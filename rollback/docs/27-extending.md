@@ -22,14 +22,21 @@
 
 ## 1. 代码在哪
 
-### 1.1 两个仓库、两条轨
+### 1.1 三个地方
 
-| 仓库 | 内容 | ext4 方案分支 | XFS 方案分支 |
+代码在三个地方，角色不同：
+
+| | 在哪 | 装着什么 | 什么时候去那里 |
 |---|---|---|---|
-| `infra-arm` | orchestrator（Go） | `jll` | `jll-xfs` |
-| `KASandbox` | Firecracker（Rust） | `jll` | `jll-xfs` |
+| **上游** | openEuler KASandbox [`deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox) | orchestrator（`packages/orchestrator/`）、Firecracker（`firecracker/`）、Python SDK（`py-sdk/`）**同仓**；另有 `deploy/CHECKPOINT.md` 与一份 `deploy/checkpoint_verify.py` | 正式归宿。[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)「feat: host-side sandbox checkpoint/restore (ARM64, HDBSS)」2026-09-09 合入：6 个提交、74 个文件、6938 行 |
+| **开发仓库** | `infra-arm`（orchestrator）与 `KASandbox`（Firecracker）各两条分支 | ext4 方案在 `jll`，XFS 方案在 `jll-xfs`；**8 个 checkpoint 单测只在这里** | 跑单测、改 XFS 方案、追历史 |
+| **交付形态** | `e2b-infra` 仓库 | patch + 编译好的 Firecracker，见 §1.2 | 装机 |
 
-两个仓库的同名分支**必须配对使用**（[第 18 篇 §7](18-ext4-vs-xfs.md#7-版本配对)）。
+上游合入的是 **ext4 方案**（主线）；XFS 方案与那 8 个 `_test.go` 没有随 MR 进去
+（上游 `internal/checkpoint/` 下没有测试文件）。上游的文件路径与本书代码地图一致，只是多了
+`packages/orchestrator/` 和 `firecracker/` 两个前缀。
+
+开发仓库里两个仓库的同名分支**必须配对使用**（[第 18 篇 §7](18-ext4-vs-xfs.md#7-版本配对)）。
 两条轨的差异见[第 18 篇](18-ext4-vs-xfs.md)。
 
 上游基线是 `infra-arm` 的 `2026.09`，加上 `fbee6fcd1 patch: all patch for arm64`

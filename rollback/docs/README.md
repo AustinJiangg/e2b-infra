@@ -1,6 +1,8 @@
 # Checkpoint / Restore 技术手册
 
 > **v0.2.0** · 2026-09-10 · 江路路（j30059180）
+>
+> 实现已合入 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09；orchestrator、Firecracker、Python SDK 同仓）
 
 一套关于**在不中断沙箱的前提下，把一台正在运行的虚拟机回退到过去某一时刻**的系统文档。
 

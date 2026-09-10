@@ -170,7 +170,7 @@ else:
 新增的 Go 单测共 **8 个 `_test.go`、约 1600 行**，分布在
 `packages/orchestrator/internal/checkpoint/`（账本、位图、层栈、合并 header 的一致性）与
 `internal/sandbox/block/`（封层、层栈等价、导出压平）两处，只在 `infra-arm` 的
-`jll` / `jll-xfs` 分支上。它们**不进交付 patch**：rpmbuild 的 `%build` 只做 `go build`，
+`jll` / `jll-xfs` 分支上 —— **未随 MR !119 合入上游**（[第 27 篇 §1.1](27-extending.md#11-三个地方)）。它们**不进交付 patch**：rpmbuild 的 `%build` 只做 `go build`，
 从不 `go test`，进了源树也一次都不会被编译。
 
 它们守着哪些不变量、哪些不变量没有被守住，见

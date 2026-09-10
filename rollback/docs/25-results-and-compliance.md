@@ -71,7 +71,7 @@
 | **920B-0824-ramp** | 2026-08-24 | 920B · `kvm-wp` | ext4 | ext4 · loop | 未记录 | `reports/ramp-ext4-20260824-215331/` |
 | **920B-0825-ext4** | 2026-08-25 | 920B · `kvm-wp` | ext4 | ext4 · 300 G loop（`direct-io` / 预分配 / 4K 扇区 / `nodiscard`） | 未记录 | `reports/ext4-20260825-154832/` |
 | **920B-0825-xfs** | 2026-08-25 | 920B · `kvm-wp` | XFS | XFS · 同参数 300 G loop，`cowextsize=4096` | 未记录 | `reports/xfs-cow4k/`（未调 `cowextsize` 的同轮在 `reports/xfs-20260825-162413/`） |
-| **920B-0904** | 2026-09-04 | 920B · `kvm-wp` | ext4 | **XFS** · 真盘 | orchestrator `aa13d05e9a…`、firecracker `05774e5376…`（构建自 KASandbox_0904） | `e2b-infra/rollback/test-950/reports/920b-kas0904-20260904/` |
+| **920B-0904** | 2026-09-04 | 920B · `kvm-wp` | ext4 | **XFS** · 真盘 | orchestrator `aa13d05e9a…`、firecracker `05774e5376…`（构建自 KASandbox_0904 —— 即上游 MR !119 的源分支，这一轮验的就是合入 openEuler 的代码） | `e2b-infra/rollback/test-950/reports/920b-kas0904-20260904/` |
 | **920B-0908** | 2026-09-08 | 920B · `kvm-wp` | ext4 | XFS · 真盘 | `orchestrator-ext4-ecdad325c-pausefix` | 原始日志在 `deltabox/e2b/results/ckpt-920b-20260908/`，**本仓库未收** |
 | **950-native** | 2026-09-09 ~ 10 | 950 · 原生 pause 路径 | —— | 导出缓存 XFS on LVM | —— | `三套快照方案的负载构造与测量口径.md` §八 |
 
