@@ -420,5 +420,5 @@ Firecracker 给每个线程装独立的 seccomp 过滤器。回滚路径引入�
 | 线格式测试 | `internal/checkpoint/bitmap_test.go` — `TestBitmapWireFormat`、`TestBitmapRejectsMalformed` |
 | OpenAPI 描述 | `src/firecracker/swagger/firecracker.yaml` |
 
-**下一篇**：[13 · 端到端](13-end-to-end.md) —— 部件都讲完了，
-按时间顺序完整走一遍一次 checkpoint 与一次 restore。
+**下一篇**：[10 · 磁盘分层与零拷贝封存](10-disk-layering.md) —— 内存那一半讲完了，
+接下来是磁盘那一半：怎么做到一个字节都不搬就换掉整个磁盘视图。

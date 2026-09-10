@@ -167,7 +167,7 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 | `pause_verify.py` | 末行 `✓ 全部通过` |
 | `compat_matrix.py` | 末行 `✓ 没有 BROKEN`（`REFUSED` 是边界不是故障） |
 | `bench-ckpt.py` | 末行 `BENCH OK`；各档 `mem_mode` 全 `incremental`；冻结窗口每档标「可区分 ✓」 |
-| `hdbss_evidence.py` | L1 `supported` + L2 `hdbss` + L3 冷/热接近 1（软件写保护时是 4~5） |
+| `hdbss_evidence.py` | L1 `supported` + L2 `hdbss` + L3 冷/热接近 1（软件写保护时约 4.5~5.4，见[第 22 篇 §6](22-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)） |
 
 验收结束后 `bash 03-switch.sh restore` 把机器还原成切换前的样子。
 任何一步不过就停下来，把该步输出和 `/data/nomad/alloc/*/alloc/logs/start.stdout.0`
@@ -228,3 +228,6 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 | 实测结果与达标判定 | [第 25 篇](25-results-and-compliance.md) |
 | 开发态工具箱完整说明 | [`../test-950/README.md`](../test-950/README.md) |
 | 平台前提与部署陷阱 | [第 19 篇 §6](19-kunpeng-platform.md#6-部署检查清单) |
+
+**下一篇**：[27 · 在这套方案上继续开发](27-extending.md) —— 验收之后，
+要在这套方案上改代码、加能力，需要先知道哪些不变量不能碰。

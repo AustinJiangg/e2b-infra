@@ -118,12 +118,18 @@
 
 ### 2.3 测试脚本
 
-**交付态**：`e2b-infra/benchmark/` 下四个脚本，各自单文件、零共享依赖。
+**交付态**：`e2b-infra/benchmark/` 下两个脚本，各自单文件、零共享依赖
+（[21 §2.2](21-test-overview.md#22-交付态验收两个单文件脚本)）。
 
 | 关注点 | 文件 | 讲解 |
 |---|---|---|
 | 正确性验收（59 项，一条直链） | `checkpoint_verify.py` | [22 §2](22-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
 | 分档扫描 + 时机成本 + 直接量产物 | `checkpoint_bench.py` | [23 §3](23-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
+
+**跨实现对照**：同目录下另有两个脚本，只用于做三套方案的横向对照，不属于交付态验收流程。
+
+| 关注点 | 文件 | 讲解 |
+|---|---|---|
 | 与进程级那套逐格对齐的对照组 | `checkpoint_bench_v2.py` | [24 §2.1](24-cross-implementation.md#21-主力基准与对照组) |
 | e2b 原生 snapshot 的两个模式 | `native_snapshot_bench.py` | [24 §2.3](24-cross-implementation.md#23-原生那份的两个模式) |
 
