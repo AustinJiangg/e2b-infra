@@ -143,8 +143,10 @@ resumedSbx, err := s.sandboxFactory.ResumeSandbox(ctx, template, sbx.Config,
 
 **这个下限是 ARM 适配版特有的，x86 上不成立** —— 那里换入的是干净页，不计入增量。
 
+> **2026-09-11 起已修复**（infra-arm `jll` `de25fe4d0`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
+
 > 三套方案的脏页判据并排，以及这个下限在实测里长什么样（名义脏内存一路涨、
-> 原生导出的 memfile 几乎不动），见[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)。
+> 原生导出的 memfile 几乎不动），见[第 27 篇 §5](27-cross-implementation.md#5-一个真实发现读也被算成脏)。
 
 ---
 
@@ -261,7 +263,9 @@ resumedSbx, err := s.sandboxFactory.ResumeSandbox(ctx, template, sbx.Config,
 **这只在 ARM 适配版上成立**（[§3.2](#32-一个反直觉的现象)）。
 x86 上 e2b 的增量是精确的。把这条说成「e2b 的设计问题」是不准确的 ——
 它是一处**成本模型差异**，而且对本方案没有影响，本方案根本不走那条判据
-（三套判据并排与实测形状见[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)）。
+（三套判据并排与实测形状见[第 27 篇 §5](27-cross-implementation.md#5-一个真实发现读也被算成脏)）。
+2026-09-11 起这个下限在 ARM 线上也不成立了：原生改读与本方案同一份写跟踪位图
+（[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)）。
 
 ---
 
@@ -289,5 +293,5 @@ x86 上 e2b 的增量是精确的。把这条说成「e2b 的设计问题」是�
 | 原生 diff 元数据 | `packages/shared/pkg/storage/header` — `DiffMetadataBuilder` |
 | 本方案的对应实现 | 见[第 8](08-memory-diff-tree.md)、[10](10-disk-layering.md)、[11 篇](11-in-place-rollback.md) |
 
-**下一部分**：[21 · 测试体系总览](21-test-overview.md) —— 机制、保障、平台都讲完了，
-接下来是「怎么证明它对、它快」。
+**下一篇**：[21 · 原生 snapshot 的增量为什么不精确](21-native-increment-diagnosis.md) ——
+同一台机器上，本方案的增量是精确的，原生那条线却不是；先看清它差在哪。

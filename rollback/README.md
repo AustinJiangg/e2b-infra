@@ -6,7 +6,7 @@
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
-| [`docs/`](docs/) | **技术手册**，29 篇，从「这是个什么问题」到「怎么证明它对、它快」再到「怎么在它上面继续开发」 | 首要入口 |
+| [`docs/`](docs/) | **技术手册**，32 篇，从「这是个什么问题」到「怎么证明它对、它快」再到「怎么在它上面继续开发」 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
 | [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
 | [`test-950/`](test-950/) | 开发态验证工具箱：宿主自检 / 造数据卷 / 两套之间切换 / 穷举与劣化排查脚本，以及 11 份实测报告 | 我们自己，做上机验证与排查 |
@@ -25,7 +25,7 @@
 | 工程师，要接手或参与 | 全书；机制最短路径 [`06`](docs/06-architecture.md) → [`07`](docs/07-dirty-page-tracking.md) → [`08`](docs/08-memory-diff-tree.md) → [`10`](docs/10-disk-layering.md) → [`11`](docs/11-in-place-rollback.md) → [`13`](docs/13-end-to-end.md) |
 | 系统工程师 / 运维 | [`19 鲲鹏平台`](docs/19-kunpeng-platform.md) → [`17 可观测与验证`](docs/17-observability-and-verification.md) |
 | 使用方，判断什么时候用它 | [`00`](docs/00-design-overview.md) → [`16 生命周期与边界`](docs/16-lifecycle-and-portability.md) → [`20 与原生的对比`](docs/20-vs-native.md) |
-| 要看测试证据 / 验收 | [`21 测试体系总览`](docs/21-test-overview.md) → [`25 实测结果与达标判定`](docs/25-results-and-compliance.md) → [`26 上机验收操作`](docs/26-acceptance-runbook.md) |
+| 要看测试证据 / 验收 | [`24 测试体系总览`](docs/24-test-overview.md) → [`28 实测结果与达标判定`](docs/28-results-and-compliance.md) → [`29 上机验收操作`](docs/29-acceptance-runbook.md) |
 
 完整目录见 [`docs/README.md`](docs/README.md)。
 
@@ -43,9 +43,9 @@
 > 两套测试脚本**不要混用**。宿主探针在两个交付脚本里故意重复了一份，
 > 就是为了防止只拷走一半、剩下的静默变成 unknown。
 
-**讲解见 [`docs/22`](docs/22-functional-tests.md)（每条正确性判据怎么设计的）与
-[`docs/23`](docs/23-performance-methodology.md)（判定口径与负载构造），
-操作见 [`docs/26`](docs/26-acceptance-runbook.md)（前置条件、三条命令、期望末行、结果回传规范）。**
+**讲解见 [`docs/25`](docs/25-functional-tests.md)（每条正确性判据怎么设计的）与
+[`docs/26`](docs/26-performance-methodology.md)（判定口径与负载构造），
+操作见 [`docs/29`](docs/29-acceptance-runbook.md)（前置条件、三条命令、期望末行、结果回传规范）。**
 
 ## 当前状态
 
@@ -54,14 +54,14 @@
 性能分档基准尚未在 950 上跑过；920B 上的全部历史数字来自软件写保护路径，两者口径不同、不能相减。
 
 **全书的实测数字与对照客户指标的逐档判定只在
-[`docs/25-results-and-compliance.md`](docs/25-results-and-compliance.md) 一处维护**，
+[`docs/28-results-and-compliance.md`](docs/28-results-and-compliance.md) 一处维护**，
 尚未覆盖的缺口也在那里。
 
 ## 把文档发给别人
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.2.0**（2026-09-10，江路路 j30059180）；每份产物的封面与侧栏都印着版本号，
+当前文档版本 **v0.2.1**（2026-09-14，江路路 j30059180）；每份产物的封面与侧栏都印着版本号，
 Release tag 与之一致，修订规则见 [`docs/README.md#版本`](docs/README.md#版本)。
 
 | 附件 | 大小 | 给谁 |

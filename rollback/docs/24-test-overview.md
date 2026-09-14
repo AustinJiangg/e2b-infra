@@ -1,4 +1,4 @@
-# 21 · 测试体系总览
+# 24 · 测试体系总览
 
 > 这套系统最危险的故障不会让任何断言变红：功能全对、内容逐字复现、脚本打印
 > 一屏 `PASS`，只是**测的根本不是那个东西**。本篇先讲四种这样的静默失效，
@@ -80,7 +80,7 @@ checkpoint 会把当前写层封存、另开一层（[第 10 篇 §3](10-disk-la
 
 **guest 的页缓存会把磁盘层的问题完全盖住** —— 刚写过的 16 MiB 还在缓存里，
 读回来当然对。绕开缓存（`O_DIRECT`）才是在读那块盘。
-这条判据的展开在[第 22 篇 §4](22-functional-tests.md#4-pause_verifypy一个自洽的静默损坏)。
+这条判据的展开在[第 25 篇 §4](25-functional-tests.md#4-pause_verifypy一个自洽的静默损坏)。
 
 ### 1.3 把读过的页当成脏页
 
@@ -109,8 +109,8 @@ checkpoint 会把当前写层封存、另开一层（[第 10 篇 §3](10-disk-la
 [第 20 篇 §6.3](20-vs-native.md#63-e2b-的增量快照有一个与改动量无关的下限)）。
 所以同一台机器上，我们的内存差分随档位线性增长，原生的不增长。
 这条链的完整推导、三套脏页判据的并排，以及它为什么不影响本方案，在
-[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)；
-实测那一列产物大小在[第 25 篇 §3.3](25-results-and-compliance.md#33-跨实现对照在-950-上的状态)。
+[第 27 篇 §5](27-cross-implementation.md#5-一个真实发现读也被算成脏)；
+实测那一列产物大小在[第 28 篇 §3.3](28-results-and-compliance.md#33-跨实现对照在-950-上的状态)。
 
 ### 1.4 判据本身静默失效
 
@@ -170,12 +170,12 @@ else:
 新增的 Go 单测共 **8 个 `_test.go`、约 1600 行**，分布在
 `packages/orchestrator/internal/checkpoint/`（账本、位图、层栈、合并 header 的一致性）与
 `internal/sandbox/block/`（封层、层栈等价、导出压平）两处，只在 `infra-arm` 的
-`jll` / `jll-xfs` 分支上 —— **未随 MR !119 合入上游**（[第 27 篇 §1.1](27-extending.md#11-三个地方)）。它们**不进交付 patch**：rpmbuild 的 `%build` 只做 `go build`，
+`jll` / `jll-xfs` 分支上 —— **未随 MR !119 合入上游**（[第 30 篇 §1.1](30-extending.md#11-三个地方)）。它们**不进交付 patch**：rpmbuild 的 `%build` 只做 `go build`，
 从不 `go test`，进了源树也一次都不会被编译。
 
 它们守着哪些不变量、哪些不变量没有被守住，见
 [第 15 篇 §8](15-state-and-concurrency.md#8-单元测试守着哪些不变量)与
-[第 27 篇 §5.1](27-extending.md#51-测试)。本部分不再展开 —— 单测证的是**部件**，
+[第 30 篇 §5.1](30-extending.md#51-测试)。本部分不再展开 —— 单测证的是**部件**，
 本部分讲的是**整机**。
 
 ### 2.2 交付态验收：两个单文件脚本
@@ -238,7 +238,7 @@ XFS 方案没有按代 `mem_diff`），传错了就用错的规则去判对的�
 ## 3. 测试矩阵
 
 全书唯一一张。**现状列只记三态**（✅ 跑过并留有报告 / 待测 / 部分），
-数字一律不在这里，在[第 25 篇](25-results-and-compliance.md)。
+数字一律不在这里，在[第 28 篇](28-results-and-compliance.md)。
 
 | 要证的性质 | 脚本 | 判据 | 950 | 920B |
 |---|---|---|---|---|
@@ -263,7 +263,7 @@ XFS 方案没有按代 `mem_diff`），传错了就用错的规则去判对的�
 
 > **950 = 鲲鹏 950，HDBSS 硬件标脏，产物落根盘 ext4（真盘）；920B = 鲲鹏 920，
 > 无 HDBSS 走 KVM 软件写保护，产物视轮次落调优过的 loop 卷或根盘 XFS（真盘）。**
-> 两台机器的差异表见[第 25 篇 §1](25-results-and-compliance.md#1-条件标签)，
+> 两台机器的差异表见[第 28 篇 §1](28-results-and-compliance.md#1-条件标签)，
 > 平台差异见[第 19 篇 §4](19-kunpeng-platform.md#4-两台机器的实测对照)。
 
 矩阵里「待测」占了整整一列，这是当前状态的如实记录：**950 上已经证到的是正确性
@@ -287,8 +287,8 @@ XFS 方案没有按代 `mem_diff`），传错了就用错的规则去判对的�
 | 冻结窗口 | `freeze_probe.py` 在 guest 里 2.5 kHz 采样，看时间序列里的「洞」 | 解释业务感受到的停顿，**不作判定** |
 | 宿主分阶段 | 服务端 `timings.json` | 回答「时间去哪了」，不回答「差多少」 |
 
-判定口径与它的完整定义在[第 23 篇 §1](23-performance-methodology.md#1-指标口径)，
-判定结果在[第 25 篇 §5](25-results-and-compliance.md#5-对照客户指标的判定表)。
+判定口径与它的完整定义在[第 26 篇 §1](26-performance-methodology.md#1-指标口径)，
+判定结果在[第 28 篇 §5](28-results-and-compliance.md#5-对照客户指标的判定表)。
 
 ### 4.2 一个数字要带的条件标签
 
@@ -316,7 +316,7 @@ A 建 victim、B 删掉它、C 保持删掉（回到 A 必须让它复活），�
 
 同样的道理用在别处：`hdbss_evidence.py` 的 L3 判据先在 920B 上取到**负样本**
 （没有 HDBSS，冷/热 = 4.5~5.4，正是软件写保护的特征），这个判据才有资格拿到 950 上用
-（[第 22 篇 §6](22-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)）。
+（[第 25 篇 §6](25-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)）。
 
 ### 4.4 空着比错的数强
 
@@ -335,7 +335,7 @@ XFS 方案没有按代的 `mem_diff`，那一格就空着；宿主机之外跑�
 > 这类口径说明必须和数字放在一起。分开放，数字一定会被单独引用。
 
 三套方案横向对照时这条纪律更严：快照范围不同，有些列只能并列、不能作差
-（[第 24 篇 §4](24-cross-implementation.md#4-恢复语义不同所以有些列不能作差)）。
+（[第 27 篇 §4](27-cross-implementation.md#4-恢复语义不同所以有些列不能作差)）。
 
 ---
 
@@ -362,7 +362,7 @@ XFS 方案没有按代的 `mem_diff`，那一格就空着；宿主机之外跑�
 2. **覆盖层要排在 `patch_e2b.py` 之前**，顺序反了会被 https→http 的全局替换盖回去。
 3. 装在 conda 环境里是正常路径；装进已经被改过元数据的系统 python 才需要 `--force`。
 
-具体命令与期望输出在[第 26 篇 §1](26-acceptance-runbook.md#1-前置条件)。
+具体命令与期望输出在[第 29 篇 §1](29-acceptance-runbook.md#1-前置条件)。
 
 ### 5.2 宿主机 vs 非宿主机
 
@@ -396,7 +396,7 @@ python checkpoint_verify.py 2>&1 | tee reports/<机器>-verify-<日期>.log
 命令与参数、脏页后端、产物落盘路径与文件系统、沙箱 id、结果表、以及「这份数不能拿来干什么」。
 两个范本：`reports/950-verify-20260829/00-context.md`（交付态一轮）与
 `reports/920b-kas0904-20260904/00-context.md`（开发态全套 + 两个遗留问题的定位过程）。
-必填字段表在[第 26 篇 §5](26-acceptance-runbook.md#5-结果回传规范)。
+必填字段表在[第 29 篇 §5](29-acceptance-runbook.md#5-结果回传规范)。
 
 ---
 
@@ -408,7 +408,7 @@ python checkpoint_verify.py 2>&1 | tee reports/<机器>-verify-<日期>.log
    要抓它们，测试必须多问一句「这是怎么做到的」，而不只问「做对了没有」。
 3. `mem_mode` 是防第一种的主力判据；它依赖 SDK 透出该字段，
    **换一版 SDK 就会从 59 项静默变成 57 项**。报告里必须记项数与 SDK 版本。
-4. 三层测试：单元测试证部件（不进交付 patch，见第 27 篇）、
+4. 三层测试：单元测试证部件（不进交付 patch，见第 30 篇）、
    交付态两个单文件脚本证整机、开发态工具箱做穷举与归因。
 5. 交付态**故意重复**宿主探针：拷走一半的公共模块不会报错，只会让条件标签集体变成「未知」。
 6. 两套脚本不混用。开发态位置参数顺序敏感，传错会用错的规则判对的产物、报假 FAIL。
@@ -424,12 +424,12 @@ python checkpoint_verify.py 2>&1 | tee reports/<机器>-verify-<日期>.log
 | 想知道 | 去哪 |
 |---|---|
 | 三个时钟与退化上报的实现 | [第 17 篇](17-observability-and-verification.md) |
-| 每条正确性判据怎么设计的 | [第 22 篇](22-functional-tests.md) |
-| 性能指标口径与负载怎么造 | [第 23 篇](23-performance-methodology.md) |
-| 三套方案怎么并排比 | [第 24 篇](24-cross-implementation.md) |
-| 实测数字与达标判定 | [第 25 篇](25-results-and-compliance.md) |
-| 上机怎么操作 | [第 26 篇](26-acceptance-runbook.md) |
+| 每条正确性判据怎么设计的 | [第 25 篇](25-functional-tests.md) |
+| 性能指标口径与负载怎么造 | [第 26 篇](26-performance-methodology.md) |
+| 三套方案怎么并排比 | [第 27 篇](27-cross-implementation.md) |
+| 实测数字与达标判定 | [第 28 篇](28-results-and-compliance.md) |
+| 上机怎么操作 | [第 29 篇](29-acceptance-runbook.md) |
 | 开发态工具箱的完整说明 | [`../test-950/README.md`](../test-950/README.md)、[`MANIFEST.md`](../test-950/MANIFEST.md) |
 
-**下一篇**：[22 · 功能正确性测试](22-functional-tests.md) —— 「回到那一刻」怎么被证明，
+**下一篇**：[25 · 功能正确性测试](25-functional-tests.md) —— 「回到那一刻」怎么被证明，
 以及每个脚本各自守住哪一条。

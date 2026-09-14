@@ -338,7 +338,7 @@ pub enum DirtyTrackingBackend { Off, KvmWriteProtect, Hdbss }
 
 > **当前限制**：这个决策是**整个 orchestrator 一个值**（包级变量，启动时算一次），
 > 不是每沙箱一个。做成「按沙箱按需武装」需要在创建沙箱时就知道它会不会打 checkpoint，
-> 目前的 API 里没有这个信息。这是一个明确的可扩展点，见[第 27 篇](27-extending.md)。
+> 目前的 API 里没有这个信息。这是一个明确的可扩展点，见[第 30 篇](30-extending.md)。
 
 ---
 
@@ -359,7 +359,7 @@ pub enum DirtyTrackingBackend { Off, KvmWriteProtect, Hdbss }
 
 再加上进程级快照（gsd / CRIU）用的内核 soft-dirty，一共四条判据；
 把它们并排成一张表、以及这个差异在同一台机器同一份负载下测出来是什么形状，
-见[第 24 篇 §5](24-cross-implementation.md#5-一个真实发现读也被算成脏)。
+见[第 27 篇 §5](27-cross-implementation.md#5-一个真实发现读也被算成脏)。
 
 ### 5.1 退化是怎么发生的
 
@@ -423,6 +423,9 @@ for page_idx in 0..nr_pages {
 x86 上第 2 条不成立：换入的是干净页（保留了 WP 位），不计入增量。所以这个下限是
 **ARM 适配版特有的**，不是 e2b 的设计问题。
 
+> **2026-09-11 起已修复**（infra-arm `jll` `de25fe4d0`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
+
+
 ### 5.4 本方案怎么绕开
 
 本方案根本不走 uffd 这条判据。它取的是 **KVM / HDBSS 的脏页日志** ——
@@ -455,7 +458,7 @@ HDBSS 把「每页一次 VM-Exit」换成了「CPU 顺手记一笔 + 定期汇�
 这部分开销可能把「省掉写保护陷出」的收益吃掉相当一部分。
 
 `FC_HDBSS_ORDER` 就是为这件事准备的。**这一项还没有实测数据** ——
-1 / 2 / 4 三档在写密集负载下的对比是[第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖)
+1 / 2 / 4 三档在写密集负载下的对比是[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖)
 里明确列出的缺口之一。
 
 ### 6.3 什么时候不该开

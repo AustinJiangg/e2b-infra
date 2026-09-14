@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.2.0** · 2026-09-10 · 江路路（j30059180）
+> **v0.2.1** · 2026-09-14 · 江路路（j30059180）
 >
 > 实现已合入 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09；orchestrator、Firecracker、Python SDK 同仓）
 
@@ -24,8 +24,8 @@
 | 工程师，要接手或参与 | 全书；机制最短路径是 **06 → 07 → 08 → 10 → 11 → 13** |
 | 系统工程师 / 运维 | **02 → 05 → 19 → 17** |
 | 使用方，要判断什么时候用它 | **00 → 16 → 20** |
-| 评审 / 客户，要看证据 | **00 → 25**（结论与逐档判定）→ **21**（方法与测试矩阵），细节按需进 22 / 23 / 24 |
-| 拿到交付件，要在机器上验收 | **26**，判据讲解回看 22 / 23 |
+| 评审 / 客户，要看证据 | **00 → 28**（结论与逐档判定）→ **24**（方法与测试矩阵），细节按需进 25 / 26 / 27 |
+| 拿到交付件，要在机器上验收 | **29**，判据讲解回看 25 / 26 |
 
 ---
 
@@ -78,26 +78,29 @@
 | 18 | [`18-ext4-vs-xfs.md`](18-ext4-vs-xfs.md) | 两套方案的差异、连带的接口差异、怎么选 |
 | 19 | [`19-kunpeng-platform.md`](19-kunpeng-platform.md) | 鲲鹏平台：HDBSS 原理、920B 与 950、部署检查清单 |
 | 20 | [`20-vs-native.md`](20-vs-native.md) | 与原生 snapshot 的完整对比，以及两者如何配合使用 |
+| 21 | [`21-native-increment-diagnosis.md`](21-native-increment-diagnosis.md) | 原生 snapshot 的增量为什么不精确：现象、判 / 存 / 填三层拆解、判据塌缩 × 每代新进程 × 换入即脏、只换判据的 2 MiB 归并地板、本方案做法为何不能照抄 |
+| 22 | [`22-native-increment-fix.md`](22-native-increment-fix.md) | 原生 snapshot 的精确增量：4 KiB 存、2 MiB 拼（两条路线、三层改法、追踪没开时的退路） |
+| 23 | [`23-native-increment-cost-and-verification.md`](23-native-increment-cost-and-verification.md) | 原生精确增量的代价、验证与边界：恢复开销、平台策略、兼容、四类验证、影响面只在原生路径 |
 
 ### 第五部分　测试与验证
 
-怎么证明它对、它快。方法（21–24）与数据（25）分开；全书的实测数字只在 25 一处。
+怎么证明它对、它快。方法（24–27）与数据（28）分开；全书的实测数字只在 28 一处。
 
 | # | 文档 | 内容 |
 |---|---|---|
-| 21 | [`21-test-overview.md`](21-test-overview.md) | 测试体系总览：四种静默失效、三层测试、测试矩阵、测量纪律 |
-| 22 | [`22-functional-tests.md`](22-functional-tests.md) | 功能正确性：三重证据、59 项校验、树语义、pause 兼容、兼容矩阵、HDBSS 取证、稳定性 |
-| 23 | [`23-performance-methodology.md`](23-performance-methodology.md) | 性能测试：判定口径（200 / 100 ms 怎么钉死）、负载构造、各脚本回答什么、怎么读报告 |
-| 24 | [`24-cross-implementation.md`](24-cross-implementation.md) | 与进程级快照和 e2b 原生 snapshot 并排：什么能比、什么不能比 |
-| 25 | [`25-results-and-compliance.md`](25-results-and-compliance.md) | 全书的实测数据、对照 200 / 100 ms 的逐档判定、已知劣化、尚未覆盖 |
-| 26 | [`26-acceptance-runbook.md`](26-acceptance-runbook.md) | 拿到交付件后在目标机上怎么跑、看什么、发回什么 |
+| 24 | [`24-test-overview.md`](24-test-overview.md) | 测试体系总览：四种静默失效、三层测试、测试矩阵、测量纪律 |
+| 25 | [`25-functional-tests.md`](25-functional-tests.md) | 功能正确性：三重证据、59 项校验、树语义、pause 兼容、兼容矩阵、HDBSS 取证、稳定性 |
+| 26 | [`26-performance-methodology.md`](26-performance-methodology.md) | 性能测试：判定口径（200 / 100 ms 怎么钉死）、负载构造、各脚本回答什么、怎么读报告 |
+| 27 | [`27-cross-implementation.md`](27-cross-implementation.md) | 与进程级快照和 e2b 原生 snapshot 并排：什么能比、什么不能比 |
+| 28 | [`28-results-and-compliance.md`](28-results-and-compliance.md) | 全书的实测数据、对照 200 / 100 ms 的逐档判定、已知劣化、尚未覆盖 |
+| 29 | [`29-acceptance-runbook.md`](29-acceptance-runbook.md) | 拿到交付件后在目标机上怎么跑、看什么、发回什么 |
 
 ### 第六部分　继续开发
 
 | # | 文档 | 内容 |
 |---|---|---|
-| 27 | [`27-extending.md`](27-extending.md) | 代码地图、改动指引、不能破坏的不变量、一次改动怎么验证 |
-| 28 | [`28-glossary-and-code-map.md`](28-glossary-and-code-map.md) | 术语表、代码索引、文件格式索引、环境变量与 API 总表 |
+| 30 | [`30-extending.md`](30-extending.md) | 代码地图、改动指引、不能破坏的不变量、一次改动怎么验证 |
+| 31 | [`31-glossary-and-code-map.md`](31-glossary-and-code-map.md) | 术语表、代码索引、文件格式索引、环境变量与 API 总表 |
 
 ---
 
@@ -109,7 +112,7 @@
 | [`../diagrams/`](../diagrams/) | 三张汇报用 SVG 与 mermaid 图源 |
 | [`../slides/`](../slides/) | Slidev 汇报稿（导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
 | [`../test-950/`](../test-950/) | 开发态验证工具箱与实测报告 |
-| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能）；同目录另有两个跨实现对照脚本（第 24 篇），不属于交付态验收流程 |
+| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能）；同目录另有两个跨实现对照脚本（第 27 篇），不属于交付态验收流程 |
 
 ---
 
@@ -117,7 +120,8 @@
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
-| v0.2.0 | 2026-09-10 | 新增第五部分「测试与验证」六篇（21–26），原 21/22 移为 27/28；实测数据收口到第 25 篇 |
+| v0.2.1 | 2026-09-14 | 原生 snapshot 精确增量修复（infra-arm `jll` `de25fe4d0`）：新增第 21–23 篇专讲原生 snapshot 精确增量（机理 / 改法 / 代价与验证）；第 27 篇新增 §5.5「原生快照口径（修复后）」，第 28 篇新增表 3-J、3-K，00/05/07/20 的「ARM 线退化成工作集」段落加已修复标注 |
+| v0.2.0 | 2026-09-10 | 新增第五部分「测试与验证」六篇（现 24–29），原 21/22 移为现 30/31；实测数据收口到实测结果篇 |
 | v0.1.0 | 2026-09-04 | 首个署名版本：23 篇正文 + 编写规约 |
 
 版本号只描述**本套文档**，与 `infra-arm` / `KASandbox` 的代码版本不绑定 ——

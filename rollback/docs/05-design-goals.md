@@ -47,8 +47,8 @@
 
 用客户端墙钟是因为它含网络往返与服务端全部工作，是三个钟里最大的一个，
 也是客户在自己机器上唯一能复测的一个。完整的口径定义表见
-[第 23 篇 §1.2](23-performance-methodology.md#12-口径定义表)，
-逐档的判定结果见[第 25 篇 §5](25-results-and-compliance.md#5-对照客户指标的判定表)。
+[第 26 篇 §1.2](26-performance-methodology.md#12-口径定义表)，
+逐档的判定结果见[第 28 篇 §5](28-results-and-compliance.md#5-对照客户指标的判定表)。
 
 这条目标反过来规定了成本模型：达标线是一个**常数**，而增量的代价随本次改动量走
 （[§5.1](#51-成本只与改动量挂钩)），所以性能表按**脏页量档位**给，不按沙箱内存大小给。
@@ -108,6 +108,9 @@
 
 **必须说清楚**：这是 ARM 适配引入的退化，**不是 e2b 的设计问题**。
 本方案修复它，也不构成「超越 x86 原生」。
+
+> **2026-09-11 起已修复**（infra-arm `jll` `de25fe4d0`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
+
 
 ---
 
