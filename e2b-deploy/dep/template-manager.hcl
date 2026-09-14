@@ -36,8 +36,13 @@ job "template-manager-system" {
       # 槽位号只增不减）。30s 是 Nomad 客户端 max_kill_timeout 的默认上限。
       kill_timeout = "30s"
 
+      # 只约束 orchestrator 进程（Nomad task cgroup），即模板构建这条路径；
+      # 沙箱在 /sys/fs/cgroup/e2b 那棵独立的树下，不受这里限制。
+      # 太小会 memcg OOM（Exit 137）并连锁到 api 恒 503、部署超时失败。
+      # 怎么量峰值、怎么改、三处路径分别在哪，见
+      # deploy-docs/12-orchestrator资源配额调优.md
       resources {
-        memory     = 8192
+        memory     = 32768
         cpu        = 2048
       }
 
