@@ -1,9 +1,9 @@
-# 26 · 上机验收操作
+# 29 · 上机验收操作
 
 > 拿到交付件之后，在目标机上怎么把这套 checkpoint / restore 验一遍：装什么、跑哪几条命令、
-> 每条该看到什么、结果怎么留档回传。**本篇只讲操作**，判据背后的道理在第 21–25 篇。
+> 每条该看到什么、结果怎么留档回传。**本篇只讲操作**，判据背后的道理在第 24–28 篇。
 >
-> **读者**：做验收的人。**预备**：[第 21 篇 §5](21-test-overview.md#5-环境与产物)。
+> **读者**：做验收的人。**预备**：[第 24 篇 §5](24-test-overview.md#5-环境与产物)。
 > **代码**：`e2b-infra/benchmark/`、`e2b-infra/rollback/test-950/`
 
 ---
@@ -22,7 +22,7 @@
 **在哪跑。** 强烈建议**直接在跑 orchestrator 的宿主机上**跑。远程也能验正确性，
 但脏页后端、产物文件系统、每代产物实占、宿主分阶段这四类信息全都拿不到
 （套接字与 `/proc` 都是本地的），报告里会是「未知」和空格
-（[第 21 篇 §5.2](21-test-overview.md#52-宿主机-vs-非宿主机)）。
+（[第 24 篇 §5.2](24-test-overview.md#52-宿主机-vs-非宿主机)）。
 
 **Python 环境。** 建议用独立 conda 环境，别动系统 python：
 
@@ -97,7 +97,7 @@ python checkpoint_verify.py
 **N 必须是 59**；出现 `57` 说明 SDK 没有 `mem_mode` 字段，脚本会先打印一行
 「（服务端没有报 mem_mode 字段，跳过全量/增量的判定）」并跳过那两条断言 ——
 这轮结果仍然是有效的正确性验收，但**不能拿来证明用的是增量**
-（[第 21 篇 §1.4](21-test-overview.md#14-判据本身静默失效)）。
+（[第 24 篇 §1.4](24-test-overview.md#14-判据本身静默失效)）。
 
 任何一项 `FAIL` 都会让脚本打印 `✗ n / N 项校验未通过：` 并逐条列出，退出码 `1`。
 
@@ -167,7 +167,7 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 | `pause_verify.py` | 末行 `✓ 全部通过` |
 | `compat_matrix.py` | 末行 `✓ 没有 BROKEN`（`REFUSED` 是边界不是故障） |
 | `bench-ckpt.py` | 末行 `BENCH OK`；各档 `mem_mode` 全 `incremental`；冻结窗口每档标「可区分 ✓」 |
-| `hdbss_evidence.py` | L1 `supported` + L2 `hdbss` + L3 冷/热接近 1（软件写保护时约 4.5~5.4，见[第 22 篇 §6](22-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)） |
+| `hdbss_evidence.py` | L1 `supported` + L2 `hdbss` + L3 冷/热接近 1（软件写保护时约 4.5~5.4，见[第 25 篇 §6](25-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)） |
 
 验收结束后 `bash 03-switch.sh restore` 把机器还原成切换前的样子。
 任何一步不过就停下来，把该步输出和 `/data/nomad/alloc/*/alloc/logs/start.stdout.0`
@@ -180,7 +180,7 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 每一轮实测在 `reports/<机器>-<内容>-<日期>/` 下留一个目录：原始日志（`tee` 出来的）
 + 一份 `00-context.md`。**没有 `00-context.md` 的日志不能被引用** ——
 不带条件的数字一定会被人单独拿去比较
-（[第 21 篇 §4.2](21-test-overview.md#42-一个数字要带的条件标签)）。
+（[第 24 篇 §4.2](24-test-overview.md#42-一个数字要带的条件标签)）。
 
 `00-context.md` 必填字段：
 
@@ -223,11 +223,11 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 
 | 想知道 | 去哪 |
 |---|---|
-| 这些判据为什么是这几条 | [第 21 篇](21-test-overview.md)、[第 22 篇](22-functional-tests.md) |
-| 数字怎么读、口径是什么 | [第 23 篇](23-performance-methodology.md) |
-| 实测结果与达标判定 | [第 25 篇](25-results-and-compliance.md) |
+| 这些判据为什么是这几条 | [第 24 篇](24-test-overview.md)、[第 25 篇](25-functional-tests.md) |
+| 数字怎么读、口径是什么 | [第 26 篇](26-performance-methodology.md) |
+| 实测结果与达标判定 | [第 28 篇](28-results-and-compliance.md) |
 | 开发态工具箱完整说明 | [`../test-950/README.md`](../test-950/README.md) |
 | 平台前提与部署陷阱 | [第 19 篇 §6](19-kunpeng-platform.md#6-部署检查清单) |
 
-**下一篇**：[27 · 在这套方案上继续开发](27-extending.md) —— 验收之后，
+**下一篇**：[30 · 在这套方案上继续开发](30-extending.md) —— 验收之后，
 要在这套方案上改代码、加能力，需要先知道哪些不变量不能碰。

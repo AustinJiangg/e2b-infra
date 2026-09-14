@@ -358,7 +358,7 @@ defer cleanup()      // ← 删掉 revert_mem.tmp 和 revert_bitmap.tmp
 - HDBSS 武装时序（不变量 #13，只靠调用点位置保证）。
 
 > 单元测试只在 `infra-arm` 仓库里，**不进交付 patch**（rpmbuild 的 `%build` 只做 `go build`），
-> 也未随上游 MR 合入（[第 27 篇 §1.1](27-extending.md#11-三个地方)）。
+> 也未随上游 MR 合入（[第 30 篇 §1.1](30-extending.md#11-三个地方)）。
 
 ---
 

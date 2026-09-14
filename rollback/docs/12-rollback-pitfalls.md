@@ -281,13 +281,13 @@ if err := sbx.WaitForEnvd(ctx, envdRestoreTimeout); err != nil { ... }
 
 `checkpoint_verify.py` 的活性判据因此只断言**心跳在推进**（计数器在增长），
 不对时间做任何假设。判据怎么落到脚本里、为什么这一条是**先想清楚再写测试**的典型，
-见[第 22 篇 §2.3](22-functional-tests.md#23-活体判据为什么不能用时间)。
+见[第 25 篇 §2.3](25-functional-tests.md#23-活体判据为什么不能用时间)。
 
 > 反过来，时间倒退也是一个**有用的证据**：验收里心跳进程在三代之间保持
 > **同一个 PID 和同一个启动时刻** —— 这证明了打快照没有重启虚机，
 > 而且它是「回到那一刻」最硬的一条证据
-> （[第 22 篇 §1](22-functional-tests.md#1-什么叫回到那一刻)；
-> 实测结果见[第 25 篇 §2](25-results-and-compliance.md#2-功能正确性结果)）。
+> （[第 25 篇 §1](25-functional-tests.md#1-什么叫回到那一刻)；
+> 实测结果见[第 28 篇 §2](28-results-and-compliance.md#2-功能正确性结果)）。
 
 ---
 

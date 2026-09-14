@@ -3,8 +3,8 @@
 > 这套系统最危险的故障不是崩溃，是**「看起来正常」** —— 功能全对、测试全过、
 > 只是每次多拷两个 GiB，或者某几页内存的内容属于另一个时刻。
 > 本篇讲**系统自己**怎么让这类问题现形：三个时钟、退化上报，以及两个交付态验收脚本
-> 各自回答什么。测试体系与实测数据分别在[第 21 篇](21-test-overview.md)与
-> [第 25 篇](25-results-and-compliance.md)。
+> 各自回答什么。测试体系与实测数据分别在[第 24 篇](24-test-overview.md)与
+> [第 28 篇](28-results-and-compliance.md)。
 >
 > **读者**：工程师、系统工程师、要做验收的人。
 > **预备**：[第 13 篇 · 端到端](13-end-to-end.md)、[第 14 篇 · 失败语义](14-failure-semantics.md)。
@@ -194,14 +194,14 @@ pub struct RollbackResponse {
 这不是没来得及重构。它们是一个个单独拷到目标机上跑的，跨文件依赖在版本对不齐时
 **静默降级成「未知」**而不是报错：脚本照跑、数字照打印，只是再也说不清那组数是在什么
 脏页后端、什么文件系统上跑出来的。这就是[§2](#2-让静默退化现形)那条逻辑用在测试代码自己身上
-（展开见[第 21 篇 §2.2](21-test-overview.md#22-交付态验收两个单文件脚本)）。
+（展开见[第 24 篇 §2.2](24-test-overview.md#22-交付态验收两个单文件脚本)）。
 
 同样地，交付态脚本与开发态工具箱（[`../test-950/`](../test-950/)）**不要混用** ——
 后者脚本之间有共享模块、位置参数顺序敏感，是给我们自己排查用的。
 
-三层测试各管什么见[第 21 篇 §2](21-test-overview.md#2-三层测试)；
-两个脚本的判据怎么设计的，正确性在[第 22 篇 §2](22-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项)、
-性能在[第 23 篇 §3](23-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物)。
+三层测试各管什么见[第 24 篇 §2](24-test-overview.md#2-三层测试)；
+两个脚本的判据怎么设计的，正确性在[第 25 篇 §2](25-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项)、
+性能在[第 26 篇 §3](26-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物)。
 
 ### 3.2 `checkpoint_verify.py`：只证正确性
 
@@ -220,7 +220,7 @@ pub struct RollbackResponse {
   不是虚机重启了、更不是重放了什么操作。
 
 59 项断言逐项怎么构成、`mem_mode` 那两条依赖哪一版 SDK、怎么读输出，见
-[第 22 篇 §2](22-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项)。
+[第 25 篇 §2](25-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项)。
 
 ### 3.3 为什么活性判据不能用时间
 
@@ -231,23 +231,23 @@ pub struct RollbackResponse {
 
 **墙钟**在恢复瞬间被 envd 拨回，中间有跳变；**单调时钟**被真的拨回了，
 任何基于它的速率计算都会得到荒谬的值。所以只断言**计数器在增长**
-（[第 22 篇 §2.3](22-functional-tests.md#23-活体判据为什么不能用时间)）。
+（[第 25 篇 §2.3](25-functional-tests.md#23-活体判据为什么不能用时间)）。
 
 ---
 
 ## 4. 当前实测状态
 
 **实测数据不在本篇。** 全书的实测数字、条件标签、对照客户指标的逐档判定、
-以及尚未覆盖的缺口，只在[第 25 篇 · 实测结果与达标判定](25-results-and-compliance.md)
+以及尚未覆盖的缺口，只在[第 28 篇 · 实测结果与达标判定](28-results-and-compliance.md)
 一处维护 —— 分散在多篇里的数字一定会走样，也一定会被脱离条件单独引用。
 
 | 你想查 | 去哪 |
 |---|---|
-| 950 / 920B 的功能正确性结果（含每轮的 SDK 与判据是否有效） | [第 25 篇 §2](25-results-and-compliance.md#2-功能正确性结果) |
-| 分档性能与对照 200 / 100 ms 的达标判定 | [第 25 篇 §5](25-results-and-compliance.md#5-对照客户指标的判定表) |
-| 两台机器的条件标签差异（为什么不能相减） | [第 25 篇 §1](25-results-and-compliance.md#1-条件标签) |
-| 还有哪些性质没测到 | [第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖) |
-| 每条性质由哪个脚本、用什么判据、证到了哪一步 | [第 21 篇 §3](21-test-overview.md#3-测试矩阵) |
+| 950 / 920B 的功能正确性结果（含每轮的 SDK 与判据是否有效） | [第 28 篇 §2](28-results-and-compliance.md#2-功能正确性结果) |
+| 分档性能与对照 200 / 100 ms 的达标判定 | [第 28 篇 §5](28-results-and-compliance.md#5-对照客户指标的判定表) |
+| 两台机器的条件标签差异（为什么不能相减） | [第 28 篇 §1](28-results-and-compliance.md#1-条件标签) |
+| 还有哪些性质没测到 | [第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖) |
+| 每条性质由哪个脚本、用什么判据、证到了哪一步 | [第 24 篇 §3](24-test-overview.md#3-测试矩阵) |
 
 ---
 
@@ -266,7 +266,7 @@ pub struct RollbackResponse {
    **进程带 PID 复活**（才说明是内存搬回去了）。
 7. **活性判据不能用时间** —— 单调时钟真的被拨回了。只断言计数器在推进。
 8. 口径说明必须和数字放在一起 —— 否则数字一定会被单独引用。
-   所以**全书的实测数字只在[第 25 篇](25-results-and-compliance.md)一处维护**，本篇不留数字。
+   所以**全书的实测数字只在[第 28 篇](28-results-and-compliance.md)一处维护**，本篇不留数字。
 
 ---
 
@@ -290,11 +290,11 @@ pub struct RollbackResponse {
 
 | 想知道 | 去哪 |
 |---|---|
-| 四种静默失效、三层测试、测试矩阵、测量纪律 | [第 21 篇](21-test-overview.md) |
-| 每条正确性判据怎么设计的、59 项怎么构成 | [第 22 篇](22-functional-tests.md) |
-| 性能指标口径与负载构造 | [第 23 篇](23-performance-methodology.md) |
-| 实测数字与达标判定 | [第 25 篇](25-results-and-compliance.md) |
-| 上机怎么跑 | [第 26 篇](26-acceptance-runbook.md) |
+| 四种静默失效、三层测试、测试矩阵、测量纪律 | [第 24 篇](24-test-overview.md) |
+| 每条正确性判据怎么设计的、59 项怎么构成 | [第 25 篇](25-functional-tests.md) |
+| 性能指标口径与负载构造 | [第 26 篇](26-performance-methodology.md) |
+| 实测数字与达标判定 | [第 28 篇](28-results-and-compliance.md) |
+| 上机怎么跑 | [第 29 篇](29-acceptance-runbook.md) |
 
 **下一部分**：[18 · 两套方案：ext4 与 XFS](18-ext4-vs-xfs.md) ——
 机制和保障都讲完了，接下来是「在什么样的机器上、用哪一套」。

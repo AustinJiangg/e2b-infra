@@ -86,7 +86,7 @@ pause 把当时的层栈整体压进沙箱快照，账本又不从磁盘加载�
 两件事叠加就得到「跨 pause 的 checkpoint id 无效」。这条边界有实测印证 ——
 兼容矩阵把它判成 `REFUSED`（明确拒绝、不留半吊子状态），不是 `BROKEN`，
 同一轮里 `checkpoint.list` 返回 0 个、pause 之后新建的 checkpoint 能正常 restore
-（[第 22 篇 §5](22-functional-tests.md#5-compat_matrixpy与原生生命周期的组合矩阵)）。
+（[第 25 篇 §5](25-functional-tests.md#5-compat_matrixpy与原生生命周期的组合矩阵)）。
 **checkpoint 与原生生命周期操作并存但不交叉**，是边界，不是缺陷。
 
 ---

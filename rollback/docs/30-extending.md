@@ -1,4 +1,4 @@
-# 27 · 在这套方案上继续开发
+# 30 · 在这套方案上继续开发
 
 > 前面各篇讲的是「它是什么」「怎么证明它对」。本篇讲「你要动它的时候该知道什么」：
 > 代码在哪、按任务该改哪里、哪些不变量碰不得、以及已知还差什么。
@@ -6,7 +6,7 @@
 > **读者**：要接手或参与这个项目的工程师。
 > **预备**：至少读完[第 13](13-end-to-end.md)、[14](14-failure-semantics.md)、
 > [15 篇](15-state-and-concurrency.md)。
-> **配套**：[第 28 篇 · 术语表与代码地图](28-glossary-and-code-map.md)。
+> **配套**：[第 31 篇 · 术语表与代码地图](31-glossary-and-code-map.md)。
 
 ---
 
@@ -171,19 +171,19 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 | 层 | 跑什么 | 在哪 | 判据讲解 |
 |---|---|---|---|
 | 单元测试 | `go test ./internal/checkpoint/...` | 开发机 | [15 §8](15-state-and-concurrency.md#8-单元测试守着哪些不变量) |
-| 正确性验收 | `benchmark/checkpoint_verify.py` | 目标机（950 / 920B） | [22 §2](22-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
-| 性能基准 | `benchmark/checkpoint_bench.py` | 目标机 | [23 §3](23-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
+| 正确性验收 | `benchmark/checkpoint_verify.py` | 目标机（950 / 920B） | [25 §2](25-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
+| 性能基准 | `benchmark/checkpoint_bench.py` | 目标机 | [26 §3](26-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
 
 **深入排查**用开发态工具箱 `rollback/test-950/`：`correctness.py`（树语义）、
 `timing.py`（O(脏页) 与链深）、`loop.py`（稳定性）、`pause_verify.py`（checkpoint 之后 pause）、
 `compat_matrix.py`（与原生生命周期的组合）、`bench-ckpt.py` + `freeze_probe.py`（分位数与冻结窗口）、
 `probe-ramp.py`（连打劣化归因）、`hdbss_evidence.py`（HDBSS 三级证据），
 `run-all.sh` 一条命令跑完一套。它与交付态脚本**不要混用** —— 位置参数顺序敏感，
-传错会用错的规则去判对的产物、报假 FAIL（[第 21 篇 §2.4](21-test-overview.md#24-为什么两套不混用)）。
+传错会用错的规则去判对的产物、报假 FAIL（[第 24 篇 §2.4](24-test-overview.md#24-为什么两套不混用)）。
 
 **上机的完整流程**（前置条件、三条命令、期望末行、结果回传规范）见
-[第 26 篇](26-acceptance-runbook.md)；要证的每条性质分别由哪个脚本、
-用什么判据、在哪台机器上证到了哪一步，见[第 21 篇 §3](21-test-overview.md#3-测试矩阵)。
+[第 29 篇](29-acceptance-runbook.md)；要证的每条性质分别由哪个脚本、
+用什么判据、在哪台机器上证到了哪一步，见[第 24 篇 §3](24-test-overview.md#3-测试矩阵)。
 
 ### 4.2 换二进制的流程
 
@@ -207,8 +207,8 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 `track_dirty_pages: true` 且理由符合预期、第二个 checkpoint 的 `memMode` 是 `incremental`
 （不是 `full`）、950 上 `dmesg | grep 'Enable HDBSS success'` 有输出且 PID 是 Firecracker 的。
 **三个里任何一个不对，后面的数字都不用看了** —— 尤其是第二个：它是防「增量静默退化成全量」
-的主力判据，而这条判据本身也会失效（[第 21 篇 §1](21-test-overview.md#1-为什么这套方案的测试要格外小心)）。
-每个数字还要带哪些条件标签才允许被引用，见[第 21 篇 §4](21-test-overview.md#4-测量纪律)。
+的主力判据，而这条判据本身也会失效（[第 24 篇 §1](24-test-overview.md#1-为什么这套方案的测试要格外小心)）。
+每个数字还要带哪些条件标签才允许被引用，见[第 24 篇 §4](24-test-overview.md#4-测量纪律)。
 
 ---
 
@@ -224,7 +224,7 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 **尚未跑到的实测**（950 上的分档基准、HDBSS 与软件写保护的收益对照、
 `FC_HDBSS_ORDER` 取 1 / 2 / 4 的调优、完整 `rpmbuild` 流程）连同上面三项，
-统一在[第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖)维护**一份**清单 ——
+统一在[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖)维护**一份**清单 ——
 缺口散在多篇里就一定会各自过期，所以只在那一处更新。
 
 ### 5.2 可能的方向
@@ -236,7 +236,7 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 | **按沙箱按需武装脏页跟踪** | 现在是整个 orchestrator 一个值；要按沙箱得在创建时知道它会不会打 checkpoint | 中 |
 | **结构化的 Faulted 标识** | 现在客户端靠字符串匹配识别（[第 9 篇 §3.3](09-firecracker-api-contract.md#33-客户端侧的三个细节)） | **低，建议顺手做** |
 | **层文件的全零块回收** | 恒等映射不剔除全零块（[第 10 篇 §4.1](10-disk-layering.md#41-不紧凑化带来的简化)） | 中 |
-| **`manifest.json` 的层列表改为引用父代** | 现在每个 checkpoint 把截止到自己的全部层完整记一遍，是持续连打劣化里那块 O(链深) 记账的来源（[第 25 篇 §7.1](25-results-and-compliance.md#71-持续连打60-秒里慢-28-倍)） | 中 |
+| **`manifest.json` 的层列表改为引用父代** | 现在每个 checkpoint 把截止到自己的全部层完整记一遍，是持续连打劣化里那块 O(链深) 记账的来源（[第 28 篇 §7.1](28-results-and-compliance.md#71-持续连打60-秒里慢-28-倍)） | 中 |
 | **跟上游合并** | 分叉小是有意的，但上游会动 | 持续 |
 
 ---
@@ -274,9 +274,9 @@ vCPU 只写寄存器、不做完整复位，直觉上更快。实测 p95 是 145
 2. 改动指引按任务组织；加设备时**必读**[第 12 篇 §8](12-rollback-pitfalls.md#8-检查表还有哪些地方可能有同类问题) 的检查表。
 3. 自查清单 8 条，第 8 条（不变量）最重要 —— **9 条不变量被破坏后是静默的**。
 4. 验证分三层；换完二进制**一定要验实际跑起来的是哪一版**。
-5. 已知缺口清单只在[第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖)维护一份；
+5. 已知缺口清单只在[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖)维护一份；
    六个可能的方向里，「结构化的 Faulted 标识」难度低，建议顺手做掉。
 
 ---
 
-**下一篇**：[28 · 术语表与代码地图](28-glossary-and-code-map.md) —— 全书的查询入口。
+**下一篇**：[31 · 术语表与代码地图](31-glossary-and-code-map.md) —— 全书的查询入口。

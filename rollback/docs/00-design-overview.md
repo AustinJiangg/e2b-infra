@@ -29,7 +29,7 @@
 - **低延迟**。回退发生在 Agent 的决策循环里，几百毫秒和几秒是完全不同的产品体验。
   客户给的量化上限是 **checkpoint ≤ 200 ms、restore ≤ 100 ms**
   —— 它只约束高频路径上的增量 checkpoint 与原地 restore，完整口径见
-  [第 23 篇 §1.2](23-performance-methodology.md#12-口径定义表)。
+  [第 26 篇 §1.2](26-performance-methodology.md#12-口径定义表)。
 - **沙箱不能中断**。沙箱有 IP、有端口映射、有正在保持的连接、有外部持有的引用。
   中断一次，这些全要重建。
 
@@ -483,6 +483,9 @@ restore 侧有个对称的次序约束：**暂停之后**才导出活跃脏页�
 
 必须明确：**这是修复 ARM 适配引入的退化，不是超越 x86 原生。** 在 x86 上 e2b 的增量本来就是精确的。
 
+> **2026-09-11 起已修复**（infra-arm `jll` `de25fe4d0`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
+
+
 同样地，[第 7 节](#7-与-e2b-原生的路径对比)提到的「与改动量无关的下限」也只在 ARM 适配版上成立 ——
 它是两件事叠加的结果：① 每次 snapshot 都会重建沙箱，工作集必须重新换入；② 换入即被判脏。
 x86 上换入的是干净页，不计入增量。
@@ -615,11 +618,11 @@ p50 196 ms 只剩 3.8 ms 余量，并列的 p99
 **口径**：达标线只约束**增量 checkpoint（≤ 200 ms）与原地 restore（≤ 100 ms）**，
 判定用客户端墙钟 p50、p99 并列；判定表按**脏页量档位**给，不按沙箱内存大小给；
 树根全量是每个沙箱一次性的成本，单列不参与判定
-（完整定义见[第 23 篇 §1.2](23-performance-methodology.md#12-口径定义表)）。
+（完整定义见[第 26 篇 §1.2](26-performance-methodology.md#12-口径定义表)）。
 
-> **全书的实测数字、逐档达标判定与尚未覆盖的缺口只在[第 25 篇](25-results-and-compliance.md)
+> **全书的实测数字、逐档达标判定与尚未覆盖的缺口只在[第 28 篇](28-results-and-compliance.md)
 > 一处维护**，其他篇一律引用不复制。测试体系本身 —— 尤其是「测试通过 ≠ 测的是那个东西」
-> 这件事 —— 见[第 21 篇](21-test-overview.md)。
+> 这件事 —— 见[第 24 篇](24-test-overview.md)。
 
 ---
 
@@ -631,9 +634,9 @@ p50 196 ms 只剩 3.8 ms 余量，并列的 p99
 | 补背景（不熟悉 microVM / e2b / 快照） | [01](01-what-and-why.md) → [02](02-microvm-and-e2b.md) → [03](03-snapshot-fundamentals.md) → [04](04-e2b-native-snapshot.md) |
 | 判断能不能用、边界在哪 | [16 生命周期与边界](16-lifecycle-and-portability.md) → [20 与原生的对比配合](20-vs-native.md) |
 | 部署与验收 | [19 鲲鹏平台](19-kunpeng-platform.md) → [17 可观测与验证](17-observability-and-verification.md) |
-| 看测试证据、对照客户指标 | [21 测试体系总览](21-test-overview.md) → [25 实测结果与达标判定](25-results-and-compliance.md)，方法细节按需进 [22](22-functional-tests.md) / [23](23-performance-methodology.md) / [24](24-cross-implementation.md) |
-| 拿到交付件要上机验收 | [26 上机验收操作](26-acceptance-runbook.md) |
-| 接手继续开发 | [14 失败语义](14-failure-semantics.md) → [15 状态与并发](15-state-and-concurrency.md) → [27 继续开发](27-extending.md) |
+| 看测试证据、对照客户指标 | [24 测试体系总览](24-test-overview.md) → [28 实测结果与达标判定](28-results-and-compliance.md)，方法细节按需进 [25](25-functional-tests.md) / [26](26-performance-methodology.md) / [27](27-cross-implementation.md) |
+| 拿到交付件要上机验收 | [29 上机验收操作](29-acceptance-runbook.md) |
+| 接手继续开发 | [14 失败语义](14-failure-semantics.md) → [15 状态与并发](15-state-and-concurrency.md) → [30 继续开发](30-extending.md) |
 
 完整目录见 [README.md](README.md)。
 
@@ -646,7 +649,7 @@ orchestrator、Firecracker、Python SDK 同仓 —— 下表 orchestrator 的路
 Firecracker 的路径以 `firecracker/` 起。**开发分支**：`infra-arm@jll`（orchestrator）、`KASandbox@jll`（Firecracker）；
 XFS 方案（`jll-xfs`）未合入上游。**交付形态**是 `e2b-infra` 仓库的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`。
 **单元测试只在 `infra-arm`**：不进 patch（rpmbuild 的 `%build` 只做 `go build`），也未随 MR 合入上游。
-三处的关系见[第 27 篇 §1.1](27-extending.md#11-三个地方)。
+三处的关系见[第 30 篇 §1.1](30-extending.md#11-三个地方)。
 
 | 关注点 | 位置 |
 |---|---|
@@ -664,11 +667,11 @@ XFS 方案（`jll-xfs`）未合入上游。**交付形态**是 `e2b-infra` 仓�
 | HDBSS 启用与脏跟踪后端选择 | `src/vmm/src/arch/aarch64/vm.rs`、`src/vmm/src/vstate/vm.rs` |
 | 快照写出与位图侧车 | `src/vmm/src/vstate/vm.rs`、`src/vmm/src/vstate/memory.rs` |
 
-完整索引见[第 28 篇](28-glossary-and-code-map.md)。
+完整索引见[第 31 篇](31-glossary-and-code-map.md)。
 
 ## 附录 B：验收脚本
 
 交付态是 `e2b-infra/benchmark/` 下两个**零共享依赖**的单文件脚本 ——
 `checkpoint_verify.py` 只证正确性、`checkpoint_bench.py` 只测耗时，
 拷到目标机上就能跑；开发态工具箱在 [`../test-950/`](../test-950/)，**两套不要混用**。
-设计原则见[第 21 篇 §2](21-test-overview.md#2-三层测试)，上机怎么跑见[第 26 篇](26-acceptance-runbook.md)。
+设计原则见[第 24 篇 §2](24-test-overview.md#2-三层测试)，上机怎么跑见[第 29 篇](29-acceptance-runbook.md)。

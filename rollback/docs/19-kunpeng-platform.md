@@ -171,7 +171,7 @@ HDBSS **不会被快照继承** —— 从快照恢复时会创建新的 KVM VM 
 
 但这张表证的仍然只是「能力打开了」，不是「硬件真的在记脏页」。要证到数据面还得加一层，
 判据怎么设计、为什么必须先在 920B 上取到**负样本**才有资格拿到 950 上用，见
-[第 22 篇 §6](22-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)。
+[第 25 篇 §6](25-functional-tests.md#6-hdbss_evidencepy能力不等于数据面)。
 
 > 探测能力（`KVM_CHECK_EXTENSION`）可以在 KVM fd 上做，不建 VM；
 > 但真正启用（`KVM_ENABLE_CAP`）必须在 VM fd 上，而且要先有 vCPU。
@@ -222,7 +222,7 @@ HDBSS **不会被快照继承** —— 从快照恢复时会创建新的 KVM VM 
 ### 5.2 尚未实测
 
 `FC_HDBSS_ORDER` 取 1 / 2 / 4 在写密集负载下的对比，是
-[第 25 篇 §8](25-results-and-compliance.md#8-尚未覆盖)明确列出的缺口之一。目前用默认值 1。
+[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖)明确列出的缺口之一。目前用默认值 1。
 
 ---
 
