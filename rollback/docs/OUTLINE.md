@@ -500,15 +500,15 @@ Firecracker 侧的主体，`PUT /snapshot/rollback` 的九个阶段。
 
 | 材料 | 位置 | 喂给 |
 |---|---|---|
-| 交付态脚本 docstring 与代码 | `../../benchmark/checkpoint_verify.py` `checkpoint_bench.py`；`checkpoint_bench_v2.py` `native_snapshot_bench.py`（尚未提交，在主工作区 `e2b-infra/benchmark/`） | 25 26 27 |
-| 开发态工具箱 | `../test-950/*.py` `*.sh`、`README.md`、`MANIFEST.md` | 24 25 26 29 |
-| `../test-950/耗时基准结论.md` | 两套对照、连打劣化、宿主分段 | 26 28 |
-| `../test-950/reports/` | 950-verify-20260829、920b-kas0904-20260904、bench-ext4/xfs-20260824、ext4/xfs-2026082x、ramp、cow4k | 28 |
+| 交付态脚本 docstring 与代码 | `../scripts/acceptance/checkpoint_verify.py` `checkpoint_bench.py`；`../scripts/probes/checkpoint_bench_v2.py` `native_snapshot_bench.py` | 25 26 27 |
+| 开发态工具箱 | `../scripts/dev/*.py` `*.sh`、`README.md`、`MANIFEST.md` | 24 25 26 29 |
+| `../scripts/dev/耗时基准结论.md` | 两套对照、连打劣化、宿主分段 | 26 28 |
+| `../scripts/dev/reports/` | 950-verify-20260829、920b-kas0904-20260904、bench-ext4/xfs-20260824、ext4/xfs-2026082x、ramp、cow4k | 28 |
 | `benchmark/checkpoint-bench-对比.md`（主工作区，未提交） | bench vs v2、与 gsd 的实测对比、已知缺陷 | 26 27 28 |
 | `e2b-repo/三套快照方案的负载构造与测量口径.md`（工作区根，不在仓库） | 三套一张图、负载三种失真、负载放哪、恢复语义、ARM 原生脏页判据把读算脏 | 26 §2、27 全篇 |
 
 **24 · 测试体系总览**
-- 读者：评审 / 客户 / 接手者；预备：00；代码：`benchmark/`、`rollback/test-950/`
+- 读者：评审 / 客户 / 接手者；预备：00；代码：`rollback/scripts/acceptance/`、`rollback/scripts/dev/`
 - §1 为什么这套方案的测试要格外小心：三种**静默失效**——`mem_mode` 退化成 full（测试全过但测的不是增量）、
   checkpoint 后 pause 丢封层（diff header 自洽所以没人报错）、原生 ARM 线把读过的页当脏页（增量退化成工作集）；
   再加第四种：判据本身失效（`mem_mode=?`）。共同点：**测试通过 ≠ 测的是那个东西**。引 17 §2
@@ -583,7 +583,7 @@ Firecracker 侧的主体，`PUT /snapshot/rollback` 的九个阶段。
 **29 · 上机验收操作**
 - 客户面的操作篇，短（~6k 字）。交付态 3 条命令 + 前置（SDK 覆盖层、`.env`、conda）+ 每条的期望末行 + `tee`；
   开发态流程 01 → 03 → 04 → run-all 摘要 + 判据速查表 + 结果回传规范（`00-context.md` 模板）。
-  与 `../test-950/README.md` 有重叠，但那个 README 不进客户拿到的 HTML
+  与 `../scripts/dev/README.md` 有重叠，但那个 README 不进客户拿到的 HTML
 
 ### 第六部分　继续开发
 
@@ -698,9 +698,9 @@ flowchart LR
 | `../checkpoint-lifecycle.md` | ✅ 已改写为 `16-lifecycle-and-portability.md`（去掉问答体例，改为与其他篇一致的讲解体），原文件删除 |
 | `../diagrams/` | SVG 与 mermaid 源**未动**；其 README 的跳转已改指本系列 |
 | `../slides/` | 稿件**未动**；其 README 的参考链接已改指本系列 |
-| `../test-950/` | **不动**。开发态工具箱，第 17、24、25、26、29、31 篇链接过去 |
+| `../scripts/dev/` | **不动**。开发态工具箱，第 17、24、25、26、29、31 篇链接过去 |
 | `../README.md` | ✅ 已重写，本系列为首要入口；随第五部分补入「要看测试证据 / 验收」的读法 |
-| `../test-950/耗时基准结论.md` 等结论文档 | **不动**。第 26、28 篇吸收其内容，原文件仍是开发态记录 |
+| `../scripts/dev/耗时基准结论.md` 等结论文档 | **不动**。第 26、28 篇吸收其内容，原文件仍是开发态记录 |
 | `../../benchmark/checkpoint-bench-对比.md` | **不动**。第 26、27、28 篇吸收其内容 |
 | 工作区根 `三套快照方案的负载构造与测量口径.md` | **不动**（不在仓库）。第 26 §2、27 篇吸收其内容 |
 

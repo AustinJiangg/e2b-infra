@@ -1,0 +1,77 @@
+sandbox: inhilfeeceh8wswgvrjjh   store: /orchestrator/build/checkpoints (xfs)   dirty tracking: kvm-wp
+  注意：本次跑在 KVM 写保护上，不是 HDBSS——数字里不含硬件标脏的收益。
+
+=== 1. 线性链 ===
+CREATE ck1   dirty=   0MB  time= 1.253s  df_delta= 2098MB  mem_mode=full
+CREATE ck2   dirty=  64MB  time= 0.107s  df_delta=   80MB  mem_mode=incremental
+CREATE ck3   dirty= 256MB  time= 0.206s  df_delta=  273MB  mem_mode=incremental
+CREATE ck4   dirty= 512MB  time= 0.360s  df_delta=  536MB  mem_mode=incremental
+CREATE ck5   dirty=   0MB  time= 0.061s  df_delta=   20MB  mem_mode=incremental
+  [PASS] 树根 ck1 是全量捕获（mem_mode=full）
+  [PASS] ck2..ck5 都是增量
+
+=== 2. 逐级回退 + 跨链前滚 ===
+RESTORE ck5   time= 0.031s  ok=True mem=ck5 disk=ck5 blob=0be8ad38  base=ck5，回滚集只有活跃脏页
+  [PASS] restore ck5：内存/磁盘/blob 三项都回到 ck5 时刻
+RESTORE ck4   time= 0.040s  ok=True mem=ck4 disk=ck4 blob=0be8ad38  路径 (ck4..ck5]
+  [PASS] restore ck4：内存/磁盘/blob 三项都回到 ck4 时刻
+RESTORE ck3   time= 0.192s  ok=True mem=ck3 disk=ck3 blob=5880324c  路径 (ck3..ck4]
+  [PASS] restore ck3：内存/磁盘/blob 三项都回到 ck3 时刻
+RESTORE ck2   time= 0.111s  ok=True mem=ck2 disk=ck2 blob=d9a8509c  路径 (ck2..ck3]
+  [PASS] restore ck2：内存/磁盘/blob 三项都回到 ck2 时刻
+RESTORE ck1   time= 0.055s  ok=True mem=ck1 disk=ck1 blob=-  路径 (ck1..ck2]
+  [PASS] restore ck1：内存/磁盘/blob 三项都回到 ck1 时刻
+RESTORE ck5   time= 0.211s  ok=True mem=ck5 disk=ck5 blob=0be8ad38  前滚 (ck1..ck5]
+  [PASS] restore ck5：内存/磁盘/blob 三项都回到 ck5 时刻
+RESTORE ck1   time= 0.185s  ok=True mem=ck1 disk=ck1 blob=-  反向
+  [PASS] restore ck1：内存/磁盘/blob 三项都回到 ck1 时刻
+
+=== 3. 分叉：回到过去再建检查点，跨分支恢复 ===
+CREATE ck6   dirty=  32MB  time= 0.088s  df_delta=   52MB  mem_mode=incremental
+  [PASS] ck6 的父节点是 ck1
+RESTORE ck3   time= 0.145s  ok=True mem=ck3 disk=ck3 blob=5880324c  跨分支：ck6→ck1 ∪ ck3→ck2→ck1
+  [PASS] restore ck3：内存/磁盘/blob 三项都回到 ck3 时刻
+RESTORE ck6   time= 0.153s  ok=True mem=ck6 disk=ck6 blob=8ee54ed0  跨回新支
+  [PASS] restore ck6：内存/磁盘/blob 三项都回到 ck6 时刻
+RESTORE ck5   time= 0.193s  ok=True mem=ck5 disk=ck5 blob=0be8ad38  跨到旁支最远端
+  [PASS] restore ck5：内存/磁盘/blob 三项都回到 ck5 时刻
+CREATE ck7   dirty=   8MB  time= 0.069s  df_delta=   31MB  mem_mode=incremental
+  [PASS] ck7 的父节点是 ck5
+RESTORE ck6   time= 0.192s  ok=True mem=ck6 disk=ck6 blob=8ee54ed0  路径经 LCA=ck1
+  [PASS] restore ck6：内存/磁盘/blob 三项都回到 ck6 时刻
+RESTORE ck2   time= 0.061s  ok=True mem=ck2 disk=ck2 blob=d9a8509c  路径经 LCA=ck1
+  [PASS] restore ck2：内存/磁盘/blob 三项都回到 ck2 时刻
+RESTORE ck7   time= 0.199s  ok=True mem=ck7 disk=ck7 blob=4752a644  路径经 LCA=ck2
+  [PASS] restore ck7：内存/磁盘/blob 三项都回到 ck7 时刻
+
+=== 4. 删除语义：被引用者隐藏、叶子物理回收 ===
+  [PASS] ck2 有后代，删除后隐藏而非物理删除
+  [PASS] ck2 的 sidecar 保留（跨它回滚要用）
+  [PASS] ck2 的 snapfile 已丢弃（隐藏条目不是恢复目标）
+  [PASS] ext4 套：隐藏条目的 mem_diff 必须留（后代靠它解析内容）
+  [PASS] list 里看不到 ck2：['ck1', 'ck3', 'ck4', 'ck5', 'ck6', 'ck7']
+RESTORE ck1   time= 0.208s  ok=True mem=ck1 disk=ck1 blob=-  跨隐藏的 ck2 纪元
+  [PASS] restore ck1：内存/磁盘/blob 三项都回到 ck1 时刻
+RESTORE ck4   time= 0.256s  ok=True mem=ck4 disk=ck4 blob=0be8ad38  再跨回来
+  [PASS] restore ck4：内存/磁盘/blob 三项都回到 ck4 时刻
+  [PASS] ck6 是叶子，物理删除
+RESTORE ck3   time= 0.208s  ok=True mem=ck3 disk=ck3 blob=5880324c  删掉 ck6 之后其余分支不受影响
+  [PASS] restore ck3：内存/磁盘/blob 三项都回到 ck3 时刻
+
+=== 5. 失败语义：算不出回滚集就拒绝，沙箱照常运行 ===
+RESTORE ck7   time= 0.257s  ok=True mem=ck7 disk=ck7 blob=4752a644  先站到 ck7
+  [PASS] restore ck7：内存/磁盘/blob 三项都回到 ck7 时刻
+人为破坏：移走 /orchestrator/build/checkpoints/inhilfeeceh8wswgvrjjh/ckpt_1788517596562807628/mem_bitmap
+RESTORE ck4   refused=True err='Code.internal: failed to restore sandbox (it keeps running at its current state): failed to materialize revert files: failed to read sidecar of checkp'
+  [PASS] restore ck4 被拒绝（路径 ck7→ck5→ck4 需要被破坏的 ck5 纪元）
+  [PASS] 拒绝没有动沙箱状态：['ck7', 'ck7'] == ['ck7', 'ck7']
+  [PASS] 沙箱在拒绝之后照常运行
+RESTORE ck4   time= 0.043s  ok=True mem=ck4 disk=ck4 blob=0be8ad38  sidecar 放回来，又能恢复了
+  [PASS] restore ck4：内存/磁盘/blob 三项都回到 ck4 时刻
+
+=== 6. 存储 ===
+19G	/orchestrator/build/checkpoints/inhilfeeceh8wswgvrjjh
+3.0G	/orchestrator/build/checkpoints/inhilfeeceh8wswgvrjjh
+（apparent 远大于实际是正常的：两套的内存产物都是稀疏文件。
+  XFS 套在稀疏之外还叠加 reflink 的 extent 共享，所以差得更多。）
+ALL PASS

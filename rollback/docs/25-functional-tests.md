@@ -2,8 +2,8 @@
 
 > 六个脚本怎么证明「回滚之后，沙箱还是回滚那一刻的那个沙箱」，以及每一条断言为什么长成那样。
 > **读者**：接手者 / 评审 / 上机验收的人　**预备**：[第 8 篇](08-memory-diff-tree.md)、[第 14 篇](14-failure-semantics.md)、[第 16 篇](16-lifecycle-and-portability.md)
-> **代码**：[`../../benchmark/checkpoint_verify.py`](../../benchmark/checkpoint_verify.py)、[`../test-950/correctness.py`](../test-950/correctness.py)、
-> [`pause_verify.py`](../test-950/pause_verify.py)、[`compat_matrix.py`](../test-950/compat_matrix.py)、[`hdbss_evidence.py`](../test-950/hdbss_evidence.py)、[`loop.py`](../test-950/loop.py)
+> **代码**：[`../scripts/acceptance/checkpoint_verify.py`](../scripts/acceptance/checkpoint_verify.py)、[`../scripts/dev/correctness.py`](../scripts/dev/correctness.py)、
+> [`pause_verify.py`](../scripts/dev/pause_verify.py)、[`compat_matrix.py`](../scripts/dev/compat_matrix.py)、[`hdbss_evidence.py`](../scripts/dev/hdbss_evidence.py)、[`loop.py`](../scripts/dev/loop.py)
 
 [第 17 篇 §3.2](17-observability-and-verification.md#32-checkpoint_verifypy只证正确性) 已经给过验收脚本的**梗概**。
 本篇是详述：每一类断言解决的是哪一种「测试通过但什么也没证明」，项数怎么数出来，
@@ -177,7 +177,7 @@ GENS = [
 第 2 节只在第一次回退后做活体检查（`first` 标志），因为活体检查里有两段 1.5 秒的等待，
 每次都做会让脚本变慢而信息量不增加。
 
-与 950 上 2026-08-29 那份日志（`../test-950/reports/950-verify-20260829/checkpoint-verify.log`）
+与 950 上 2026-08-29 那份日志（`../scripts/dev/reports/950-verify-20260829/checkpoint-verify.log`）
 逐条核对，59 条 `[PASS]` 的分布与上表**完全吻合**：15 + 2 + 2 + 9 + 7 + 17 + 7 = 59。
 
 **59 不是常数**，三处会变：
@@ -517,7 +517,7 @@ flowchart TB
 - 这些脚本在整个测试体系里的位置、以及全书唯一那张测试矩阵：[第 24 篇 §3](24-test-overview.md#3-测试矩阵)
 - 本篇提到的每一个结果数字，完整结果表与条件标签：[第 28 篇 §2](28-results-and-compliance.md#2-功能正确性结果)
 - 上机怎么跑、每条命令的期望末行：[第 29 篇](29-acceptance-runbook.md)，
-  以及开发态工具箱自己的 [`README.md`](../test-950/README.md)「判据速查」
+  以及开发态工具箱自己的 [`README.md`](../scripts/dev/README.md)「判据速查」
 
 **下一篇**：[26 · 性能测试：指标与方法](26-performance-methodology.md) ——
 正确性说完了，接下来是「多快」。

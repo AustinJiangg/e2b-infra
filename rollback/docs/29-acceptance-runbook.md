@@ -4,7 +4,7 @@
 > 每条该看到什么、结果怎么留档回传。**本篇只讲操作**，判据背后的道理在第 24–28 篇。
 >
 > **读者**：做验收的人。**预备**：[第 24 篇 §5](24-test-overview.md#5-环境与产物)。
-> **代码**：`e2b-infra/benchmark/`、`e2b-infra/rollback/test-950/`
+> **代码**：`e2b-infra/rollback/scripts/acceptance/`、`e2b-infra/rollback/scripts/dev/`
 
 ---
 
@@ -47,7 +47,8 @@ python /opt/e2b-infra/patch_e2b.py                         # 再改端点
 覆盖层带不带 `mem_mode` 字段，直接决定验收会跑 59 项还是 57 项（§2）。
 
 **`.env`。** 在 `benchmark/` 目录下放一份 `.env`（`cp .env.example .env`，或直接
-`bash sync-env.sh` 自动生成并填凭据），四个变量：
+`bash sync-env.sh` 自动生成并填凭据），再做一条软链
+`ln -s ../../benchmark/.env rollback/scripts/.env` 让脚本读得到，四个变量：
 
 | 变量 | 填什么 |
 |---|---|
@@ -60,7 +61,7 @@ python /opt/e2b-infra/patch_e2b.py                         # 再改端点
 
 ## 2. 交付态：三条命令
 
-三条命令都在 `benchmark/` 目录下跑，**全部用默认参数**。
+三条命令都在 `rollback/scripts/acceptance/` 目录下跑，**全部用默认参数**。
 
 ### 2.1 覆盖层自检
 
@@ -146,9 +147,9 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 ## 4. 开发态流程摘要
 
 要更细的数据（分位数、链深、冻结窗口、兼容矩阵、HDBSS 三级证据），
-把 `rollback/test-950/` 整个目录拷到目标机，按下面四步走。
+把 `rollback/scripts/dev/` 整个目录拷到目标机，按下面四步走。
 每一步的细节、两套方案的差别、数据卷怎么造，见
-[`../test-950/README.md`](../test-950/README.md) —— **别手敲单个脚本**，位置参数顺序敏感。
+[`../scripts/dev/README.md`](../scripts/dev/README.md) —— **别手敲单个脚本**，位置参数顺序敏感。
 
 | 步 | 命令 | 必须看到 |
 |---|---|---|
@@ -198,7 +199,7 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 | 这份数不能拿来干什么 | 至少一条：不是性能基准 / 不能与另一台机器相减 / 判据当时是否有效 | 人填 |
 
 两份可以照抄结构的范本：
-[`reports/950-verify-20260829/00-context.md`](../test-950/reports/950-verify-20260829/00-context.md)
+[`reports/950-verify-20260829/00-context.md`](../scripts/dev/reports/950-verify-20260829/00-context.md)
 （交付态一轮，末尾三条注意写明了「这不是性能基准」「不能和另一台机器相减」）与
 `reports/920b-kas0904-20260904/00-context.md`（开发态全套，外加两个遗留问题的定位过程）。
 
@@ -226,7 +227,7 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 | 这些判据为什么是这几条 | [第 24 篇](24-test-overview.md)、[第 25 篇](25-functional-tests.md) |
 | 数字怎么读、口径是什么 | [第 26 篇](26-performance-methodology.md) |
 | 实测结果与达标判定 | [第 28 篇](28-results-and-compliance.md) |
-| 开发态工具箱完整说明 | [`../test-950/README.md`](../test-950/README.md) |
+| 开发态工具箱完整说明 | [`../scripts/dev/README.md`](../scripts/dev/README.md) |
 | 平台前提与部署陷阱 | [第 19 篇 §6](19-kunpeng-platform.md#6-部署检查清单) |
 
 **下一篇**：[30 · 在这套方案上继续开发](30-extending.md) —— 验收之后，

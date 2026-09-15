@@ -1,0 +1,22 @@
+sandbox: i6ngloxk8upppizhuz67r   store: /orchestrator/build/checkpoints (xfs)   dirty tracking: kvm-wp
+  注意：本次跑在 KVM 写保护上，不是 HDBSS——数字里不含硬件标脏的收益。
+CREATE a     dirty=  32MB  time= 1.446s  df_delta=    0MB  mem_mode=full
+CREATE b     dirty=  32MB  time= 0.073s  df_delta=    0MB  mem_mode=incremental
+  25/200  p50=0.043s  max=0.055s  慢于1s=0 次
+  50/200  p50=0.045s  max=0.056s  慢于1s=0 次
+  75/200  p50=0.045s  max=0.056s  慢于1s=0 次
+  100/200  p50=0.045s  max=0.056s  慢于1s=0 次
+  125/200  p50=0.044s  max=0.056s  慢于1s=0 次
+  150/200  p50=0.044s  max=0.056s  慢于1s=0 次
+  175/200  p50=0.044s  max=0.056s  慢于1s=0 次
+  200/200  p50=0.044s  max=0.056s  慢于1s=0 次
+
+=== 结果 (ext4, 两个检查点交替) ===
+  次数       : 200
+  failures   : 0
+  p50 / p90  : 0.044s / 0.049s
+  min / max  : 0.039s / 0.056s
+  >1s 的次数 : 0 []
+  总墙钟     : 26.1s
+  [PASS] 200 次回滚全部内容正确
+STABLE

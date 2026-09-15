@@ -243,7 +243,7 @@ dmesg | grep -Ei 'kvm.*(VHE|nVHE).*initialized'
 ```
 
 ```bash
-# ③ KVM 暴露 capability 502 吗（需要一个探针程序，见 test-950/cap_test.c）
+# ③ KVM 暴露 capability 502 吗（需要一个探针程序，见 scripts/dev/cap_test.c）
 gcc -O2 -Wall cap_test.c -o /tmp/cap_test && /tmp/cap_test
 # 期望：KVM_CHECK_EXTENSION(cap=502) = 1
 #      HDBSS capability is present and can be enabled.
@@ -355,12 +355,12 @@ df -T /orchestrator/build
 | 两个调用点 | `src/vmm/src/builder.rs` — `build_microvm_for_boot`、`build_microvm_from_snapshot` |
 | 宿主探测与默认值 | `internal/sandbox/fc/dirtytracking.go` |
 | 启动时能力上报 | `packages/orchestrator/main.go` — `reportCheckpointCapabilities` |
-| 能力探针（C） | `e2b-infra/rollback/test-950/cap_test.c` |
-| 宿主自检脚本 | `e2b-infra/rollback/test-950/{00-recon-950.sh,01-check-host.sh}` |
-| loop 卷制备 | `e2b-infra/rollback/test-950/02-prepare-loop-volume.sh` |
-| 换二进制与验证 | `e2b-infra/rollback/test-950/{03-switch.sh,04-verify-runtime.sh}` |
+| 能力探针（C） | `e2b-infra/rollback/scripts/dev/cap_test.c` |
+| 宿主自检脚本 | `e2b-infra/rollback/scripts/dev/{00-recon-950.sh,01-check-host.sh}` |
+| loop 卷制备 | `e2b-infra/rollback/scripts/dev/02-prepare-loop-volume.sh` |
+| 换二进制与验证 | `e2b-infra/rollback/scripts/dev/{03-switch.sh,04-verify-runtime.sh}` |
 | 内核侧调研记录 | 工作区 `e2b-repo/HDBSS_KUNPENG950_KERNEL_6.6.0_515.md` |
-| 950 摸底结论 | `e2b-infra/rollback/test-950/950-摸底结论.md` |
+| 950 摸底结论 | `e2b-infra/rollback/scripts/dev/950-摸底结论.md` |
 
 **下一篇**：[20 · 与原生 snapshot 的对比与配合](20-vs-native.md) —— 两条路径的完整对照，
 以及怎么一起用。

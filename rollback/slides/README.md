@@ -72,9 +72,9 @@ npm run export
 | 完整技术文档（32 篇） | `../docs/` |
 | 当前验收状态与口径 | `../docs/17-observability-and-verification.md` |
 | 交付件与中间产物的划分、测试覆盖与缺口 | `../../../交付件清单.md` |
-| 工具箱逐脚本的验证状态、双轨 commit | `../test-950/MANIFEST.md` |
-| 耗时对照与三个发现 | `../test-950/耗时基准结论.md` |
-| 原始数据（12 份报告，含 950 那轮的原始终端记录） | `../test-950/reports/` |
+| 工具箱逐脚本的验证状态、双轨 commit | `../scripts/dev/MANIFEST.md` |
+| 耗时对照与三个发现 | `../scripts/dev/耗时基准结论.md` |
+| 原始数据（12 份报告，含 950 那轮的原始终端记录） | `../scripts/dev/reports/` |
 | 方案设计（最终落地的两条路线） | `../../../rollback-version-2/Fable5-...-v3-ext4.md`、`...-XFS-Reflink-方案总结.md` |
 
 Node 装在 `~/.local/node`（v24 LTS，非 root 安装），`~/.bashrc` 里已加 PATH。

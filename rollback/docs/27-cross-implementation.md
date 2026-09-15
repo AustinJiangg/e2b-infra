@@ -9,7 +9,7 @@
 > **预备**：[第 1 篇 §3](01-what-and-why.md#3-快照在四个层次上)、
 > [第 4 篇](04-e2b-native-snapshot.md)、[第 20 篇](20-vs-native.md)、
 > [第 26 篇](26-performance-methodology.md)。
-> **代码**：`e2b-infra/benchmark/checkpoint_bench_v2.py`、`native_snapshot_bench.py`
+> **代码**：`e2b-infra/rollback/scripts/probes/checkpoint_bench_v2.py`、`native_snapshot_bench.py`
 
 ---
 
@@ -448,7 +448,7 @@ KVM 写保护，每个干净页的第一次写陷出一次，**所有沙箱都�
 修复后的二进制上 `checkpoint_verify.py` 全过、`checkpoint_bench_v2.py` 六代全 `incremental`
 （920B-0914，第 28 篇 §4）。
 
-**探针脚本**（`e2b-infra/benchmark/`）：`pb2.py` 把 `/memory/dirty`、写跟踪位图、实际导出三列并排，
+**探针脚本**（`e2b-infra/rollback/scripts/probes/`）：`pb2.py` 把 `/memory/dirty`、写跟踪位图、实际导出三列并排，
 修复后后两列逐档相等；`pb5.py` 三代改同一个 2 MiB 块里的不同 4 KiB 页再各起新沙箱验 md5，
 是「4 KiB 存、2 MiB 拼」的关键用例。
 

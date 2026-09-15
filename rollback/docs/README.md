@@ -111,8 +111,9 @@
 | [`OUTLINE.md`](OUTLINE.md) | 本系列的编写计划与写作规约，给维护者看 |
 | [`../diagrams/`](../diagrams/) | 三张汇报用 SVG 与 mermaid 图源 |
 | [`../slides/`](../slides/) | Slidev 汇报稿（导出的 PDF 挂在 [Releases](https://github.com/AustinJiangg/e2b-infra/releases)） |
-| [`../test-950/`](../test-950/) | 开发态验证工具箱与实测报告 |
-| `../../benchmark/` | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能）；同目录另有两个跨实现对照脚本（第 27 篇），不属于交付态验收流程 |
+| [`../scripts/dev/`](../scripts/dev/) | 开发态验证工具箱与实测报告（原 `test-950/`） |
+| [`../scripts/acceptance/`](../scripts/acceptance/) | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能） |
+| [`../scripts/probes/`](../scripts/probes/) | 开发态探针与跨实现对照脚本（第 21–23、27 篇），不属于交付态验收流程 |
 
 ---
 

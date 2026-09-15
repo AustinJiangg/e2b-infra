@@ -12,12 +12,20 @@ import sys
 import tempfile
 import time
 
+from dotenv import load_dotenv
+
+# 凭据统一来自 .env：load_dotenv() 从调用脚本所在目录逐级向上找，所以
+# rollback/scripts/.env（软链到 benchmark/.env）对 acceptance/ probes/ dev/
+# 下的脚本都生效。已经 export 好的环境变量优先，不会被 .env 覆盖。
+load_dotenv()
+
 os.environ.setdefault("E2B_DOMAIN", "e2b.app")
 os.environ.setdefault("E2B_HTTP_SSL", "false")
 if not os.environ.get("E2B_API_URL"):
-    sys.exit("请先 export E2B_API_URL=http://<950-ip>:3000")
+    sys.exit("缺 E2B_API_URL：请先 export E2B_API_KEY / E2B_API_URL，"
+             "或按 scripts/README 配好 .env")
 if not os.environ.get("E2B_API_KEY"):
-    sys.exit("请先 export E2B_API_KEY=<key>")
+    sys.exit("缺 E2B_API_KEY：请先 export E2B_API_KEY 或按 scripts/README 配好 .env")
 
 from e2b import Sandbox  # noqa: E402  (after the env is set)
 

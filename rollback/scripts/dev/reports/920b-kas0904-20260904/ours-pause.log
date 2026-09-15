@@ -1,0 +1,53 @@
+模板 = base   每份随机数据 = 16 MB
+沙箱 igqdnhfom78t1syovbx9o
+
+===== 1. checkpoint 之前写 before.bin =====
+  before.bin sha=510c2dceeccc7126
+
+===== 2. checkpoint（写层封存、另开一层）=====
+  checkpoint id=ckpt_1788518944159710574  用时 1.481s
+
+===== 3. checkpoint 之后写 after.bin =====
+  after.bin sha=153060e6779190cd
+
+===== 4. pause / resume =====
+  pause 用时 0.995s
+  resume 用时 0.232s
+    [PASS] resume 之后沙箱还能执行命令
+
+===== 5. O_DIRECT 读回（绕开 guest page cache）=====
+  before.bin  写入 510c2dceeccc7126  读回 510c2dceeccc7126
+  after.bin   写入 153060e6779190cd  读回 153060e6779190cd
+    [PASS] **checkpoint 之前**写的 16MB 在 pause/resume 后完好（就是这条抓 bug）
+    [PASS] checkpoint 之后写的 16MB 在 pause/resume 后完好
+
+===== 6. restore 回 ck1 =====
+Traceback (most recent call last):
+  File "/root/kas-venv/lib64/python3.11/site-packages/e2b/sandbox_sync/checkpoint.py", line 134, in restore
+    res = self._rpc.restore_checkpoint(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/kas-venv/lib64/python3.11/site-packages/e2b/checkpointd/checkpoint/checkpoint_connect.py", line 58, in restore_checkpoint
+    return self._restore_checkpoint.call_unary(req, **opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/kas-venv/lib64/python3.11/site-packages/e2b_connect/client.py", line 114, in retry
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/kas-venv/lib64/python3.11/site-packages/e2b_connect/client.py", line 306, in call_unary
+    return self._process_unary_response(res)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/kas-venv/lib64/python3.11/site-packages/e2b_connect/client.py", line 254, in _process_unary_response
+    raise error_for_response(http_resp)
+e2b_connect.client.ConnectException: (<Code.invalid_argument: 'invalid_argument'>, 'missing header\n')
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/pause_verify.py", line 140, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/pause_verify.py", line 117, in main
+    sbx.checkpoint.restore(ck.checkpoint_id)
+  File "/root/kas-venv/lib64/python3.11/site-packages/e2b/sandbox_sync/checkpoint.py", line 144, in restore
+    raise handle_rpc_exception(e)
+e2b.exceptions.InvalidArgumentException: missing header
+
