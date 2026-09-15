@@ -1,6 +1,9 @@
-# 950 验证工具箱：XFS+reflink 与 ext4 差分树两套 checkpoint/restore
+# 开发态工具箱 `rollback/scripts/dev/`：XFS+reflink 与 ext4 差分树两套 checkpoint/restore
 
-整个目录拷到 950 任意位置即可，脚本之间只用相对路径。
+（本目录 2026-09-15 由 `rollback/test-950/` 迁来，内容未变，只换了位置。）
+
+整个目录拷到被测机（950 / 920B）任意位置即可，脚本之间只用相对路径。
+凭据的配法见下面「完整流程」，以及上一层的 [`../README.md`](../README.md)。
 
 ```
 bin/                两套的 orchestrator 与 firecracker 二进制 + SHA256SUMS
@@ -9,7 +12,7 @@ cap_test.c          KVM cap 502 探针，01 会自动编译调用
 02-prepare-loop-volume.sh 造数据卷（xfs 或 ext4，loop 或真盘），loop 已调优
 03-switch.sh        在两套之间切换：换二进制、改 env、重启 template-manager
 04-verify-runtime.sh 切换后冒烟：跑的是哪套、脏页后端是不是 HDBSS、数据落在哪个文件系统
-lib.py              测试脚本共用的 SDK 封装
+lib.py              测试脚本共用的 SDK 封装（开头 load_dotenv()，凭据从 .env 或环境变量取）
 correctness.py      正确性 e2e（线性 / 前滚 / 分叉 / 删除 / 失败语义，内存+磁盘+blob 三重校验）
 hdbss_evidence.py   HDBSS 三级证据：能力 / FC 自报 / 数据面
 timing.py           耗时与存储：逐代 create、逐级 restore、链深 5/20/50 对照
@@ -83,10 +86,25 @@ L3 的判据在 920B 上验证过：920B 没有 HDBSS，量到冷/热 = 4.5~5.4�
 
 ## 完整流程
 
+凭据（`E2B_API_URL` / `E2B_API_KEY`）两种给法，任选其一：
+
 ```bash
+# ① .env（推荐）：每台机器做一次软链，指向凭据的唯一来源 benchmark/.env
+ln -s ../../benchmark/.env ../.env       # 即 rollback/scripts/.env
+# lib.py 开头的 load_dotenv() 会从脚本所在目录逐级向上找到它，
+# 本目录所有 .py 都经由 lib.py 取配置，所以一次配好全都能跑。
+
+# ② export（.sh 脚本只认这种，04-verify-runtime.sh 需要）：
+set -a; . ../.env; set +a
+# 或者直接
 export E2B_API_URL=http://<950-ip>:3000
 export E2B_API_KEY=<key>
+```
 
+> `.sh` 脚本不读 `.env`，只读环境变量。用 ① 的话，跑 `04-verify-runtime.sh` /
+> `run-all.sh` 之前补一条 `set -a; . ../.env; set +a` 即可。
+
+```bash
 bash 01-check-host.sh                      # 先看清楚这台机器有什么
 
 # --- ext4 套：950 根盘就是 ext4，直接用真盘，不造卷、不设 BASE_PATH ---

@@ -1,0 +1,9 @@
+# 本机凭据：唯一来源是 benchmark/.env，这里只放一个指过去的软链接，不入库。
+#   ln -s ../../benchmark/.env rollback/scripts/.env
+.env
+
+__pycache__/
+
+# 各脚本每次运行产生的目录（客户端结果、采集的日志、生成的报告），不入库。
+# dev/reports/ 里已归档的实测报告是例外，那些是手工挑出来入库的。
+*/runs/

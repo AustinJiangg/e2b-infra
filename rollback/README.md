@@ -9,7 +9,7 @@
 | [`docs/`](docs/) | **技术手册**，32 篇，从「这是个什么问题」到「怎么证明它对、它快」再到「怎么在它上面继续开发」 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
 | [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
-| [`test-950/`](test-950/) | 开发态验证工具箱：宿主自检 / 造数据卷 / 两套之间切换 / 穷举与劣化排查脚本，以及 11 份实测报告 | 我们自己，做上机验证与排查 |
+| [`scripts/`](scripts/) | **快照回滚的全部脚本**：`acceptance/` 交付态验收、`probes/` 开发态探针、`dev/` 开发态工具箱（原 `test-950/`）与 12 份实测报告 | 验收方（`acceptance/`）；我们自己（另两个） |
 | **[Releases](https://github.com/AustinJiangg/e2b-infra/releases)** | 文档打包件与汇报稿 PDF，下载下来直接发给别人 | 要把材料发出去的人 |
 
 > 构建产物一律不进仓库：`slides/` 只跟踪源文件（`node_modules`、`dist/`、
@@ -33,12 +33,14 @@
 
 | 想做什么 | 用什么 |
 |---|---|
-| 正确性验收 | 仓库根的 `benchmark/checkpoint_verify.py` |
-| 性能基准 | 仓库根的 `benchmark/checkpoint_bench.py` |
-| 深入排查 | [`test-950/`](test-950/) |
+| 正确性验收 | [`scripts/acceptance/checkpoint_verify.py`](scripts/acceptance/checkpoint_verify.py) |
+| 性能基准 | [`scripts/acceptance/checkpoint_bench.py`](scripts/acceptance/checkpoint_bench.py) |
+| 深入排查 | [`scripts/dev/`](scripts/dev/) |
+| 机理探针、跨实现对照 | [`scripts/probes/`](scripts/probes/) |
 
 前两个是**交付态**脚本：各自单文件、零共享依赖，两条命令跑完。
-`test-950/` 是**开发态**工具箱，脚本之间有共享模块、需要配路径。
+`scripts/dev/`（原 `test-950/`）是**开发态**工具箱，脚本之间有共享模块、需要配路径。
+凭据怎么配、950 与 920B 各自要验哪些结论，见 [`scripts/README.md`](scripts/README.md)。
 
 > 两套测试脚本**不要混用**。宿主探针在两个交付脚本里故意重复了一份，
 > 就是为了防止只拷走一半、剩下的静默变成 unknown。
@@ -83,7 +85,7 @@ python3 tmp/build_docs_html.py e2b-infra/rollback/docs e2b-infra/rollback/diagra
 打包与两个校验脚本（`mdlinks.py` 查链接与中文锚点、`mdmermaid.mjs` 查 mermaid 语法）
 也在 `e2b-repo/tmp/`，尚未随本仓库同步。生成完新建一个 Release 传上去即可。
 
-## 关于 `test-950/bin/`
+## 关于 `scripts/dev/bin/`
 
 四个被测二进制（两个 orchestrator 各 108 MB、两个 Firecracker）**不进本仓库** ——
 它们是构建产物，可从 `infra-arm` / `KASandbox` 的对应 commit 重建，且超过 GitHub 的单文件上限。

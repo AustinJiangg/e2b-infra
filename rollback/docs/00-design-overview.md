@@ -671,7 +671,7 @@ XFS 方案（`jll-xfs`）未合入上游。**交付形态**是 `e2b-infra` 仓�
 
 ## 附录 B：验收脚本
 
-交付态是 `e2b-infra/benchmark/` 下两个**零共享依赖**的单文件脚本 ——
+交付态是 `e2b-infra/rollback/scripts/acceptance/` 下两个**零共享依赖**的单文件脚本 ——
 `checkpoint_verify.py` 只证正确性、`checkpoint_bench.py` 只测耗时，
-拷到目标机上就能跑；开发态工具箱在 [`../test-950/`](../test-950/)，**两套不要混用**。
+拷到目标机上就能跑；开发态工具箱在 [`../scripts/dev/`](../scripts/dev/)，**两套不要混用**。
 设计原则见[第 24 篇 §2](24-test-overview.md#2-三层测试)，上机怎么跑见[第 29 篇](29-acceptance-runbook.md)。

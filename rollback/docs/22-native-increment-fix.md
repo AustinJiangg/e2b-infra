@@ -73,7 +73,7 @@ return &header.DiffMetadata{Dirty: dirty, Empty: bitset.New(0), BlockSize: pageS
 
 - 端点要求暂停态，而 `Pause` 取脏页元数据时虚机已经暂停（`process.Pause` → `CreateSnapshot` → `DiffMetadata`）；
 - `Pause` 先做的那次 Full 快照**不擦**位图 —— 那次没给 memfile 路径，Firecracker 根本没走到重置分支
-  （`benchmark/pb3.py` 实测 53202 页进、53202 页出）；
+  （`rollback/scripts/probes/pb3.py` 实测 53202 页进、53202 页出）；
 - 每代都是新进程，位图天然从零开始，不需要 reset。
 
 位图语义 = KVM 脏页日志（920B 上是写保护，950 上是 HDBSS）∪ Firecracker 用户态位图（virtio 队列、
@@ -206,7 +206,7 @@ if !fc.TrackDirtyPagesEnabled() {
 | uffd 校验与缺页 | `internal/sandbox/uffd/userfaultfd/userfaultfd.go` — `NewUserfaultfdFromFd`、`faultPage` |
 | 预取器 | `internal/sandbox/uffd/prefetch/prefetcher.go` |
 | 顺手修的两处 | `internal/sandbox/block/cache.go` — `coveringBlocks`；`block/chunk.go` — `fetchToCache` |
-| 位图不被 Full 快照擦掉的实测 | `e2b-infra/benchmark/pb3.py` |
+| 位图不被 Full 快照擦掉的实测 | `e2b-infra/rollback/scripts/probes/pb3.py` |
 
 **下一篇**：[23 · 原生精确增量的代价、验证与边界](23-native-increment-cost-and-verification.md) ——
 改法讲完了，接下来是它在恢复热路径上付了多少、怎么验、影响面到哪为止。

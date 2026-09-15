@@ -7,8 +7,8 @@
 > **读者**：评审、客户、接手者。
 > **预备**：[第 00 篇 · 总览](00-design-overview.md)、
 > [第 17 篇 · 可观测性与验证](17-observability-and-verification.md)。
-> **代码**：`e2b-infra/benchmark/`（交付态两个脚本）、
-> `e2b-infra/rollback/test-950/`（开发态工具箱）
+> **代码**：`e2b-infra/rollback/scripts/acceptance/`（交付态两个脚本）、
+> `e2b-infra/rollback/scripts/dev/`（开发态工具箱）
 
 ---
 
@@ -37,7 +37,7 @@ md5、根文件系统上的文件，一项都不会错。变的只有两件事 �
 变成一秒半，每一代产物从几十 MB 变成整份内存。
 
 普通测试抓不到，是因为它只看得见「回来的内容对不对」，看不见「用什么方式回来的」。
-`rollback/test-950/README.md` 把这句话写在两套方案的共同前提里：
+`rollback/scripts/dev/README.md` 把这句话写在两套方案的共同前提里：
 
 > 两套共同必须：`FC_TRACK_DIRTY_PAGES=true`。漏配则每次 checkpoint 都退化成全量，
 > 测试照样"通过"但测的不是增量，是最容易漏掉的坑。
@@ -52,7 +52,7 @@ md5、根文件系统上的文件，一项都不会错。变的只有两件事 �
 
 checkpoint 会把当前写层封存、另开一层（[第 10 篇 §3](10-disk-layering.md#3-seal不搬运任何数据的换层)）。
 于是一个被 pause 的沙箱要想完整地回来，必须把整个层栈压平再导出。这一步做错的后果，
-`test-950` 那次补测试的提交（`173a3d5`）说得很清楚：
+开发态工具箱那次补测试的提交（`173a3d5`）说得很清楚：
 
 > checkpoint seals the write layer and opens a fresh one, so a paused sandbox has to
 > flatten the whole stack to come back whole. Getting that wrong lost every write made
@@ -180,9 +180,9 @@ else:
 
 ### 2.2 交付态验收：两个单文件脚本
 
-`e2b-infra/benchmark/` 下的
-[`checkpoint_verify.py`](../../benchmark/checkpoint_verify.py)（只证正确性）与
-[`checkpoint_bench.py`](../../benchmark/checkpoint_bench.py)（只测耗时），
+`e2b-infra/rollback/scripts/acceptance/` 下的
+[`checkpoint_verify.py`](../scripts/acceptance/checkpoint_verify.py)（只证正确性）与
+[`checkpoint_bench.py`](../scripts/acceptance/checkpoint_bench.py)（只测耗时），
 **各自单文件、零共享依赖**，拷到目标机上就能跑。
 
 两个脚本各自带着一份一模一样的宿主探针，互相不引用。这不是没来得及重构：
@@ -205,7 +205,7 @@ else:
 
 ### 2.3 开发态工具箱
 
-`e2b-infra/rollback/test-950/`（[目录说明](../test-950/README.md)）是我们自己排查用的一套：
+`e2b-infra/rollback/scripts/dev/`（[目录说明](../scripts/dev/README.md)）是我们自己排查用的一套：
 `correctness.py`、`timing.py`、`loop.py`、`bench-ckpt.py`、`probe-ramp.py`、
 `freeze_probe.py`、`pause_verify.py`、`compat_matrix.py`、`hdbss_evidence.py`，
 共享 `lib.py`，外加四个 shell（宿主自检 / 造数据卷 / 两套之间切换 / 切换后冒烟），
@@ -216,7 +216,7 @@ else:
 
 ### 2.4 为什么两套不混用
 
-|  | 交付态 `benchmark/` | 开发态 `rollback/test-950/` |
+|  | 交付态 `rollback/scripts/acceptance/` | 开发态 `rollback/scripts/dev/` |
 |---|---|---|
 | 给谁 | 交付方在目标机上做验收 | 我们自己跑穷举、找劣化、判 HDBSS 真假 |
 | 依赖 | 单文件、零共享依赖 | 共享 `lib.py`，要配 store 路径 |
@@ -429,7 +429,7 @@ python checkpoint_verify.py 2>&1 | tee reports/<机器>-verify-<日期>.log
 | 三套方案怎么并排比 | [第 27 篇](27-cross-implementation.md) |
 | 实测数字与达标判定 | [第 28 篇](28-results-and-compliance.md) |
 | 上机怎么操作 | [第 29 篇](29-acceptance-runbook.md) |
-| 开发态工具箱的完整说明 | [`../test-950/README.md`](../test-950/README.md)、[`MANIFEST.md`](../test-950/MANIFEST.md) |
+| 开发态工具箱的完整说明 | [`../scripts/dev/README.md`](../scripts/dev/README.md)、[`MANIFEST.md`](../scripts/dev/MANIFEST.md) |
 
 **下一篇**：[25 · 功能正确性测试](25-functional-tests.md) —— 「回到那一刻」怎么被证明，
 以及每个脚本各自守住哪一条。

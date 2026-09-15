@@ -6,14 +6,14 @@
 
 | | 位置 | 干什么用 |
 |---|---|---|
-| **测试工具箱** | `WSL:~/projects/e2b-repo/test-950/` | 拷到 950，**手工换二进制**跑验证。不走 RPM |
+| **测试工具箱** | `WSL:~/projects/e2b-repo/e2b-infra/rollback/scripts/dev/` | 拷到 950，**手工换二进制**跑验证。不走 RPM |
 | **RPM 仓库** | `WSL:~/projects/e2b-repo/e2b-infra`（两个分支） | 正式部署：构建 rpm → 装到 `/opt` → `build.sh -i/-s` |
 
 **2026-08-28 起 WSL 侧是完整的**：`bin/` 四个二进制（226MB）与 `reports/` 全部报告都已从 920B
 拉回并 `sha256sum -c` 校验通过，920B 上不再有 WSL 没有的东西。
 
-**去 950 要拷两份，缺一不可**：`e2b-infra`（部署）和 `test-950/`（验证）。
-测试脚本与结论文档**不在** e2b-infra 里，只带 RPM 仓库过去是跑不了验证的。
+**去 950 要拷两份，缺一不可**：`e2b-infra`（部署）和 `rollback/scripts/dev/`（验证）。
+后者已经并入 e2b-infra 仓库（2026-09-15 由 `rollback/test-950/` 迁来），但仍要单独拷到被测机上跑。
 
 ---
 
@@ -36,7 +36,7 @@ infra-arm 保留了 rebase 前的备份 tag：`pre-rebase-jll` / `pre-rebase-jll
 
 ---
 
-## 二、测试工具箱 `test-950/`
+## 二、测试工具箱 `rollback/scripts/dev/`
 
 ### 脚本
 
@@ -297,7 +297,7 @@ XFS 套这轮跑在 loop XFS（`/mnt/xfsdev`）上，绝对耗时偏悲观；ext
 
 ## 八、2026-08-27 新增：交付侧验收脚本
 
-`e2b-infra/benchmark/` 下两个**单文件、零共享依赖**的脚本，给交付方在 950 上做验收用，
+`e2b-infra/rollback/scripts/acceptance/` 下两个**单文件、零共享依赖**的脚本，给交付方在 950 上做验收用，
 与本目录这套开发态工具箱互补（本目录的脚本共享 `lib.py`，跑得更细，但不适合只拷两个文件过去）：
 
 | 脚本 | 只做一件事 | 已验证 |

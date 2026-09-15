@@ -7,8 +7,8 @@
 > **读者**：评审、客户、要复测的人、接手基准的工程师。
 > **预备**：[第 24 篇 §4 · 测量纪律](24-test-overview.md#4-测量纪律)、
 > [第 26 篇 §1 · 指标口径](26-performance-methodology.md#1-指标口径)。
-> **数据**：[`../test-950/reports/`](../test-950/reports/)、
-> [`../test-950/耗时基准结论.md`](../test-950/耗时基准结论.md)、
+> **数据**：[`../scripts/dev/reports/`](../scripts/dev/reports/)、
+> [`../scripts/dev/耗时基准结论.md`](../scripts/dev/耗时基准结论.md)、
 > `benchmark/checkpoint-bench-对比.md`（主工作区，未提交）。
 
 ---
@@ -65,13 +65,13 @@
 
 | 轮次 | 日期 | 机器 · 后端 | 方案 | 产物文件系统 · 介质 | 二进制 | 位置 |
 |---|---|---|---|---|---|---|
-| **950-verify** | 2026-08-29 | 950 · `hdbss` | ext4 | ext4 · **真盘**（根盘） | FC 1.12.1，orchestrator 未记录 | [`reports/950-verify-20260829/`](../test-950/reports/950-verify-20260829/) |
+| **950-verify** | 2026-08-29 | 950 · `hdbss` | ext4 | ext4 · **真盘**（根盘） | FC 1.12.1，orchestrator 未记录 | [`reports/950-verify-20260829/`](../scripts/dev/reports/950-verify-20260829/) |
 | **920B-0824-fn** | 2026-08-24 | 920B · `kvm-wp` | ext4 / XFS 各一轮 | ext4 · loop（`/mnt/ext4dev`）；XFS · 真盘（`/`） | 未记录 | `reports/ext4-20260824-161727/`、`reports/xfs-20260824-161025/` |
-| **920B-0824-bench** | 2026-08-24 | 920B · `kvm-wp` | ext4 / XFS 各一轮 | 同上 | 未记录 | [`reports/bench-ext4-20260824-200601/`](../test-950/reports/bench-ext4-20260824-200601/)、`reports/bench-xfs-20260824-201348/` |
+| **920B-0824-bench** | 2026-08-24 | 920B · `kvm-wp` | ext4 / XFS 各一轮 | 同上 | 未记录 | [`reports/bench-ext4-20260824-200601/`](../scripts/dev/reports/bench-ext4-20260824-200601/)、`reports/bench-xfs-20260824-201348/` |
 | **920B-0824-ramp** | 2026-08-24 | 920B · `kvm-wp` | ext4 | ext4 · loop | 未记录 | `reports/ramp-ext4-20260824-215331/` |
 | **920B-0825-ext4** | 2026-08-25 | 920B · `kvm-wp` | ext4 | ext4 · 300 G loop（`direct-io` / 预分配 / 4K 扇区 / `nodiscard`） | 未记录 | `reports/ext4-20260825-154832/` |
 | **920B-0825-xfs** | 2026-08-25 | 920B · `kvm-wp` | XFS | XFS · 同参数 300 G loop，`cowextsize=4096` | 未记录 | `reports/xfs-cow4k/`（未调 `cowextsize` 的同轮在 `reports/xfs-20260825-162413/`） |
-| **920B-0904** | 2026-09-04 | 920B · `kvm-wp` | ext4 | **XFS** · 真盘 | orchestrator `aa13d05e9a…`、firecracker `05774e5376…`（构建自 KASandbox_0904 —— 即上游 MR !119 的源分支，这一轮验的就是合入 openEuler 的代码） | `e2b-infra/rollback/test-950/reports/920b-kas0904-20260904/` |
+| **920B-0904** | 2026-09-04 | 920B · `kvm-wp` | ext4 | **XFS** · 真盘 | orchestrator `aa13d05e9a…`、firecracker `05774e5376…`（构建自 KASandbox_0904 —— 即上游 MR !119 的源分支，这一轮验的就是合入 openEuler 的代码） | `e2b-infra/rollback/scripts/dev/reports/920b-kas0904-20260904/` |
 | **920B-0908** | 2026-09-08 | 920B · `kvm-wp` | ext4 | XFS · 真盘 | `orchestrator-ext4-ecdad325c-pausefix` | 原始日志在 `deltabox/e2b/results/ckpt-920b-20260908/`，**本仓库未收** |
 | **950-native** | 2026-09-09 ~ 10 | 950 · 原生 pause 路径 | —— | 导出缓存 XFS on LVM | —— | `三套快照方案的负载构造与测量口径.md` §八 |
 | **920B-0914-native4k** | 2026-09-14 | 920B · 原生路径，修复后（`de25fe4d0`）· 软件写保护 | 9bfa37ab | 导出缓存 ext4 loop（direct-io），模板存储 tmpfs | —— | 920B `tmp/native4k-bench-920b-de25fe4d0.log`；`原生快照精确增量-方案设计.md` §8 |
@@ -122,7 +122,7 @@
   （两种脏页后端喂给上层的是同一张位图），但外推不等于测过，
   矩阵里那四格照旧写待测（[第 24 篇 §3](24-test-overview.md#3-测试矩阵)）。
 
-> **关于「52 项」**：`../test-950/MANIFEST.md` 里记着 920B 早期一轮 `checkpoint_verify.py`
+> **关于「52 项」**：`../scripts/dev/MANIFEST.md` 里记着 920B 早期一轮 `checkpoint_verify.py`
 > 的 **52/52**（当时脚本是「三代 × 11 个观测点」的版本），但那份文档自己也写明
 > **「52/52 与 60/60 只存在于 git commit message 里」**——没有日志留档，所以本篇不收。
 > 另一条线索是现行脚本在**模板里没有 `python3`** 时活体检查降为 4 项，总数同样落到 52
@@ -345,7 +345,7 @@ restore 端到端 0.2 ~ 1.3 s，修复前后同一噪声带；restore 后 `touch
 
 #### 表 3-K · `pb2.py` 三列并排（修复前后）
 
-**条件**：`benchmark/pb2.py`，模板 `base` 2 GiB、`huge_pages=2M`；每档真做一次 `create_snapshot`，
+**条件**：`rollback/scripts/probes/pb2.py`，模板 `base` 2 GiB、`huge_pages=2M`；每档真做一次 `create_snapshot`，
 档与档之间沙箱经历 pause + resume。左列是修复前原生 pause 的判据 `GET /memory/dirty`（2 MiB 粒度），
 中列是 Firecracker 写跟踪位图 `PUT /snapshot/save-dirty-bitmap`（4 KiB 粒度），右列是实际导出的 memfile。
 
@@ -390,7 +390,7 @@ XFS 方案落真盘 XFS（`/`）· 每档一个全新沙箱，链深一致从 1 
 | 256 MB | **196.2 ms** | 204.2 | 218.5 | 218.5 | 快 8× | 271.90 MB | **276.8 ms** | 307.07 MB |
 
 > **数值以 `bench.json` 为准**。同一轮的 `报告.md` 与
-> [`../test-950/耗时基准结论.md`](../test-950/耗时基准结论.md) 对同一个值取了不同的小数位
+> [`../scripts/dev/耗时基准结论.md`](../scripts/dev/耗时基准结论.md) 对同一个值取了不同的小数位
 > （0 MB 档 create p50 在两处分别写作 0.029 s 与 0.030 s，浅集 p50 写作 0.0315 s 与 0.032 s）。
 > 原始样本的 p50 是 **0.0295 s** 与 **0.0315 s**，本篇一律按原始值换算。
 
@@ -889,7 +889,7 @@ restore 端到端：
 - [第 25 篇 §2.4 · `mem_mode` 断言依赖哪一版 SDK](25-functional-tests.md#24-mem_mode-断言以及它依赖哪一版-sdk) —— 57 与 59 的差别
 - [第 27 篇 §4.5 · 哪些列可以并排](27-cross-implementation.md#45-哪些列可以并排) —— §6 两张附表的口径
 - [第 18 篇 §6 · 怎么选](18-ext4-vs-xfs.md#6-怎么选) —— §4.6 那张取舍表的决策版
-- [`../test-950/耗时基准结论.md`](../test-950/耗时基准结论.md) —— 920B 两套对照的完整开发态记录
+- [`../scripts/dev/耗时基准结论.md`](../scripts/dev/耗时基准结论.md) —— 920B 两套对照的完整开发态记录
 
 **下一篇**：[29 · 上机验收操作](29-acceptance-runbook.md) —— 把这一篇里写着「待测」的格子
 变成有数的格子，需要在机器上敲哪几条命令。

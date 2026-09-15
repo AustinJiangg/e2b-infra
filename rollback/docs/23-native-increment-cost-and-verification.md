@@ -5,7 +5,7 @@
 >
 > **读者**：工程师、系统工程师。
 > **预备**：[第 22 篇 · 原生 snapshot 的精确增量](22-native-increment-fix.md)。
-> **代码**：infra-arm `jll` 提交 `de25fe4d0`；探针与基准 `e2b-infra/benchmark/` —
+> **代码**：infra-arm `jll` 提交 `de25fe4d0`；探针与基准 `e2b-infra/rollback/scripts/probes/` —
 > `pb2.py`、`pb5.py`、`native_snapshot_bench.py`
 >
 > **与本书主线的关系**：这是对**原生路径**的一处独立修复，不属于本方案 checkpoint / restore；
@@ -83,7 +83,7 @@
    `native_snapshot_bench.py` 六档 memfile 从恒 ~440 MiB 变成 38 / 54 / 88 / 153 / 288 MiB，
    随写入量线性（表 3-J）。
 2. **跨代拼接正确**（②③ 生效）。`native_snapshot_bench.py --mode both` 两种模式全档位内存代号 /
-   文件代号 / md5 全部回到目标代。专用例 `benchmark/pb5.py`：三代分别改**同一个 2 MiB 块里的不同 4 KiB 页**
+   文件代号 / md5 全部回到目标代。专用例 `rollback/scripts/probes/pb5.py`：三代分别改**同一个 2 MiB 块里的不同 4 KiB 页**
    再各起新沙箱验 md5，外加一页清零 —— 这是「一个 2 MiB 页的 512 个子页来自多代 + nil build 空洞」的关键用例，
    ALL PASS。单测 `TestFileSliceAssemblesAcrossMappings` 断言零拷贝路径返回同一底层字节、跨映射块正确拼出；
    `TestToDiffHeaderFinerBlockSize` / `TestToDiffHeaderBlockSizeMustDivide` 覆盖
@@ -149,7 +149,7 @@ SDK；上传与模板存储；**本方案 checkpoint / restore 的全部代码**
 | 追踪开关与平台默认值 | `internal/sandbox/fc/dirtytracking.go` — `TrackDirtyPagesEnabled`、`resolveTrackDirtyPages` |
 | 判据换源与两道门 | `internal/sandbox/uffd/uffd.go` — `DiffMetadata` |
 | header 块大小继承 | `packages/shared/pkg/storage/header/metadata.go` — `ToDiffHeader` |
-| 探针与基准 | `e2b-infra/benchmark/` — `pb2.py`、`pb5.py`、`native_snapshot_bench.py` |
+| 探针与基准 | `e2b-infra/rollback/scripts/probes/` — `pb2.py`、`pb5.py`、`native_snapshot_bench.py` |
 | 设计稿与实施记录 | 工作区 `e2b-repo/原生快照精确增量-方案设计.md`、`原生快照增量判据-修复方案与验证计划.md` |
 
 **相关篇目**：修复前的成本模型在[第 7 篇 §5](07-dirty-page-tracking.md#5-脏页判据的三方差异)

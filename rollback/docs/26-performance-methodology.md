@@ -10,11 +10,11 @@
 > [第 10 篇 · 磁盘分层](10-disk-layering.md)、
 > [第 11 篇 · 原地回滚](11-in-place-rollback.md)、
 > [第 17 篇 §1 · 三个时钟](17-observability-and-verification.md#1-三个时钟)。
-> **代码**：[`../../benchmark/checkpoint_bench.py`](../../benchmark/checkpoint_bench.py)、
-> [`../test-950/bench-ckpt.py`](../test-950/bench-ckpt.py)、
-> [`../test-950/freeze_probe.py`](../test-950/freeze_probe.py)、
-> [`../test-950/timing.py`](../test-950/timing.py)、
-> [`../test-950/probe-ramp.py`](../test-950/probe-ramp.py)
+> **代码**：[`../scripts/acceptance/checkpoint_bench.py`](../scripts/acceptance/checkpoint_bench.py)、
+> [`../scripts/dev/bench-ckpt.py`](../scripts/dev/bench-ckpt.py)、
+> [`../scripts/dev/freeze_probe.py`](../scripts/dev/freeze_probe.py)、
+> [`../scripts/dev/timing.py`](../scripts/dev/timing.py)、
+> [`../scripts/dev/probe-ramp.py`](../scripts/dev/probe-ramp.py)
 
 ---
 
@@ -258,7 +258,7 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
 ### 3.5 它的定位：每档只测一次
 
 这个脚本每档只跑一次，**不给分位数**。docstring 明确划了界：
-「要分位数和分布，用 `rollback/test-950/bench-ckpt.py`」。
+「要分位数和分布，用 `rollback/scripts/dev/bench-ckpt.py`」。
 所以第 28 篇的判定表不由它产出 —— 它产出的是时机成本、产物实测、
 以及一条能在客户机器上五分钟跑完的完整曲线。
 
@@ -444,7 +444,7 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
 ## 8. 怎么读一份报告
 
 `bench-ckpt.py` 每跑一轮写出 `bench.json`（全部原始样本）与 `报告.md`（渲染表）。
-以 [`../test-950/reports/bench-ext4-20260824-200601/报告.md`](../test-950/reports/bench-ext4-20260824-200601/报告.md)
+以 [`../scripts/dev/reports/bench-ext4-20260824-200601/报告.md`](../scripts/dev/reports/bench-ext4-20260824-200601/报告.md)
 为例，六张表的角色：
 
 | 表 | 回答什么 | 判定用它吗 |
@@ -514,7 +514,7 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
 - [第 17 篇 §1 · 三个时钟](17-observability-and-verification.md#1-三个时钟) —— 本篇口径表的上游
 - [第 8 篇 §7 · 成本模型](08-memory-diff-tree.md#7-成本模型) —— 为什么按脏页量分档
 - [第 24 篇 §4 · 测量纪律](24-test-overview.md#4-测量纪律) —— 条件标签与「不同条件的数不相减」
-- [`../test-950/耗时基准结论.md`](../test-950/耗时基准结论.md) —— 920B 两套对照的完整开发态记录
+- [`../scripts/dev/耗时基准结论.md`](../scripts/dev/耗时基准结论.md) —— 920B 两套对照的完整开发态记录
 
 **下一篇**：[27 · 性能测试：三套方案的横向对照](27-cross-implementation.md) ——
 同样的口径问题放到三套实现之间，答案会变：负载该放哪、哪几列能并排、哪几列只能并列。

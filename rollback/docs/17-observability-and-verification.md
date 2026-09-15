@@ -9,7 +9,7 @@
 > **读者**：工程师、系统工程师、要做验收的人。
 > **预备**：[第 13 篇 · 端到端](13-end-to-end.md)、[第 14 篇 · 失败语义](14-failure-semantics.md)。
 > **代码**：`internal/sandbox/phasetimings.go`、`internal/checkpoint/metrics.go`、
-> `e2b-infra/benchmark/checkpoint_{verify,bench}.py`
+> `e2b-infra/rollback/scripts/acceptance/checkpoint_{verify,bench}.py`
 
 ---
 
@@ -185,9 +185,9 @@ pub struct RollbackResponse {
 
 ### 3.1 交付态：两个零依赖的单文件脚本
 
-`e2b-infra/benchmark/` 下两个脚本，供交付方在目标机上直接运行：
-[`checkpoint_verify.py`](../../benchmark/checkpoint_verify.py) 只回答「回滚回来的是不是那一刻」，
-[`checkpoint_bench.py`](../../benchmark/checkpoint_bench.py) 只回答「一次要多久、产物有多大」。
+`e2b-infra/rollback/scripts/acceptance/` 下两个脚本，供交付方在目标机上直接运行：
+[`checkpoint_verify.py`](../scripts/acceptance/checkpoint_verify.py) 只回答「回滚回来的是不是那一刻」，
+[`checkpoint_bench.py`](../scripts/acceptance/checkpoint_bench.py) 只回答「一次要多久、产物有多大」。
 两件事分开跑，正确性现场不给性能垫噪声，性能档位也不拖慢正确性。
 
 **各自单文件、零共享依赖**，而且两个脚本各带一份一模一样的宿主探针，互相不引用 ——
@@ -196,7 +196,7 @@ pub struct RollbackResponse {
 脏页后端、什么文件系统上跑出来的。这就是[§2](#2-让静默退化现形)那条逻辑用在测试代码自己身上
 （展开见[第 24 篇 §2.2](24-test-overview.md#22-交付态验收两个单文件脚本)）。
 
-同样地，交付态脚本与开发态工具箱（[`../test-950/`](../test-950/)）**不要混用** ——
+同样地，交付态脚本与开发态工具箱（[`../scripts/dev/`](../scripts/dev/)）**不要混用** ——
 后者脚本之间有共享模块、位置参数顺序敏感，是给我们自己排查用的。
 
 三层测试各管什么见[第 24 篇 §2](24-test-overview.md#2-三层测试)；
@@ -281,8 +281,8 @@ pub struct RollbackResponse {
 | 脏页后端上报 | `src/vmm/src/vstate/vm.rs` — `DirtyTrackingBackend::as_str` |
 | Firecracker 分段与计数 | `src/vmm/src/vmm_config/snapshot.rs` — `RollbackTimings`、`RollbackResponse` |
 | 队列诊断 | `src/vmm/src/rollback.rs` — `log_queue_diagnostics` |
-| 交付态验收脚本 | `e2b-infra/benchmark/checkpoint_verify.py`、`checkpoint_bench.py` |
-| 开发态工具箱 | `e2b-infra/rollback/test-950/` |
+| 交付态验收脚本 | `e2b-infra/rollback/scripts/acceptance/checkpoint_verify.py`、`checkpoint_bench.py` |
+| 开发态工具箱 | `e2b-infra/rollback/scripts/dev/` |
 
 ---
 

@@ -8,7 +8,7 @@
 > **预备**：[第 4 篇 · e2b 原生 snapshot](04-e2b-native-snapshot.md)、
 > [第 7 篇 · 脏页跟踪](07-dirty-page-tracking.md)、[第 8 篇 · 内存差分树](08-memory-diff-tree.md)。
 > **代码**：`internal/sandbox/uffd/uffd.go`、`internal/sandbox/uffd/userfaultfd/userfaultfd.go`、
-> `packages/shared/pkg/storage/header/metadata.go`；探针 `e2b-infra/benchmark/pb2.py`、`pb4.py`
+> `packages/shared/pkg/storage/header/metadata.go`；探针 `e2b-infra/rollback/scripts/probes/pb2.py`、`pb4.py`
 >
 > **与本书主线的关系**：本篇与随后的[第 22](22-native-increment-fix.md)、[23 篇](23-native-increment-cost-and-verification.md)
 > 讲的是对**原生路径**的一处独立修复，不是本方案 checkpoint / restore 的一部分。
@@ -28,7 +28,7 @@
 
 ## 1. 现象：改 12 MiB，导出 148 MiB
 
-先看数据。`benchmark/pb2.py` 把同一沙箱上三样东西并排：修复前原生 `pause` 用的判据
+先看数据。`rollback/scripts/probes/pb2.py` 把同一沙箱上三样东西并排：修复前原生 `pause` 用的判据
 `GET /memory/dirty`、Firecracker 写跟踪位图 `PUT /snapshot/save-dirty-bitmap`、以及
 `create_snapshot` 真正导出的 memfile 大小。950（HDBSS）上摘录三行
 （完整表见[第 28 篇 表 3-K](28-results-and-compliance.md#表-3-k--pb2py-三列并排修复前后)）：
@@ -102,7 +102,7 @@ ARM 适配版上，arm64 6.6 内核没有 uffd 写保护，`UFFDIO_COPY_MODE_WP`
 ### 3.3 只换判据够不够：2 MiB 块归并的地板
 
 既然正确的位图就在旁边，最直接的想法是 ① 换成写跟踪位图、②③ 不动。
-`benchmark/pb4.py` 算的就是这个：把 4 KiB 写跟踪位图归并到 2 MiB 差分块，看能降到多少。
+`rollback/scripts/probes/pb4.py` 算的就是这个：把 4 KiB 写跟踪位图归并到 2 MiB 差分块，看能降到多少。
 920B 摘录（完整见[第 28 篇 表 3-K](28-results-and-compliance.md#表-3-k--pb2py-三列并排修复前后)）：
 
 | 场景 | 修复前导出 | 只换判据（2 MiB 归并） | 4 KiB 真值 |
@@ -187,7 +187,7 @@ ARM 适配版上，arm64 6.6 内核没有 uffd 写保护，`UFFDIO_COPY_MODE_WP`
 | 退化的那一行 | `internal/sandbox/uffd/userfaultfd/userfaultfd.go` — 被注释的 `UFFDIO_COPY_MODE_WP` |
 | ③ 的硬检查与缺页 | `internal/sandbox/uffd/userfaultfd/userfaultfd.go` — `NewUserfaultfdFromFd`、`faultPage` |
 | ② 的块大小继承 | `packages/shared/pkg/storage/header/metadata.go` — `ToDiffHeader` |
-| 探针 | `e2b-infra/benchmark/` — `pb2.py`、`pb4.py` |
+| 探针 | `e2b-infra/rollback/scripts/probes/` — `pb2.py`、`pb4.py` |
 | 设计稿与实施记录 | 工作区 `e2b-repo/原生快照精确增量-方案设计.md`、`原生快照增量判据-修复方案与验证计划.md` |
 
 **下一篇**：[22 · 原生 snapshot 的精确增量：4 KiB 存、2 MiB 拼](22-native-increment-fix.md) ——

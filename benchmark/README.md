@@ -270,3 +270,26 @@ runs/
 
 `collect_logs.sh` 与 `parse_report.py` 不带参数时，按 **`--run-dir` > 环境变量
 `BENCH_RUN_DIR` > `runs/.latest`** 的顺序定位运行目录。`runs/` 已在 `.gitignore` 中忽略。
+
+## 6. 快照回滚脚本已迁到 `rollback/scripts/`
+
+checkpoint / restore（快照回滚）相关的脚本原先也放在本目录，2026-09-15 起全部移到
+[`../rollback/scripts/`](../rollback/scripts/)，按用途分三类：
+
+| 新位置 | 原位置 |
+|---|---|
+| `rollback/scripts/acceptance/` | `benchmark/checkpoint_verify.py`、`benchmark/checkpoint_bench.py` |
+| `rollback/scripts/probes/` | `benchmark/{pb2,pb3,pb4,pb5,probe_dirty,native_snapshot_bench,checkpoint_bench_v2}.py`、`benchmark/uffdwp_probe.c` |
+| `rollback/scripts/dev/` | `rollback/test-950/` |
+
+本目录只保留沙箱**启动耗时**与高并发那套压测，上面第 1~5 节说的都是它。
+
+**`benchmark/.env` 仍是凭据（E2B / Nomad token）的唯一来源**，`.env.example` 与
+`sync-env.sh` 也留在这里不动。迁走的脚本不各自维护一份 `.env`，而是在
+`rollback/scripts/` 下做一个软链指回来，每台机器执行一次：
+
+```bash
+ln -s ../../benchmark/.env rollback/scripts/.env
+```
+
+详见 [`../rollback/scripts/README.md`](../rollback/scripts/README.md)。

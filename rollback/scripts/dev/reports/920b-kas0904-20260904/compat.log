@@ -1,0 +1,53 @@
+
+===== A. 基线：原生操作在【没有 checkpoint】的沙箱上 =====
+  ✓ A1 pause → connect（无 checkpoint）               OK       数据一致
+
+===== B. checkpoint 之后，原生操作还能不能做 =====
+  ✓ B0 沙箱上做 checkpoint                             OK       id=10306617
+  ✓ B1 checkpoint 之后沙箱照常运行                         OK       
+  ✓ B2 checkpoint → pause → connect：磁盘数据           OK       
+  ✓ B3 pause → connect 之后 checkpoint.list          OK       0 个
+  · B4 pause → connect 之后 restore 旧 checkpoint     REFUSED  checkpoint ckpt_1788520397210306617 not found
+  ✓ B5 上一步之后沙箱仍然可用                                 OK       
+  ✓ B6 pause → connect 之后新建 checkpoint             OK       id=38072573
+  ✓ B7 restore 到 pause 之后新建的 checkpoint            OK       b2 已回滚掉
+
+===== C. restore 之后，原生操作还能不能做 =====
+  ✓ C0 restore 本身                                  OK       
+  ✓ C1 restore 之后沙箱照常运行                            OK       
+  ✓ C2 restore → pause → connect：磁盘数据              OK       
+
+===== D. 多次 checkpoint（多层封存）之后 pause =====
+  ✓ D1 三次 checkpoint → pause → connect：三层数据        OK       全部一致
+
+===== E. 反向：pause/resume 之后再走完整 checkpoint 流程 =====
+  ✓ E1 pause → connect → checkpoint → restore      OK       
+
+===== F. kill 与 checkpoint 的关系 =====
+Response 404
+  · F1 kill 之后 connect                             REFUSED  Paused sandbox in83t21l6tyiowqt7fxvo not found
+
+================ 矩阵 ================
+  A1 pause → connect（无 checkpoint）            OK       数据一致
+  B0 沙箱上做 checkpoint                          OK       id=10306617
+  B1 checkpoint 之后沙箱照常运行                      OK       
+  B2 checkpoint → pause → connect：磁盘数据        OK       
+  B3 pause → connect 之后 checkpoint.list       OK       0 个
+  B4 pause → connect 之后 restore 旧 checkpoint  REFUSED  checkpoint ckpt_1788520397210306617 not found
+  B5 上一步之后沙箱仍然可用                              OK       
+  B6 pause → connect 之后新建 checkpoint          OK       id=38072573
+  B7 restore 到 pause 之后新建的 checkpoint         OK       b2 已回滚掉
+  C0 restore 本身                               OK       
+  C1 restore 之后沙箱照常运行                         OK       
+  C2 restore → pause → connect：磁盘数据           OK       
+  D1 三次 checkpoint → pause → connect：三层数据     OK       全部一致
+  E1 pause → connect → checkpoint → restore   OK       
+  F1 kill 之后 connect                          REFUSED  Paused sandbox in83t21l6tyiowqt7fxvo not found
+
+  OK 13 项 / REFUSED 2 项 / BROKEN 0 项
+
+  边界（服务端明确拒绝，不是损坏）：
+    · B4 pause → connect 之后 restore 旧 checkpoint
+    · F1 kill 之后 connect
+
+  ✓ 没有 BROKEN：原生能力没有被 checkpoint/restore 破坏。
