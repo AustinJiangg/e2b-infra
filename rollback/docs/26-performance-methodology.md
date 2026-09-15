@@ -444,7 +444,7 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
 ## 8. 怎么读一份报告
 
 `bench-ckpt.py` 每跑一轮写出 `bench.json`（全部原始样本）与 `报告.md`（渲染表）。
-以 [`../scripts/dev/reports/bench-ext4-20260824-200601/报告.md`](../scripts/dev/reports/bench-ext4-20260824-200601/报告.md)
+以 `rollback-reports/bench-ext4-20260824-200601/报告.md`（工作区归档，不入库）
 为例，六张表的角色：
 
 | 表 | 回答什么 | 判定用它吗 |

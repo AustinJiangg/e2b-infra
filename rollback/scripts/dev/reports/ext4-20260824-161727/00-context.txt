@@ -1,5 +1,0 @@
-store        : /mnt/ext4dev/orchestrator/build/checkpoints (fstype ext4)
-base path    : /mnt/ext4dev/orchestrator
-full root    : True
-track dirty  : true
-hdbss order  : <未设,默认1>

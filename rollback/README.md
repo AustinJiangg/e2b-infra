@@ -9,7 +9,7 @@
 | [`docs/`](docs/) | **技术手册**，32 篇，从「这是个什么问题」到「怎么证明它对、它快」再到「怎么在它上面继续开发」 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
 | [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
-| [`scripts/`](scripts/) | **快照回滚的全部脚本**：`acceptance/` 交付态验收、`probes/` 开发态探针、`dev/` 开发态工具箱（原 `test-950/`）与 12 份实测报告 | 验收方（`acceptance/`）；我们自己（另两个） |
+| [`scripts/`](scripts/) | **快照回滚的全部脚本**：`acceptance/` 交付态验收与基准（四个单文件脚本）、`probes/` 开发态探针、`dev/` 开发态工具箱（原 `test-950/`）。实测报告不入库，归档在工作区 `e2b-repo/rollback-reports/` | 验收方（`acceptance/`）；我们自己（另两个） |
 | **[Releases](https://github.com/AustinJiangg/e2b-infra/releases)** | 文档打包件与汇报稿 PDF，下载下来直接发给别人 | 要把材料发出去的人 |
 
 > 构建产物一律不进仓库：`slides/` 只跟踪源文件（`node_modules`、`dist/`、

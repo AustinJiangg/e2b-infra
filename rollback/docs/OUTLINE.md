@@ -500,10 +500,10 @@ Firecracker 侧的主体，`PUT /snapshot/rollback` 的九个阶段。
 
 | 材料 | 位置 | 喂给 |
 |---|---|---|
-| 交付态脚本 docstring 与代码 | `../scripts/acceptance/checkpoint_verify.py` `checkpoint_bench.py`；`../scripts/probes/checkpoint_bench_v2.py` `native_snapshot_bench.py` | 25 26 27 |
+| 交付态脚本 docstring 与代码 | `../scripts/acceptance/checkpoint_verify.py` `checkpoint_bench.py` `checkpoint_bench_v2.py` `native_snapshot_bench.py` | 25 26 27 |
 | 开发态工具箱 | `../scripts/dev/*.py` `*.sh`、`README.md`、`MANIFEST.md` | 24 25 26 29 |
 | `../scripts/dev/耗时基准结论.md` | 两套对照、连打劣化、宿主分段 | 26 28 |
-| `../scripts/dev/reports/` | 950-verify-20260829、920b-kas0904-20260904、bench-ext4/xfs-20260824、ext4/xfs-2026082x、ramp、cow4k | 28 |
+| 工作区 `e2b-repo/rollback-reports/`（不入库） | 950-verify-20260829、920b-kas0904-20260904、bench-ext4/xfs-20260824、ext4/xfs-2026082x、ramp、cow4k | 28 |
 | `benchmark/checkpoint-bench-对比.md`（主工作区，未提交） | bench vs v2、与 gsd 的实测对比、已知缺陷 | 26 27 28 |
 | `e2b-repo/三套快照方案的负载构造与测量口径.md`（工作区根，不在仓库） | 三套一张图、负载三种失真、负载放哪、恢复语义、ARM 原生脏页判据把读算脏 | 26 §2、27 全篇 |
 

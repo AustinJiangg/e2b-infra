@@ -9,7 +9,7 @@
 > **预备**：[第 1 篇 §3](01-what-and-why.md#3-快照在四个层次上)、
 > [第 4 篇](04-e2b-native-snapshot.md)、[第 20 篇](20-vs-native.md)、
 > [第 26 篇](26-performance-methodology.md)。
-> **代码**：`e2b-infra/rollback/scripts/probes/checkpoint_bench_v2.py`、`native_snapshot_bench.py`
+> **代码**：`e2b-infra/rollback/scripts/acceptance/checkpoint_bench_v2.py`、`native_snapshot_bench.py`
 
 ---
 
