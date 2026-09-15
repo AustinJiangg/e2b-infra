@@ -29,11 +29,19 @@ job "template-manager-system" {
     task "start" {
       driver = "raw_exec"
       kill_signal  = "SIGTERM"
-      # 停服时 orchestrator 要在退出前跑 networkPool.Close()，把网络槽位暖池
-      # （NewSlotsPoolSize 32 + ReusedSlotsPoolSize 100）里的 netns / veth / iptables
-      # 规则逐个拆掉。默认 kill_timeout 只有 5s，132 个槽位常常拆不完就被 SIGKILL，
-      # 剩下的会永久留在宿主机上（StorageLocal 下次启动会把它们记成 foreignNs 跳过，
-      # 槽位号只增不减）。30s 是 Nomad 客户端 max_kill_timeout 的默认上限。
+      # 停服时进程要在退出前跑 networkPool.Close()，把网络槽位暖池里的
+      # netns / veth / iptables 规则逐个拆掉。本仓库把池子从上游的
+      # NewSlotsPoolSize 32 / ReusedSlotsPoolSize 100 调到了 300 / 1000：零并发时常驻
+      # 300 个槽位，历史峰值并发越高、回收池里沉淀的越多（上限 1000）。每个槽位 9 条
+      # iptables 规则，拆一轮是十几秒到几十秒。
+      #
+      # 30s 是 Nomad 客户端 max_kill_timeout 的默认上限（patch 把上游那行
+      # max_kill_timeout = "24h" 删掉了，所以走默认），提不上去。槽位多时拆不完会被
+      # SIGKILL，剩下的永久留在宿主机上：StorageLocal 下次启动把它们记成 foreignNs
+      # 永久跳过，槽位号只增不减，攒到几千个网卡后 nomad client 的 fingerprint 要走
+      # 几分钟，表现就是 build.sh -s 卡在"端口未启动"。
+      #
+      # 所以别指望这 30s 能清干净——停服后用 build.sh --recycle-netns 兜底。
       kill_timeout = "30s"
 
       # 只约束 orchestrator 进程（Nomad task cgroup），即模板构建这条路径；

@@ -700,6 +700,12 @@ function stop() {
     fi
     
     cd "$E2B_DIR" || error "进入 $E2B_DIR 目录失败"
+
+    # 必须赶在 uninstall-nomad 之前：nomad 一停就没人能优雅停 job 了，
+    # 那样 template-manager 只能被 pkill/SIGKILL，networkPool.Close() 一行都跑不到，
+    # 整池槽位当场变成泄漏。
+    graceful_stop_template_manager || warn "优雅停没成功，下面的 pkill 会兜底（这一轮的暖池会变成泄漏，靠后面的清理收）"
+
     bash "$E2B_DIR/uninstall-consul.sh" --force || warn "停止 Consul 失败（非致命）"
     bash "$E2B_DIR/uninstall-nomad.sh" --force || warn "停止 Nomad 失败（非致命）"
 
@@ -821,6 +827,49 @@ function check_ports_free() {
     return 1
 }
 
+# 优雅停 template-manager job。
+#
+# 全机只有这一个进程持有网络槽位暖池：template-manager.hcl 里
+# ORCHESTRATOR_SERVICES="orchestrator,template-manager"，一个进程担两个角色；
+# /usr/bin/orchestrator 跟它是同一个二进制的两份拷贝，但没有任何 job 去启动它
+# （deploy.sh 提交的 job 只有 redis / template-manager / edge / api）。
+#
+# SIGTERM 之后它会跑 networkPool.Close()，自己把暖池里的 netns/veth/iptables 拆掉。
+# 这一步的意义不只是少留垃圾：等它退干净之后，宿主机上还剩的 ns-<n> 按定义就是它
+# 清不掉的泄漏，后面的清理不再需要区分"暖池空闲槽位"和"泄漏残留"。
+#
+# 但别指望它清干净：kill_timeout 只有 30s（patch 把 nomad 客户端的
+# max_kill_timeout = "24h" 删掉了，走默认上限），槽位多时拆不完照样被 SIGKILL。
+function graceful_stop_template_manager() {
+    local token waited=0
+
+    if ! command -v nomad >/dev/null 2>&1; then
+        warn "没有 nomad 命令，跳过优雅停（后面靠 pkill 兜底）"
+        return 0
+    fi
+
+    token=$(source /opt/e2b-infra/.env >/dev/null 2>&1; printf '%s' "${NOMAD_ACL_TOKEN:-}")
+
+    info "优雅停 template-manager-system，给它时间自己拆掉暖池..."
+    nomad job stop ${token:+-token "$token"} template-manager-system >/dev/null 2>&1 \
+        || warn "nomad job stop 失败（job 可能本来就没在跑），继续"
+
+    # kill_timeout 是 30s，多等 10s 给 nomad executor 自己收尾
+    while [ $waited -lt 40 ]; do
+        pgrep -f '^/usr/bin/template-manager' >/dev/null 2>&1 || break
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    if pgrep -f '^/usr/bin/template-manager' >/dev/null 2>&1; then
+        warn "等了 ${waited}s 进程还在，暖池大概率没拆完"
+        return 1
+    fi
+
+    info "template-manager 已退出（等待 ${waited}s）"
+    return 0
+}
+
 # 在用的槽位：netns 里还有进程（就是 firecracker）说明沙箱正在跑，清理必须绕开它。
 #
 # 只能识别"运行中"这一种。orchestrator 建完 netns 就把 fd 关了（CreateNetwork 里的
@@ -888,7 +937,7 @@ function purge_sandbox_netns() {
     if [ "$ns_left" -eq 0 ] && [ "$veth_left" -eq 0 ]; then
         echo "- netns / veth 已清空（netns $ns_count、veth $veth_count）；当前宿主机网卡数：$(ip -o link 2>/dev/null | wc -l)"
     else
-        warn "仍残留 netns $ns_left 个、veth $veth_left 个（删除失败 $failed 次）——确认没有 firecracker 在跑、且当前用户是 root 后重跑 $0 --purge-netns"
+        warn "仍残留 netns $ns_left 个、veth $veth_left 个（删除失败 $failed 次）——确认没有 firecracker 在跑、且当前用户是 root 后重跑 $0 --recycle-netns"
     fi
 }
 
@@ -950,6 +999,36 @@ function purge_sandbox_iptables() {
     nat_after=$(iptables -t nat -S 2>/dev/null | wc -l)
     filter_after=$(iptables -t filter -S 2>/dev/null | wc -l)
     success "沙箱网络资源清理完成；iptables 规则 nat $nat_before → $nat_after、filter $filter_before → $filter_after"
+}
+
+# 回收沙箱网络垃圾：停 template-manager → 清 netns/veth/iptables → 再拉起来。
+#
+# 为什么必须停：暖池里那几百个空闲槽位在宿主机上跟泄漏残留长得一模一样（没进程、
+# 没 fd 引用、名字和规则形态都一致），只有进程自己内存里的 channel 知道谁是谁。
+# 而且 foreignNs 是启动时的快照，运行期不更新——就算你精确删掉了泄漏的 netns，
+# 那些槽位号也要等进程重启才会重新可用。所以这件事天生就是"停 → 清 → 起"，
+# 不存在"不停服在线清理"这条路。
+function recycle_sandbox_net() {
+    local running=0
+    pgrep -f '^/usr/bin/template-manager' >/dev/null 2>&1 && running=1
+
+    if [ $running -eq 1 ]; then
+        # 这里没有 pkill 兜底：进程还活着就往下清，等于把它正在用的槽位删掉，
+        # 暖池会变成一堆指向不存在 netns 的空壳，后续沙箱创建连续失败。
+        graceful_stop_template_manager \
+            || error "进程没停下来，中止清理（硬清会毁掉它手里的暖池）。先查它为什么不退，或者用 $0 -d 彻底停服后再清"
+    else
+        info "template-manager 没在跑，剩下的 netns 全是垃圾，直接清理"
+    fi
+
+    purge_sandbox_netns
+    purge_sandbox_iptables
+
+    if [ $running -eq 1 ]; then
+        redeploy_job template-manager
+    else
+        info "原先就没在跑，不拉起；要启动服务用 $0 -s"
+    fi
 }
 
 function purge_hugepages() {
@@ -1064,7 +1143,7 @@ function make_images() {
 # ===================== 参数解析（完整修正）=====================
 # 定义正确的短/长选项：m: 表示 -m 需要接收参数；d对应stop
 OPTIONS="iusdfm:r:"
-LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages,purge-netns"  # make:/redeploy: 表示需要参数
+LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages,recycle-netns"  # make:/redeploy: 表示需要参数
 
 # 解析参数（处理 getopt 结果）
 # 兼容不同系统的 getopt，增加 -o/-l 明确指定选项
@@ -1100,11 +1179,10 @@ while true; do
             has_valid_param=1
             shift
             ;;
-        --purge-netns)
-            # 只清沙箱网络垃圾（netns/veth/iptables），不动服务；-d 里跑的就是这两个函数。
-            # 运行中的沙箱会跳过；暖池里的空闲槽位跟泄漏残留区分不了，要保住就先 -d 停服。
-            purge_sandbox_netns
-            purge_sandbox_iptables
+        --recycle-netns)
+            # 停 template-manager → 清 netns/veth/iptables → 再拉起来。
+            # 只动这一个 job，不碰 nomad/consul/redis/api/edge，比 -d + -s 快得多。
+            recycle_sandbox_net
             has_valid_param=1
             shift
             ;;
@@ -1157,7 +1235,7 @@ if [ $has_valid_param -eq 0 ]; then
     echo "  启动 e2b-infra 服务：$0 --start 或 $0 -s"
     echo "  停止 e2b-infra 服务：$0 --stop 或 $0 -d"
     echo "  释放静态大页池：$0 --purge-hugepages（只清 HugeTLB，不动服务；建议先 -d 停服）"
-    echo "  清理沙箱网络垃圾：$0 --purge-netns（netns/veth/iptables；跳过运行中沙箱，暖池保不住，建议先 -d）"
+    echo "  回收沙箱网络垃圾：$0 --recycle-netns（停 template-manager → 清 netns/veth/iptables → 再拉起；不碰其它组件）"
     echo "  部署 e2b-infra 服务：$0 --deploy 或 $0 -f"
     echo "  快速重跑单个 job：$0 --redeploy <job> 或 $0 -r <job>（例如：$0 -r template-manager，只 render+重跑该 job，跳过镜像构建）"
     echo "  构建镜像：$0 --make <镜像参数> 或 $0 -m <镜像参数>（例如：$0 -m ubuntu22.04）"
