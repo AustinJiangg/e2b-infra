@@ -13,48 +13,66 @@
 
 ## 0. 结论速查
 
-1. 这个配额**只管 orchestrator 进程和模板构建**，**不管沙箱**。
-   "并发几十个沙箱毫无压力"完全不能说明这个值够用。
-2. 撑爆它的通常不是进程堆，而是 page cache 和 `/mnt/snapshot-cache`(tmpfs) 的 shmem 页。
+1. firecracker 进程**就在这个 cgroup 里**（arm64 补丁把 CLONE_INTO_CGROUP 注释掉了，
+   `/sys/fs/cgroup/e2b` 只剩空目录，§1）；但**客户机内存走 hugetlb，不记 memory 控制器**，
+   所以这个值既不是"只管 orchestrator"，也不是"沙箱数 × 沙箱内存"的预算。
+   "并发几十个沙箱毫无压力"仍然不能说明这个值够用——沙箱内存根本不在账上。
+2. 撑爆它的通常不是进程堆，而是构建/快照产生的 page cache（脏页回写完才可回收）。
    所以 OOM 现场的 `anon-rss` 可能只有几十 MB，看着像"没吃内存却被杀"。
-3. 现值 **32768 MiB**（原 8192，2026-09 上调）。要改，**必须改三个地方**（§3），
+3. 现值 **262144 MiB（256 GiB）**（8192 → 32768 → 262144，2026-09）。要改，**必须改三个地方**（§3），
    只改运行态会被下次 `build.sh -i` 覆盖回去。
-4. 别无脑往大调。这个上限的意义是"跑飞了别把整台机器拖垮"，共享机器上尤其如此。
-   按实测峰值的 3~4 倍取值（§2）。
+4. 这个上限的意义是"跑飞了别把整台机器拖垮"。1.1 TB 的机器上 256 GiB 仍是护栏；
+   换到小内存机器要按实测峰值重新取（§2）。
 
 ---
 
 ## 1. 它管什么、不管什么
 
-这套部署里有两棵互不相干的 cgroup 树：
+看起来有两棵树，实际只有一棵在用：
 
 ```
 /sys/fs/cgroup/
 ├── nomad.slice/share.slice/<allocID>.start.scope   ← template-manager.hcl 的 resources 管这里
-│      └── orchestrator 主进程（/usr/bin/template-manager）
-│            · 模板构建：解压镜像层、拼 rootfs、写快照
-│            · 这些动作产生的 page cache 与 tmpfs shmem 页，全记在这个 cgroup 账上
+│      ├── orchestrator 主进程（/usr/bin/template-manager）
+│      │     · 模板构建：解压镜像层、拼 rootfs、写 memfile / 差分文件
+│      │     · 这些动作产生的 page cache 记在这个 cgroup 账上
+│      └── 每个沙箱的 firecracker 进程（含构建期的 provision 沙箱）
+│            · 子进程默认继承父进程的 cgroup，orchestrator 没有把它挪走
+│            · guest 内存是 MAP_HUGETLB 映射，只记 hugetlb 控制器，**不进 memory.max 的账**
 │
-└── e2b/<sandbox>/                                  ← orchestrator 自建，resources 管不到
-       └── 每个沙箱的 firecracker 进程
-             · VM 内存走 hugepages，连常规 memcg 的账都不走
+└── e2b/sbx-<id>/                                   ← orchestrator 自建，但里面没有进程
 ```
 
-代码依据：`packages/orchestrator/.../sandbox/cgroup/manager.go` 里
-`RootCgroupPath = /sys/fs/cgroup/e2b`，orchestrator 启动日志会打印
-`initialized root cgroup {"path": "/sys/fs/cgroup/e2b"}`。
+代码依据：
+
+- `packages/orchestrator/internal/sandbox/cgroup/manager.go`：`RootCgroupPath = /sys/fs/cgroup/e2b`，
+  启动时 mkdir 并打印 `initialized root cgroup`，每个沙箱再 mkdir 一个 `sbx-<id>`——目录确实有。
+- `packages/orchestrator/internal/sandbox/fc/process.go` `configure()`：上游用
+  `SysProcAttr.UseCgroupFD/CgroupFD`（CLONE_INTO_CGROUP）把 FC 放进 `sbx-<id>`，
+  **ARM 移植补丁 `fbee6fcd1` 把这几行整段注释掉了**（原因、以及它在 cgroup v1 / v2 机器上
+  分别意味着什么，见 [11 篇 §1.1](11-沙箱绑核与NUMA亲和.md)）。于是 FC 留在父进程的 cgroup，
+  即 Nomad task scope。
+  验证：`cat /proc/$(pgrep -n firecracker)/cgroup` 应显示 `nomad.slice/...start.scope`，
+  `cat /sys/fs/cgroup/e2b/sbx-*/cgroup.procs` 应为空。
+- `packages/api/internal/sandbox/sandbox_features.go` `HasHugePages()`：FC ≥ 1.7 恒为 true，
+  部署用 1.13.1，沙箱和模板构建都以 `huge_pages=2M` 起 VM；
+  `firecracker/src/vmm/src/vmm_config/machine_config.rs` 里对应 `MAP_HUGETLB | MAP_HUGE_2MB`。
+  hugetlb 页由 hugetlb 控制器记账，memory 控制器不记（cgroup2 以 `memory_hugetlb_accounting`
+  挂载时例外，6.6+ 才有该选项、默认关；`grep cgroup2 /proc/mounts` 可查）。
 
 | 行为 | 记在谁账上 |
 |---|---|
 | 解压基础镜像的层 | page cache → **Nomad task cgroup** |
 | 拼 rootfs、写 ext4 | page cache → **Nomad task cgroup** |
-| 写快照到 `/mnt/snapshot-cache`（65 GB tmpfs） | shmem → **Nomad task cgroup** |
-| 构建时的 provision 沙箱 | `/sys/fs/cgroup/e2b` |
-| 运行中的沙箱 | `/sys/fs/cgroup/e2b` + hugepages |
+| 写 memfile、checkpoint 差分文件 | page cache → **Nomad task cgroup** |
+| orchestrator 自己的堆（差分计算、块缓存） | anon → **Nomad task cgroup** |
+| firecracker 进程 guest 以外的内存（几十 MB） | anon → **Nomad task cgroup** |
+| 沙箱 / provision 沙箱的 guest 内存 | hugetlb 控制器，**不进 memory.max** |
+| `/mnt/snapshot-cache`（65 GB tmpfs） | 代码里只 `MkdirAll`，没有写入路径，不构成压力 |
 
-**为什么 tmpfs 是压垮它的那根稻草**：page cache 可回收（memcg 有压力时先回写再丢弃），
-而 tmpfs 的 shmem 页不能简单丢弃，只能换出到 swap。这台机器 swap 只有 4 GB 且已用满，
-内核没有退路，只能挑 cgroup 里最大的进程杀。
+**为什么峰值远高于进程 RSS**：page cache 名义上可回收，但脏页要先回写；构建一口气解压
+几百 MB 的层、写整份 rootfs 和 memfile，回写跟不上时 memcg 就先于系统 OOM。
+这台机器 swap 只有 4 GB 且已用满，内核没有退路，只能挑 cgroup 里最大的进程杀。
 
 ## 2. 量出该给多少
 
@@ -71,12 +89,14 @@ watch -n2 'for f in /sys/fs/cgroup/nomad.slice/share.slice/*.start.scope/memory.
   numfmt --to=iec < $f; done; df -h /mnt/snapshot-cache | tail -1'
 ```
 
-取值建议：**峰值 × 3~4**。峰值 5–10 GiB 对应 32 GiB，已经很宽裕；要构建几 GB 的大镜像
-或跑并发构建，再按同样比例上调。
+取值建议：**峰值 × 3~4**，再留出并发构建的余量。现值 256 GiB 是在 1.1 TB 机器上取的：
+hugepages 只预分配 20%（`start-client.sh`，其余 80% 走 overcommit），普通内存充裕，
+256 GiB 仍能起到"跑飞了别拖垮整机"的作用。换到小内存机器要按本机峰值重新取。
 
-不建议直接设成几百 G：
-- 这是**共享服务器**，limit 的作用就是"某个东西跑飞了别把整机拖垮"，设得过大等于关掉这层保护；
-- Nomad 调度侧也按这个数预留，语义会失真，将来多节点/多任务时会误导调度。
+注意两点：
+- Nomad 调度侧也按这个数预留，将来多节点/多任务时这个值会影响调度；
+- 如果哪天关掉 hugepages（FC < 1.7，或改了 `HasHugePages()`），或 cgroup2 挂上
+  `memory_hugetlb_accounting`，沙箱 guest 内存会一下子全进这个账，配额语义随之改变。
 
 ## 3. ★ 改哪里：三个文件，改错一个就白改
 
@@ -174,3 +194,4 @@ dmesg -T | grep -iE 'oom|killed process' | tail
 | 日期 | 变更 | 依据 |
 |---|---|---|
 | 2026-09 | `memory` 8192 → 32768 | 200 MB 基础镜像 + `skip_cache=True` 全量重建在 8 GiB 下必然 memcg OOM；上调后同一构建 7 秒完成 |
+| 2026-09-15 | `memory` 32768 → 262144 | 查实 FC 进程就在 task cgroup 里（arm64 补丁注释掉了 CLONE_INTO_CGROUP），guest 内存因 hugetlb 不记账；§0/§1 按代码事实改写，上限按 1.1 TB 机器取为护栏值 |
