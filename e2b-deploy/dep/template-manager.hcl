@@ -44,13 +44,15 @@ job "template-manager-system" {
       # 所以别指望这 30s 能清干净——停服后用 build.sh --recycle-netns 兜底。
       kill_timeout = "30s"
 
-      # 只约束 orchestrator 进程（Nomad task cgroup），即模板构建这条路径；
-      # 沙箱在 /sys/fs/cgroup/e2b 那棵独立的树下，不受这里限制。
-      # 太小会 memcg OOM（Exit 137）并连锁到 api 恒 503、部署超时失败。
-      # 怎么量峰值、怎么改、三处路径分别在哪，见
+      # Nomad task cgroup 的 memory.max 硬上限。firecracker 进程也在这个 cgroup 里
+      # （arm64 补丁注释掉了 CLONE_INTO_CGROUP，/sys/fs/cgroup/e2b 只是空目录），
+      # 但客户机内存走 hugetlb、不记 memory 控制器，所以这里不是"沙箱数 × 内存"的预算；
+      # 记账的是 orchestrator 堆 + 构建/快照产生的 page cache。太小会 memcg OOM
+      # （Exit 137）并连锁到 api 恒 503、部署超时失败。256 GiB 只是"跑飞了别拖垮
+      # 整机"的护栏。怎么量峰值、怎么改、三处路径分别在哪，见
       # deploy-docs/12-orchestrator资源配额调优.md
       resources {
-        memory     = 32768
+        memory     = 262144
         cpu        = 2048
       }
 
