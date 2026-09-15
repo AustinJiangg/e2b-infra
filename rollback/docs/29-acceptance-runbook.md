@@ -199,7 +199,7 @@ python checkpoint_bench.py   2>&1 | tee reports/<机器>-verify-<日期>/checkpo
 | 这份数不能拿来干什么 | 至少一条：不是性能基准 / 不能与另一台机器相减 / 判据当时是否有效 | 人填 |
 
 两份可以照抄结构的范本：
-[`reports/950-verify-20260829/00-context.md`](../scripts/dev/reports/950-verify-20260829/00-context.md)
+`reports/950-verify-20260829/00-context.md`（报告归档在工作区 `e2b-repo/rollback-reports/`，不入库）
 （交付态一轮，末尾三条注意写明了「这不是性能基准」「不能和另一台机器相减」）与
 `reports/920b-kas0904-20260904/00-context.md`（开发态全套，外加两个遗留问题的定位过程）。
 

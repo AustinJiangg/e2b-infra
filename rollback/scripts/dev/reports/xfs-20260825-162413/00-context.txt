@@ -1,5 +1,0 @@
-store        : /mnt/xfsdev/orchestrator/build/checkpoints (fstype xfs)
-base path    : /mnt/xfsdev/orchestrator
-full root    : True
-track dirty  : true
-hdbss order  : <未设,默认1>

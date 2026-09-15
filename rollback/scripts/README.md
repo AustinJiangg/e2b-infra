@@ -37,7 +37,10 @@ python-dotenv 从**脚本所在目录逐级向上**查找 `.env`，所以这一�
 | `checkpoint_verify.py` | 功能正确性：三代 × 多个观测点，内存/磁盘/删除/权限位全查，并用心跳进程的 pid + 启动时间证明是内存回来了而不是虚机重启 |
 | `checkpoint_bench.py` | 耗时基准：一条链上全量 + 每档增量再逐级走回，每档按 `--split` 把改动拆成内存和文件两份，抓"刚写完"与"宿主平静后"两次 |
 
-两个脚本互不依赖，也不依赖本目录其它任何文件 —— 拷这两个 `.py` 过去就能跑。
+| `checkpoint_bench_v2.py` | 耗时基准（对照组口径）：套用进程级那套 `demo_checkpoint_perf.py` 的档位表与两张汇总表，服务端分段与产物实占从 `timings.json` 读；三套横向对照里代表**我们这套** |
+| `native_snapshot_bench.py` | e2b **原生** snapshot（pause / create_snapshot 两种模式）的同一张档位表；三套横向对照里代表原生那套，也是原生精确增量修复的验证脚本 |
+
+四个脚本互不依赖，也不依赖本目录其它任何文件 —— 拷哪个 `.py` 过去就能跑哪个。
 
 ### `probes/` —— 开发态探针与跨实现对照
 
@@ -49,8 +52,6 @@ python-dotenv 从**脚本所在目录逐级向上**查找 `.env`，所以这一�
 | `pb5.py` | 跨代 4KB 拼接正确性：三代改同一个 2MB 块里的不同 4KB 页，恢复每一代都逐字节对 |
 | `probe_dirty.py` | 把恒定 400MB 的 memfile 拆开量，D/E 一对专门证明"只读也被算成脏" |
 | `uffdwp_probe.c` | 这台 arm64 内核到底支不支持 uffd 写保护、pagemap 第 57 位会不会置上（`gcc -o uffdwp_probe uffdwp_probe.c` 后直接跑） |
-| `native_snapshot_bench.py` | 三套对照之三：e2b **原生** snapshot（pause / create_snapshot）的同一张档位表 |
-| `checkpoint_bench_v2.py` | 三套对照之二：**我们这套**（宿主机 Firecracker 差分 + NBD 换盘）的同一张档位表 |
 
 `pb3.py` / `pb4.py` `from pb2 import ...`，与 `pb2.py` 同目录即可，不必设 `PYTHONPATH`。
 
@@ -89,19 +90,21 @@ HDBSS 三级证据（`hdbss_evidence.py`）、一条龙（`run-all.sh`）。
 | HDBSS 三级取证：能力 / FC 自报 / 数据面 | `dev/hdbss_evidence.py` |
 | 性能分档的最终数字 | `acceptance/checkpoint_bench.py`、`dev/bench-ckpt.py` |
 | 无写保护陷出时的开销（冷/热写耗时比应接近 1，写保护下是 4~5） | `dev/hdbss_evidence.py`、`dev/probe-ramp.py` |
-| 原生精确增量在 HDBSS 下复跑 | `probes/native_snapshot_bench.py`、`probes/pb2.py` |
+| 原生精确增量在 HDBSS 下复跑 | `acceptance/native_snapshot_bench.py`、`probes/pb2.py` |
 
 判定"跑在哪个后端"不靠推测：`dev/lib.py` 让每个脚本开头打印这一次的
 `dirty_tracking`（`hdbss` / `kvm-wp` / `off`），报告里不会出现"不知道这组数字是哪个后端跑的"。
 
 ## 报告目录命名
 
-已归档的实测报告在 `dev/reports/`，沿用现有命名 `<机器>-<内容>-<日期>`：
+实测报告是开发过程产物，**不入库**：归档在工作区 `e2b-repo/rollback-reports/`（WSL 侧，
+与本仓库平级），脚本跑出来的 `dev/reports/` 也在 `.gitignore` 里。命名 `<机器>-<内容>-<日期>`：
 
 ```
-dev/reports/950-verify-20260829/          950   · checkpoint_verify
-dev/reports/920b-kas0904-20260904/        920B  · KASandbox_0904 那一轮
-dev/reports/bench-ext4-20260824-200601/   （早期只标内容+时间戳的，保留原样）
+rollback-reports/950-verify-20260829/          950   · checkpoint_verify
+rollback-reports/920b-kas0904-20260904/        920B  · KASandbox_0904 那一轮
+rollback-reports/920b-native4k-20260914/       920B  · jll de25fe4d0 三份
+rollback-reports/bench-ext4-20260824-200601/   （早期只标内容+时间戳的，保留原样）
 ```
 
 新报告一律用 `<机器>-<内容>-<日期>`，机器写 `950` / `920b`，日期 `YYYYMMDD`，

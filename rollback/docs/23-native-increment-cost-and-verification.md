@@ -149,7 +149,7 @@ SDK；上传与模板存储；**本方案 checkpoint / restore 的全部代码**
 | 追踪开关与平台默认值 | `internal/sandbox/fc/dirtytracking.go` — `TrackDirtyPagesEnabled`、`resolveTrackDirtyPages` |
 | 判据换源与两道门 | `internal/sandbox/uffd/uffd.go` — `DiffMetadata` |
 | header 块大小继承 | `packages/shared/pkg/storage/header/metadata.go` — `ToDiffHeader` |
-| 探针与基准 | `e2b-infra/rollback/scripts/probes/` — `pb2.py`、`pb5.py`、`native_snapshot_bench.py` |
+| 探针与基准 | `e2b-infra/rollback/scripts/probes/` — `pb2.py`、`pb5.py`；`scripts/acceptance/native_snapshot_bench.py` |
 | 设计稿与实施记录 | 工作区 `e2b-repo/原生快照精确增量-方案设计.md`、`原生快照增量判据-修复方案与验证计划.md` |
 
 **相关篇目**：修复前的成本模型在[第 7 篇 §5](07-dirty-page-tracking.md#5-脏页判据的三方差异)

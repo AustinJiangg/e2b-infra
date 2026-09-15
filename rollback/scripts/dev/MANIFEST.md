@@ -9,8 +9,9 @@
 | **测试工具箱** | `WSL:~/projects/e2b-repo/e2b-infra/rollback/scripts/dev/` | 拷到 950，**手工换二进制**跑验证。不走 RPM |
 | **RPM 仓库** | `WSL:~/projects/e2b-repo/e2b-infra`（两个分支） | 正式部署：构建 rpm → 装到 `/opt` → `build.sh -i/-s` |
 
-**2026-08-28 起 WSL 侧是完整的**：`bin/` 四个二进制（226MB）与 `reports/` 全部报告都已从 920B
-拉回并 `sha256sum -c` 校验通过，920B 上不再有 WSL 没有的东西。
+**2026-08-28 起 WSL 侧是完整的**：`bin/` 四个二进制（226MB）与全部报告都已从 920B
+拉回并 `sha256sum -c` 校验通过，920B 上不再有 WSL 没有的东西。2026-09-15 起报告不再入库，
+归档在工作区 `e2b-repo/rollback-reports/`（下文的 `reports/…` 都指那里）。
 
 **去 950 要拷两份，缺一不可**：`e2b-infra`（部署）和 `rollback/scripts/dev/`（验证）。
 后者已经并入 e2b-infra 仓库（2026-09-15 由 `rollback/test-950/` 迁来），但仍要单独拷到被测机上跑。
