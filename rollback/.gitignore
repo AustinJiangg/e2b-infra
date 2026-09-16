@@ -1,0 +1,3 @@
+# 脚本每次跑出来的结果数据不入库。手工归档的整轮结果放在工作区
+# e2b-repo/rollback-reports/（与本仓库平级），各带一份 00-context.md 记环境。
+results/
