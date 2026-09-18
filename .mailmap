@@ -1,0 +1,8 @@
+# Canonical identity for this repository's own contributors. Commits made
+# under older names, the work address, or by the coding assistant on the
+# owner's behalf are shown as this one by git log / shortlog / blame;
+# history itself is unchanged.
+jianglulu <jianglulu001@gmail.com>
+jianglulu <jianglulu001@gmail.com> <jianglulu13@h-partners.com>
+jianglulu <jianglulu001@gmail.com> <AustinJiangg@users.noreply.github.com>
+jianglulu <jianglulu001@gmail.com> <noreply@anthropic.com>
