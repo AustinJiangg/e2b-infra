@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """checkpoint 之后 pause / resume，根文件系统必须原样回来。
 
-抓的是这个 bug（infra-arm ecdad325c / KASandbox_0904 内含）：
+抓的是这个 bug（infra-arm d22bb8c47 / KASandbox_0904 内含）：
 
     checkpoint 会把沙箱的写层封存、另开一层，所以从第一次 checkpoint 起，
     当前层只装着那之后的写，更早的写在下面的 SealedView 里。而 Pause 用来

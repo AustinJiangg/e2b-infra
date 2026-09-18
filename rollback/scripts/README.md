@@ -103,7 +103,7 @@ HDBSS 三级证据（`hdbss_evidence.py`）、一条龙（`run-all.sh`）。
 ```
 rollback-reports/950-verify-20260829/          950   · checkpoint_verify
 rollback-reports/920b-kas0904-20260904/        920B  · KASandbox_0904 那一轮
-rollback-reports/920b-native4k-20260914/       920B  · jll de25fe4d0 三份
+rollback-reports/920b-native4k-20260914/       920B  · jll c9a92a5ab 三份
 rollback-reports/bench-ext4-20260824-200601/   （早期只标内容+时间戳的，保留原样）
 ```
 

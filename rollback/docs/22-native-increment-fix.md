@@ -6,7 +6,7 @@
 > **读者**：工程师。
 > **预备**：[第 21 篇 · 原生 snapshot 的增量为什么不精确](21-native-increment-diagnosis.md)；
 > [第 8 篇 · 内存差分树](08-memory-diff-tree.md)、[第 9 篇 · 分叉 Firecracker 的接口契约](09-firecracker-api-contract.md)。
-> **代码**：infra-arm `jll` 提交 `de25fe4d0`（14 个文件，Firecracker 零改动）：
+> **代码**：infra-arm `jll` 提交 `c9a92a5ab`（14 个文件，Firecracker 零改动）：
 > `internal/sandbox/uffd/uffd.go`、`internal/sandbox/fc/memory.go`、
 > `internal/sandbox/block/page.go`、`internal/sandbox/build/build.go`、
 > `internal/sandbox/uffd/userfaultfd/userfaultfd.go`、`packages/shared/pkg/storage/header/metadata.go`
