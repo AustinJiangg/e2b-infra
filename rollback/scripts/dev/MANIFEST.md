@@ -24,7 +24,7 @@
 |---|---|---|---|
 | KASandbox | `jll` | `3863c76` | ext4 套的 FC；含 seccomp `pread64` 修复 |
 | KASandbox | `jll-xfs` | `2b06bb0` | XFS 套的 FC；同上 |
-| infra-arm | `jll` | `18f9951e5` | ext4 差分树；已 rebase 到 `2026.09`，不含 gsd；+ memMode + 宿主分阶段计时 + 封存不等盘 |
+| infra-arm | `jll` | `ea52f88c3` | ext4 差分树；已 rebase 到 `2026.09`，不含 gsd；+ memMode + 宿主分阶段计时 + 封存不等盘 |
 | infra-arm | `jll-xfs` | `6f8853e60` | XFS+reflink；同上 |
 | e2b-infra | `main` | `c362670` | RPM：ext4 套 + SDK 覆盖层 + 交付侧验收脚本 |
 | e2b-infra | `xfs-reflink` | `311b51e7` | RPM：XFS 套 + SDK 覆盖层 + 交付侧验收脚本 |
@@ -85,7 +85,7 @@ infra-arm 保留了 rebase 前的备份 tag：`pre-rebase-jll` / `pre-rebase-jll
 |---|---|---|
 | `fc-ext4` | `9bfa37ab2a6b67fe` | KASandbox `jll@3863c76` |
 | `fc-xfs` | `bab5f15bb3682dc3` | KASandbox `jll-xfs@2b06bb0` |
-| `orchestrator-ext4` | 见 `bin/SHA256SUMS` | infra-arm `jll@835a3559a` + 真 busybox |
+| `orchestrator-ext4` | 见 `bin/SHA256SUMS` | infra-arm `jll@d417aa973` + 真 busybox |
 | `orchestrator-xfs` | 见 `bin/SHA256SUMS` | infra-arm `jll-xfs@f645faf65` + 真 busybox |
 
 `bin/SHA256SUMS` 是这四条，`01-check-host.sh` 会 `sha256sum -c` 校验。

@@ -5,7 +5,7 @@
 >
 > **读者**：工程师、系统工程师。
 > **预备**：[第 22 篇 · 原生 snapshot 的精确增量](22-native-increment-fix.md)。
-> **代码**：infra-arm `jll` 提交 `de25fe4d0`；探针与基准 `e2b-infra/rollback/scripts/probes/` —
+> **代码**：infra-arm `jll` 提交 `c9a92a5ab`；探针与基准 `e2b-infra/rollback/scripts/probes/` —
 > `pb2.py`、`pb5.py`、`native_snapshot_bench.py`
 >
 > **与本书主线的关系**：这是对**原生路径**的一处独立修复，不属于本方案 checkpoint / restore；

@@ -74,7 +74,7 @@
 | **920B-0904** | 2026-09-04 | 920B · `kvm-wp` | ext4 | **XFS** · 真盘 | orchestrator `aa13d05e9a…`、firecracker `05774e5376…`（构建自 KASandbox_0904 —— 即上游 MR !119 的源分支，这一轮验的就是合入 openEuler 的代码） | `reports/920b-kas0904-20260904/` |
 | **920B-0908** | 2026-09-08 | 920B · `kvm-wp` | ext4 | XFS · 真盘 | `orchestrator-ext4-ecdad325c-pausefix` | 原始日志在 `deltabox/e2b/results/ckpt-920b-20260908/`，**本仓库未收** |
 | **950-native** | 2026-09-09 ~ 10 | 950 · 原生 pause 路径 | —— | 导出缓存 XFS on LVM | —— | `三套快照方案的负载构造与测量口径.md` §八 |
-| **920B-0914-native4k** | 2026-09-14 | 920B · 原生路径，修复后（`de25fe4d0`）· 软件写保护 | 9bfa37ab | 导出缓存 ext4 loop（direct-io），模板存储 tmpfs | —— | 920B `tmp/native4k-bench-920b-de25fe4d0.log`；`原生快照精确增量-方案设计.md` §8 |
+| **920B-0914-native4k** | 2026-09-14 | 920B · 原生路径，修复后（`c9a92a5ab`）· 软件写保护 | 9bfa37ab | 导出缓存 ext4 loop（direct-io），模板存储 tmpfs | —— | 920B `tmp/native4k-bench-920b-de25fe4d0.log`；`原生快照精确增量-方案设计.md` §8 |
 
 > 「二进制未记录」不是疏忽的托词，是**如实记录**：那几轮没有把 `sha256sum` 抄进
 > `00-context.txt`。按[第 24 篇 §4.2](24-test-overview.md#42-一个数字要带的条件标签)，
@@ -320,7 +320,7 @@ HDBSS 的收益预期最大的就是这一张 —— 软件写保护的 VM exit 
 
 #### 表 3-J · `native_snapshot_bench.py`（修复后）：920B-0914-native4k
 
-**条件**：920B · 原生路径修复后（infra-arm `jll` `de25fe4d0`）· `FC_TRACK_DIRTY_PAGES=true`（软件写保护）·
+**条件**：920B · 原生路径修复后（infra-arm `jll` `c9a92a5ab`）· `FC_TRACK_DIRTY_PAGES=true`（软件写保护）·
 同一份脚本、同一档位表；「修复前」列是同机同 FC 前一轮（09-11）。cp0 含预热写入的 192 + 64 MB。
 
 | 档 | 名义脏内存 / 文件 | memfile 修复前 | memfile 修复后 | pause ms | touch1 ms 修复前 → 后 |

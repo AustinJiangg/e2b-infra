@@ -409,7 +409,7 @@ guest 碰到某一页，宿主机才去把那一页填进来（[第 4 篇 §5](0
 
 ### 5.5 原生快照口径（修复后）
 
-2026-09-11 起，infra-arm `jll` 分支（提交 `de25fe4d0`，一个提交、14 个文件、Firecracker 零改动）
+2026-09-11 起，infra-arm `jll` 分支（提交 `c9a92a5ab`，一个提交、14 个文件、Firecracker 零改动）
 把 ARM 线原生 pause / create_snapshot 的内存增量改成了精确的。读原生那一列之前先确认跑的是哪一版，
 两版的口径完全不同。本节只讲**口径怎么变**；为什么修复前不精确、三层各改了什么、代价与边界，
 见[第 21 篇](21-native-increment-diagnosis.md)、[第 22 篇](22-native-increment-fix.md)、[第 23 篇](23-native-increment-cost-and-verification.md)。
