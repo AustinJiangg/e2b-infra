@@ -198,6 +198,7 @@
 | `FC_HDBSS_REQUIRED` | Firecracker | `true` / `1` | `false` | 必须启用 HDBSS，否则启动失败 |
 | `CHECKPOINT_FULL_ROOT` | orchestrator | `""` / `true` / `1` = 开 | 开 | 树根是否全量捕获 |
 | `ORCHESTRATOR_BASE_PATH` | orchestrator | 路径 | —— | 产物根目录 |
+| `PROXY_TRACE` | orchestrator | `1` = 开 | 关 | envd 代理的连接级日志（`drop_reason`、`aborted_after_headers`），用于取证流被 restore 截断（[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)） |
 
 > 两层脏页的区别见[第 19 篇 §1](19-kunpeng-platform.md#1-先分清两层)。
 

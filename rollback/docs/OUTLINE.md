@@ -375,6 +375,8 @@ Firecracker 侧的主体，`PUT /snapshot/rollback` 的九个阶段。
 - 原子提交：temp 文件 + fsync + rename + 目录 fsync；`prepared` / `committed` 两态
 - `context.WithoutCancel`：客户端放弃不能让一台暂停中的虚机留在暂停态
 - 失败时的清理顺序与幂等性
+- **同沙箱多调用方**：在途的流式调用撞上 restore 必被截断（响应头已发出，改不成 409），
+  既定限制与预留的「restore 世代号」改进方案
 - 单元测试覆盖了哪些不变量（事务、层栈封存链、合并 header 与层栈读一致性、身份映射）
 
 **16 · 生命周期与可移植性边界**

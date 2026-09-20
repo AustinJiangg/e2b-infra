@@ -18,6 +18,7 @@
 3. 「虚机暂停」在并发模型里是什么角色？它替代了什么？
 4. 一个条目怎么做到「要么完整可见，要么完全不存在」？
 5. 客户端断开连接时，一个进行到一半的 checkpoint 会怎样？
+6. 两个调用方同时操作同一个沙箱（一个在跑流式命令、另一个发 restore）会怎样？
 
 ---
 
@@ -332,7 +333,53 @@ defer cleanup()      // ← 删掉 revert_mem.tmp 和 revert_bitmap.tmp
 
 ---
 
-## 8. 单元测试守着哪些不变量
+## 8. 同沙箱多调用方：流式调用会被 restore 截断
+
+前面几节讲的并发都在服务端内部。还有一类并发在服务端**之外**：两个调用方同时操作同一个沙箱 ——
+一个在跑流式命令（SDK `commands.run` 带 `on_stdout`，走 envd 的流式 RPC），另一个发起 restore。
+
+### 8.1 行为
+
+restore 的第一件事就是断开该沙箱上**所有在途连接** —— 沙箱马上要回到过去，
+在途响应的后半截已经没有意义。此时两类调用的下场不同：
+
+| 调用形态 | restore 到达时 | 调用方看到 |
+|---|---|---|
+| unary | 响应头**还没**写出去 | 服务端改口为 409，SDK 映射成 `CheckpointInterruptedException(reason=sandbox_restored)` |
+| 流式 | 响应头（200）**已经**写出去 | 只能从中间切断：`RemoteProtocolError: incomplete chunked read` / `unexpected EOF` / `ReadError` |
+
+差别不在实现取舍，而在 HTTP 本身：**状态码只能在响应头里说一次**。
+头一旦发出，服务端就再没有办法把这次调用改判成 checkpoint 语义的异常，
+只剩下切断连接这一种表达方式 —— 于是调用方拿到的是**传输层错误**，与真的网络故障长得一模一样。
+
+这是**确定性行为，不是偶发**：定向用例 T40 的 `--overlap` 组（流跑到一半时对同一沙箱再发一次 restore）
+1200 条流全中。反过来，**restore 返回之后才发出的新请求不受影响** ——
+同一套用例用 21120 条请求覆盖 restore 返回后 0–140 ms 的窗口，0 例被截；
+清 conntrack、`ResetView`、设备静默都在恢复虚机与应答之前做完（§4）。
+
+### 8.2 影响范围与当前处理
+
+只有「多个调用方同时操作同一个沙箱」才会遇到；单调用方串行使用（命令跑完再 restore）不会。
+
+作为**既定限制**记录：调用方应当把「流式调用期间的传输层错误 + 随后确认确实发生过一次 restore」
+当作被回滚打断，按需重发。
+
+取证入口：orchestrator 的环境变量 `PROXY_TRACE=1` 打开代理的连接级日志，
+被 restore 打掉的连接带 `drop_reason=restore` 与 `aborted_after_headers=true`
+（[第 31 篇 §4](31-glossary-and-code-map.md#4-环境变量总表)）。
+
+### 8.3 预留的改进方案（未实现）
+
+让客户端自己分型：服务端为每个沙箱维护一个 **restore 世代号**，经 checkpoint 服务接口暴露；
+SDK 在流式调用开始时记下世代号，流中途遇到传输层错误时回查一次 —— 世代号变了就改抛
+`CheckpointInterruptedException(reason=sandbox_restored)`，没变就原样抛出。
+
+代价是 orchestrator 与 SDK 各一处小改动，只有异常路径多一次查询，旧 SDK 不受影响。
+**决定（2026-09-20）：暂不实现**，等使用方提出需求再做。
+
+---
+
+## 9. 单元测试守着哪些不变量
 
 `internal/checkpoint` 下的测试大致对应本篇和[第 14 篇](14-failure-semantics.md)的不变量：
 
@@ -362,7 +409,7 @@ defer cleanup()      // ← 删掉 revert_mem.tmp 和 revert_bitmap.tmp
 
 ---
 
-## 9. 小结
+## 10. 小结
 
 1. 三类状态：账本（进程内存）、活体对象、文件产物。**账本不跨重启存活**，
    这个取舍让并发模型少了一整类问题（崩溃一致性）。
@@ -376,6 +423,9 @@ defer cleanup()      // ← 删掉 revert_mem.tmp 和 revert_bitmap.tmp
 6. 条目「要么完整可见、要么完全不存在」不是靠过滤，而是靠 `prepared` 条目
    **根本不在账本里**。
 7. `context.WithoutCancel` + 无条件 `defer resume`：客户端放弃不能留下一台暂停的虚机。
+8. 服务端之外还有一类并发：**同沙箱多调用方**。已经开始回数据的流式调用撞上 restore
+   **必然**被截断成传输层错误 —— 响应头已发出，状态码改不了。unary 还来得及改判成 409。
+   这是既定限制（§8）。
 
 ---
 
@@ -392,6 +442,8 @@ defer cleanup()      // ← 删掉 revert_mem.tmp 和 revert_bitmap.tmp
 | 暂停契约 | `internal/sandbox/rootfs/nbd.go` — `SealLayer`、`ResetView` 的文档注释 |
 | 请求解耦 | `internal/checkpoint/service.go` — `context.WithoutCancel` |
 | 无条件恢复 | `internal/sandbox/checkpoint.go` — `CheckpointToFiles` 的 `defer` |
+| 断开在途连接 | `internal/checkpoint/service.go` — `beginRestore` 的 `dropConnections`；连接池的 `resetAllConnections` |
+| 改判 409 的那半条路 | 同上 — `onTransportError` → `RestoredAnswer`（只在响应头写出前有效） |
 | 测试 | `internal/checkpoint/{store,bitmap,rootfs,header_agreement}_test.go` |
 
 **下一篇**：[16 · 生命周期与可移植性边界](16-lifecycle-and-portability.md) ——
