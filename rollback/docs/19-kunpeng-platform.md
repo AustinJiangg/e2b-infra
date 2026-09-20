@@ -326,6 +326,78 @@ df -T /orchestrator/build
 > ext4 方案在 950 上**不用造卷** —— 根盘本来就是 ext4，直接用，不设
 > `ORCHESTRATOR_BASE_PATH`。这套是真正要交付的，它的数字必须来自真盘。
 
+### 7.5 orchestrator 每次重启都会漏掉一整池网络槽位
+
+这一条不是鲲鹏平台特有的，但**做回滚开发的人比谁都容易踩到** —— 换二进制验证要切栈，
+切栈就是重启一次 orchestrator，一天下来能重启十几回。
+
+**现象。** orchestrator 一起来就预建一池网络槽位（`NewSlotsPoolSize = 300`，
+`internal/sandbox/network/pool.go`），每个槽位是一个 netns + 一对 veth + 一批 iptables 规则。
+**这一池在进程退出时留在宿主机上，下一个进程起来既不认它、也不清它，又建 300 个** ——
+无论退出的原因是切栈、升级、还是崩溃重启。920B 上的实际量级：2026-09-16 清掉 **8729** 个，09-20 清掉 **7836** 个，
+同一天晚上又攒到 **2936** 个。
+
+**影响有三层。**
+
+1. **建新槽位越来越慢。** 宿主机上的 netns 与 iptables 规则越多，建一个新槽位就越贵：
+   暖池填满的时间从约 **4 分钟**拖到约 **7 分钟**；攒到八千多个的时候实测只有**每分钟约
+   10 个**（干净机器上约 76 个/分钟）。
+2. **网卡数上千之后沙箱命令会卡顿**，nomad client 的 fingerprint 也要跑上几分钟，表现是
+   启动卡在"端口未启动"（见
+   [`../../deploy-docs/06-日常运维手册.md`](../../deploy-docs/06-日常运维手册.md) §8.1）。
+   注意"沙箱命令卡顿"有**两个**来源、症状一样：宿主侧的槽位泄漏（本条），
+   以及 guest 侧回滚后残留的中断状态（[第 12 篇](12-rollback-pitfalls.md)）。
+   排查顺序是先数宿主机的 netns，再看 guest。
+3. **暖池填充期间的性能数据带扰动。** 填充期正在建 netns，restore 路径上与 netfilter
+   打交道的那几段会被顶住，长尾明显变多。**做性能测试前必须先等
+   `ip netns list | wc -l` 稳定下来再采**（连续采样几分钟不变即可，不要用"重启后等 N 分钟"
+   这种固定时长的判据 —— 每台机器、每个泄漏水位下的填充速度都不一样）。
+
+**成因：两头各缺一块。**
+
+- **启动这头没有回收。** `storage_local.go:27` 的 `NewStorageLocal` 开机先扫一遍
+  `/var/run/netns`（`getForeignNamespaces()`，同文件 :131），把见到的每一个 `ns-*` 都记成
+  "别人的命名空间"，此后 `Acquire` 一律跳过（:75）—— 上一个进程留下的残留因此**既不会被清，
+  也不会被复用**，只会把可用槽位号往后顶；而 `Acquire` 是从 idx 2 起线性扫、带 500 ms
+  超时（:53），残留越多越慢。同一个 `main.go` 里 NBD 设备和 Firecracker 进程**都有**开机回收
+  （`devicePool.ReclaimOrphanedDevices` / `fc.KillOrphanedProcesses`，`main.go:440-441`），
+  唯独网络槽位没有对应物。
+- **退出这头有代码，但有缺口。** `pool.go:251` 的 `Pool.Close` 确实会排空 `newSlots` 并逐个
+  `RemoveNetwork` —— "根本没写清理"并不成立；漏的是这条路走不完的那些情况：被 SIGKILL 或
+  崩溃时压根不走；`Close` 里的 `close(p.reusedSlots)`（:267）与 `Return` 往同一 channel 的
+  发送（:220）存在竞争，一旦 panic，关闭流程就地中断、剩下的槽位全留在机器上；
+  异步归还的槽位（:184）没有人等，`Close` 排空时它可能还没回来。
+- **ARM 适配把池子放大了约 9 倍。** 上游 `2026.09` 的默认值是 `NewSlotsPoolSize = 32` /
+  `ReusedSlotsPoolSize = 100`，适配版改成 300 / 1000（`pool.go:22-23`）。这不制造泄漏，
+  但让每次重启漏掉的量从几十个变成三百个。
+
+**上游在 `2026.09` 之后分三步修掉了这三块**（`e2b-dev/infra`，可逐条核对）：
+
+| 上游 commit | 日期 | 修法 | 首个包含它的 tag |
+|---|---|---|---|
+| [`3add40c7`](https://github.com/e2b-dev/infra/pull/2480) | 2026-04-23 | 消除 `Return`/`Close` 的 send-on-closed-channel panic：改用 `closeMu` + `closed` 标志，`reusedSlots` 不再 close，`Close` 改为非阻塞排空 | `2026.17`（2026-04-26） |
+| [`de2f3919`](https://github.com/e2b-dev/infra/pull/3000) | 2026-06-12 | 关闭期加固：异步归还改为受跟踪的 `ReturnAsync`，`Close` 先等在途归还结束再排空；`RemoveNetwork` 忽略"本来就不存在"的 iptables/路由/veth/netns 错误，不再被一条伪错误打断整串拆除 | `2026.24`（2026-06-15） |
+| [`fbfce25c`](https://github.com/e2b-dev/infra/pull/3090)、[`79b838e4`](https://github.com/e2b-dev/infra/pull/3123) | 2026-06-26、06-29 | 补上开机回收：新增 `network.ReclaimLeakedSlots`（扫 `/run/netns` 里的 `ns-<idx>`，逐个重建临时 slot 调 `RemoveNetwork`）与统一的 `startupreclaim` 包，并在启动流程里调用 —— 位置**必须早于** `NewStorageLocal`，否则残留仍会被当成"别人的"而永久跳过 | `2026.27`（2026-07-02） |
+
+（该目录在上游 `2026.13` 之后从 `internal/sandbox/network/` 移到了 `pkg/sandbox/network/`，
+按新路径查历史。）
+
+**因此的处置。** 本项目的 ARM 适配版停在 `2026.09`，**升级基线属于 openEuler 侧 ARM 适配的
+工作范围**；本项目不在旧基线上单独回合这三笔补丁，修复随基线升级到 `2026.27` 或更高版本
+一并到位。在那之前按运维手册定期清理 —— 这是一个有明确出口的版本差，不是永久性缺陷。
+
+**在那之前怎么规避。**
+
+- **定期清理。** 完整步骤（含"为什么必须停了才能清"）在
+  [`../../deploy-docs/06-日常运维手册.md`](../../deploy-docs/06-日常运维手册.md) §8.1。
+  顺序是：停 `template-manager` job → 等 5008 端口上的进程真正退出 → 跑清理 → 重新起栈。
+- **跑回滚栈时不要直接用 `build.sh --recycle-netns`。** 那条命令会按 rpm 部署的样子把 job
+  重新拉起来，而回滚验证跑的是自建的 orchestrator / Firecracker 产物；要用的话只取它的
+  清理那一步，起栈仍旧走切栈脚本（[第 29 篇](29-acceptance-runbook.md)）。
+- 判断"是不是真泄漏"别只数 netns：暖池里那几百个空闲槽位和泄漏残留在宿主机上长得
+  一模一样，正常水位是 `300 + 历史峰值并发 + 泄漏`，指标 `orchestrator.network.slots_pool.*`
+  比数 netns 准。
+
 ---
 
 ## 8. 小结
@@ -343,6 +415,10 @@ df -T /orchestrator/build
 6. 950 根盘是 ext4、920B 是 XFS —— 这解释了方案与机型为什么配成对，
    但**判据仍然是文件系统**。
 7. 生产回滚部署应设 `FC_HDBSS_REQUIRED=true`，宁可启动失败也不要静默走软件路径。
+8. **orchestrator 每次重启都会漏掉一整池（300 个）网络槽位**（§7.5）。根因是基线
+   `2026.09` **开机不回收上一个进程的残留**、关闭路径另有两个缺口；上游已分别修在
+   `2026.17`、`2026.24`、`2026.27`。**随基线升级一并解决**，本项目不单独打补丁；
+   在那之前靠定期清理规避，**性能测试必须等 netns 计数稳定后再采**。
 
 ---
 
