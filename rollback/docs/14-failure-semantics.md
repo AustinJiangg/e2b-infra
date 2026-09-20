@@ -345,6 +345,10 @@ for cur := e; cur != nil && cur.Hidden && cur.ID != base.entryID && !hasChildLoc
 | Service | Connect 错误码：`data_loss`（撕裂）/ `internal`（其余）/ `not_found` / `invalid_argument` / `unauthenticated` |
 | SDK | 抛异常 |
 
+这张表只覆盖**这次调用自己失败**的情形。还有一种：调用没失败，是它所在的沙箱被
+**别的调用方** restore 了。unary 调用会被改判成 409 → `CheckpointInterruptedException`，
+流式调用则只能被截断成传输层错误 —— 见[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)。
+
 有一处**已知的不够严谨**：客户端靠字符串匹配识别 `Faulted`
 （[第 9 篇 §3.3](09-firecracker-api-contract.md#33-客户端侧的三个细节)）。
 改 Firecracker 那一侧时值得顺手在响应里加一个结构化字段。

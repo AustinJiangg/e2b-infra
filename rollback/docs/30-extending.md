@@ -170,7 +170,7 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 | 层 | 跑什么 | 在哪 | 判据讲解 |
 |---|---|---|---|
-| 单元测试 | `go test ./internal/checkpoint/...` | 开发机 | [15 §8](15-state-and-concurrency.md#8-单元测试守着哪些不变量) |
+| 单元测试 | `go test ./internal/checkpoint/...` | 开发机 | [15 §9](15-state-and-concurrency.md#9-单元测试守着哪些不变量) |
 | 正确性验收 | `rollback/scripts/acceptance/checkpoint_verify.py` | 目标机（950 / 920B） | [25 §2](25-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
 | 性能基准 | `rollback/scripts/acceptance/checkpoint_bench.py` | 目标机 | [26 §3](26-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
 
