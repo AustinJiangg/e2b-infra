@@ -38,7 +38,7 @@ SOURCES 目录，所以下面所有文件直接放在仓库根即可。
 ### 2.2 补丁体系
 
 ```
-Patch1: 0001-adapted-for-arm-architecture.patch   （~333KB，104 个文件，唯一的下游补丁）
+Patch1: 0001-adapted-for-arm-architecture.patch   （738827 字节，169 个文件，唯一的下游补丁）
 ```
 
 `%autosetup -p1` 会在解包后应用它（`-p1` 去掉路径前缀 `a/`、`b/`）。
@@ -75,7 +75,13 @@ Patch1: 0001-adapted-for-arm-architecture.patch   （~333KB，104 个文件，�
 `benchmark/FC启动优化-netns-exec.md`。本仓库自研的 `launch` / `launch-c` 两档实测收益不足，
 已移除，存档在分支 `archive/fc-launch-modes`。
 
-> 这两个改动域只是**叙述上的分组**，在补丁文件里是连续的一份 diff，没有物理边界。
+**改动域三：沙箱级 checkpoint / restore**（补丁里其余的文件，集中在 `packages/orchestrator/internal/{checkpoint,sandbox}/`
+与 `packages/shared/pkg/{proxy,storage/header,fc}`，外加这些 shared 文件在各模块 `vendor/` 里的副本共 19 个）。
+代码来源是 openEuler 交付仓库的 `deltabox-dev` 分支（当前融合到 `4af2872c6`），不是在源码工作树里手写的；
+怎么移植、怎么校验、vendor 副本怎么同步，见 [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md) §11。
+我们新增的单测（40 个 `_test.go`）不在补丁里——`%build` 从不 `go test`。
+
+> 这三个改动域只是**叙述上的分组**，在补丁文件里是连续的一份 diff，没有物理边界。
 > 其中 `packages/orchestrator/Makefile`、`internal/sandbox/fc/process.go`、
 > `internal/sandbox/socket/socket.go` 三个文件被两域同时触及，合并后各自只有一份 hunk。
 
@@ -247,6 +253,16 @@ cd /tmp && rm -rf e2b-deploy
 tar -xzf "$REPO/e2b-deploy.tar.gz"          # 1) 解开旧包（拿到 ubuntu-22.04-custom.tar.gz）
 rsync -av --exclude .git "$REPO/e2b-deploy/" e2b-deploy/   # 2) 用仓库目录覆盖文本内容
 tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy              # 3) 重打包放回仓库根
+```
+
+**出包前核对压缩包与目录没有漂移**（两者曾经不一致过：目录改了、包没重打，RPM 用的是包，
+于是出的 RPM 是旧的）。除了目录里有意省略的 `dep/ubuntu-22.04-custom.tar.gz` 与包内的 `.git`，应无任何输出：
+
+```bash
+rm -rf /tmp/e2b-deploy-check && mkdir -p /tmp/e2b-deploy-check
+tar -xzf "$REPO/e2b-deploy.tar.gz" -C /tmp/e2b-deploy-check
+diff -rq "$REPO/e2b-deploy" /tmp/e2b-deploy-check/e2b-deploy \
+  | grep -v -e 'ubuntu-22.04-custom.tar.gz' -e ': \.git$' -e '__pycache__'
 ```
 
 反向地，如果直接改了压缩包，也要同步更新可读目录（解包后 rsync 回 `e2b-deploy/`，
