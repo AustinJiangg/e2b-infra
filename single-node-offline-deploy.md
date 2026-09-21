@@ -176,8 +176,17 @@ rm -rf e2b-infra-2026.09 infra-2026.09.tar.gz
 
 # 2) 改 e2b-deploy/dep/.env：SERVER_IP= 必须改成本机 IP（否则 harbor/registry/nomad 地址全错），
 #    改完重建打进 RPM 的部署包 e2b-deploy.tar.gz（改了其它端口/变量同理）
+#    ⚠️ 不能直接 `tar -czf e2b-deploy.tar.gz e2b-deploy`：约 70MB 的 dep/ubuntu-22.04-custom.tar.gz
+#    只存在于压缩包里（e2b-deploy/ 目录不含它），直接打目录会把它弄丢。按下面三步重建
+#    （与 deploy-docs/03 篇 §4 一致）：解开旧包 → 用目录覆盖文本内容 → 重新打包。
 sed -i 's/^SERVER_IP=.*/SERVER_IP=<本机IP>/' e2b-deploy/dep/.env
-tar -czf e2b-deploy.tar.gz e2b-deploy
+REPO=$PWD
+rm -rf /tmp/e2b-deploy-repack && mkdir -p /tmp/e2b-deploy-repack && cd /tmp/e2b-deploy-repack
+tar -xzf "$REPO/e2b-deploy.tar.gz"                          # 拿到 ubuntu-22.04-custom.tar.gz
+rsync -a --exclude .git "$REPO/e2b-deploy/" e2b-deploy/     # 用仓库目录覆盖（含刚改的 .env）
+tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy
+ls -la e2b-deploy/dep/ubuntu-22.04-custom.tar.gz            # 自检：镜像还在（约 70MB）
+cd "$REPO"
 
 # 3) 构建 RPM
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
