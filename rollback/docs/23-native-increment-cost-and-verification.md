@@ -92,7 +92,7 @@
 3. **退路完整**（[第 22 篇 §3.5](22-native-increment-fix.md#35-追踪没开时的门)）。920B `FC_TRACK_DIRTY_PAGES=false`：
    日志命中 `dirty tracking is off`，memfile 回到 172 / 178 MiB 的工作集口径，内存与文件校验仍全过。
 4. **与本方案共存**（[§3](#3-影响面只在原生路径的内存侧)）。同一二进制上 `checkpoint_verify.py` 全过，
-   `checkpoint_bench_v2.py` 六代全 `incremental`（[第 28 篇 §4](28-results-and-compliance.md#4-性能--920b软件写保护)）。
+   `checkpoint_bench_v2.py` 六代全 `incremental`（[第 28 篇 §4](28-results-and-compliance.md#4-性能--920b按改动量分档的基准2026-09-21deltabox-dev4af2872c6)）。
 
 未做：950 上尚未复跑（代码路径相同，预期只差本底）；`jll-xfs` 未合入 —— 那条线的 Firecracker
 没有 `save-dirty-bitmap` 端点，合过去只会走退路，没有收益。
