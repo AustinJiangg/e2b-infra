@@ -378,6 +378,9 @@ D 三次 checkpoint（**多层封存**）之后 pause 1 格——原 bug 的本�
    pause 把当时的层栈整体压进沙箱快照，resume 起来的是新实例，
    checkpoint 账本不跨 pause。同一组里 `checkpoint.list` 返回 0 个、
    pause 之后**新建**的 checkpoint 可以正常 restore——所以这是账本边界，不是功能损坏。
+   完整规则与它为什么必须如此见[第 16 篇 §1.4](16-lifecycle-and-portability.md#14-原生-pause--resume-与-checkpoint-的代际边界)；
+   开发态回归用例 T41 把这张表的四格（干净沙箱 pause/resume、连做三轮、resume 后重新
+   checkpoint/restore、账本不跨 pause）逐条锁住。
    它属于 [第 16 篇 §1.3](16-lifecycle-and-portability.md#13-什么情况下-checkpoint-会失效)
    那张失效事件表的同一类，且账本不从磁盘加载这一点见
    [第 16 篇 §3.3](16-lifecycle-and-portability.md#33-账本不从磁盘加载)。

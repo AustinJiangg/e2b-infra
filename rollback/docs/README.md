@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.2.1** · 2026-09-14 · 江路路（j30059180）
+> **v0.2.2** · 2026-09-21 · 江路路（j30059180）
 >
 > 实现已合入 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09；orchestrator、Firecracker、Python SDK 同仓）
 
@@ -121,6 +121,7 @@
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v0.2.2 | 2026-09-21 | 第 16 篇新增 §1.4「原生 pause / resume 与 checkpoint 的代际边界」（resume 之后是新一代：`list` 为空、旧 id restore 回 `not_found`、新一代可正常重新 checkpoint / restore）；第 19 篇新增 §7.5「orchestrator 每次重启漏掉一整池网络槽位」（成因、上游修复对照、处置与清理办法）；第 26 篇 §7 按「清连接跟踪与回滚并行」改写服务端分段结论，旧说法留作交代；第 24 篇测试矩阵补 T41 / T23 三行，第 25 篇 §5 交叉引用第 16 篇 §1.4；第 28 篇 §8 缺口表更新 |
 | v0.2.1 | 2026-09-14 | 原生 snapshot 精确增量修复（infra-arm `jll` `c9a92a5ab`）：新增第 21–23 篇专讲原生 snapshot 精确增量（机理 / 改法 / 代价与验证）；第 27 篇新增 §5.5「原生快照口径（修复后）」，第 28 篇新增表 3-J、3-K，00/05/07/20 的「ARM 线退化成工作集」段落加已修复标注 |
 | v0.2.0 | 2026-09-10 | 新增第五部分「测试与验证」六篇（现 24–29），原 21/22 移为现 30/31；实测数据收口到实测结果篇 |
 | v0.1.0 | 2026-09-04 | 首个署名版本：23 篇正文 + 编写规约 |

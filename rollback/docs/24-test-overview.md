@@ -250,6 +250,9 @@ XFS 方案没有按代 `mem_diff`），传错了就用错的规则去判对的�
 | 树语义：线性 / 前滚 / 分叉跨 LCA / 删除 / 失败 | `correctness.py` | 末行 `ALL PASS` | 待测 | ✅ |
 | pause 之后数据完好 | `pause_verify.py` | 末行 `✓ 全部通过`；**必须 `O_DIRECT` 读回** | 待测 | ✅ |
 | 不弄坏原生生命周期操作 | `compat_matrix.py` | 末行 `✓ 没有 BROKEN`；`REFUSED` 是边界不是故障 | 待测 | ✅ |
+| 干净沙箱的原生 pause → resume 照常 | 开发态回归用例 T41（场景 a / b） | 从不 checkpoint 的沙箱 pause/resume 一次与连做三轮都正常 | 待测 | ✅ |
+| resume 之后的新一代能重新 checkpoint / restore | 开发态回归用例 T41（场景 c / d） | 场景 c：resume 后 checkpoint → 改数据 → restore 回去；场景 d：`list` 为空、旧 id restore 回 `not_found`、新建的可用（[第 16 篇 §1.4](16-lifecycle-and-portability.md#14-原生-pause--resume-与-checkpoint-的代际边界)） | 待测 | ✅ |
+| 文件系统边界（流式写 / open fd / rename / fsync） | 开发态回归用例 T23 | 流式文件退回快照那一刻的前缀且无坏块、open fd 行号连续且 restore 后接着写、目录 rename 被回滚、fsync 过又被删的文件复原 | 待测 | ✅ |
 | HDBSS 三级证据 | `01-check-host.sh` / `04-verify-runtime.sh` / `hdbss_evidence.py` | L1 `cap 502: supported`、L2 自报 `hdbss`、L3 冷/热写耗时比接近 1 | L1/L2 ✅、**L3 待落盘** | ✅（负样本） |
 | 稳定性 | `loop.py` | 200 次回滚 `failures: 0`，任何内容错误立即停 | 待测 | ✅ |
 | 成本随脏页量走（O(脏页)）与 df 增量 | `timing.py` | 末尾 `ALL CORRECT`，逐代 df 增量与脏页量相称 | 待测 | ✅ |
