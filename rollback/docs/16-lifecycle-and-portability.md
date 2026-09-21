@@ -78,7 +78,7 @@ os.RemoveAll(filepath.Join(s.root, sandboxID))   // ← 整个目录，连同 la
 | orchestrator 重启 | 同上 —— 重启本来就会带走这台机器上的所有沙箱 |
 | 宿主重启或宕机 | 同上 |
 | 沙箱迁移到别的节点 | checkpoint **不跟随**，留在原节点直至清理 |
-| 沙箱被 `pause` 再 `connect`（等同 resume） | pause 之前的 checkpoint **回不去**（`checkpoint ... not found`）；resume 起来的是新实例，账本不跨 pause。pause 之后**新建**的 checkpoint 一切正常 |
+| 沙箱被原生 `pause` 再 `connect`（等同 resume） | pause 之前的 checkpoint **全部作废**：`list` 返回空，对旧 checkpoint id 的 restore 回 `not_found`。resume 之后的这一代**可以照常重新 checkpoint / restore**。详见 [§1.4](#14-原生-pause--resume-与-checkpoint-的代际边界) |
 | 单个 checkpoint 被显式删除 | 仍被后代依赖则转为隐藏保留，否则物理删除并级联回收祖先（[第 14 篇 §7](14-failure-semantics.md#7-删除依赖感知的回收)） |
 
 pause 那一行是这张表里唯一**不是「沙箱没了」**的失效原因，值得多说一句：
@@ -88,6 +88,46 @@ pause 把当时的层栈整体压进沙箱快照，账本又不从磁盘加载�
 同一轮里 `checkpoint.list` 返回 0 个、pause 之后新建的 checkpoint 能正常 restore
 （[第 25 篇 §5](25-functional-tests.md#5-compat_matrixpy与原生生命周期的组合矩阵)）。
 **checkpoint 与原生生命周期操作并存但不交叉**，是边界，不是缺陷。
+
+### 1.4 原生 pause / resume 与 checkpoint 的代际边界
+
+这条边界是使用方最容易撞上的一条，值得把规则完整写一遍。
+
+**规则（一句话）**：**原生 pause 会让该沙箱的全部 checkpoint 作废；resume 之后，同一个沙箱 id
+底下是"新的一代"，它可以从零开始重新 checkpoint / restore。**
+
+| 时刻 | `checkpoint.list` | 对 pause 之前某个 checkpoint id 做 restore | 新建 checkpoint |
+|---|---|---|---|
+| pause 之前 | 列出这一代的全部条目 | 正常 | 正常 |
+| resume 之后 | **空** | **`not_found`** | **正常**，并且从这一代的第一次起是一棵新的全量树根 |
+
+**为什么必须如此。** 原生 pause 把沙箱从这个节点上取下来，resume 是**以同一个沙箱 id 现建一个新的
+Firecracker 进程**（[第 4 篇 §5](04-e2b-native-snapshot.md)）。而本方案的 restore 是**原地回滚**：
+它要求那个活着的进程、那份活着的内存映射、那套活着的宿主资源还在（[§3.1](#31-恢复机制要求活体)）。
+旧那一代的差分链没有可以写回去的对象了 —— 保留它们只会让使用方拿到一个必定失败、
+或者更糟、悄悄恢复到别的进程上的 id。所以账本按**代**记账，而不是按 id 记账。
+
+**"代"是什么**：`Sandbox.LifecycleID`，每换一个 Firecracker 进程就换一次。
+账本记的是"**哪一代**拥有挂在这个 sandbox id 下的状态"：
+
+- 属主那一代继续用；
+- 本节点当前正在跑的新一代**接管**这个 id，并丢掉上一代留下的差分（已经没有进程可以回滚到它们上面）；
+- 其余的（被后来者超越的迟到请求）明确拒绝，不留半吊子状态。
+
+读路径（`list` / 取条目 / 删除）按同一个归属判定，所以上面那张表的三格是同一条规则的三个侧面。
+沙箱移除也是分代的 —— 它是异步触发、再等操作锁，可能在 resume 已经把新进程放回来**之后**才到达，
+所以它会先确认自己是不是还适用，**迟到的移除不会带走活沙箱的状态**；
+撕裂标记（[第 14 篇 §3](14-failure-semantics.md)）同样点名它判死的是哪一代 ——
+撕裂是关于一个 Firecracker 进程的事实，不是关于一个比它活得久的 id 的事实。
+
+> **2026-09-21 修掉的一处缺陷**：在此之前，账本把"沙箱被移除"当成对这个 id 的**终局**
+> （写一条墓碑），于是**第一次原生 pause 之后，同一个 id 的新一代连 checkpoint 都建不起来**，
+> 永久返回 `sandbox has been removed from this node: refusing to recreate its checkpoint directory`。
+> 上表的第三列当时是坏的，与交付文档 `deploy/CHECKPOINT.md` §6 写明的边界相反。
+> 修法就是上面那套按代记账（提交 `4af2872c6`）。回归用例 **T41 场景 c**（resume 之后再
+> checkpoint → 改数据 → restore 回去，14 条断言）与 **场景 d**（checkpoint → pause → resume 后
+> `list` 为空、旧 id restore 被拒且 `code=not_found`、新建的 checkpoint 完整可用，18 条断言）
+> 各自锁住一半；场景 c 正是它把缺陷抓出来的。
 
 ---
 
@@ -348,6 +388,9 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
    而且沿途会逐项丢掉这套方案的全部收益。
 6. 这是取舍：用「绑定沙箱生命周期」换零拷贝封存、原地回滚、与改动量挂钩的成本曲线。
 7. 一个正面副产品：**不需要配额、清理任务或过期策略**。
+8. **原生 pause 让该沙箱的全部 checkpoint 作废，resume 之后是新的一代、可以重新 checkpoint / restore**
+   （[§1.4](#14-原生-pause--resume-与-checkpoint-的代际边界)）。账本按**代**（`LifecycleID`）记账而不是按
+   沙箱 id 记账 —— 原地回滚要求活体，而 resume 起来的是另一个 Firecracker 进程。
 
 ---
 

@@ -420,7 +420,8 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
 | create | `pause`、`snapshot`、`seal`、`resume` | 冻结窗口内的四步（[第 10 篇 §3](10-disk-layering.md#3-seal不搬运任何数据的换层)） |
 | restore | `save_live_bitmap`、`materialize`、`fc_rollback` | 内存那半：存活跃脏图 → 凑回滚集 → Firecracker 搬回去（[第 11 篇 §3](11-in-place-rollback.md#3-九个阶段)） |
 | restore | `assemble_view`、`reset_view` | 磁盘那半：重建层栈 + 整体换视图（[第 10 篇 §7](10-disk-layering.md#7-resetview挂载不动整体换视图)） |
-| restore | `conntrack`、`wait_envd`、`rollback_in_place` | 冲连接跟踪 / 等 envd 答话 / 回滚总段 |
+| restore | `conntrack`、`conntrack_bg`、`wait_envd`、`rollback_in_place` | 冲连接跟踪：`conntrack` 是冻结窗口里**等这件事做完**的时间，`conntrack_bg` 是这件事**自身**的耗时（两者的关系见下面第三条结论）/ 等 envd 答话 / 回滚总段 |
+| restore | `assemble_view_pre` | 在冻结窗口**之外**先把盘视图拼好（[第 10 篇 §7](10-disk-layering.md#7-resetview挂载不动整体换视图)）。它进 `total`、不进 `frozen` |
 | 两侧 | `fc_validate`、`fc_quiesce`、`fc_memory`、`fc_vcpus`、`fc_gic`、`fc_devices`、`fc_total` | Firecracker 自报，微秒精度（[第 11 篇 §7](11-in-place-rollback.md#7-计时与回报)） |
 | restore | `materialize_disk_read_mb`、`fc_rollback_disk_read_mb` | 真从块层读回来的量，页缓存命中不计 |
 
@@ -430,10 +431,23 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
   其余每一步都在 1 ms 以内且不随脏页量变化。**我们自己的代码在这条路上没有可优化的余地**，
   要更快只能让 Firecracker 写得更快 —— 950 上的 HDBSS 正是冲这个来的（[第 19 篇](19-kunpeng-platform.md)）。
 - **restore 反过来，大头在我们自己这边**：`materialize`（沿差分树凑回滚集）
-  是最大的一段且随脏页量线性涨，比 Firecracker 自己干的活还大一倍多；
-  另有 `conntrack` 一笔约 7.5 ms 的固定税，完全不随脏页量变化 ——
-  在 0 MB 档它占了整个停机时间的三分之一还多。
-  **只算 `fc_rollback` 会让三分之一的冻结窗口对不上账。**
+  是最大的一段且随脏页量线性涨，比 Firecracker 自己干的活还大 1.5–2.5 倍。
+  **只算 `fc_rollback` 会让一半以上的冻结窗口对不上账。**
+- **连接跟踪不再占冻结窗口，但端到端上仍有一笔固定成本**。清连接跟踪表这件事不需要回滚已经发生，
+  只需要虚机停着、槽位在手，所以它从暂停那一刻就与回滚**并行**做，回滚在 resume 之前才去等它。
+  于是冻结窗口里的 `conntrack` 常态是 **0**，`conntrack_bg`（这件事自身，约 8 ms）落在窗口之外。
+  加上同样在窗口之外的 `assemble_view_pre`（约 17–24 ms）与 `wait_envd`（约 2.6 ms），
+  **一次 restore 的端到端里有约 27 ms 与"回滚多少数据"完全无关** ——
+  改动量小的时候，这三项才是端到端的本金。
+
+  > **此前版本**：2026-09-20 之前，清连接跟踪是在冻结窗口**内**串行做的，
+  > 本篇曾记「`conntrack` 一笔约 7.5 ms 的固定税，0 MB 档占停机时间三分之一还多」，
+  > 并且在宿主机连接跟踪表大、或网络槽位暖池正在填充时会出现数百毫秒的长尾。
+  > 根因是两件事：host 侧"按 IP 删除"要把整张表 dump 进用户态（固定约 6 ms + 4.43 µs/条，
+  > 一次 dump 不论回传多少条都要走完 262144 个哈希桶，且并发 dump 被内核串行化），
+  > 以及 netlink 库每个请求开关一次 `NETLINK_NETFILTER` socket、而 `close()` 会卡在
+  > nf_tables 的工作队列上（127–447 ms）。四个提交依次把 flush 与回滚并行、
+  > 把地址比对下推给内核、让 netlink socket 常驻、再把 host 侧的多路请求合并成一次表扫描。
 
 `fc_*` 与 orchestrator 侧同名段之差就是 RPC 开销。
 某一档缺某个阶段（报告里显示 `—`）是正常的：两套方案的步骤本来就不完全一样
@@ -502,8 +516,9 @@ restore 表里另有一列「读盘」，取自 `timings.json` 的
    `bench-ckpt.py` 给分布与冻结窗口（判定表由它产出），
    `timing.py` 把链深与回滚集大小解耦，`probe-ramp.py` 用判别式设计定性连打劣化。
 7. 冻结窗口的测量自带分辨率下限，**底噪必须一起报**，不可区分的格子要标出来。
-8. 服务端分段的结论是**方向性的**：create 的时间几乎全在 Firecracker 写内存，
-   restore 的时间大头在 `materialize` 与一笔固定的 `conntrack`。
+8. 服务端分段的结论是**方向性的**：checkpoint 的时间几乎全在 Firecracker 写内存，
+   restore 的冻结窗口大头在 `materialize`，而端到端上另有约 27 ms 落在冻结窗口**之外**
+   （`assemble_view_pre` + `conntrack_bg` + `wait_envd`），与改动量无关。
 9. 读报告先看两条判据（`mem_mode` 全 `incremental`、漂移两列接近），
    再读时间；三种体积口径里**只有「新增物理空间」可以横向比较**。
 
