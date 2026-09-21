@@ -167,14 +167,15 @@ else:
 
 ### 2.1 单元测试：只说位置与规模
 
-新增的 Go 单测共 **8 个 `_test.go`、约 1600 行**，分布在
-`packages/orchestrator/internal/checkpoint/`（账本、位图、层栈、合并 header 的一致性）与
-`internal/sandbox/block/`（封层、层栈等价、导出压平）两处，只在 `infra-arm` 的
-`jll` / `jll-xfs` 分支上 —— **未随 MR !119 合入上游**（[第 30 篇 §1.1](30-extending.md#11-三个地方)）。它们**不进交付 patch**：rpmbuild 的 `%build` 只做 `go build`，
-从不 `go test`，进了源树也一次都不会被编译。
+单元测试与被测代码同仓同目录（`KASandbox_0904`，[第 30 篇 §1.1](30-extending.md#11-代码仓库)）：
+Go 侧集中在 `packages/orchestrator/internal/checkpoint/`（账本、位图、层栈、合并 header 的一致性、
+限额与拒绝、代际）与 `internal/sandbox/{block,fc,network}/`（封层、层栈等价、导出压平、
+回滚失败分类、conntrack 清理）；Firecracker 侧是各源文件内的 `#[cfg(test)]`；
+SDK 侧是 `py-sdk/tests/test_checkpoint_errors.py`（`reason` → 异常类的映射）。
+rpm 构建的 `%build` 只做 `go build`、从不 `go test`，所以它们要在代码仓库里单独跑。
 
 它们守着哪些不变量、哪些不变量没有被守住，见
-[第 15 篇 §9](15-state-and-concurrency.md#9-单元测试守着哪些不变量)与
+[第 15 篇 §10](15-state-and-concurrency.md#10-单元测试守着哪些不变量)与
 [第 30 篇 §5.1](30-extending.md#51-测试)。本部分不再展开 —— 单测证的是**部件**，
 本部分讲的是**整机**。
 

@@ -218,6 +218,15 @@ for _, direction := range []netlink.ConntrackFilterType{
 
 写成一个带两个条件的过滤器，语义会变成「源和目的**同时**是 slot 地址」，一条也匹配不上。
 
+宿主侧这一步的现行实现（`internal/sandbox/network/conntrack*.go`）在上述语义不变的前提下做了三件事，
+都是为了不让它拖长冻结窗口：
+
+| 做法 | 原因 |
+|---|---|
+| **表大时让内核过滤**：宿主表达到 2000 条（`conntrackFilterWorthFrom`，两条路径的实测交叉点约 1500 条）时，改用带 `CTA_FILTER` 的 dump 让内核只回本 slot 的表项；内核回来的每一条在删除前**再核对一次地址**，不支持该过滤的内核自动退回整表扫描 | 整表搬到用户态的代价正比于表的大小；而不认识 `CTA_FILTER` 的老内核会回整张表，不核对就删会打断节点上所有沙箱 |
+| **多个 restore 合并成一次扫表**（`conntrack_sweeper.go`）：同时在等的 slot 攒成一批，一次遍历替所有人删；扫描开始之后到达的请求排进下一批 | 内核不会并行做两次 conntrack dump，并发 restore 各扫各的只会互相排队 |
+| **netlink socket 常驻**（`conntrack_handles.go`）：每个 slot 一个命名空间内的 socket、宿主一个，建网络时打开，restore 路径上不开也不关 | 关闭一个 netfilter netlink socket 要等 nf_tables 的工作队列排空，实测可达数百毫秒 |
+
 ### 4.4 时机：必须在暂停窗口内
 
 清表要在虚机暂停、还没恢复的那个窗口里做：
@@ -227,19 +236,43 @@ for _, direction := range []netlink.ConntrackFilterType{
 如果放在恢复之后，就有一个竞态窗口：guest 已经在跑、可能已经发出了包，
 而我们正在删的表项可能是它刚建立的。
 
+清表需要的前提只是「虚机已停」，并不需要「回滚已完成」。所以现行实现（自 `68c547f1b` 起）
+**在 pause 之后立刻启动清表，与内存回滚并行，在 resume 之前 join**
+（`internal/sandbox/checkpoint.go` — `startConntrackFlush`、`conntrack.join()`）：
+约束没变 —— 表项必须在流量放回来之前清完 —— 只是它不再串在回滚后面占冻结窗口。
+提交点之前失败、需要原样恢复虚机的那条路径同样先 join 再 resume。
+分段耗时里的 `conntrack` 因此量的是 join 的等待时间，通常接近零
+（[第 26 篇 §7](26-performance-methodology.md)）。
+
 ### 4.5 代理侧的连接池
 
 同样的道理适用于 orchestrator 自己的代理：它对每个沙箱维护一个连接池。
 回滚之后，池子里那些还开着的连接，对端（guest 里的服务）已经不记得它们了。
 
 ```go
+// service.go — beginRestore
 if s.dropConnections != nil {
-    if err := s.dropConnections(sbx.LifecycleID); err != nil { ... }
+    if err := s.dropConnections(connectionKey); err != nil { ... }   // 只记 WARN
 }
 ```
 
-这一步在**恢复之后**做（它是 orchestrator 自己的状态，不涉及内核竞态），
-失败只记警告 —— 连接池里的坏连接会在下次使用时报错并被剔除，不是致命问题。
+这一步在 restore **一开始**做 —— 磁盘视图装配完、暂停虚机之前（`service.go` — `beginRestore`），
+而不是等回滚完成之后。跨越回滚的连接此刻已经注定作废，只是它们自己还不知道：
+早断开，持有这些连接的调用方在毫秒级就得到应答（unary 调用被改判成 409 `sandbox_restored`，
+[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)）；
+晚断开，它们要挂到 restore 结束，最坏是 45 s 的 envd 等待。
+代价是：restore 若在提交点之前失败，这些调用方白白重连一次 —— 两种错里这是便宜的那种。
+失败只记警告：连接池里的坏连接会在下次使用时报错并被剔除，不是致命问题。
+
+### 4.6 对使用方的结论
+
+**restore 会作废该沙箱上全部跨越回滚的 TCP 连接，客户端必须重连。** 具体是三处：
+宿主 conntrack 表里按该沙箱 slot IP 匹配的表项被删除；沙箱网络命名空间内的 conntrack 整表清空；
+orchestrator 代理到该沙箱的连接池被丢弃。guest 自己的 TCP 状态也回到了 checkpoint 时刻，
+所以即便不清，这些连接也无法继续。**同节点的其他沙箱不受影响**（宿主表从不整表 flush）。
+SDK 的 unary 调用撞上 restore 会收到 `CheckpointInterruptedException`，重连重试即可；
+已经开始回数据的流式调用只能表现为传输层错误（[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)）。
+restore 之后 guest 向外新建的连接不受任何影响。
 
 ---
 
@@ -348,6 +381,9 @@ pause 路径上也输出同样的诊断，这样可以对比「回滚前」与�
 | 宿主上有没有「记得这个 guest 的状态」的东西？ | 要在暂停窗口内清掉（如 conntrack） |
 | 新代码有没有引入新的系统调用？ | 检查 seccomp 白名单（VMM 线程 / vCPU 线程各一份） |
 | 有没有在途的异步 I/O？ | 阶段 2 要排空它 |
+| 有没有「KVM 内部挂起、不在快照里」的状态（如 arm64 延迟完成的 MMIO 退出）？ | pause 停车前与回滚写寄存器前都要排干（[第 11 篇 §3.6](11-in-place-rollback.md#36-阶段-5vcpu)） |
+| 往**活着的**内核对象上写「写 1 生效」的成对寄存器（GIC 的 enable / pending / active）？ | 必须绝对写回（先清后设），否则快照里为 0 的残留位留下（[第 11 篇 §3.7](11-in-place-rollback.md#37-阶段-6中断控制器)） |
+| 设备状态与宿主侧后端（tap 的 offload 标志等）有没有必须一致的配对？ | 回滚设备状态后按回滚后的值重设后端 |
 | 新设备支持热插拔或动态配置吗？ | `validate_topology` 要能表达这件事，否则应当拒绝 |
 
 ---

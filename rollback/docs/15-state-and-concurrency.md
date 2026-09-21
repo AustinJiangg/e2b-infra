@@ -78,25 +78,37 @@ live, err := readDirtyBitmap(liveBitmapPath)
 
 ### 2.2 `opLocks[sandboxID]`：按沙箱串行
 
-每个沙箱一把互斥锁，create / restore / delete **全程持有**：
+每个沙箱一把互斥锁（容量为 1 的 channel），checkpoint / restore / delete **全程持有**：
 
 ```go
-func (s *Store) LockSandbox(sandboxID string) func() {
-    s.mu.Lock()
-    l, ok := s.opLocks[sandboxID]
-    if !ok {
-        l = &sync.Mutex{}
-        s.opLocks[sandboxID] = l
-    }
-    s.mu.Unlock()          // ← 先放掉全局锁
+func (s *Store) LockSandboxWithin(sandboxID string, wait time.Duration) (func(), bool) {
+    gate := s.gate(sandboxID)      // ← gate() 内部短暂持 s.mu 取出（或创建）这把锁，返回前已放掉
 
-    l.Lock()               // ← 再获取沙箱锁（可能长时间等待）
-    return l.Unlock
+    select {
+    case gate <- struct{}{}:       // ← 空闲：立即拿到
+        return func() { <-gate }, true
+    default:
+    }
+
+    timer := time.NewTimer(wait)
+    defer timer.Stop()
+
+    select {
+    case gate <- struct{}{}:       // ← 排队等到了
+        return func() { <-gate }, true
+    case <-timer.C:                // ← 等满 wait：放弃
+        return nil, false
+    }
 }
 ```
 
-**注意解锁顺序**：先释放 `s.mu` 再获取 `l`。反过来（持着 `s.mu` 去抢 `l`）
+**注意顺序**：先释放 `s.mu` 再去等沙箱锁。反过来（持着 `s.mu` 去等）
 会让一个进行中的 checkpoint 把全局账本锁一直占着。
+
+**排队有上限**：持锁方可能卡在一个永不返回的调用上，无限排队只会让每个等待者各占一条连接、
+最后得到一个光秃秃的读超时。所以应答客户端的三条路径都用限时版本，等满
+`CHECKPOINT_LOCK_WAIT_TIMEOUT`（默认 60 s）就回 503 `busy`（[§9](#9-限额与超时四个服务端开关)）。
+不限时的 `LockSandbox` 只留给不面向客户端的内部路径。
 
 锁的层级因此是明确的：
 
@@ -201,34 +213,43 @@ NBD dispatcher 手里那个 `*Overlay` 指针**从头到尾没变过**。它不�
 
 ---
 
-## 5. 原子提交
+## 5. 原子提交与持久性
 
-一个条目必须**要么完整可见，要么完全不存在**（不变量 #7）。做法是经典的
-temp + fsync + rename：
+一个条目必须**要么完整可见，要么完全不存在**（不变量 #7）。做法是 temp + rename，**刻意不 fsync**：
 
 ```go
 for _, f := range files {
-    if err := syncFile(f[0]); err != nil { ... }      // ① 临时文件落盘
-    if err := os.Rename(f[0], f[1]); err != nil { ... } // ② 原子改名
+    // Deliberately no fsync before the rename. ...
+    if err := os.Rename(f[0], f[1]); err != nil { ... }   // 原子改名
 }
-if err := syncDir(e.Dir); err != nil { ... }          // ③ 目录项落盘
 ```
 
-三步各自的作用：
+POSIX 保证同目录内的 rename 是原子的：要么旧名要么新名，不会有中间态。manifest 的替换同理
+（`writeManifest`：写 `.tmp` 再 rename）。这就是「原子发布」的全部 ——
+它不依赖落盘，因为之后的每一个读者（orchestrator 解析页、Firecracker 读回文件）
+走的都是写入方用过的同一份 page cache。
 
-| 步 | 保证 |
-|---|---|
-| ① `fsync(临时文件)` | 内容真的在盘上，而不只是在 page cache |
-| ② `rename` | POSIX 保证同目录内的 rename 是原子的：要么旧名要么新名，不会有中间态 |
-| ③ `fsync(目录)` | 目录项本身也落盘，否则崩溃后可能看到旧的目录内容 |
+**checkpoint 的持久性：承诺什么、不承诺什么**
 
-不过第 ①③ 步在这套系统里其实**没有兑现价值** ——
-账本不跨重启存活，所以「崩溃后磁盘上是什么」没人会去读
-（对比[第 10 篇 §5](10-disk-layering.md#5-封存不等待落盘) 里刻意**不**做 msync 的封存层，
-那里是把同样的逻辑贯彻到底了）。
+| | 内容 | 依据 |
+|---|---|---|
+| **承诺** | 发布是原子的：条目要么完整可见、要么不存在；`list` 看不到半成品，restore 拿不到半成品 | `store.go` — `commitFiles`、`writeManifest` 的 rename；`prepared` 条目不进账本（§5.1） |
+| **承诺** | checkpoint 返回成功后，同一宿主上立即可读、内容一致（page cache 对同一宿主上所有进程一致，写返回即可见） | 读侧全部是普通缓冲读，无 `O_DIRECT` |
+| **承诺** | e2b **原生 pause** 的 snapfile 仍然 `fsync`（上游行为不变）—— 那份文件要进持久化存储、活过本进程 | `firecracker/src/vmm/src/persist.rs` — `snapfile_must_be_durable`（判据：请求不带 `mem_file_path`） |
+| **不承诺** | checkpoint 的任何文件落盘。snapfile、内存差分、位图侧车、回滚集、封存的磁盘层、manifest 全程不 `fsync` | `store.go` — `commitFiles` 注释；`firecracker/src/vmm/src/vstate/vm.rs` — `dump_memory_and_bitmap` 只 `flush()`；[第 10 篇 §5](10-disk-layering.md#5-封存不等待落盘) |
+| **不承诺** | checkpoint 活过 orchestrator 进程。账本只在进程内存里、从不从磁盘读回；orchestrator 重启时所有沙箱随之消失；`NewStore` 启动时把 store 根目录（`<产物根>/checkpoints`）**整个清空**再重建 | `store.go` — 包注释、`NewStore` 的 `os.RemoveAll(root)` |
+| **不承诺** | checkpoint 活过宿主崩溃或掉电。崩溃后目录里可能留下残缺文件，但重启后没有任何东西会去读它，且下次启动即被清空 | 同上 |
 
-保留它们的理由是：代价小（每次 checkpoint 几次 fsync，相对写快照可以忽略），
-而且**万一将来要做账本持久化，这一半已经是对的**。这是一个可以接受的不对称。
+**对使用方的含义**：checkpoint 是「这台宿主、这个 orchestrator 进程、这一代沙箱」之内的回滚点，
+不是备份。orchestrator 升级或重启、宿主重启之后，之前的 checkpoint ID 全部失效（对它们 restore 得到 404）。
+要跨重启、跨宿主保存沙箱状态，用 e2b 原生的 pause / snapshot（[第 16 篇 §7.1](16-lifecycle-and-portability.md#71-要长期保存怎么办)）；
+各种失效条件的完整列表在[第 16 篇 §1.3](16-lifecycle-and-portability.md#13-什么情况下-checkpoint-会失效)。
+
+不做 `fsync` 换来的是并发下的 checkpoint 延迟：ext4 的日志提交是整个文件系统的一个串行点，
+多个沙箱同时 checkpoint 时每个 `fsync` 都要等其他沙箱的回写；暂停窗口内的那几次尤其贵。
+自 `04ef67baa`（orchestrator 侧）与 `0a2592d45`、`02491e116`（Firecracker 侧）起按上表执行。
+如果将来要做可持久化的 checkpoint，这些 `fsync` 需要按事务顺序（数据先于账本）整体加回来，
+并同时解决账本重建与沙箱重建（[第 16 篇 §5](16-lifecycle-and-portability.md#5-补齐需要什么)）。
 
 ### 5.1 两态可见性
 
@@ -379,7 +400,43 @@ SDK 在流式调用开始时记下世代号，流中途遇到传输层错误时�
 
 ---
 
-## 9. 单元测试守着哪些不变量
+## 9. 限额与超时：四个服务端开关
+
+四个环境变量，都由 orchestrator 进程读取，都可以不设。生效值与来源（`env` / `default`）
+在启动时的能力行里打印（[第 17 篇 §2.2](17-observability-and-verification.md#22-启动时的能力上报)），
+写错的值**不会**让服务不带保护地运行：解析不了就回落默认值并打一条 WARN。
+
+| 变量 | 默认 | 取值 | 关闭方式 | 触发时的行为 |
+|---|---|---|---|---|
+| `CHECKPOINT_MIN_FREE_BYTES` | max(4 GiB, 2 × 该沙箱 guest 内存) | 非负整数，单位字节 | `0` | checkpoint 与 restore 在动手**之前**检查 store 所在文件系统的可用空间（`statfs` 的 `Bavail`），不足则 **507** `resource_exhausted` / `disk_full`。沙箱与已有 checkpoint 不受影响 |
+| `CHECKPOINT_MAX_PER_SANDBOX` | `0`（不限） | 非负整数，单位个 | `0` | 单个沙箱**可见** checkpoint 数达到上限后，新的 checkpoint 被拒：**429** `resource_exhausted` / `too_many_checkpoints`。隐藏条目不计数（调用方看不见也删不掉）。`delete` 之后即可再打 |
+| `CHECKPOINT_LOCK_WAIT_TIMEOUT` | `60s` | Go duration（`90s`、`2m`），须 > 0 | 不可关闭 | checkpoint / restore / delete 在同一沙箱的操作锁上排队超过此值：**503** `unavailable` / `busy`，带 `Retry-After: 1`。本次调用什么都没做，可重试 |
+| `CHECKPOINT_FC_CALL_TIMEOUT` | `2m` | Go duration，须 > 0 | 不可关闭 | 单次 Firecracker API 调用（pause / snapshot / rollback / resume）的时限。pause 超时：补一次 resume 后按普通失败返回（500 `internal`）；**rollback 超时：无法判断虚机停在哪个时刻，按撕裂处理**（500 `data_loss` / `torn`） |
+
+各拒绝对应的 SDK 异常与调用方动作见[第 14 篇 §10](14-failure-semantics.md#10-错误契约)。
+
+**为什么磁盘余量默认是 2 × guest 内存**：起树根的 checkpoint 要写下整份 guest 内存，
+restore 物化的回滚集也可能一样大，所以单次操作最多就是一份 guest 内存；
+两份是给「紧接着的下一次」和沙箱自己的磁盘写留的 —— 它们落在同一个文件系统上。
+guest 内存小于 2 GiB 时取 4 GiB 下限，因为磁盘层和沙箱自身的写入不随内存变小。
+
+**产物盘写满的后果不是「这一次 checkpoint 失败」**。Firecracker 写快照遇到 `ENOSPC` 只是一次失败的调用；
+但同一时刻，节点上**每一个**沙箱往稀疏映射里的写入都会因为内核无法分配后备块而出错，
+影响的是整个节点。提前拒绝把它变成一个调用方能处理的应答。
+所以容量规划上：产物盘除了模板与沙箱自身写入之外，应至少常留「最大 guest 内存 × 2」的余量；
+多租户节点建议同时设 `CHECKPOINT_MAX_PER_SANDBOX`，
+因为 checkpoint 不会自动过期（[第 16 篇 §1.2](16-lifecycle-and-portability.md#12-什么时候被删)），
+一个循环打点的客户端可以无上限地占用产物盘。
+
+**两个超时与 SDK 超时的配合**：SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s
+（[第 31 篇 §5.1](31-glossary-and-code-map.md#51-sdkpython)），
+大于 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 与 45 s 的 envd 等待之和，
+目的是让调用方总能收到服务端给出的结论，而不是自己先超时。
+把 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 调大时，客户端超时要跟着调大。
+
+---
+
+## 10. 单元测试守着哪些不变量
 
 `internal/checkpoint` 下的测试大致对应本篇和[第 14 篇](14-failure-semantics.md)的不变量：
 
@@ -404,17 +461,18 @@ SDK 在流式调用开始时记下世代号，流中途遇到传输层错误时�
 - 并发操作同一沙箱（依赖 `opLocks`，但没有针对性的竞态测试）；
 - HDBSS 武装时序（不变量 #13，只靠调用点位置保证）。
 
-> 单元测试只在 `infra-arm` 仓库里，**不进交付 patch**（rpmbuild 的 `%build` 只做 `go build`），
-> 也未随上游 MR 合入（[第 30 篇 §1.1](30-extending.md#11-三个地方)）。
+> 单元测试与被测代码同目录（`packages/orchestrator/internal/checkpoint/*_test.go`），
+> 限额与拒绝行为的用例在 `limits_test.go`、`service_test.go`；
+> rpm 构建的 `%build` 只做 `go build`，不运行它们（[第 30 篇 §1.1](30-extending.md#11-代码仓库)）。
 
 ---
 
-## 10. 小结
+## 11. 小结
 
 1. 三类状态：账本（进程内存）、活体对象、文件产物。**账本不跨重启存活**，
    这个取舍让并发模型少了一整类问题（崩溃一致性）。
 2. 两把锁，**单向层级**：`opLocks[sandbox]`（长持有）→ `Store.mu`（短持有）。
-   不可能死锁。`LockSandbox` 里先放全局锁再抢沙箱锁，顺序不能反。
+   不可能死锁。先放全局锁再等沙箱锁，顺序不能反；排队有上限，超时回 `busy`（§9）。
 3. **持 `Store.mu` 时不做 I/O**。`MaterializeRevert` 为此手工解锁而不是 `defer`。
 4. `Overlay.mu` 只保护**指针替换的原子性**，数据竞争由 `Cache` 自己的锁负责。
    NBD dispatcher 手里的指针从头到尾没变过。
@@ -433,9 +491,10 @@ SDK 在流式调用开始时记下世代号，流中途遇到传输层错误时�
 
 | 关注点 | 位置 |
 |---|---|
-| 两把锁 | `internal/checkpoint/store.go` — `Store.mu`、`opLocks`、`LockSandbox` |
+| 两把锁 | `internal/checkpoint/store.go` — `Store.mu`、`opLocks`、`gate`、`LockSandboxWithin`、`LockSandbox` |
 | 锁内不做 I/O 的例子 | 同上 — `MaterializeRevert` 的手工解锁 |
-| 原子提交 | 同上 — `commitFiles`、`syncFile`、`syncDir` |
+| 原子提交与持久性 | 同上 — `commitFiles`、`writeManifest`、`NewStore`；`firecracker/src/vmm/src/persist.rs` — `snapfile_must_be_durable` |
+| 限额与超时 | `internal/checkpoint/service.go` — `minFreeBytes`、`refuseIfDiskFull`、`refuseTooManyCheckpoints`、`lockWaitTimeout`、`writeBusy`；`store.go` — `MaxPerSandbox`、`atCheckpointLimitLocked`；`internal/sandbox/checkpoint.go` — `fcCall`、`FCCallTimeout` |
 | 两态可见性 | 同上 — `Prepare`、`publishLocked`、`Get` |
 | 路径校验 | 同上 — `validateID` |
 | 指针替换 | `internal/sandbox/block/overlay.go` — `mu`、`Seal`、`ResetView` |

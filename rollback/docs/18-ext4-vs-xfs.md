@@ -7,8 +7,8 @@
 > **读者**：工程师、部署与运维。
 > **预备**：[第 8 篇 · 内存差分树](08-memory-diff-tree.md)、
 > [第 9 篇 · Firecracker 接口契约](09-firecracker-api-contract.md)。
-> **代码**：`infra-arm` 的 `jll`（ext4）与 `jll-xfs`（XFS）两个分支；
-> 差异集中在 `internal/checkpoint/{store,service,clone}.go`
+> **代码**：交付的是 ext4 方案（`KASandbox_0904`，交付分支 `deltabox`）；XFS 方案已归档，代码不在该仓库、不在交付范围，本篇保留作设计对照。
+> 两者的差异集中在 `internal/checkpoint/{store,service,clone}.go`
 
 ---
 
@@ -113,7 +113,7 @@ cloned, err := CloneOrCopy(basePath, entry.TempMemFull())
 
 ### 3.2 Firecracker 侧的差异只有一个端点
 
-| | ext4 方案的 Firecracker（`KASandbox@jll`） | XFS 方案的（`KASandbox@jll-xfs`） |
+| | ext4 方案的 Firecracker（交付） | XFS 方案的（已归档） |
 |---|---|---|
 | `dirty_bitmap_path` | ✓ | ✓ |
 | `PUT /snapshot/rollback` | ✓ | ✓ |
@@ -288,11 +288,11 @@ XFS 方案保留下来，一是 920B 上的验证环境用它，二是它在 XFS
 
 | 关注点 | 位置 |
 |---|---|
-| reflink 探针与克隆 | `internal/checkpoint/clone.go`（**仅 `jll-xfs` 分支**）— `ProbeReflink`、`CloneOrCopy`、`copySparse` |
-| XFS 方案的 create | `internal/checkpoint/service.go`（`jll-xfs`）— `create` 里的 `CloneOrCopy` 分支 |
-| XFS 方案的回滚集 | `internal/checkpoint/store.go`（`jll-xfs`）— `RevertBitmapForTarget`、`MemSource` |
-| ext4 方案的差分与解析 | `internal/checkpoint/store.go`（`jll`）— `MaterializeRevert`、`writeRevertMem` |
-| 启动时的能力上报 | `packages/orchestrator/main.go` — `reportCheckpointCapabilities`（两分支内容不同） |
-| `save-dirty-bitmap`（仅 ext4 方案） | `src/vmm/src/rollback.rs`（`KASandbox@jll`）— `save_dirty_bitmap` |
+| reflink 探针与克隆 | `internal/checkpoint/clone.go`（**仅 XFS 方案，已归档**）— `ProbeReflink`、`CloneOrCopy`、`copySparse` |
+| XFS 方案的 create | `internal/checkpoint/service.go`（XFS 方案）— `create` 里的 `CloneOrCopy` 分支 |
+| XFS 方案的回滚集 | `internal/checkpoint/store.go`（XFS 方案）— `RevertBitmapForTarget`、`MemSource` |
+| ext4 方案的差分与解析 | `internal/checkpoint/store.go`（ext4 方案）— `MaterializeRevert`、`writeRevertMem` |
+| 启动时的能力上报 | `packages/orchestrator/main.go` — `reportCheckpointCapabilities`（两方案内容不同） |
+| `save-dirty-bitmap`（仅 ext4 方案） | `firecracker/src/vmm/src/rollback.rs`— `save_dirty_bitmap` |
 
 **下一篇**：[19 · 鲲鹏平台](19-kunpeng-platform.md) —— 另一条轴：机型决定脏页后端。

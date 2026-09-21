@@ -5,7 +5,7 @@
 >
 > **读者**：工程师、系统工程师。
 > **预备**：[第 22 篇 · 原生 snapshot 的精确增量](22-native-increment-fix.md)。
-> **代码**：infra-arm `jll` 提交 `c9a92a5ab`；探针与基准 `e2b-infra/rollback/scripts/probes/` —
+> **代码**：`KASandbox_0904` 提交 `c42d23e73`；探针与基准 `e2b-infra/rollback/scripts/probes/` —
 > `pb2.py`、`pb5.py`、`native_snapshot_bench.py`
 >
 > **与本书主线的关系**：这是对**原生路径**的一处独立修复，不属于本方案 checkpoint / restore；
@@ -94,7 +94,7 @@
 4. **与本方案共存**（[§3](#3-影响面只在原生路径的内存侧)）。同一二进制上 `checkpoint_verify.py` 全过，
    `checkpoint_bench_v2.py` 六代全 `incremental`（[第 28 篇 §4](28-results-and-compliance.md#4-性能--920b按改动量分档的基准2026-09-21deltabox-dev4af2872c6)）。
 
-未做：950 上尚未复跑（代码路径相同，预期只差本底）；`jll-xfs` 未合入 —— 那条线的 Firecracker
+未做：950 上尚未复跑（代码路径相同，预期只差本底）；XFS 方案（已归档）未合入 —— 那条线的 Firecracker
 没有 `save-dirty-bitmap` 端点，合过去只会走退路，没有收益。
 
 ---

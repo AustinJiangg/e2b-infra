@@ -323,7 +323,8 @@ e2b 支持多种 rootfs 提供方式，只有 NBD + Overlay 那一种能封存�
 
 ### 5.1 原子提交
 
-产物先写成 `<name>.tmp`，`fsync` 之后 `rename` 到最终名字，再 `fsync` 目录。
+产物先写成 `<name>.tmp`，再 `rename` 到最终名字；**不做 `fsync`** —— 原子性来自 rename，checkpoint 不承诺活过 orchestrator 进程
+（承诺什么、不承诺什么见[第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性)）。
 条目在账本里有两个状态：
 
 - `prepared` —— 目录已建、临时文件在写，`Get` / `List` 都看不见；
@@ -357,7 +358,7 @@ Prepare：建目录，登记一个 prepared 条目
 **restore**：
 
 ```
-拦截 → 鉴权 → 取沙箱操作锁 → 取条目 → 加载磁盘视图
+拦截 → 鉴权 → 取沙箱操作锁 → 取条目 → 加载并装配磁盘视图 → 丢弃代理连接池
    ↓
 ┌─ 暂停虚机 ────────────────────────────────┐
 │  导出活跃脏页位图（save-dirty-bitmap）      │
@@ -365,12 +366,12 @@ Prepare：建目录，登记一个 prepared 条目
 │  物化：revert_mem（稀疏）+ revert_bitmap    │
 │  Firecracker 原地回滚（内存→vCPU→GIC→设备） │
 │  切换磁盘视图（ResetView）                  │
-│  清 conntrack                              │
+│  清 conntrack（与回滚并行，此处 join）     │
 └─ 恢复虚机 ────────────────────────────────┘
    ↓
 等 envd 应答（上限 45 s）
    ↓
-基准 ← 本条目；磁盘账本 ← 本条目的 header；丢弃代理连接池
+基准 ← 本条目；磁盘账本 ← 本条目的 header
    ↓
 写 last-restore-timings.json → 回报 success
 ```

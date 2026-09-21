@@ -77,9 +77,17 @@
 
 ## 2. 代码地图
 
-路径相对各自仓库根；在上游 openEuler KASandbox `deltabox`（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)）里，orchestrator 的路径前面加 `packages/orchestrator/`，Firecracker 的加 `firecracker/`，其余完全一致。三处代码的关系见[第 30 篇 §1.1](30-extending.md#11-三个地方)。
+代码都在 openEuler 交付仓库 `KASandbox_0904`（交付分支 `deltabox`），三个组件同仓：
 
-### 2.1 orchestrator（`infra-arm@jll`）
+| 组件 | 目录 | 下表路径的前缀 | 单元测试 |
+|---|---|---|---|
+| orchestrator | `packages/orchestrator/` | §2.1 的 `internal/...` 前面加 `packages/orchestrator/` | 同目录 `*_test.go` |
+| Firecracker | `firecracker/` | §2.2 的 `src/...` 前面加 `firecracker/` | 源文件内 `#[cfg(test)]` |
+| Python SDK | `py-sdk/` | —— | `py-sdk/tests/test_checkpoint_errors.py` |
+
+怎么跑见[第 30 篇 §1.1](30-extending.md#11-代码仓库)。
+
+### 2.1 orchestrator（`packages/orchestrator/`）
 
 | 关注点 | 文件 | 关键符号 |
 |---|---|---|
@@ -100,9 +108,8 @@
 | 代理拦截 | `internal/proxy/proxy.go` | `checkpoint.Handles` 那段包装 |
 | 启动时能力上报 | `packages/orchestrator/main.go` | `reportCheckpointCapabilities` |
 | 原生路径（对照） | `internal/server/sandboxes.go`、`internal/sandbox/sandbox.go` | `Server.Pause`、`Server.Checkpoint`、`Sandbox.Pause`、`Factory.ResumeSandbox` |
-| **仅 XFS 方案** | `internal/checkpoint/clone.go` | `ProbeReflink`、`CloneOrCopy` |
 
-### 2.2 Firecracker（`KASandbox@jll`）
+### 2.2 Firecracker（`firecracker/`）
 
 | 关注点 | 文件 | 关键符号 |
 |---|---|---|
@@ -151,8 +158,7 @@
 | 连打劣化归因：链深还是写入量 | `probe-ramp.py` | [26 §6](26-performance-methodology.md#6-probe-ramppy一个判别式设计) |
 | 宿主自检 / 造数据卷 / 换二进制 / 切换后冒烟 | `01-check-host.sh`、`02-prepare-loop-volume.sh`、`03-switch.sh`、`04-verify-runtime.sh` | [29 §4](29-acceptance-runbook.md#4-开发态流程摘要) |
 
-**其他**：单元测试在 `internal/checkpoint/{store,bitmap,rootfs,header_agreement}_test.go`
-（不进交付 patch）；汇报配图在 `e2b-infra/rollback/diagrams/`、汇报稿在 `e2b-infra/rollback/slides/`。
+**其他**：单元测试与被测代码同目录（`internal/checkpoint/*_test.go` 等，见本节开头的表；rpm 构建不运行它们）；汇报配图在 `e2b-infra/rollback/diagrams/`、汇报稿在 `e2b-infra/rollback/slides/`。
 
 ---
 
@@ -198,9 +204,15 @@
 | `FC_HDBSS_REQUIRED` | Firecracker | `true` / `1` | `false` | 必须启用 HDBSS，否则启动失败 |
 | `CHECKPOINT_FULL_ROOT` | orchestrator | `""` / `true` / `1` = 开 | 开 | 树根是否全量捕获 |
 | `ORCHESTRATOR_BASE_PATH` | orchestrator | 路径 | —— | 产物根目录 |
-| `PROXY_TRACE` | orchestrator | `1` = 开 | 关 | envd 代理的连接级日志（`drop_reason`、`aborted_after_headers`），用于取证流被 restore 截断（[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)） |
+| `CHECKPOINT_MIN_FREE_BYTES` | orchestrator | 非负整数（字节）；`0` = 关 | max(4 GiB, 2 × guest 内存) | 产物盘可用空间低于此值时，checkpoint 与 restore 在动手前被拒：507 `disk_full`（[第 15 篇 §9](15-state-and-concurrency.md#9-限额与超时四个服务端开关)） |
+| `CHECKPOINT_MAX_PER_SANDBOX` | orchestrator | 非负整数（个）；`0` = 不限 | `0` | 单沙箱可见 checkpoint 数上限，到顶后 checkpoint 被拒：429 `too_many_checkpoints` |
+| `CHECKPOINT_LOCK_WAIT_TIMEOUT` | orchestrator | Go duration（`90s`、`2m`），须 > 0 | `60s` | 在同一沙箱的操作锁上排队的上限，超过回 503 `busy` + `Retry-After: 1` |
+| `CHECKPOINT_FC_CALL_TIMEOUT` | orchestrator | Go duration，须 > 0 | `2m` | 单次 Firecracker API 调用的时限；rollback 调用超时按撕裂处理 |
+| `PROXY_TRACE` | orchestrator | `1` / `true` / `yes` / `on`（不分大小写）= 开，其余一律关；进程启动时读一次 | 关 | envd 代理的连接级日志（`drop_reason`、`aborted_after_headers`），用于取证流被 restore 截断（[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)） |
 
 > 两层脏页的区别见[第 19 篇 §1](19-kunpeng-platform.md#1-先分清两层)。
+> 四个 `CHECKPOINT_*` 限额 / 超时变量解析不了时回落默认值并打 WARN；生效值与来源在启动能力行里
+> （[第 17 篇 §2.2](17-observability-and-verification.md#22-启动时的能力上报)）。
 
 ---
 
@@ -208,15 +220,31 @@
 
 ### 5.1 SDK（Python）
 
-| 方法 | 说明 |
-|---|---|
-| `sandbox.checkpoint.create(name=None)` | 打一个 checkpoint，返回 `checkpointId` 与 `memMode` |
-| `sandbox.checkpoint.restore(checkpoint_id)` | 回滚到该 checkpoint |
-| `sandbox.checkpoint.list()` | 列出可见的 checkpoint |
-| `sandbox.checkpoint.delete(checkpoint_id)` | 删除（可能转为隐藏保留） |
-| `sandbox.checkpoint.is_available()` | 探活（等价的旧名是 `is_running()`） |
+| 方法 | 说明 | 默认请求超时 | 自动重试 |
+|---|---|---|---|
+| `sandbox.checkpoint.create(name=None)` | 打一个 checkpoint，返回 `checkpointId` 与 `memMode` | 300 s | 否 |
+| `sandbox.checkpoint.restore(checkpoint_id)` | 回滚到该 checkpoint | 300 s | 否 |
+| `sandbox.checkpoint.delete(checkpoint_id)` | 删除（可能转为隐藏保留） | 300 s | 否 |
+| `sandbox.checkpoint.list()` | 列出可见的 checkpoint | 60 s | 否 |
+| `sandbox.checkpoint.is_available()` | 探活，由宿主应答、不进沙箱 | 60 s | —— |
+| `sandbox.checkpoint.is_running()` | `is_available()` 的旧名，保留作兼容，行为相同 | 60 s | —— |
 
-异步版在 `e2b/sandbox_async/checkpoint.py`。
+六个方法，四个 RPC。异步版在 `e2b/sandbox_async/checkpoint.py`，签名与行为相同。
+
+**超时**：checkpoint / restore / delete 的默认值是 `CHECKPOINT_REQUEST_TIMEOUT` = 300 s
+（`py-sdk/e2b/connection_config.py`），**不继承**连接级的 `request_timeout`（那个值是为 envd 请求调的，默认 60 s）；
+每次调用显式传的 `request_timeout=` 仍然优先。300 s 的理由：服务端在同沙箱锁上最多排队
+`CHECKPOINT_LOCK_WAIT_TIMEOUT`（60 s）、restore 之后最多等 envd 45 s，
+客户端预算必须大于两者之和才能收到服务端的结论。delete 不碰虚机，但与 checkpoint / restore 抢同一把锁，所以同样用 300 s；
+`list` 不取锁，沿用 60 s。
+
+**不重放**：四个 RPC 的客户端以 `retries=0` 构造（通用 envd 客户端在响应中途断开时默认重发）。
+原因是它们都不幂等 —— 重放的 create 会多打一个调用方不知道的 checkpoint，
+重放的 restore 会把 guest 再回滚一次，重放的 delete 得到 404。
+**客户端超时不会取消服务端的操作**（[第 15 篇](15-state-and-concurrency.md) §6），
+所以调用方在超时或断线之后，应先 `list()` 确认结果，再决定是否重发。
+
+**异常**：九个 `Checkpoint*Exception` 类与各自的处置见[第 14 篇 §10](14-failure-semantics.md#10-错误契约)。
 
 ### 5.2 宿主侧 RPC（端口 49984）
 
@@ -228,8 +256,22 @@
 | `/checkpoint.Checkpoint/DeleteCheckpoint` | |
 | `/health` | 由宿主应答，不进沙箱 |
 
-错误码：`not_found` / `invalid_argument` / `unauthenticated` / `internal` /
-**`data_loss`**（撕裂，必须重建沙箱）/ `failed_precondition`。
+错误响应体是 JSON：`code`（Connect 错误码）、`reason`、`message`。
+
+| HTTP | `code` | `reason` |
+|---|---|---|
+| 400 | `invalid_argument` | `invalid_argument` |
+| 401 | `unauthenticated` | `unauthenticated` |
+| 404 | `not_found`（未知方法是 `unimplemented`） | `not_found` |
+| 409 | `aborted` | `sandbox_restored` |
+| 412 | `failed_precondition` | `chain_broken` |
+| 429 | `resource_exhausted` | `too_many_checkpoints` |
+| 500 | `internal` | `internal` / `rootfs_poisoned` / `guest_unresponsive` |
+| 500 | **`data_loss`** | `torn`（撕裂，必须重建沙箱） |
+| 503 | `unavailable`（带 `Retry-After: 1`） | `busy` |
+| 507 | `resource_exhausted` | `disk_full` |
+
+每个 `reason` 下沙箱的状态与调用方动作见[第 14 篇 §10](14-failure-semantics.md#10-错误契约)。
 
 ### 5.3 Firecracker 的三处扩展
 
