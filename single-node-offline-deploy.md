@@ -167,21 +167,15 @@ cd e2b-infra
 git lfs pull                       # 拉取 e2b-infra-2026.09.tar.gz（LFS 服务器见 .lfsconfig，不是 GitHub）
 ls -l e2b-infra-2026.09.tar.gz     # 必须是 143753275 字节；134 字节说明还是 LFS 指针
 
-# 1b) git lfs pull 拉不动时：用 LFS batch 接口直接取对象，再校验 sha256（oid 就是文件的 sha256，
-#     与仓库里那个 134 字节指针文件的 oid 行一致）
-OID=59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9
-HREF=$(curl -s -X POST https://artlfs.openeuler.openatom.cn/src-openeuler/e2b-infra/objects/batch \
-  -H 'Accept: application/vnd.git-lfs+json' -H 'Content-Type: application/vnd.git-lfs+json' \
-  -d "{\"operation\":\"download\",\"transfers\":[\"basic\"],\"objects\":[{\"oid\":\"$OID\",\"size\":143753275}]}" \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["objects"][0]["actions"]["download"]["href"])')
-curl -L -o e2b-infra-2026.09.tar.gz "$HREF"
-echo "$OID  e2b-infra-2026.09.tar.gz" | sha256sum -c      # 必须输出 OK
-#     ⚠️ 不要用"下载 GitHub 归档 https://github.com/e2b-dev/infra/archive/refs/tags/2026.09.tar.gz
-#     再改名重打包"来代替：那份归档不含各模块的 vendor/ 目录，而 spec 的 %build 用
+# 1b) 这个源码包放在内部 LFS 服务器上（.lfsconfig），只有能访问该服务器的机器才拉得到。
+#     拉不到时，从已有该文件的机器拷一份过来（scp / U 盘均可），放到仓库根目录，再校验：
+echo "59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9  e2b-infra-2026.09.tar.gz" | sha256sum -c   # 必须输出 OK
+#     不能用上游的 GitHub 标签归档代替：https://github.com/e2b-dev/runtime/archive/refs/tags/2026.09.tar.gz
+#     （e2b 已把仓库从 infra 改名为 runtime，旧的 e2b-dev/infra 地址会跳转到这里）。2026-09-22 实测：
+#     该归档 2802318 字节，顶层目录是 runtime-2026.09/，不含任何 vendor/ 目录；spec 需要的是
+#     143753275 字节、带各模块 vendor/ 的源码包，两者不是同一个文件。spec 的 %build 用
 #     GOFLAGS=-mod=vendor（e2b-infra.spec:44），0001 补丁本身也要改 vendor/ 下的文件，
-#     %prep 打补丁这一步就会失败。
-#     2026-09-21 实测：该 LFS 源站对 batch 接口返回的签名下载地址曾回 403 SignatureDoesNotMatch。
-#     取不到时，从已有该文件的机器拷一份过来（scp / U 盘均可），同样用上面那条 sha256sum -c 校验。
+#     拿标签归档改名顶替，%prep 打补丁这一步就会失败。
 
 # 2) 改 e2b-deploy/dep/.env：SERVER_IP= 必须改成本机 IP（否则 harbor/registry/nomad 地址全错），
 #    改完重建打进 RPM 的部署包 e2b-deploy.tar.gz（改了其它端口/变量同理）
@@ -251,20 +245,27 @@ grep -h -m1 'checkpoint capabilities' /data/nomad/alloc/*/alloc/logs/start.stdou
 grep -h 'dirty page tracking is off\|is not a boolean and was ignored' /data/nomad/alloc/*/alloc/logs/start.stdout.*
 ```
 
-**脏页跟踪（决定 checkpoint 是增量还是全量）在标准部署下跟着硬件走。**
-orchestrator 读环境变量 `FC_TRACK_DIRTY_PAGES`（按 Go 的 `strconv.ParseBool`：`1/t/T/TRUE/true/True`
-开，`0/f/F/FALSE/false/False` 关；没设、或设了解析不了的值，都按硬件决定——宿主 KVM 有
-arm64 HDBSS（能力号 502）则开，否则关；解析不了时启动日志多一条 WARN）。
-而本部署**不传这个变量**：`e2b-deploy/dep/template-manager.hcl` 的 `env {}` 块里没有它，
-`e2b-deploy/dep/deploy.sh` 的 `envsubst` 白名单（`deploy.sh:131` 起）里也没有，写进 `.env` 到不了进程。所以：
+**checkpoint 是增量还是全量，由脏页跟踪开没开决定；本部署不设开关，跟着硬件走。**
+目标平台是带 HDBSS 的鲲鹏 950：orchestrator 启动时探测 KVM 的 arm64 硬件脏状态跟踪能力（能力号 502），
+探到就自动打开脏页跟踪，用硬件标脏做增量 checkpoint，不需要任何配置。所以
+`e2b-deploy/dep/template-manager.hcl` 的 `env {}` 块里没有 `FC_TRACK_DIRTY_PAGES`，
+`e2b-deploy/dep/deploy.sh` 的 `envsubst` 白名单（`deploy.sh:131` 起）里也没有——这是有意的默认。
 
-| 宿主 | 标准部署下 | 表现 |
+`FC_TRACK_DIRTY_PAGES` 是 orchestrator 进程的环境变量，用来覆盖探测结果
+（deltabox-dev `4af2872c6`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
+按 Go 的 `strconv.ParseBool` 读，`1/t/T/TRUE/true/True` 强制开，`0/f/F/FALSE/false/False` 强制关；
+没设、或值解析不了（`yes`、`on`、空串、拼错），都按硬件探测结果决定，后一种情况启动日志另打一条 WARN
+（`packages/orchestrator/main.go:765-770`）。按平台：
+
+| 宿主 | 不设变量（本部署的默认） | 显式 `FC_TRACK_DIRTY_PAGES=true` |
 |---|---|---|
-| 有 HDBSS（鲲鹏 950） | 自动开 | 第二次起的 checkpoint 是增量（`mem_mode="incremental"`） |
-| 没有 HDBSS（鲲鹏 920 系） | 自动关，③ 的第二条 grep 能看到那条 WARN | 每次 checkpoint 都是全量（`mem_mode="full"`）：功能正确，只是慢、占空间；`checkpoint_verify.py` 里「gB / gC 是增量」那一条断言会 FAIL，其余不受影响 |
+| 有 HDBSS（鲲鹏 950，目标平台） | 自动开，硬件标脏；同一沙箱第二次起的 checkpoint 是增量（`mem_mode="incremental"`） | 同左，不需要设 |
+| 没有 HDBSS（如鲲鹏 920B） | 关；每次 checkpoint 都是全量（`mem_mode="full"`），功能正确，耗时与占用空间随内存规格增长；③ 的第二条 grep 能看到 `dirty page tracking is off` 那条 WARN | 开，退化为 KVM 写保护跟踪，checkpoint 仍是增量 |
 
-没有 HDBSS 的机器要增量，按第 5 节·场景三在 `env {}` 块里**加一行字面量**再重跑该 job
-（会重启 orchestrator，杀掉运行中的沙箱）：
+我们的开发环境是 920B（950 没有外网，开发只能在 920B 上做），它没有 HDBSS，所以开发栈的
+orchestrator 显式设了 `FC_TRACK_DIRTY_PAGES=true`：这样 920B 与 950 的差别基本只剩"增量靠什么实现"
+（KVM 写保护 / 硬件标脏），其余路径相同。在无 HDBSS 的机器上做开发或预验证时，同样的做法是按第 5 节·场景三
+在 `env {}` 块里加一行字面量再重跑该 job（会重启 orchestrator，杀掉运行中的沙箱）：
 
 ```bash
 cd /opt/e2b-infra
@@ -277,8 +278,11 @@ tr '\0' '\n' < /proc/$pid/environ | grep FC_TRACK_DIRTY_PAGES      # 进程里�
 
 `nomad/template-manager.hcl` 会被下次 `rpm -Uvh` + 重放 overlay 覆盖；要持久，改仓库的
 `e2b-deploy/dep/template-manager.hcl` 后重建 `e2b-deploy.tar.gz` 与 RPM（第 2 节第 2 步）。
-代价：没有硬件标脏时，内核要给每个干净页加写保护，首次写入各触发一次 VM exit，
-从不做 checkpoint 的沙箱也要付这笔开销（`dirtytracking.go` 注释里写明的取舍，所以默认关）。
+软件跟踪的代价：没有硬件标脏时，内核要给每个干净页加写保护，首次写入各触发一次 VM exit，
+从不做 checkpoint 的沙箱也要付这笔开销——这是无 HDBSS 时默认关的原因（`dirtytracking.go:25-33` 的注释）。
+
+下面验收脚本里「gB / gC 是增量」那一条断言，在无 HDBSS 且未设该变量的机器上不成立（那里的 checkpoint 是全量），
+其余断言不受影响。
 
 **功能验收**（脚本不随 RPM 走，在克隆出来的仓库根目录下跑；需要先建好 `base` 模板）：
 
