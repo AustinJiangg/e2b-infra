@@ -164,15 +164,24 @@ done
 # 1) 拉代码（大源码包走 git-lfs）
 git clone <本仓库地址> e2b-infra
 cd e2b-infra
-git lfs pull                       # 拉取 e2b-infra-2026.09.tar.gz
+git lfs pull                       # 拉取 e2b-infra-2026.09.tar.gz（LFS 服务器见 .lfsconfig，不是 GitHub）
+ls -l e2b-infra-2026.09.tar.gz     # 必须是 143753275 字节；134 字节说明还是 LFS 指针
 
-# 1b) git lfs pull 拉不动时（LFS 服务器 https://artlfs.openeuler.openatom.cn 不可达/被代理拦截），
-#     从上游 GitHub 下载同一份源码后重打包。注意：GitHub 归档解包后的顶层目录叫 infra-2026.09，
-#     而 spec 的 %autosetup 期望 e2b-infra-2026.09，必须解包改名再重新打包，只改文件名没用
-wget https://github.com/e2b-dev/infra/archive/refs/tags/2026.09.tar.gz -O infra-2026.09.tar.gz
-tar -xzf infra-2026.09.tar.gz && mv infra-2026.09 e2b-infra-2026.09
-tar -czf e2b-infra-2026.09.tar.gz e2b-infra-2026.09
-rm -rf e2b-infra-2026.09 infra-2026.09.tar.gz
+# 1b) git lfs pull 拉不动时：用 LFS batch 接口直接取对象，再校验 sha256（oid 就是文件的 sha256，
+#     与仓库里那个 134 字节指针文件的 oid 行一致）
+OID=59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9
+HREF=$(curl -s -X POST https://artlfs.openeuler.openatom.cn/src-openeuler/e2b-infra/objects/batch \
+  -H 'Accept: application/vnd.git-lfs+json' -H 'Content-Type: application/vnd.git-lfs+json' \
+  -d "{\"operation\":\"download\",\"transfers\":[\"basic\"],\"objects\":[{\"oid\":\"$OID\",\"size\":143753275}]}" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["objects"][0]["actions"]["download"]["href"])')
+curl -L -o e2b-infra-2026.09.tar.gz "$HREF"
+echo "$OID  e2b-infra-2026.09.tar.gz" | sha256sum -c      # 必须输出 OK
+#     ⚠️ 不要用"下载 GitHub 归档 https://github.com/e2b-dev/infra/archive/refs/tags/2026.09.tar.gz
+#     再改名重打包"来代替：那份归档不含各模块的 vendor/ 目录，而 spec 的 %build 用
+#     GOFLAGS=-mod=vendor（e2b-infra.spec:44），0001 补丁本身也要改 vendor/ 下的文件，
+#     %prep 打补丁这一步就会失败。
+#     2026-09-21 实测：该 LFS 源站对 batch 接口返回的签名下载地址曾回 403 SignatureDoesNotMatch。
+#     取不到时，从已有该文件的机器拷一份过来（scp / U 盘均可），同样用上面那条 sha256sum -c 校验。
 
 # 2) 改 e2b-deploy/dep/.env：SERVER_IP= 必须改成本机 IP（否则 harbor/registry/nomad 地址全错），
 #    改完重建打进 RPM 的部署包 e2b-deploy.tar.gz（改了其它端口/变量同理）
@@ -221,6 +230,62 @@ bash build.sh -s      # 起 consul+nomad（首次会 bootstrap ACL）、登录 h
 source /opt/e2b-infra/.env
 nomad job status -token "$NOMAD_ACL_TOKEN"     # redis/template-manager/edge/api 都在
 curl -s http://$SERVER_IP:4646/v1/status/leader
+```
+
+### 4.1 checkpoint / restore：装上了没有、是不是增量
+
+RPM 里的 orchestrator（0001 补丁）、Firecracker（`firecracker.arm`）和 Python SDK 覆盖层
+（`dep/e2b-sdk-checkpoint/`）三样合起来提供沙箱级 checkpoint / restore；SDK 侧用法见
+`/opt/e2b-infra/dep/e2b-sdk-checkpoint/使用说明.md`。装完核对三处：
+
+```bash
+# ① Firecracker 走完了"第二跳"（init-client.sh 把 /opt/e2b-infra/bin/firecracker 拷进 /fc-versions）
+sha256sum /opt/e2b-infra/bin/firecracker /fc-versions/v1.13.1/firecracker
+#    两行都应是 18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9（= 仓库里的 firecracker.arm）
+
+# ② SDK 覆盖层（21 个文件）装好且自检通过
+python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
+
+# ③ orchestrator 启动时自报的能力：脏页跟踪开/关及原因、各项界限
+grep -h -m1 'checkpoint capabilities' /data/nomad/alloc/*/alloc/logs/start.stdout.*
+grep -h 'dirty page tracking is off\|is not a boolean and was ignored' /data/nomad/alloc/*/alloc/logs/start.stdout.*
+```
+
+**脏页跟踪（决定 checkpoint 是增量还是全量）在标准部署下跟着硬件走。**
+orchestrator 读环境变量 `FC_TRACK_DIRTY_PAGES`（按 Go 的 `strconv.ParseBool`：`1/t/T/TRUE/true/True`
+开，`0/f/F/FALSE/false/False` 关；没设、或设了解析不了的值，都按硬件决定——宿主 KVM 有
+arm64 HDBSS（能力号 502）则开，否则关；解析不了时启动日志多一条 WARN）。
+而本部署**不传这个变量**：`e2b-deploy/dep/template-manager.hcl` 的 `env {}` 块里没有它，
+`e2b-deploy/dep/deploy.sh` 的 `envsubst` 白名单（`deploy.sh:131` 起）里也没有，写进 `.env` 到不了进程。所以：
+
+| 宿主 | 标准部署下 | 表现 |
+|---|---|---|
+| 有 HDBSS（鲲鹏 950） | 自动开 | 第二次起的 checkpoint 是增量（`mem_mode="incremental"`） |
+| 没有 HDBSS（鲲鹏 920 系） | 自动关，③ 的第二条 grep 能看到那条 WARN | 每次 checkpoint 都是全量（`mem_mode="full"`）：功能正确，只是慢、占空间；`checkpoint_verify.py` 里「gB / gC 是增量」那一条断言会 FAIL，其余不受影响 |
+
+没有 HDBSS 的机器要增量，按第 5 节·场景三在 `env {}` 块里**加一行字面量**再重跑该 job
+（会重启 orchestrator，杀掉运行中的沙箱）：
+
+```bash
+cd /opt/e2b-infra
+grep -q 'FC_TRACK_DIRTY_PAGES' nomad/template-manager.hcl || \
+  sed -i '/ORCHESTRATOR_SERVICES/a\        FC_TRACK_DIRTY_PAGES          = "true"' nomad/template-manager.hcl
+bash build.sh -r template-manager
+pid=$(pgrep -f /usr/bin/template-manager | head -1)
+tr '\0' '\n' < /proc/$pid/environ | grep FC_TRACK_DIRTY_PAGES      # 进程里真有才算生效
+```
+
+`nomad/template-manager.hcl` 会被下次 `rpm -Uvh` + 重放 overlay 覆盖；要持久，改仓库的
+`e2b-deploy/dep/template-manager.hcl` 后重建 `e2b-deploy.tar.gz` 与 RPM（第 2 节第 2 步）。
+代价：没有硬件标脏时，内核要给每个干净页加写保护，首次写入各触发一次 VM exit，
+从不做 checkpoint 的沙箱也要付这笔开销（`dirtytracking.go` 注释里写明的取舍，所以默认关）。
+
+**功能验收**（脚本不随 RPM 走，在克隆出来的仓库根目录下跑；需要先建好 `base` 模板）：
+
+```bash
+cd benchmark && bash sync-env.sh && python build_template.py && cd ..   # 凭据同步 + 建 base 模板（见第 12 节）
+set -a; . benchmark/.env; set +a                                        # 把 E2B_API_KEY 等导出给脚本
+python rollback/scripts/acceptance/checkpoint_verify.py                 # 末尾逐条 PASS/FAIL
 ```
 
 ---

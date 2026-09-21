@@ -1,6 +1,13 @@
 # 交付清单
 
-最后更新：2026-08-28（开发收尾。仓库级总索引见开发仓库根目录 `交付件清单.md`）
+最后更新：2026-09-21（第三、四节同步到 deltabox-dev 融合后的状态；其余各节仍是 2026-08-28 开发收尾时的记录，
+其中的分支名、commit、`bin/` 二进制与实测数字对应当时的代码，保留作历史。仓库级总索引见开发仓库根目录 `交付件清单.md`）
+
+> **2026-09-21 起，RPM 仓库里 checkpoint / restore 三个组件的来源换了**：不再是 KASandbox / infra-arm / e2b-arm
+> 三个开发仓库的 `jll` 分支，而是 openEuler 交付仓库 `KASandbox_0904` 的 `deltabox-dev` 分支
+> （当前融合到 `4af2872c6`）的 `firecracker/`、`packages/`、`py-sdk/` 三个目录。第一节表格里的仓库与 commit
+> 是 08-28 的状态，不再是 0001 / `firecracker.arm` / SDK 覆盖层的来源。XFS+reflink 套（`xfs-reflink` 分支）已归档，
+> 此后只维护 `main`（ext4 差分树）。
 
 两处产物，用途不同，不要混：
 
@@ -112,10 +119,10 @@ ext4 套的 orchestrator 依赖 `PUT /snapshot/save-dirty-bitmap`，只有 `fc-e
 
 | | 说明 |
 |---|---|
-| `0001-adapted-for-arm-architecture.patch` | ARM 适配 + 我们的 checkpoint 提交；由 `tmp/regen-e2b-infra-patch.sh` 生成 |
-| `firecracker.arm` | 换成带 seccomp `pread64` 修复的 FC |
+| `0001-adapted-for-arm-architecture.patch` | ARM 适配 + checkpoint / restore；2026-09-21 起来源是 `deltabox-dev` 的 `packages/`（融合到 `4af2872c6`），由开发工作区的 `tmp/regen-e2b-infra-patch-deltabox.sh` 生成。738827 字节 / 20132 行 / 169 个文件，sha256 `90bd549c315dbbe0de4b1ea3bb27c94cb8164bb826a00e4c6b7312b9e7bd1c96` |
+| `firecracker.arm` | 构建自 `deltabox-dev` 的 `firecracker/`（`86e4d9610`；到 `4af2872c6` 该目录无变化）。2677888 字节，sha256 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9`。含 seccomp `pread64` 修复、原地 rollback、`save-dirty-bitmap` |
 | `e2b-deploy/build.sh` | `install_e2b` 里多调一次 SDK 覆盖层安装；两个脚本共用一个解析出来的解释器 |
-| `e2b-deploy/dep/e2b-sdk-checkpoint/` | **新增**：SDK 覆盖层（installer + 16 个 payload 文件 + 使用说明） |
+| `e2b-deploy/dep/e2b-sdk-checkpoint/` | **新增**：SDK 覆盖层（installer + **21 个** payload 文件 + 使用说明）。08-28 时是 16 个；2026-09-21 起 21 个 = 12 个新增 + 9 个覆盖上游（新纳入 `e2b/sandbox/checkpoint/errors.py`、`e2b/exceptions.py`、`e2b/envd/{api,rpc}.py`、`e2b_connect/client.py`）。17 个取自 `py-sdk@4af2872c6`，4 个（`e2b/__init__.py`、`e2b/connection_config.py`、`e2b/sandbox_{sync,async}/main.py`）取自 `e2b-arm@1598c96e`，两边差异只来自 SDK 基线版本 |
 | `e2b-deploy.tar.gz` | 随 `e2b-deploy/` 重打（保住了被 gitignore 的 70MB `ubuntu-22.04-custom.tar.gz`） |
 
 spec 不用动的原因：`e2b-deploy.tar.gz` 本来就是 `Source9`，整个 `e2b-deploy/`
@@ -126,17 +133,34 @@ spec 不用动的原因：`e2b-deploy.tar.gz` 本来就是 `Source9`，整个 `e
 > 四个仓库分别以什么形态落进 e2b-infra、为什么、以及单测要不要进 patch 的待定项，
 > 见开发仓库根目录的 `仓库融合说明.md`（那份是开发态文档，不随交付走）。
 
-infra-arm 的 checkpoint 提交 cherry-pick 到「upstream 2026.09 + ARM 适配」那条线上，
-再 `git diff upstream <branch>` 生成。重跑：`tmp/regen-e2b-infra-patch.sh`。
+**2026-09-21 起的做法**（细节见 `deploy-docs/08-源码开发与出包流程.md` §11）：起点是「upstream 2026.09 +
+上一版 0001（`81f9612`）」，把 `deltabox-dev` 上 `0f9b58f92..4af2872c6` 触及 `packages/` 的 **44 个提交**
+逐个只取 `packages/` 的 hunk 应用上去——41 个干净、1 个 3-way 自动合并、2 个因 openEuler 基线上下文不同
+需要手工（`c42d23e73` 的 `block/chunk.go` 与 `uffd/userfaultfd/userfaultfd.go`，`579f75d68` 的 `network/network.go`），
+外加一处编译期适配（`network/conntrack_handles.go`：`NamespacePath()` → `netns.GetFromName(s.NamespaceID())`）；
+同步 vendor 15 个文件；再 `git diff upstream <融合树>` 出补丁。重跑：开发工作区的
+`tmp/regen-e2b-infra-patch-deltabox.sh`（`VARIANT=M` 时除 deltabox-dev 外不依赖其它开发仓库）。
 
-**单测不在 patch 里（2026-08-25 起）。** 我们新增的 6~7 个 `_test.go`（ext4 轨 6 个，
-xfs 轨多一个 `clone_test.go`，共约 1500 行）只留在 **infra-arm 的 `jll` / `jll-xfs` 分支**，
-不进 e2b-infra。原因：rpmbuild 的 `%build` 只跑 `go build`，从不 `go test`，
+08-28 之前的做法（历史）：infra-arm 的 checkpoint 提交 cherry-pick 到「upstream 2026.09 + ARM 适配」那条线上，
+再 `git diff upstream <branch>` 生成，脚本是 `tmp/regen-e2b-infra-patch.sh`。
+
+**单测不在 patch 里（2026-08-25 起）。** 我们新增的 `_test.go`（2026-09-21 这一版共 **40 个**；
+08-25 时是 6~7 个、约 1500 行）只留在开发仓库——现在是 **`deltabox-dev` 分支**，此前是 infra-arm 的
+`jll` / `jll-xfs` 分支——不进 e2b-infra。原因：rpmbuild 的 `%build` 只跑 `go build`，从不 `go test`，
 这些文件进了 RPM 源树一次也不会被编译。已有测试文件里跟着签名改的一两行**保留**，
-否则树不自洽、`go test ./...` 会编译失败。**评审要看单测，去 infra-arm。**
+否则树不自洽、`go test ./...` 会编译失败。**评审要看单测，去 `deltabox-dev`。**
+另外，`internal/checkpoint` 与 `shared/pkg/proxy` 两个包的单测在 `-mod=vendor` 下编不了
+（引用了 vendor 里没有的 `go.uber.org/zap/zaptest/observer`），只能在 deltabox-dev 上跑，见 08 篇 §11.4。
 详见开发仓库根目录的 `仓库融合说明.md` 第六节。
 
-已验证：
+已验证（2026-09-21 这一版）：
+- 纯净上游树上 `patch -p1 --dry-run` 干净，`GIT binary patch` 为 0；补丁打出的树补回被剔除的 40 个单测后与融合树零差异
+- 五个包 `GOWORK=off GOFLAGS=-mod=vendor go build ./...` 在 aarch64 上全过
+- x86（WSL）与 aarch64（920B）各自从头生成，补丁逐字节相同
+- 与 deltabox-dev 逐文件比对：我们动过的 100 个 `packages/` 文件 89 个逐字节相同，其余 11 个的差异均为基线差异、逐行有解释
+- 补丁里 openEuler 基线独有符号（`KillOrphanedProcesses` / `Mooncake` / `ExternalNetNS` / `force_disconnect` / `NamespacePath`）出现 0 次
+
+已验证（08-28 那一版，历史）：
 - 新 patch 打到**原始上游树**上，**再补回被剔除的那几个单测**后，
   与移植树 `diff -r` **零差异**（两套都是）——两仓库的差异是可判定的
 - `packages/{api,client-proxy,envd,db,orchestrator}` 全部以 `GOWORK=off GOFLAGS=-mod=vendor` 编过
@@ -158,15 +182,28 @@ xfs 轨多一个 `clone_test.go`，共约 1500 行）只留在 **infra-arm 的 `
 
 ## 四、部署必配的环境变量
 
-**950 上什么都不用配**（2026-08-25 起）：
+**950 上什么都不用配**（2026-08-25 起）。2026-09-21 起 `FC_TRACK_DIRTY_PAGES` 的读法改为
+`strconv.ParseBool`（`deltabox-dev@86e4d9610`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go`）：
+
+- `1/t/T/TRUE/true/True` → 强制开；`0/f/F/FALSE/false/False` → 强制关；
+- 没设 → 跟硬件走（`KVM_CHECK_EXTENSION(502)` > 0 则开，否则关）；
+- 设了但解析不了（空串、`yes`、`on`、拼错）→ **不再算"关"**：忽略该值、同样跟硬件走，启动时打一条 WARN
+  写明这个值被忽略。旧代码是"`"true"` 开，其它一律关"，空串会把 950 上的增量静默关掉。
+
+**RPM 标准部署不传这个变量**：`e2b-deploy/dep/template-manager.hcl` 的 `env {}` 块里没有它，
+`e2b-deploy/dep/deploy.sh:131` 起的 `envsubst` 白名单里也没有，写进 `.env` 到不了 orchestrator。
+所以有 HDBSS 的机器（950）自动开；没有 HDBSS 的机器（920 系）标准部署下 checkpoint 是全量
+（功能正确、更慢），`acceptance/checkpoint_verify.py` 里「gB / gC 是增量」那条断言会失败；
+要增量得自己在 hcl 的 `env {}` 块里加一行字面量 `FC_TRACK_DIRTY_PAGES = "true"`
+（做法见 `single-node-offline-deploy.md` §4.1）。
 
 | 变量 | main（ext4） | xfs-reflink |
 |---|---|---|
 | `FC_TRACK_DIRTY_PAGES` | 不用配 —— 不设时探 KVM cap 502，950 上探得到就自动开 | 同左 |
-| `ORCHESTRATOR_BASE_PATH` | 不用配 —— 默认 `/orchestrator`，950 根盘就是 ext4 | **已写进仓库的 `template-manager.hcl`**：`"/mnt/xfsdev/orchestrator"` |
+| `ORCHESTRATOR_BASE_PATH` | 不用配 —— 默认 `/orchestrator`，950 根盘就是 ext4 | **已写进仓库的 `template-manager.hcl`**：`"/mnt/xfsdev/orchestrator"`（该分支已归档） |
 
-在**没有硬件标脏**的机器上（比如 920B）要测增量，得显式设
-`FC_TRACK_DIRTY_PAGES=true`，否则自动探测会判定为关。
+在**没有硬件标脏**的机器上（比如 920B）要测增量，得在 nomad job 的 `env {}` 块里显式设
+`FC_TRACK_DIRTY_PAGES = "true"`，否则自动探测会判定为关。
 
 两个配错都仍然**不让部署失败**（功能是对的、只是慢），但都不再无声：
 orchestrator 启动时会打一行 `checkpoint capabilities`，脏页跟踪关着报 **WARN**，
