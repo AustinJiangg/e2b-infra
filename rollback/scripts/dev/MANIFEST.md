@@ -169,7 +169,7 @@ spec 不用动的原因：`e2b-deploy.tar.gz` 本来就是 `Source9`，整个 `e
   （infra-arm 没有 vendor/，漏了这步 orchestrator 会编不过）
 
 未验证：
-- **完整 rpmbuild 没跑过**（`e2b-infra-2026.09.tar.gz` 在仓库里是 git-lfs 指针）
+- **完整 rpmbuild 只用重建的源码包跑过**（2026-09-22，920B）：`e2b-infra-2026.09.tar.gz` 在仓库里是 git-lfs 指针，LFS 原件（sha256 `59f05d43…5ea9`）在开发机上拿不到，验证用的是从原件解开的工作树重新打的等价包（去掉 `vendor/` 后与上游 2026.09 标签归档只差 `go.work.sum` 与被 Source1 覆盖的 busybox）。`%prep` 以 `--fuzz=0` 打 0001 无失败无偏移，`%build`、成包通过；拆包核对 `bin/firecracker` sha256 `18f3faa7…d4c9`、SDK 覆盖层 21 个文件与仓库逐字节相同。用 LFS 原件的 rpmbuild 由部署机（950）完成
 - 950 上的实际部署与运行
 
 ### 为什么 firecracker 也在仓库里换
@@ -180,34 +180,44 @@ spec 不用动的原因：`e2b-deploy.tar.gz` 本来就是 `Source9`，整个 `e
 
 ---
 
-## 四、部署必配的环境变量
+## 四、环境变量：按平台怎么配
 
-**950 上什么都不用配**（2026-08-25 起）。2026-09-21 起 `FC_TRACK_DIRTY_PAGES` 的读法改为
-`strconv.ParseBool`（`deltabox-dev@86e4d9610`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go`）：
+**目标平台 950 上什么都不用配。** orchestrator 启动时探测 KVM 的硬件脏状态跟踪能力
+（`KVM_CHECK_EXTENSION(502)` > 0，即 HDBSS），探到就自动打开脏页跟踪，增量 checkpoint 走硬件标脏。
+RPM 标准部署因此不传 `FC_TRACK_DIRTY_PAGES`：`e2b-deploy/dep/template-manager.hcl` 的 `env {}` 块里没有它，
+`e2b-deploy/dep/deploy.sh:131` 起的 `envsubst` 白名单里也没有——这是按目标平台定的默认。
 
+`FC_TRACK_DIRTY_PAGES` 用来覆盖探测结果，读法是 `strconv.ParseBool`
+（`deltabox-dev@4af2872c6`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`；
+该语义由 `86e4d9610` 引入）：
+
+- 没设 → 跟硬件走（探到能力号 502 则开，否则关）；
 - `1/t/T/TRUE/true/True` → 强制开；`0/f/F/FALSE/false/False` → 强制关；
-- 没设 → 跟硬件走（`KVM_CHECK_EXTENSION(502)` > 0 则开，否则关）；
-- 设了但解析不了（空串、`yes`、`on`、拼错）→ **不再算"关"**：忽略该值、同样跟硬件走，启动时打一条 WARN
-  写明这个值被忽略。旧代码是"`"true"` 开，其它一律关"，空串会把 950 上的增量静默关掉。
+- 设了但解析不了（空串、`yes`、`on`、拼错）→ 忽略该值、同"没设"一样跟硬件走，启动时打一条 WARN
+  写明这个值被忽略（`packages/orchestrator/main.go:765-770`）。`86e4d9610` 之前的代码是
+  "`"true"` 开，其它一律关"，空串会把 950 上的增量关掉。
 
-**RPM 标准部署不传这个变量**：`e2b-deploy/dep/template-manager.hcl` 的 `env {}` 块里没有它，
-`e2b-deploy/dep/deploy.sh:131` 起的 `envsubst` 白名单里也没有，写进 `.env` 到不了 orchestrator。
-所以有 HDBSS 的机器（950）自动开；没有 HDBSS 的机器（920 系）标准部署下 checkpoint 是全量
-（功能正确、更慢），`acceptance/checkpoint_verify.py` 里「gB / gC 是增量」那条断言会失败；
-要增量得自己在 hcl 的 `env {}` 块里加一行字面量 `FC_TRACK_DIRTY_PAGES = "true"`
-（做法见 `single-node-offline-deploy.md` §4.1）。
+三种情形：
+
+| 情形 | `FC_TRACK_DIRTY_PAGES` | 脏页跟踪 | checkpoint |
+|---|---|---|---|
+| 950（有 HDBSS，目标平台） | 不设 | 自动开，硬件标脏 | 增量 |
+| 没有 HDBSS 的机器，不设变量 | 不设 | 关（启动日志有 `dirty page tracking is off` 的 WARN） | 每次全量，功能正确 |
+| 我们的 920B 开发环境（无 HDBSS） | 显式 `true` | 开，退化为 KVM 写保护 | 增量 |
+
+950 没有外网，开发只能在 920B 上做；开发栈显式设 `true` 之后，920B 与 950 的差别基本只剩
+"增量靠什么实现"，其余路径相同。在其它无 HDBSS 的机器上做开发或预验证，同样是在 nomad job 的
+`env {}` 块里加一行字面量 `FC_TRACK_DIRTY_PAGES = "true"`（命令见 `single-node-offline-deploy.md` §4.1）。
+`acceptance/checkpoint_verify.py` 里「gB / gC 是增量」那条断言，在无 HDBSS 且未设该变量的机器上不成立，
+其余断言不受影响。
 
 | 变量 | main（ext4） | xfs-reflink |
 |---|---|---|
-| `FC_TRACK_DIRTY_PAGES` | 不用配 —— 不设时探 KVM cap 502，950 上探得到就自动开 | 同左 |
+| `FC_TRACK_DIRTY_PAGES` | 950 上不用配 —— 不设时探 KVM cap 502，探得到就自动开 | 同左 |
 | `ORCHESTRATOR_BASE_PATH` | 不用配 —— 默认 `/orchestrator`，950 根盘就是 ext4 | **已写进仓库的 `template-manager.hcl`**：`"/mnt/xfsdev/orchestrator"`（该分支已归档） |
 
-在**没有硬件标脏**的机器上（比如 920B）要测增量，得在 nomad job 的 `env {}` 块里显式设
-`FC_TRACK_DIRTY_PAGES = "true"`，否则自动探测会判定为关。
-
-两个配错都仍然**不让部署失败**（功能是对的、只是慢），但都不再无声：
-orchestrator 启动时会打一行 `checkpoint capabilities`，脏页跟踪关着报 **WARN**，
-XFS 套的 store 不支持 reflink 报 **ERROR** 并指明该怎么改。详解见
+orchestrator 启动时会打一行 `checkpoint capabilities`，写明脏页跟踪是开是关及原因；关着时另有一条 **WARN**。
+XFS 套的 store 不支持 reflink 报 **ERROR** 并指明该怎么改。两种情况都不让部署失败（功能是对的）。详解见
 `两个环境变量与已知坑.md`。
 
 HDBSS 的**用哪种方式标脏**仍然不需要任何开关，FC 运行时自己选；

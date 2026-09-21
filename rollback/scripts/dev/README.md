@@ -55,8 +55,10 @@ loop 的三项调优（direct-io / 预分配 / 4K 扇区）、`nodiscard` 那个
 **两套的 FC 与 orchestrator 必须配对**，混用会失败：ext4 套的 orchestrator 依赖
 `PUT /snapshot/save-dirty-bitmap`，只有 `fc-ext4` 有这个端点。
 
-两套共同必须：`FC_TRACK_DIRTY_PAGES=true`。漏配则每次 checkpoint 都退化成全量，
-测试照样"通过"但测的不是增量，是最容易漏掉的坑。
+脏页跟踪（决定 checkpoint 是增量还是全量）两套一样：950 上不用设任何变量，orchestrator 探到 HDBSS 自动开；
+没有 HDBSS 的机器不设变量时是关的，每次 checkpoint 为全量（功能正确）。我们的 920B 开发环境没有 HDBSS，
+开发栈显式设 `FC_TRACK_DIRTY_PAGES=true`（退化为 KVM 写保护，仍是增量）——在这类机器上测增量前先确认进程里有这个变量，
+否则测到的是全量。三种情形的对照见 `MANIFEST.md` 第四节。
 
 ## HDBSS
 
