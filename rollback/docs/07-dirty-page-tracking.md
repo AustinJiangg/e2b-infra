@@ -286,7 +286,7 @@ HDBSS 能真正生效，要同时满足：
 
 | 变量 | 作用 | 默认 |
 |---|---|---|
-| `FC_TRACK_DIRTY_PAGES` | 强制开 / 关，覆盖硬件探测 | 跟随探测 |
+| `FC_TRACK_DIRTY_PAGES` | 强制开 / 关，覆盖硬件探测；按 `strconv.ParseBool` 读，未设置或解析不了都跟随探测（[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量)） | 跟随探测 |
 | `FC_HDBSS_ORDER` | 每 vCPU 的 buffer 大小编码 | `1`（8 KiB） |
 | `FC_HDBSS_REQUIRED` | 要求必须启用 HDBSS，否则**启动即失败** | `false` |
 
@@ -334,7 +334,9 @@ pub enum DirtyTrackingBackend { Off, KvmWriteProtect, Hdbss }
 所以一台 950 上，能做增量 checkpoint 的沙箱**开箱就在做**，没人需要知道这件事；
 一台 920B 上，不打 checkpoint 的沙箱不用为别人的功能买单。
 
-要在 920B 上做 checkpoint，显式设 `FC_TRACK_DIRTY_PAGES=true`。
+在没有 HDBSS 的机器上不设变量，checkpoint 照样能做，只是每次都是全量；要得到增量，显式设
+`FC_TRACK_DIRTY_PAGES=true`（退化为 KVM 写保护）——我们的 920B 开发环境就是这么配的。
+三种情形的对照见[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量)。
 
 > **当前限制**：这个决策是**整个 orchestrator 一个值**（包级变量，启动时算一次），
 > 不是每沙箱一个。做成「按沙箱按需武装」需要在创建沙箱时就知道它会不会打 checkpoint，

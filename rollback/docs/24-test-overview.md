@@ -29,18 +29,18 @@
 
 ### 1.1 增量静默退化成全量
 
-`FC_TRACK_DIRTY_PAGES` 没配、或者机器上探不到硬件标脏又没有显式打开，
-每一次 checkpoint 就整份拷走 guest RAM。
+机器上探不到硬件标脏（无 HDBSS）、又没有显式设 `FC_TRACK_DIRTY_PAGES=true`，
+每一次 checkpoint 就整份拷走 guest RAM。950 上不会出现（自动探测到 HDBSS 就开）；
+我们的 920B 开发环境没有 HDBSS，靠显式设这个变量得到增量（[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量)），
+所以在 920B 上测增量时这是要先确认的一项。
 
 这条路径**功能是完全正确的**：全量捕获当然能精确地恢复到那一刻，内存标记、blob 的
 md5、根文件系统上的文件，一项都不会错。变的只有两件事 —— 一次 checkpoint 从几十毫秒
 变成一秒半，每一代产物从几十 MB 变成整份内存。
 
 普通测试抓不到，是因为它只看得见「回来的内容对不对」，看不见「用什么方式回来的」。
-`rollback/scripts/dev/README.md` 把这句话写在两套方案的共同前提里：
-
-> 两套共同必须：`FC_TRACK_DIRTY_PAGES=true`。漏配则每次 checkpoint 都退化成全量，
-> 测试照样"通过"但测的不是增量，是最容易漏掉的坑。
+`rollback/scripts/dev/README.md` 在两套方案的共同前提里写着同一件事：在无 HDBSS 的机器上测增量前，
+先确认 orchestrator 进程里有 `FC_TRACK_DIRTY_PAGES=true`，否则测到的是全量。
 
 要让它现形，只能加一条**报告「怎么做的」而不是「做对没有」**的通道 ——
 这就是 `memMode`（[第 17 篇 §2.1](17-observability-and-verification.md#21-memmode每次调用都回报)）。
