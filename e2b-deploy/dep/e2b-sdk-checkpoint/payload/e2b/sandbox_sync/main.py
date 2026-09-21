@@ -141,6 +141,7 @@ class Sandbox(SandboxApi):
             self.connection_config,
             self._transport.pool,
             self._transport,
+            self.sandbox_id,
         )
 
     def is_running(self, request_timeout: Optional[float] = None) -> bool:
@@ -882,8 +883,15 @@ class Sandbox(SandboxApi):
         sandbox_headers["E2b-Sandbox-Id"] = sandbox.sandbox_id
         sandbox_headers["E2b-Sandbox-Port"] = str(ConnectionConfig.envd_port)
 
+        traffic_access_token = sandbox.traffic_access_token
+
         connection_config = ConnectionConfig(
             extra_sandbox_headers=sandbox_headers,
+            # The checkpoint API on the host authenticates with this token.
+            # It is Unset for sandboxes that allow public access.
+            traffic_access_token=(
+                traffic_access_token if isinstance(traffic_access_token, str) else None
+            ),
             **opts,
         )
 
@@ -953,6 +961,11 @@ class Sandbox(SandboxApi):
 
         connection_config = ConnectionConfig(
             extra_sandbox_headers=extra_sandbox_headers,
+            # The checkpoint API on the host authenticates with this token.
+            # It is Unset/None for sandboxes that allow public access.
+            traffic_access_token=(
+                traffic_access_token if isinstance(traffic_access_token, str) else None
+            ),
             **opts,
         )
 

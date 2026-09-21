@@ -10,6 +10,25 @@ from e2b.api.metadata import package_version
 
 REQUEST_TIMEOUT: float = 60.0  # 60 seconds
 
+CHECKPOINT_REQUEST_TIMEOUT: float = 300.0  # 5 minutes
+"""
+Default timeout for creating and restoring a checkpoint.
+
+These two are not ordinary requests. The host pauses the VM, writes or reads a
+memory snapshot and then waits up to 45 seconds for envd inside the guest to
+answer again before it gives up and reports the failure - so the *error* path
+alone can take longer than the 60 second default used everywhere else, and a
+full snapshot of a large template can take longer still. A client timeout below
+that only abandons work the server keeps doing: it has no cancellation, and for
+a create it means the checkpoint is made but its ID never reaches the caller.
+Deleting a checkpoint touches no VM, but it takes the same per-sandbox
+lock as create and restore and so can queue behind one of them: the server
+waits up to its own ``CHECKPOINT_LOCK_WAIT_TIMEOUT`` (60 seconds by
+default) before answering busy, and a client sitting on the 60 second
+default would time out first instead of seeing that answer. Delete uses
+this timeout too. Listing takes no lock and keeps the 60 second default.
+"""
+
 KEEPALIVE_PING_INTERVAL_SEC = 50  # 50 seconds
 KEEPALIVE_PING_HEADER = "Keepalive-Ping-Interval"
 
@@ -97,6 +116,7 @@ class ConnectionConfig:
         headers: Optional[Dict[str, str]] = None,
         extra_sandbox_headers: Optional[Dict[str, str]] = None,
         proxy: Optional[ProxyTypes] = None,
+        traffic_access_token: Optional[str] = None,
     ):
         self.domain = domain or ConnectionConfig._domain()
         self.debug = debug or ConnectionConfig._debug()
@@ -105,6 +125,7 @@ class ConnectionConfig:
         self.headers = headers or {}
         self.headers["User-Agent"] = f"e2b-python-sdk/{package_version}"
         self.__extra_sandbox_headers = extra_sandbox_headers or {}
+        self.__traffic_access_token = traffic_access_token
 
         self.proxy = proxy
         self.verify_ssl: Union[str, bool, ssl.SSLContext] = True
@@ -147,6 +168,18 @@ class ConnectionConfig:
 
     def get_request_timeout(self, request_timeout: Optional[float] = None):
         return self._get_request_timeout(self.request_timeout, request_timeout)
+
+    def get_checkpoint_request_timeout(self, request_timeout: Optional[float] = None):
+        """
+        Timeout for the checkpoint operations that take the sandbox's
+        checkpoint lock.
+
+        A per-call ``request_timeout`` still wins; what this deliberately does
+        not inherit is the connection-wide default, which is tuned for envd
+        requests and is below what the host needs to even report a checkpoint
+        failure. See :data:`CHECKPOINT_REQUEST_TIMEOUT`.
+        """
+        return self._get_request_timeout(CHECKPOINT_REQUEST_TIMEOUT, request_timeout)
 
     def get_sandbox_url(self, sandbox_id: str, sandbox_domain: str) -> str:
         if self._sandbox_url:
@@ -224,14 +257,21 @@ class ConnectionConfig:
 
     @property
     def checkpointd_headers(self):
-        # No Authorization header: the checkpoint API is served on the host and
-        # authenticates with the sandbox's traffic access token, which the
-        # shared headers already carry.
-        return {
+        # No Authorization header: the checkpoint API is served by the
+        # orchestrator on the host, and it authenticates the caller with the
+        # sandbox's own traffic access token. That token is *not* part of the
+        # shared headers, so it has to be added here. Sandboxes that allow
+        # public access have no such token and the server lets them through.
+        headers = {
             **self.headers,
             **self.__extra_sandbox_headers,
             "E2b-Sandbox-Port": str(self.checkpointd_port),
         }
+
+        if self.__traffic_access_token is not None:
+            headers["e2b-traffic-access-token"] = self.__traffic_access_token
+
+        return headers
 
 
 Username = str
