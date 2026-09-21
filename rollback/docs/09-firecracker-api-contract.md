@@ -118,16 +118,22 @@ let written_bitmap = match snapshot_type {
 
 ### 2.4 落地的持久性
 
-位图文件在快照被宣告完成**之前** `sync_all()`：
+位图侧车写在它所描述的内存文件**之后**，两者都只 `flush()`、**不 `sync_all()`**：
 
 ```rust
-bitmap_file.write_all(&data)?;
-bitmap_file.sync_all()?;      // ← 与内存文件同等待遇
+file.flush()?;                     // 内存文件：交给内核即可，不等磁盘
+...
+bitmap_file.write_all(&data)?;     // 侧车：同样不 sync
 ```
 
-理由与内存文件一样：一个「快照说成功了、但侧车没落地」的状态，
-会让这一代变成一个不可用的条目（[第 8 篇 §4.7](08-memory-diff-tree.md#47-缺侧车即报错)），
-而那一代的脏页已经没有第二份记录了。
+读这两个文件的只有同一台宿主上的 orchestrator，走的是同一份 page cache，写返回即可见；
+而 checkpoint 本来就不承诺活过 orchestrator 进程
+（[第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性)），`fsync` 买不到东西，
+却要在暂停窗口里付 ext4 日志提交的串行等待。
+
+snapfile 分两种情况，由 `persist.rs` 的 `snapfile_must_be_durable` 判定：
+请求带 `mem_file_path`（checkpoint 路径）→ 不 sync；不带（e2b 原生 pause，snapfile 要进持久化存储）→
+保留上游的 `sync_all()`。
 
 ---
 
@@ -177,7 +183,7 @@ httpClient := &http.Client{
         DialContext: /* unix socket */,
         DisableKeepAlives: true,
     },
-    Timeout: 2 * time.Minute,
+    Timeout: 0,   // 时限由调用方的 context 给（CHECKPOINT_FC_CALL_TIMEOUT）
 }
 defer httpClient.CloseIdleConnections()
 ```
@@ -185,19 +191,26 @@ defer httpClient.CloseIdleConnections()
 | 细节 | 理由 |
 |---|---|
 | **禁用 keep-alive** | Firecracker 的 API server 有并发连接上限。这个 client 是每次调用新建的，池化连接会一直开到 transport 被 GC —— 回滚够多次就会用光上限，此后每次都 503 |
-| **2 分钟超时** | 内存写回正比于回滚集，大回滚会慢，但不会无限 |
+| **client 自己不设超时** | 时限由调用方的 context 统一给：`CHECKPOINT_FC_CALL_TIMEOUT`，默认 2 分钟（[第 15 篇 §9](15-state-and-concurrency.md#9-限额与超时四个服务端开关)）。transport 里再藏一个固定值，两者不一致时它会悄悄胜出。rollback 调用超时按撕裂处理 |
 | **404 → `RollbackUnsupportedError`** | 未打补丁的 Firecracker 把未知的 `/snapshot/*` 路由成 404。翻译成一个明确的错误，而不是让上层看到一个含糊的 HTTP 状态码 |
 
-还有一处响应体的模式匹配：
+「提交点之后失败」按**状态码加一个结构化字段**识别，不看错误文案：
+Firecracker 对提交点之后的失败应答 HTTP 500 且响应体带 `"fault": true`（虚机已标记 `Faulted`、拒绝 resume、只能替换），
+对提交点之前的失败应答 400（虚机可恢复）。
 
 ```go
-if bytes.Contains(resBody, []byte("Faulted")) || bytes.Contains(resBody, []byte("faulted")) {
-    return nil, RollbackFaultedError{Message: message}
+if parsed.Fault != nil {
+    if *parsed.Fault {
+        return RollbackFaultedError{Message: message}
+    }
+    return fmt.Errorf("rollback failed with status %d: %s", status, message)
 }
 ```
 
-用于识别「提交点之后失败」。**这是一个字符串匹配，不够严谨** ——
-更好的做法是在响应里加一个结构化的字段。改 Firecracker 那一侧时值得顺手做掉。
+判错的代价在两个方向上都很高 —— 把撕裂当成可恢复是静默损坏，把可恢复当成撕裂是白杀一个沙箱 ——
+所以不能依赖另一个组件随时可能改写的文案。对响应体里 `Faulted` 字样的字符串匹配仍在，
+但只作为对接**没有 `fault` 字段的旧 Firecracker 二进制**时的回退（`fc/rollback.go` — `classifyRollbackFailure`）。
+三个扩展端点的请求、响应与错误体已写进 `firecracker/src/firecracker/swagger/firecracker.yaml`。
 
 ---
 

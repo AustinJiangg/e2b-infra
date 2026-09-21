@@ -6,7 +6,7 @@
 > **读者**：工程师。
 > **预备**：[第 21 篇 · 原生 snapshot 的增量为什么不精确](21-native-increment-diagnosis.md)；
 > [第 8 篇 · 内存差分树](08-memory-diff-tree.md)、[第 9 篇 · 分叉 Firecracker 的接口契约](09-firecracker-api-contract.md)。
-> **代码**：infra-arm `jll` 提交 `c9a92a5ab`（14 个文件，Firecracker 零改动）：
+> **代码**：`KASandbox_0904` 提交 `c42d23e73`（14 个文件，Firecracker 零改动；下列 `internal/` 开头的路径在 `packages/orchestrator/` 下）：
 > `internal/sandbox/uffd/uffd.go`、`internal/sandbox/fc/memory.go`、
 > `internal/sandbox/block/page.go`、`internal/sandbox/build/build.go`、
 > `internal/sandbox/uffd/userfaultfd/userfaultfd.go`、`packages/shared/pkg/storage/header/metadata.go`
@@ -150,6 +150,19 @@ flowchart TD
   4 KiB 块下读 2 MiB 就会漏判；改成按首尾块循环，顺带不再每次分配 512 项切片。
 - `FullFetchChunker.fetchToCache` 只取起始 4 MiB chunk，读区间跨到下一个 chunk 时后半段是空的；
   改成取齐 `startingChunk..endingChunk`。
+
+还有一处是本修复与 checkpoint **叠加使用时的正确性前提**（自 `bc19b45dc` 起）：
+原生 pause 导出的内存差分是相对模板内存文件的，必须包含 guest **自启动以来**写过的每一页；
+而 Firecracker 的写跟踪位图在每次 checkpoint（`dump_dirty` 之后 `reset_dirty`）和每次 restore（回滚阶段 9）时都会被清零，
+restore 还会经一条 KVM 不记日志的映射把回滚集写进 guest 内存。只看位图的话，打过 checkpoint 的沙箱在原生 pause 时
+只会导出「上一次 checkpoint / restore 以来」的页，更早的页在 resume 后回到模板基线 ——
+guest 内存由两个时刻拼成，resume 后内核 panic（`BUG: Bad rss-counter state`），而 pause 本身报成功。
+现行做法是把 Firecracker 即将清掉的那几份位图（checkpoint 的侧车、restore 前导出的活跃脏图、物化的回滚集位图）
+并进一个每虚机的累积集合，pause 时一并导出（`internal/sandbox/checkpoint.go` — `accumulateDirtyBitmap`）；
+全量 checkpoint 的侧车是全 1、不能用，改为在拍之前先导出一次活跃脏图。
+任何一份并不进去（侧车缺失、几何对不上、无 `save-dirty-bitmap` 端点）时，整个集合标为不可信，
+pause 退回按驻留判据导出 —— 导多了只费时间，导少了毁掉沙箱。从不 checkpoint 的沙箱不受影响，导出内容与此前逐位相同。
+pause 日志会写明本次导出多少页、依据是哪一种（`tracked` / `tracked+accumulated` / `resident`）。
 
 ### 3.5 追踪没开时的门
 

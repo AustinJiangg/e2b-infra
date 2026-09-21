@@ -57,6 +57,13 @@ python /opt/e2b-infra/patch_e2b.py                         # 再改端点
 | `E2B_API_URL` | api job 的 REST 端口，如 `http://<server_ip>:3000`。**占位符没替换掉会报 `Name or service not known`** |
 | `E2B_HTTP_SSL` | `false` |
 
+**核对服务端配置。** 跑之前在 orchestrator 的启动日志里找到 `checkpoint capabilities` 这一行并留档：
+`track_dirty_pages` 应为 `true`（950 上 `track_dirty_pages_reason` 应指向 HDBSS），
+`lock_wait_timeout`、`fc_call_timeout`、`min_free_bytes`、`max_checkpoints_per_sandbox`
+四项的值与 `_source`（`env` / `default`）应与部署意图一致，`fault_inject` 应为空。
+字段含义见[第 17 篇 §2.2](17-observability-and-verification.md#22-启动时的能力上报)。
+产物盘可用空间低于 `min_free_bytes` 时，验收脚本的第一次 checkpoint 就会收到 507 `disk_full`。
+
 ---
 
 ## 2. 交付态：三条命令

@@ -74,12 +74,17 @@ if err != nil {
 
 ## 3. restore 的四档失败
 
-| 失败点 | 沙箱状态 | 返回 | 调用方该做什么 |
+| 失败点 | 沙箱状态 | 返回（HTTP / Connect code / `reason`） | 调用方该做什么 |
 |---|---|---|---|
-| 路径缺侧车 / 位图损坏 / 物化失败 | **原状态，继续可用** | `internal`，消息里明说「沙箱仍在当前状态运行」 | 换一个目标重试，或先打一个新 checkpoint |
-| Firecracker 提交点**之前**失败 | 同上，虚机原样恢复 | 同上 | 同上 |
-| Firecracker 提交点**之后**失败 | **撕裂**，标记 `Faulted`，拒绝一切后续操作 | `data_loss` | 只能重建沙箱 |
-| 回滚成功但 guest 的 envd 不应答 | 虚机在目标时刻，但 guest 内部卡住 | `internal` | 视情况；服务端留了带耗时的日志 |
+| checkpoint 树解析不了这次 restore：目标没有磁盘视图、祖先链上缺父条目、当前基准不在库里、丢过纪元（断链） | **原状态，继续可用** | 412 `failed_precondition` / `chain_broken` | **不要重试**（同样的请求只会得到同样的拒绝）；先打一个新 checkpoint 起新链 |
+| 提交点**之前**的其它失败：读磁盘视图、装配视图、物化回滚集、Firecracker 在提交点前报错 | 同上，虚机原样恢复；消息里明说「沙箱仍在当前状态运行」 | 500 `internal` / `internal` | 换一个目标重试，或先打一个新 checkpoint |
+| Firecracker 提交点**之后**失败，或 rollback 调用在 `CHECKPOINT_FC_CALL_TIMEOUT` 内没有应答 | **撕裂**，虚机标记 `Faulted`；此后该沙箱的 checkpoint 与 restore 一律被拒，`list` / `delete` 仍可用 | 500 `data_loss` / `torn` | 只能销毁重建沙箱 |
+| 回滚成功但 guest 的 envd 在 45 s 内不应答 | 宿主侧已完成，虚机在目标时刻；**不是撕裂**，卡住的是 guest 内部 | 500 `internal` / `guest_unresponsive` | 由调用方按业务决定：稍后重试命令，或销毁重建；服务端留了带耗时的日志 |
+
+「撕裂」的标记按**沙箱的一代**（`Sandbox.LifecycleID`，每个 Firecracker 进程一个）记，不按沙箱 ID：
+同一个 ID 经 e2b 原生 pause/resume 换了新进程之后从干净状态开始
+（`service.go` — `refuseIfTorn`）。全部 `reason` 与 SDK 异常类的对照见
+[§10](#10-错误契约)。
 
 前两档的关键在于**恢复虚机**：
 
@@ -105,9 +110,15 @@ resumeOnError := func(err error) error {
 const envdRestoreTimeout = 45 * time.Second
 ```
 
-SDK 的默认请求超时也是 60 秒。**两边预算相等时，客户端总是先放弃** ——
+注释里的 60 秒是 SDK 的**通用**请求超时（`REQUEST_TIMEOUT`）。**两边预算相等时，客户端总是先放弃** ——
 于是调用方看到的是一个干巴巴的 `ReadTimeout`，而真正的信息
 （「回滚成功了，是 guest 没醒过来」）永远到不了他手上。
+
+现行 SDK 又加了一层保险：`create` / `restore` / `delete` 三个调用不再沿用 60 秒，
+默认超时是 300 秒（`CHECKPOINT_REQUEST_TIMEOUT`），并且**不自动重放**。
+客户端超时并不会取消服务端正在做的 checkpoint 或 restore（服务端用 `context.WithoutCancel` 把操作与请求解耦），
+所以调用方自己把超时调小只会丢掉结果、不会省下工作 ——
+见[第 31 篇 §5.1](31-glossary-and-code-map.md#51-sdkpython)。
 
 健康的 restore 在 ~2 ms 内应答，所以 45 秒对 guest 完全不构成约束。
 **这个数字唯一决定的是：谁来报告这次失败。**
@@ -333,25 +344,68 @@ for cur := e; cur != nil && cur.Hidden && cur.ID != base.entryID && !hasChildLoc
 **14 条里有 9 条被破坏后是静默的。** 这就是为什么这套代码里到处是「宁可报错」的分支，
 以及为什么[第 17 篇](17-observability-and-verification.md)要花那么大篇幅讲怎么让退化可见。
 
+另有三处**保护性检查**，把原本静默或致命的情形变成一次明确的失败。它们不是新的不变量，
+而是上表 #2 / #3 与节点级隔离的执行手段，改相关代码时同样不能拿掉：
+
+| 检查 | 没有它的后果 | 位置 |
+|---|---|---|
+| 物化回滚集时，差分文件**短读即报错**（指出页号、文件、实际读到多少），不再补零 | 被截断的差分让若干页以全零写回 guest，无报错、无日志（同 #3） | `internal/checkpoint/store.go` — `writeRevertMem` 的 `copyExtent`（自 `1f3f48da2` 起） |
+| 稀疏缓存文件的 mmap 读写由 `guardMmapFault` 包住，缺页失败（如产物盘写满时的 `SIGBUS`）转成该次 I/O 的错误 | `SIGBUS` 对 Go 进程是致命信号：orchestrator 退出，节点上全部沙箱一起消失 | `internal/sandbox/block/cache.go`（自 `6f014db5c` 起）；提前拒绝见[第 15 篇 §9](15-state-and-concurrency.md#9-限额与超时四个服务端开关) |
+| 沙箱被 kill 时，`OnRemove` 先取该沙箱的操作锁再删文件；checkpoint / restore 取到锁后重新确认沙箱还在、还是同一代（`refuseIfGone`） | 删除与正在进行的 restore 抢同一批文件：提交点之后是撕裂，之前是凭空的 `ENOENT`；反方向则给已不存在的沙箱重建目录、永不回收 | `internal/checkpoint/service.go` — `OnRemove`、`refuseIfGone`（自 `b568e5f69` 起） |
+
 ---
 
-## 10. 错误如何到达调用方
+## 10. 错误契约
+
+checkpoint 的四个 RPC 失败时，响应体是一个 JSON：`code`（Connect 错误码）、`reason`、`message`。
+**`code` 只说这次调用怎么结束的，`reason` 才说调用方下一步该做什么** ——
+同一个 `internal` 下面有三种要求不同动作的失败。SDK 先按 `reason` 选异常类，
+服务端没给 `reason`（旧版本）才退回按 `code` 选，那时只能分到更粗的类。
+
+### 10.1 对照表
+
+| `reason` | HTTP / Connect code | SDK 异常类 | 此时沙箱的状态 | 调用方该做什么 |
+|---|---|---|---|---|
+| `torn` | 500 `data_loss` | `CheckpointTornException` | **撕裂**：restore 在提交点之后失败（或 rollback 调用超时），沙箱停在两个时刻之间。此后这一代沙箱的 checkpoint 与 restore 一律被拒，`list` / `delete` 仍可用 | 销毁并重建沙箱。不可重试，不可恢复 |
+| `chain_broken` | 412 `failed_precondition` | `CheckpointChainBrokenException` | 沙箱在原状态继续运行；是 checkpoint 树解析不了这次 restore（目标无磁盘视图、祖先缺失、丢过纪元） | **不要重试**。先打一个新 checkpoint（它会起一条新链），之后再 restore |
+| `rootfs_poisoned` | 500 `internal` | `CheckpointRootfsPoisonedException` | 沙箱继续运行；磁盘账本不可信，checkpoint 被拒（[§8](#8-账本污染)） | restore 到任意一个现有 checkpoint 即清除污染，之后 checkpoint 恢复可用 |
+| `guest_unresponsive` | 500 `internal` | `CheckpointGuestUnresponsiveException` | 回滚已完成，虚机在目标时刻；guest 内的 envd 没有在 45 s 内应答。**不是撕裂** | 由调用方按业务决定：稍后重试命令，或销毁重建 |
+| `busy` | 503 `unavailable`，带 `Retry-After: 1` | `CheckpointBusyException`（`.retry_after` = 秒数） | 无影响：同一沙箱上另一个 checkpoint 操作排队超过了 `CHECKPOINT_LOCK_WAIT_TIMEOUT`，本次调用什么都没做 | 可重试，按 `retry_after` 等一下再发 |
+| `disk_full` | 507 `resource_exhausted` | `CheckpointDiskFullException` | 无影响：检查发生在动任何东西之前，沙箱照常运行，已有 checkpoint 完好 | 这是**宿主**的问题：请运维腾出产物盘空间（删本沙箱的 checkpoint 通常不够）。腾出后可重试；紧循环重试只会重复同一个拒绝 |
+| `too_many_checkpoints` | 429 `resource_exhausted` | `CheckpointTooManyException` | 无影响：同上，未写入任何东西 | 调用方自己能解决：`list` → `delete` 不再需要的 → 再 checkpoint |
+| `sandbox_restored` | 409 `aborted` | `CheckpointInterruptedException` | 沙箱正常。这次调用（任何经代理进沙箱的 unary 调用，不限 checkpoint API）被**别人发起的 restore** 打断（[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)） | 重连后重试。调用在被打断前是否已在 guest 内生效无从得知 —— 但回滚反正已经把它抹掉了 |
+| `not_found` | 404 `not_found` | `NotFoundException` | 沙箱或 checkpoint 不存在；也包括排队期间沙箱被 kill 或经原生 pause/resume 换了一代 | 核对 ID；换代后旧 checkpoint 已不存在（[第 16 篇 §1.4](16-lifecycle-and-portability.md#14-原生-pause--resume-与-checkpoint-的代际边界)） |
+| `unauthenticated` | 401 `unauthenticated` | `AuthenticationException` | —— | 带上正确的 traffic access token |
+| `invalid_argument` | 400 `invalid_argument` | `InvalidArgumentException` | —— | 修正请求 |
+| `internal` | 500 `internal` | `CheckpointException`（基类） | 沙箱在原状态继续运行（消息里会明说）；服务端没有更具体的建议 | 可换目标或稍后重试；持续出现找运维看 orchestrator 日志 |
+
+补充三点：
+
+- **九个异常类**：基类 `CheckpointException`（继承 `SandboxException`）加上表里八个子类，
+  都带 `.reason`、`.checkpoint_id`、`.sandbox_id` 三个属性；定义在 `py-sdk/e2b/exceptions.py`，
+  映射在 `py-sdk/e2b/sandbox/checkpoint/errors.py` 的 `_CHECKPOINT_REASON_MAP`。
+  `except CheckpointException` 能接住全部 checkpoint 专属失败；
+  `not_found` / `unauthenticated` / `invalid_argument` 沿用 SDK 既有异常，不在这棵继承树下。
+- **507 与 429 共用 `resource_exhausted`**：两者都在动手之前拒绝、沙箱都安然无恙，
+  但一个要运维处理、一个调用方自己就能处理 —— 只有 `reason` 能把它们分开。
+  对接没有 `reason` 的旧服务端时 SDK 抛基类。
+- **两类拒绝会留服务端日志**：`disk_full` 与 `too_many_checkpoints` 各打一条 WARN
+  `refused a checkpoint operation`，带 `reason`、`operation` 与判定用的数字
+  （`free_bytes` / `min_free_bytes`，或 `checkpoints_held` / `max_checkpoints_per_sandbox`）。
+  限额本身怎么配见[第 15 篇 §9](15-state-and-concurrency.md#9-限额与超时四个服务端开关)。
+
+### 10.2 错误在各层的形态
 
 | 层 | 形态 |
 |---|---|
-| Firecracker | `RollbackError` 变体 + `faults_vm()` 分类 |
-| FC 客户端 | `RollbackUnsupportedError`（404）、`RollbackFaultedError`（响应体含 "Faulted"） |
+| Firecracker | `RollbackError` 变体 + `faults_vm()` 分类；提交点之后的失败应答 HTTP 500 且响应体带 `"fault": true`，之前的应答 400 |
+| FC 客户端 | `RollbackUnsupportedError`（404，或未打补丁的二进制对未知路径的 400）、`RollbackFaultedError`（按 `fault` 字段判定，[第 9 篇 §3.3](09-firecracker-api-contract.md#33-客户端侧的三个细节)） |
 | 沙箱层 | `RollbackTornError` —— 撕裂，只能重建 |
-| Service | Connect 错误码：`data_loss`（撕裂）/ `internal`（其余）/ `not_found` / `invalid_argument` / `unauthenticated` |
-| SDK | 抛异常 |
+| Service | HTTP 状态 + Connect 错误码 + `reason`（上表） |
+| SDK | 上表的异常类 |
 
-这张表只覆盖**这次调用自己失败**的情形。还有一种：调用没失败，是它所在的沙箱被
-**别的调用方** restore 了。unary 调用会被改判成 409 → `CheckpointInterruptedException`，
-流式调用则只能被截断成传输层错误 —— 见[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)。
-
-有一处**已知的不够严谨**：客户端靠字符串匹配识别 `Faulted`
-（[第 9 篇 §3.3](09-firecracker-api-contract.md#33-客户端侧的三个细节)）。
-改 Firecracker 那一侧时值得顺手在响应里加一个结构化字段。
+流式调用被 restore 打断时无法改判成 409，只能表现为传输层错误 ——
+见[第 15 篇 §8](15-state-and-concurrency.md#8-同沙箱多调用方流式调用会被-restore-截断)。
 
 ---
 

@@ -49,7 +49,7 @@ sequenceDiagram
 
     Note over S,D: ② 回到某个 checkpoint
     S->>O: restore(checkpointId)
-    O->>O: 鉴权 → 取锁 → 取条目 → 加载磁盘视图
+    O->>O: 鉴权 → 取锁 → 取条目 → 加载并装配磁盘视图 → 丢弃代理连接池
     rect rgb(234, 243, 255)
         Note over F: 冻结窗口开始
         O->>F: 暂停虚机
@@ -58,12 +58,12 @@ sequenceDiagram
         D-->>O: 沿目标祖先链逐页解析目标时刻内容
         O->>F: 原地写回：内存 → vCPU → 中断控制器 → 设备 → VMGenID
         O->>F: 挂载不动，整体切换磁盘视图
-        O->>O: 清理连接跟踪表（此刻不可能有流量重建它）
+        O->>O: 清理连接跟踪表（pause 后即启动、与回滚并行，此处 join）
         O->>F: 恢复虚机
         Note over F: 冻结窗口结束
     end
     O->>F: 等待 guest 内 envd 应答（上限 45 s）
-    O->>O: 基准 ← 本条目；磁盘账本 ← 本条目 header；丢弃代理连接池
+    O->>O: 基准 ← 本条目；磁盘账本 ← 本条目 header
     O-->>S: success
 ```
 
@@ -152,7 +152,7 @@ timings.Mark("seal", sealStart)
 | # | 步骤 | 说明 |
 |---|---|---|
 | 16 | `AppendLayer`：把新层折进合并 header，写 `rootfs.header` 与层 `.meta` | [第 10 篇 §4](10-disk-layering.md#4-恒等映射) |
-| 17 | `Commit`：临时文件 fsync + rename，manifest 翻成 `committed`，**基准 ← 本条目** | [第 15 篇](15-state-and-concurrency.md) |
+| 17 | `Commit`：临时文件 rename 到位（不 fsync），manifest 翻成 `committed`，**基准 ← 本条目** | [第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性) |
 | 18 | 写 `timings.json` | [第 17 篇](17-observability-and-verification.md) |
 | 19 | 回 `{checkpointId, memMode}` | |
 
@@ -189,18 +189,20 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced bool) {
 | 7 | `Get(sandboxID, id)` —— 只返回 `committed` 且非隐藏的条目 | 半写完的快照永远不可能成为恢复目标 |
 | 8 | `DiskViewForEntry`：读各层 `.meta`，得到「层文件 + 它持有哪些块」的清单 | [第 10 篇 §6.2](10-disk-layering.md#62-恢复不走链) |
 | 9 | 打开沙箱的启动内存源（只有差分树根时才会真正读它） | [第 8 篇 §6.3](08-memory-diff-tree.md#63-全量根为什么是默认) |
+| 9a | `AssembleView`：在窗口**外**把目标的层栈映射好（层文件已封存、同沙箱操作已串行，此刻装配与暂停后装配等价）。失败是一次普通的失败 restore，沙箱没被碰过 | [第 10 篇 §7](10-disk-layering.md#7-resetview挂载不动整体换视图) |
+| 9b | `beginRestore`：打开 restore 窗口，`dropConnections` 丢弃代理侧连接池 | [第 12 篇 §4.5](12-rollback-pitfalls.md#45-代理侧的连接池) |
 
 ### 3.2 冻结窗口
 
 | # | 步骤 | 在哪讲过 | 量级 |
 |---|---|---|---|
-| 10 | **暂停虚机** | | 毫秒级 |
+| 10 | **暂停虚机**；随即在后台启动 `FlushConntrack`（与 11–15 并行） | [第 12 篇 §4.4](12-rollback-pitfalls.md#44-时机必须在暂停窗口内) | 毫秒级 |
 | 11 | `SaveDirtyBitmap` 导出活跃脏页 | [第 9 篇 §4](09-firecracker-api-contract.md#4-扩展三put-snapshotsave-dirty-bitmap) | O(内存/64) 位扫描 |
 | 12 | 算回滚集 = 树路径纪元并集 ∪ 活跃脏页 | [第 8 篇 §4](08-memory-diff-tree.md#4-回滚集) | 内存里的位运算 |
 | 13 | 物化 `revert_mem`（稀疏）+ `revert_bitmap` | [第 8 篇 §5](08-memory-diff-tree.md#5-物化交给-firecracker-的两个文件) | O(回滚集) |
 | 14 | `PUT /snapshot/rollback`：九个阶段 | [第 11 篇](11-in-place-rollback.md) | O(回滚集) |
-| 15 | `assembleView` + `ResetView`：整体换磁盘视图 | [第 10 篇 §7](10-disk-layering.md#7-resetview挂载不动整体换视图) | O(层数)，无数据搬运 |
-| 16 | `FlushConntrack`：命名空间整表 + 宿主按 slot IP 过滤删除 | [第 12 篇 §4](12-rollback-pitfalls.md#4-连接跟踪) | 毫秒级 |
+| 15 | `ResetView`：把第 9a 步装配好的视图整体换上 | [第 10 篇 §7](10-disk-layering.md#7-resetview挂载不动整体换视图) | 常数，无数据搬运 |
+| 16 | join 第 10 步启动的 `FlushConntrack`（命名空间整表 + 宿主按 slot IP 过滤删除） | [第 12 篇 §4](12-rollback-pitfalls.md#4-连接跟踪) | 通常接近零（清表已在回滚期间完成） |
 | 17 | **恢复虚机** | | 毫秒级 |
 
 ### 3.3 顺序约束二：暂停之后才导出、才物化
@@ -217,9 +219,11 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced bool) {
 
 ### 3.4 顺序约束三：清 conntrack 必须在恢复之前
 
-第 16 步必须在第 17 步之前，且必须在暂停窗口内：
+清表必须在第 17 步之前完成，且必须在暂停窗口内：
 
 > 此刻没有流量，不可能有人重建一条刚被作废的表项。
+
+它只要求「虚机已停」，不要求「回滚已完成」，所以从第 10 步起与回滚并行，第 16 步只是等它做完。
 
 放在恢复之后会有竞态：guest 已经在跑、可能已经发包，我们正在删的表项可能是它刚建立的。
 （[第 12 篇 §4.4](12-rollback-pitfalls.md#44-时机必须在暂停窗口内)）
@@ -228,11 +232,10 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced bool) {
 
 | # | 步骤 | 说明 |
 |---|---|---|
-| 18 | `WaitForEnvd`，上限 **45 s** | guest 醒来时墙钟停在快照时刻，envd 初始化把它校回；45 s 刻意低于 SDK 的 60 s 默认超时（[第 14 篇](14-failure-semantics.md)） |
+| 18 | `WaitForEnvd`，上限 **45 s** | guest 醒来时墙钟停在快照时刻，envd 初始化把它校回；45 s 刻意低于 SDK 的请求超时（通用 60 s；checkpoint / restore / delete 为 300 s），失败由服务端而不是客户端超时来报告（[第 14 篇](14-failure-semantics.md)） |
 | 19 | `SetBaseToEntry(entry)` —— **基准 ← 目标条目**，树从这里长出新分支 | [第 8 篇 §3.2](08-memory-diff-tree.md#32-树是怎么长出来的) |
 | 20 | `SetRootfsToEntry(entry)` —— 磁盘账本重置为该条目的 header（顺带清除污染） | [第 10 篇 §8](10-disk-layering.md#8-账本与污染) |
-| 21 | `dropConnections(sbx.LifecycleID)` —— 丢弃代理侧连接池 | [第 12 篇 §4.5](12-rollback-pitfalls.md#45-代理侧的连接池) |
-| 22 | 写 `last-restore-timings.json`，回 `{success: true}` | |
+| 21 | 写 `last-restore-timings.json`，回 `{success: true}` | |
 
 第 19 步和 Firecracker 阶段 9（重置脏页基线）是**同一件事的两半**：
 账本把 `ParentID` 指向目标，Firecracker 把跟踪清零。两者同时做，
@@ -263,8 +266,8 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced bool) {
 | 算回滚集 | 内存里的位运算 |
 | 物化 | **O(回滚集)** 读 + 写 |
 | Firecracker 回滚 | **O(回滚集)** 写回 + 常数的设备状态恢复 |
-| 换磁盘视图 | O(层数) 次 `NewCache`，**无数据搬运** |
-| 清 conntrack | 两次 netlink 操作 |
+| 换磁盘视图 | 视图在窗口外装配（O(层数) 次 `NewCache`，**无数据搬运**），窗口内只做替换 |
+| 清 conntrack | 与回滚并行；窗口内只剩 join 的等待 |
 | resume | 常数 |
 
 唯一与虚机规格线性相关的是「导出活跃脏图」的位扫描 ——

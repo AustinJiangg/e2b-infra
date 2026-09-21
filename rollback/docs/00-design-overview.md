@@ -412,7 +412,9 @@ restore 侧有个对称的次序约束：**暂停之后**才导出活跃脏页�
 - **连接跟踪**：恢复后的 guest 忘记了内核仍在跟踪的连接，且 TCP 序号已经倒退。
   残留表项会让内核判定 guest 的包非法而丢弃 —— 表现为**连接挂死而不是失败**，最难排查。
   因此在暂停窗口内清空宿主与沙箱命名空间两侧的连接跟踪表：此刻没有流量，
-  不可能有人重建一条刚被作废的表项。同时丢弃代理侧到该沙箱的连接池。
+  不可能有人重建一条刚被作废的表项。代理侧到该沙箱的连接池在 restore 一开始就丢弃。
+  **对使用方**：restore 会作废该沙箱全部跨越回滚的 TCP 连接，客户端须重连；同节点其他沙箱不受影响
+  （[第 12 篇 §4.6](12-rollback-pitfalls.md#46-对使用方的结论)）。
 
 ### 5.4 失败语义分级
 
@@ -423,7 +425,7 @@ restore 侧有个对称的次序约束：**暂停之后**才导出活跃脏页�
 | 路径缺侧车 / 位图损坏 / 物化失败 | 回滚报错，**沙箱保持原状态继续可用** |
 | Firecracker 在提交点之前失败 | 同上，虚机原样恢复运行 |
 | Firecracker 在提交点之后失败 | 虚机介于两个时刻之间 = 已撕裂，标记为死并报错，只能重建沙箱 |
-| 回滚成功但 guest 的 envd 不应答 | 报错并在服务端留下带耗时的日志（等待上限 45 s，刻意低于 SDK 的 60 s 超时，否则客户端先放弃，真正的原因永远到不了调用方） |
+| 回滚成功但 guest 的 envd 不应答 | 报错并在服务端留下带耗时的日志（等待上限 45 s，刻意低于 SDK 的请求超时，否则客户端先放弃，真正的原因永远到不了调用方；应答带 `reason=guest_unresponsive`，见[第 14 篇 §10](14-failure-semantics.md#10-错误契约)） |
 
 创建侧还有一条纪律：**纪元不能丢**。Firecracker 一旦写完快照就清空了脏页位图，
 此后该 diff 文件是那一代脏页的唯一副本。若后续步骤失败，该条目以**隐藏条目**提交，
@@ -483,7 +485,7 @@ restore 侧有个对称的次序约束：**暂停之后**才导出活跃脏页�
 
 必须明确：**这是修复 ARM 适配引入的退化，不是超越 x86 原生。** 在 x86 上 e2b 的增量本来就是精确的。
 
-> **2026-09-11 起已修复**（infra-arm `jll` `c9a92a5ab`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
+> **2026-09-11 起已修复**（`KASandbox_0904` 提交 `c42d23e73`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
 
 
 同样地，[第 7 节](#7-与-e2b-原生的路径对比)提到的「与改动量无关的下限」也只在 ARM 适配版上成立 ——
@@ -644,12 +646,11 @@ p50 196 ms 只剩 3.8 ms 余量，并列的 p99
 
 ## 附录 A：代码位置
 
-**上游**：openEuler KASandbox 的 [`deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入），
-orchestrator、Firecracker、Python SDK 同仓 —— 下表 orchestrator 的路径以 `packages/orchestrator/` 起，
-Firecracker 的路径以 `firecracker/` 起。**开发分支**：`infra-arm@jll`（orchestrator）、`KASandbox@jll`（Firecracker）；
-XFS 方案（`jll-xfs`）未合入上游。**交付形态**是 `e2b-infra` 仓库的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`。
-**单元测试只在 `infra-arm`**：不进 patch（rpmbuild 的 `%build` 只做 `go build`），也未随 MR 合入上游。
-三处的关系见[第 30 篇 §1.1](30-extending.md#11-三个地方)。
+**代码仓库**：openEuler 交付仓库 `KASandbox_0904`，交付分支 `deltabox`；orchestrator、Firecracker、Python SDK 同仓 ——
+下表 orchestrator 的路径以 `packages/orchestrator/` 起，Firecracker 的路径以 `firecracker/` 起，SDK 在 `py-sdk/`。
+**单元测试**与被测代码同目录（Go 的 `*_test.go`、Rust 的 `#[cfg(test)]`、`py-sdk/tests/`）；rpm 构建的 `%build` 只做 `go build`，不运行它们。
+XFS 方案（[第 18 篇](18-ext4-vs-xfs.md)）已归档，不在该仓库、不在交付范围。
+详见[第 30 篇 §1.1](30-extending.md#11-代码仓库)。
 
 | 关注点 | 位置 |
 |---|---|

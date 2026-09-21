@@ -133,9 +133,12 @@ checkpointDuration.Record(ctx, time.Since(start).Milliseconds(), set)
 ```go
 // packages/orchestrator/main.go:750 reportCheckpointCapabilities（deltabox-dev 4af2872c6，节选）
 capabilities := checkpoint.DescribeCapabilities(storeDir)
-fields := capabilities.Fields()      // store、track_dirty_pages、track_dirty_pages_reason 与各项界限的生效值
+fields := capabilities.Fields()      // 字段见下表
 
 logger.L().Info(ctx, "checkpoint capabilities", fields...)
+
+logger.L().Info(ctx, "proxy trace",
+    zap.String("env", pool.TraceEnv), zap.Bool("enabled", pool.TraceEnabled()))
 
 if value, ignored := fc.TrackDirtyPagesIgnoredValue(); ignored {
     logger.L().Warn(ctx, fmt.Sprintf(
@@ -149,6 +152,24 @@ if !capabilities.TrackDirtyPages {
         "Set FC_TRACK_DIRTY_PAGES=true (or 1) to force it on.", fields...)
 }
 ```
+
+`checkpoint capabilities` 这一行的字段（`internal/checkpoint/capabilities.go` — `Capabilities.Fields`）：
+
+| 字段 | 含义 |
+|---|---|
+| `store` | checkpoint store 的根目录 |
+| `track_dirty_pages`、`track_dirty_pages_reason` | 脏页跟踪的结论与原因（见下） |
+| `lock_wait_timeout`、`lock_wait_timeout_source` | 同沙箱操作锁的排队上限（`CHECKPOINT_LOCK_WAIT_TIMEOUT`） |
+| `fc_call_timeout`、`fc_call_timeout_source` | 单次 Firecracker API 调用的时限（`CHECKPOINT_FC_CALL_TIMEOUT`） |
+| `min_free_bytes`、`min_free_bytes_source` | 产物盘余量门槛（`CHECKPOINT_MIN_FREE_BYTES`）。这里报的是**下限** 4 GiB；guest 内存超过 2 GiB 的沙箱实际按 2 × guest 内存执行 |
+| `max_checkpoints_per_sandbox`、`max_checkpoints_per_sandbox_source` | 单沙箱 checkpoint 数上限（`CHECKPOINT_MAX_PER_SANDBOX`），`0` = 不限 |
+| `fault_inject` | 已武装的故障注入点；生产节点上应为空（[第 30 篇 §5.1](30-extending.md#51-测试)） |
+
+每个 `_source` 取 `env` 或 `default`：只打印数值回答不了运维真正要问的问题 ——
+看到 `60s` 分不清是环境变量根本没被读到，还是恰好写了默认值；单位文件里的拼写错误看起来和默认值一模一样。
+这些值与运行时用的是同一组函数读出来的，不会出现「日志说一个值、实际按另一个值跑」。
+四个开关的含义见[第 15 篇 §9](15-state-and-concurrency.md#9-限额与超时四个服务端开关)。
+紧随其后的 `proxy trace` 一行报 `PROXY_TRACE` 是否打开。
 
 两条 WARN 各管一件事：第一条只在 `FC_TRACK_DIRTY_PAGES` 设了、但按 `strconv.ParseBool` 解析不了时出现
 （`yes`、`on`、空串、拼错——这个值被忽略，节点按"未设置"跟硬件走）；第二条只在最终结论是"关"时出现。

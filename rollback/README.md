@@ -63,7 +63,7 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.2.3**（2026-09-22，江路路 j30059180）；每份产物的封面与侧栏都印着版本号，
+当前文档版本 **v0.2.4**（2026-09-22，江路路 j30059180）；每份产物的封面与侧栏都印着版本号，
 Release tag 与之一致，修订规则见 [`docs/README.md#版本`](docs/README.md#版本)。
 
 | 附件 | 大小 | 给谁 |
@@ -94,4 +94,4 @@ python3 tmp/build_docs_html.py e2b-infra/rollback/docs e2b-infra/rollback/diagra
 ## 不在这里的东西
 
 方案设计稿、原理调研、过程日志与一次性探针仍在 WSL 工作区 `e2b-repo/`，尚未同步到本仓库。
-`infra-arm` 与 `KASandbox` 的源码分支各自推到自己的 origin，不在这里重复存放。
+源码在 openEuler 交付仓库 `KASandbox_0904`（交付分支 `deltabox`），不在这里重复存放。

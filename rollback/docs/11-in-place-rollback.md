@@ -227,6 +227,16 @@ self.set_mpstate(state.mp_state)?;
 处于 Running 状态的 vCPU 会拒绝这个事件（`NotAllowed("save/restore unavailable while running")`），
 这是暂停前提的又一道保险。
 
+写寄存器的前后各多一步（`arch/aarch64/vcpu.rs` — `drain_pending_exit`、`verify_restored_core_regs`）：
+
+- **先排干挂起的 MMIO 退出。** arm64 KVM 对 MMIO 的完成是延迟的：用户态模拟完一次访问之后，
+  「把读到的值写进目的寄存器、PC + 4」要到**下一次 `KVM_RUN` 入口**才做，而这份挂起状态在 KVM 内部、不在快照里，
+  `KVM_ARM_VCPU_INIT` 也不清它。不排干，resume 后的第一次 `KVM_RUN` 会把旧时间线的回填套到刚写好的新寄存器上。
+  同一件事在**保存侧**也要做：pause 停车前先排干，checkpoint 拍到的才是自洽的 vCPU 状态（自 `6b3dbf44e`、`2deade706` 起）。
+- **写完读回核心寄存器比对**，不一致只计数与告警。三个计数
+  （排干次数、排干失败、读回不一致）随回滚应答带回 orchestrator，
+  记进 `last-restore-timings.json`（`fc_vcpu_mmio_drained_count`）与 restore 日志。
+
 ### 3.7 阶段 6：中断控制器
 
 ```rust
@@ -237,7 +247,15 @@ vmm.vm.restore_state(&mpidrs, &state.vm_state)?;
 aarch64 上是 GIC。它需要 `mpidrs`（各 vCPU 的 MPIDR 值），由阶段 5 用到的那份
 vCPU 状态构造出来 —— 所以这两步的顺序是被数据依赖固定的。
 
-恢复作用在**既有的 GIC 设备 fd** 上，不新建设备。
+恢复作用在**既有的 GIC 设备 fd** 上，不新建设备。这带来一个重建路线没有的问题：
+GIC 的 enable / pending / active 是「写 1 生效」的成对寄存器（`IS*` / `IC*`），KVM 的写接口只处理值里为 1 的位。
+新建的 GIC 全 0，写快照值就等于赋值；而活着的 GIC 上，**快照里为 0、当前为 1 的位会原样留下**。
+active 位残留尤其致命 —— 那条中断此后不再投递。所以回滚用 `restore_state_absolute`
+（`arch/aarch64/gic/gicv3/regs/mod.rs`）对这三对寄存器做**绝对写回**：先清后设，结果与快照逐位相等（自 `8bd222604` 起）。
+
+串口那根 SPI 另外单独清一次 active / pending（`clear_serial_gic_line`）。这一步是 **best-effort**：
+它走的分发器寄存器写路径取决于宿主内核是否支持，失败只告警、不让整次回滚失败 ——
+后果仅是串口可能在本次回滚后卡住，其它设备不受影响（自 `f61648bfc`、`f9d77d324` 起）。
 
 ### 3.8 阶段 7：设备状态
 
@@ -259,14 +277,22 @@ device.interrupt_status().store(virtio_state.interrupt_status, SeqCst);
 第 ② 步依赖阶段 4 已经完成：队列对象要从 guest 内存里读环的地址与索引，
 **内存必须已经是目标时刻的样子**，否则重建出来的队列描述的是一个不存在的时刻。
 
-串口的内部状态不在快照里，所以按普通恢复路径的做法重新初始化一次：
+串口的内部状态不在快照里，回滚后要补成与 guest 驱动的认知一致的硬件状态：
 
 ```rust
-vmm.emulate_serial_init()?;
+vmm.reset_serial_for_rollback()?;
 ```
 
-网络设备还有一步 `apply_net_rx_cache` —— 那是原地回滚特有的，
-放在[第 12 篇](12-rollback-pitfalls.md)讲。
+只像普通恢复路径那样覆盖写 `IER = 0x01` 不够：guest 内存可能回到「正在发送、THRI 已打开」的时刻，
+8250 驱动只在影子值的 THRI 位由 0 变 1 时才回写 IER，设备侧的 THRE 使能被抹掉之后发送完成中断永不再来，
+guest 往串口写会永久阻塞。所以复位时在 THR 为空的前提下把 THRI 打开，并清掉 IIR 里残留的标识。
+
+网络设备还有两步原地回滚特有的动作：`apply_net_rx_cache`（[第 12 篇 §1](12-rollback-pitfalls.md)），
+以及 `apply_net_tap_offload` —— 从活设备上读回刚写进去的 `acked_features`，据此重设 tap 的 offload 标志。
+两者不一致时（guest 在 checkpoint 之后重协商过特性）vnet header 长度对不上，帧会静默出错。
+与之配套，`validate_topology` 校验网卡的 `avail_features` 与快照一致。
+**限速器与 MMDS 网络栈不回滚**，保留活对象：限速器的令牌桶延续当前值；
+跨着一次在途 MMDS 请求回滚，guest 手里那条连接会超时（自 `3d45eec88` 起）。
 
 ### 3.9 阶段 8：VMGenID
 

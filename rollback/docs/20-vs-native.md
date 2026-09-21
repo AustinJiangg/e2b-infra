@@ -143,7 +143,7 @@ resumedSbx, err := s.sandboxFactory.ResumeSandbox(ctx, template, sbx.Config,
 
 **这个下限是 ARM 适配版特有的，x86 上不成立** —— 那里换入的是干净页，不计入增量。
 
-> **2026-09-11 起已修复**（infra-arm `jll` `c9a92a5ab`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
+> **2026-09-11 起已修复**（`KASandbox_0904` 提交 `c42d23e73`）：原生 pause 的判据换成 Firecracker 的写跟踪位图，差分按 4 KiB 存、按 2 MiB 页拼回。本段描述的是修复前的机制，仍是理解成本模型的依据；机理见[第 21 篇](21-native-increment-diagnosis.md)、改法见[第 22 篇](22-native-increment-fix.md)，修复后的口径与数据见[第 27 篇 §5.5](27-cross-implementation.md#55-原生快照口径修复后)、[第 28 篇 §3.3 表 3-J](28-results-and-compliance.md#表-3-j--native_snapshot_benchpy修复后920b-0914-native4k)。
 
 > 三套方案的脏页判据并排，以及这个下限在实测里长什么样（名义脏内存一路涨、
 > 原生导出的 memfile 几乎不动），见[第 27 篇 §5](27-cross-implementation.md#5-一个真实发现读也被算成脏)。
@@ -212,6 +212,12 @@ resumedSbx, err := s.sandboxFactory.ResumeSandbox(ctx, template, sbx.Config,
 这解决了「checkpoint 不能长期保存」这个限制
 （[第 16 篇](16-lifecycle-and-portability.md)）：**先用 checkpoint 精确定位到想要的时刻，
 再用 snapshot 把那个时刻固化下来。**
+
+checkpoint / restore 之后再做原生 pause，导出的内存差分是完整的：checkpoint 与 restore 让 Firecracker
+清掉的那部分写跟踪记录，由 orchestrator 累积并在 pause 时并回
+（[第 22 篇 §3.4](22-native-increment-fix.md#34-顺手修掉的两处)）。
+反方向不成立 —— 原生 pause / resume 之后是新一代沙箱，之前的 checkpoint 全部失效
+（[第 16 篇 §1.4](16-lifecycle-and-portability.md#14-原生-pause--resume-与-checkpoint-的代际边界)）。
 
 ### 5.3 一个 Agent 工作流
 

@@ -75,7 +75,7 @@ os.RemoveAll(filepath.Join(s.root, sandboxID))   // ← 整个目录，连同 la
 | 事件 | 结果 |
 |---|---|
 | 沙箱正常结束 / 被删除 | 该沙箱的全部 checkpoint 立即删除 |
-| orchestrator 重启 | 同上 —— 重启本来就会带走这台机器上的所有沙箱 |
+| orchestrator 重启 | 同上 —— 重启本来就会带走这台机器上的所有沙箱；上一个进程留在盘上的 checkpoint 文件由 `NewStore` 在启动时整目录清空（[第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性)） |
 | 宿主重启或宕机 | 同上 |
 | 沙箱迁移到别的节点 | checkpoint **不跟随**，留在原节点直至清理 |
 | 沙箱被原生 `pause` 再 `connect`（等同 resume） | pause 之前的 checkpoint **全部作废**：`list` 返回空，对旧 checkpoint id 的 restore 回 `not_found`。resume 之后的这一代**可以照常重新 checkpoint / restore**。详见 [§1.4](#14-原生-pause--resume-与-checkpoint-的代际边界) |
@@ -137,23 +137,26 @@ Firecracker 进程**（[第 4 篇 §5](04-e2b-native-snapshot.md)）。而本方
 
 ### 2.1 第一步：orchestrator 不认识它
 
-`NewStore` 启动时只做一件事 —— `MkdirAll` 建出根目录。三张表都是空的，
+`NewStore` 启动时**先把 store 根目录整个清空**、再 `MkdirAll` 建出来。三张表都是空的，
 **不扫描磁盘、不读取任何 manifest**：
 
 ```go
 func NewStore(root string) (*Store, error) {
+    if err := os.RemoveAll(root); err != nil { ... }      // ← 上一个进程留下的，没有任何东西再引用
     if err := os.MkdirAll(root, 0o755); err != nil { ... }
     return &Store{
         root:      root,
         bySandbox: make(map[string]map[string]*Entry),   // ← 空
         bases:     make(map[string]baseRef),             // ← 空
         rootfs:    make(map[string]*rootfsState),        // ← 空
-        opLocks:   make(map[string]*sync.Mutex),
+        ...
     }, nil
 }
 ```
 
-于是 `ListCheckpoints` 返回空，`Get` 找不到条目。**在 API 层面，这个 checkpoint 不存在。**
+所以拷过去的目录如果在 orchestrator 启动之前放好，启动时就被删掉了；启动之后再放进去，
+`ListCheckpoints` 返回空，`Get` 找不到条目。**在 API 层面，这个 checkpoint 不存在。**
+根目录是 store 独占的（`<产物根>/checkpoints`），没有别的东西往里写。
 
 这是刻意的。包注释写明：
 
@@ -261,7 +264,9 @@ for _, layer := range layers {
 | `<layer>.meta` | 该封存层持有哪些块偏移 |
 | `index.json` | 该沙箱的条目清单 |
 
-父指针在、模式在、层清单在 —— 理论上足以重建整棵树。**缺的是读取它的代码，不是数据。**
+父指针在、模式在、层清单在 —— 同一个进程存活期间，理论上足以重建整棵树。**缺的是读取它的代码。**
+要跨进程、跨崩溃则还缺一样：这些文件都不 `fsync`，启动时又整目录清空
+（[第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性)），落盘的完整性本身不在承诺之内。
 
 这是取舍而非疏忽：让账本能跨重启存活，就要处理一整类新问题 ——
 
@@ -310,7 +315,8 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 |---|---|---|
 | 内存全量镜像 | **已具备**。回滚数据的解析器稍加改造，即可物化出任意一代的完整内存 | 小 |
 | 磁盘完整镜像 | 层栈压平，把模板底座物化进产物 | 中；产物体积回到全量 |
-| 账本 | `NewStore` 增加一条从 `manifest.json` / `index.json` 扫描重建的路径 | 小；但引入陈旧条目回收与格式迁移问题 |
+| 账本 | `NewStore` 不再清空根目录，增加一条从 `manifest.json` / `index.json` 扫描重建的路径 | 小；但引入陈旧条目回收与格式迁移问题 |
+| 落盘 | 把产物与 manifest 的 `fsync` 按事务顺序（数据先于账本）加回来（[第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性)） | 并发 checkpoint 的延迟回升：ext4 日志提交是全文件系统的串行点 |
 | 恢复路径 | 一条 load-from-files：新起 Firecracker 进程 + 加载 snapfile + 挂载内存与磁盘 | 中 |
 
 ### 5.1 补齐之后得到的是什么

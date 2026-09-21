@@ -22,24 +22,28 @@
 
 ## 1. 代码在哪
 
-### 1.1 三个地方
+### 1.1 代码仓库
 
-代码在三个地方，角色不同：
+开发与交付在同一个仓库：
 
-| | 在哪 | 装着什么 | 什么时候去那里 |
+| | 在哪 | 装着什么 |
+|---|---|---|
+| **代码** | openEuler 交付仓库 `KASandbox_0904`，交付分支 `deltabox` | 三个组件同仓，见下表。首次合入是 openEuler KASandbox 的 [MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)「feat: host-side sandbox checkpoint/restore (ARM64, HDBSS)」（2026-09-09） |
+| **手册与验收** | `e2b-infra` 仓库的 `rollback/` | 本手册、验收脚本（`rollback/scripts/acceptance/`）、部署文档、rpm 打包件（§1.2） |
+
+| 组件 | 目录 | 单元测试在哪 | 怎么跑 |
 |---|---|---|---|
-| **上游** | openEuler KASandbox [`deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox) | orchestrator（`packages/orchestrator/`）、Firecracker（`firecracker/`）、Python SDK（`py-sdk/`）**同仓**；另有 `deploy/CHECKPOINT.md` 与一份 `deploy/checkpoint_verify.py` | 正式归宿。[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)「feat: host-side sandbox checkpoint/restore (ARM64, HDBSS)」2026-09-09 合入：6 个提交、74 个文件、6938 行 |
-| **开发仓库** | `infra-arm`（orchestrator）与 `KASandbox`（Firecracker）各两条分支 | ext4 方案在 `jll`，XFS 方案在 `jll-xfs`；**8 个 checkpoint 单测只在这里** | 跑单测、改 XFS 方案、追历史 |
-| **交付形态** | `e2b-infra` 仓库 | patch + 编译好的 Firecracker，见 §1.2 | 装机 |
+| orchestrator（Go） | `packages/orchestrator/` —— checkpoint 服务在 `internal/checkpoint/`，暂停窗口在 `internal/sandbox/checkpoint.go`，磁盘层在 `internal/sandbox/{block,rootfs}/`，FC 客户端在 `internal/sandbox/fc/`，conntrack 在 `internal/sandbox/network/` | 与被测代码同目录的 `*_test.go`（`internal/checkpoint/` 下 12 个；`internal/sandbox/` 下 `checkpoint_*_test.go`、`block/seal_test.go`、`fc/rollback_test.go`、`network/conntrack_*_test.go` 等） | `cd packages/orchestrator && go test ./internal/checkpoint/... ./internal/sandbox/...` |
+| Firecracker（Rust） | `firecracker/` —— 回滚主体在 `src/vmm/src/rollback.rs` | 各源文件内的 `#[cfg(test)]` 模块 | `cd firecracker && cargo test -p vmm --lib -- --test-threads=1` |
+| Python SDK | `py-sdk/` —— `e2b/sandbox_sync/checkpoint.py`、`e2b/sandbox_async/checkpoint.py`、`e2b/sandbox/checkpoint/errors.py` | `py-sdk/tests/test_checkpoint_errors.py` | `cd py-sdk && pytest tests/test_checkpoint_errors.py` |
 
-上游合入的是 **ext4 方案**（主线）；XFS 方案与那 8 个 `_test.go` 没有随 MR 进去
-（上游 `internal/checkpoint/` 下没有测试文件）。上游的文件路径与本书代码地图一致，只是多了
-`packages/orchestrator/` 和 `firecracker/` 两个前缀。
+本书代码地图（[第 31 篇 §2](31-glossary-and-code-map.md#2-代码地图)）里 orchestrator 的路径省略了
+`packages/orchestrator/` 前缀，Firecracker 的省略了 `firecracker/` 前缀。
 
-开发仓库里两个仓库的同名分支**必须配对使用**（[第 18 篇 §7](18-ext4-vs-xfs.md#7-版本配对)）。
-两条轨的差异见[第 18 篇](18-ext4-vs-xfs.md)。
+交付的是 **ext4 方案**（主线）。XFS 方案（[第 18 篇](18-ext4-vs-xfs.md)）已归档，代码不在该仓库，不在交付范围；
+第 18 篇保留作设计对照。
 
-上游基线是 `infra-arm` 的 `2026.09`，加上 `fbee6fcd1 patch: all patch for arm64`
+上游基线是 e2b infra 的 `2026.09`，加上 `fbee6fcd1 patch: all patch for arm64`
 这一次 ARM 适配。**本方案的所有改动都在那之上。**
 
 ### 1.2 交付形态
@@ -63,7 +67,7 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 **两个后果**：
 
-1. **单元测试不进交付物** —— `%build` 只做 `go build`。测试只在 `infra-arm` 仓库里跑；
+1. **rpm 构建不跑单元测试** —— `%build` 只做 `go build`。测试要在代码仓库里自己跑（§1.1）；
 2. **改动必须能表达成 patch** —— 新增文件可以，但要注意 patch 的可维护性。
 
 > 交付脚本 `e2b-deploy/dep/init-client.sh` 会把 `firecracker.arm` 拷进
@@ -170,7 +174,7 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 
 | 层 | 跑什么 | 在哪 | 判据讲解 |
 |---|---|---|---|
-| 单元测试 | `go test ./internal/checkpoint/...` | 开发机 | [15 §9](15-state-and-concurrency.md#9-单元测试守着哪些不变量) |
+| 单元测试 | `go test ./internal/checkpoint/...` | 开发机 | [15 §10](15-state-and-concurrency.md#10-单元测试守着哪些不变量) |
 | 正确性验收 | `rollback/scripts/acceptance/checkpoint_verify.py` | 目标机（950 / 920B） | [25 §2](25-functional-tests.md#2-checkpoint_verifypy一条直链上的-59-项) |
 | 性能基准 | `rollback/scripts/acceptance/checkpoint_bench.py` | 目标机 | [26 §3](26-performance-methodology.md#3-checkpoint_benchpy时机成本与直接量产物) |
 
@@ -222,6 +226,13 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 **并发操作同一沙箱**只依赖 `opLocks` 而没有针对性的竞态测试、
 **HDBSS 武装时序**（不变量 #13）只靠调用点位置保证而没有断言。
 
+**故障注入钩子**（只给开发者）：失败路径里最值得信任的恰恰是手工到不了的那几条，所以留了两个测试钩子。
+orchestrator 侧是 `CHECKPOINT_FAULT_INJECT`（`internal/checkpoint/faults.go`，逗号分隔的故障名
+`envd_timeout` / `torn_assemble` / `seal_move` / `commit_late`，可加 `:once`，启动时读一次）；
+Firecracker 侧是 `FC_ROLLBACK_FAULT_INJECT`，只在用 cargo feature `rollback-fault-inject` 构建的二进制里存在，
+**交付二进制不含**。生产部署不设这两个变量；是否有故障被武装，看启动能力行的 `fault_inject` 字段
+（[第 17 篇 §2.2](17-observability-and-verification.md#22-启动时的能力上报)）。
+
 **尚未跑到的实测**（950 上的分档基准、HDBSS 与软件写保护的收益对照、
 `FC_HDBSS_ORDER` 取 1 / 2 / 4 的调优、完整 `rpmbuild` 流程）连同上面三项，
 统一在[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖)维护**一份**清单 ——
@@ -232,9 +243,8 @@ Patch1:  0001-adapted-for-arm-architecture.patch
 | 方向 | 动机 | 难度 |
 |---|---|---|
 | **可导出的 checkpoint** | 层栈压平 + 模板底座物化，做成独立 export 接口（**不改 create 默认路径**） | 中 |
-| **账本跨重启加载** | 数据已经够了，缺读取代码；但会引入陈旧条目回收与格式迁移（[第 16 篇 §3.3](16-lifecycle-and-portability.md#33-账本不从磁盘加载)） | 中 |
+| **账本跨重启加载** | 缺读取代码，并且要先把 `fsync` 按事务顺序加回来、取消启动时清空 store 根（[第 15 篇 §5](15-state-and-concurrency.md#5-原子提交与持久性)）；还会引入陈旧条目回收与格式迁移（[第 16 篇 §3.3](16-lifecycle-and-portability.md#33-账本不从磁盘加载)） | 中 |
 | **按沙箱按需武装脏页跟踪** | 现在是整个 orchestrator 一个值；要按沙箱得在创建时知道它会不会打 checkpoint | 中 |
-| **结构化的 Faulted 标识** | 现在客户端靠字符串匹配识别（[第 9 篇 §3.3](09-firecracker-api-contract.md#33-客户端侧的三个细节)） | **低，建议顺手做** |
 | **层文件的全零块回收** | 恒等映射不剔除全零块（[第 10 篇 §4.1](10-disk-layering.md#41-不紧凑化带来的简化)） | 中 |
 | **`manifest.json` 的层列表改为引用父代** | 现在每个 checkpoint 把截止到自己的全部层完整记一遍，是持续连打劣化里那块 O(链深) 记账的来源（[第 28A 篇 §12](28a-historical-results.md#12-持续连打60-秒里慢-28-倍)） | 中 |
 | **跟上游合并** | 分叉小是有意的，但上游会动 | 持续 |
@@ -269,8 +279,8 @@ vCPU 只写寄存器、不做完整复位，直觉上更快。实测 p95 是 145
 
 ## 7. 小结
 
-1. 两个仓库、两条轨（`jll` / `jll-xfs`），**同名分支必须配对**。
-   交付形态是 patch + 二进制，**单元测试不进交付物**。
+1. 一个代码仓库（`KASandbox_0904`，交付分支 `deltabox`），三个组件同仓，单测与代码同目录；
+   orchestrator 与 Firecracker **必须取自同一版本、配对部署**（[第 18 篇 §7](18-ext4-vs-xfs.md#7-版本配对)）。rpm 构建不跑单元测试。
 2. 改动指引按任务组织；加设备时**必读**[第 12 篇 §8](12-rollback-pitfalls.md#8-检查表还有哪些地方可能有同类问题) 的检查表。
 3. 自查清单 8 条，第 8 条（不变量）最重要 —— **9 条不变量被破坏后是静默的**。
 4. 验证分三层；换完二进制**一定要验实际跑起来的是哪一版**。
