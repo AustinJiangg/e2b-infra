@@ -72,10 +72,11 @@ python /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 期望结尾（`payload` 文件齐 + 干净子进程自检通过）：
 
 ```
-payload 的 16 个文件都在位
-  自检通过（干净子进程）：Sandbox.checkpoint / CheckpointInfo.mem_mode / proto mem_mode / 六个方法 / 端口 49984 / 无死 Authorization 头
+payload 的 21 个文件都在位
+  自检通过（干净子进程）：Sandbox.checkpoint / CheckpointInfo.mem_mode / proto mem_mode / 六个方法 / 端口 49984 / 无死 Authorization 头 / 给了 token 才带头 / 异常族 9 个类 / Client(retries=) 且四个 RPC 不重放 / create·restore 默认超时 ≥ 300 s
 ```
 
+覆盖层一共 21 个文件：12 个新增、9 个覆盖上游既有文件（`install.py` 文件头注释与 `payload/` 目录实数一致）。
 看到 `CheckpointInfo.mem_mode` 才说明「增量有没有被静默降级成全量」这道判据是活的。
 
 ### 2.2 正确性验收
@@ -121,8 +122,9 @@ python checkpoint_bench.py
 
 判定行是 `每一跳都落到了目标代（代号标记校验通过）。`，退出码 `0`。两条会让它变成 `1`：
 
-- `⚠ 有增量档被服务端报成 full` —— 脏页跟踪没生效，这组数字不是增量，查
-  template-manager 的 `FC_TRACK_DIRTY_PAGES`；
+- `⚠ 有增量档被服务端报成 full` —— 脏页跟踪没开，这组数字不是增量。950 上应当自动开
+  （查启动日志的 `checkpoint capabilities` 一行）；无 HDBSS 的机器要显式给 template-manager 设
+  `FC_TRACK_DIRTY_PAGES=true`（[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量)）；
 - `✗ n 跳没落到目标代` —— 恢复没回到该回的那一代，属于正确性问题，先停下来。
 
 另外三件事要顺手确认：档位表里 `mem_mode` 一列全是 `incremental`；

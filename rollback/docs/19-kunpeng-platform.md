@@ -33,7 +33,7 @@
 
 > **「脏页跟踪关着 → 退化成全量拷贝」说的是第一层，跟 HDBSS 无关。**
 
-第一层关着时不报错、测试照样通过，但测的不是增量。这就是 `memMode` 字段存在的理由
+第一层关着时不报错、功能正确，但每次 checkpoint 都是全量；拿它测增量，测到的不是增量。这就是 `memMode` 字段存在的理由
 （[第 17 篇 §2.1](17-observability-and-verification.md#21-memmode每次调用都回报)）。
 
 ---
@@ -190,8 +190,9 @@ HDBSS **不会被快照继承** —— 从快照恢复时会创建新的 KVM VM 
 | 稳定性（200 次回滚 0 失败） | `FC_HDBSS_ORDER` 的调优 |
 | 成本模型的**形状**（增量随改动量增长） | 950 的**绝对**数字 |
 
-在 920B 上要跑 checkpoint，必须显式设 `FC_TRACK_DIRTY_PAGES=true`
-（不设时按硬件判定为关）。
+920B 是我们的开发环境（950 没有外网，开发只能在 920B 上做）。开发栈显式设 `FC_TRACK_DIRTY_PAGES=true`
+（不设时按硬件判定为关，checkpoint 为全量），增量走 KVM 写保护；这样它与 950 的差别基本只剩
+「增量靠什么实现」，见 [§6.3](#63-环境变量)。
 
 > 另有一项工具链差异值得记：**`perf` 只有 950 有**。
 > 「HDBSS 真的省掉了 VM-Exit」这条证据要靠 `kvm_exit` 计数，只能在 950 上做。
@@ -266,9 +267,37 @@ df -T /orchestrator/build
 
 ### 6.3 环境变量
 
+**`FC_TRACK_DIRTY_PAGES`：目标平台 950 上不用设。** orchestrator 启动时用 `KVM_CHECK_EXTENSION` 探能力号 502，
+探到 HDBSS 就自动打开脏页跟踪，增量 checkpoint 走硬件标脏；部署件（`e2b-deploy/dep/template-manager.hcl`）
+因此不传这个变量。它的读法（deltabox-dev `4af2872c6`，
+`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
+
+| 进程环境里的值 | 结果 |
+|---|---|
+| 未设置 | 跟硬件走：探到能力号 502 则开，否则关 |
+| `1` / `t` / `T` / `TRUE` / `true` / `True` | 强制开 |
+| `0` / `f` / `F` / `FALSE` / `false` / `False` | 强制关 |
+| 其它（空串、`yes`、`on`、拼错），即 `strconv.ParseBool` 解析不了 | 忽略该值，同「未设置」一样跟硬件走；启动时打一次 WARN（`packages/orchestrator/main.go:765-770`，文案见[第 17 篇 §2.2](17-observability-and-verification.md#22-启动时的能力上报)） |
+
+三种情形：
+
+| 情形 | `FC_TRACK_DIRTY_PAGES` | 脏页跟踪 | checkpoint | FC 自报的 `dirty_tracking` |
+|---|---|---|---|---|
+| **950**（有 HDBSS，本产品的目标平台） | 不设 | 自动开，硬件标脏 | 增量 | `hdbss` |
+| **没有 HDBSS 的机器**，不设变量 | 不设 | 关；启动日志有 `dirty page tracking is off` 的 WARN | 每次全量（`mem_mode="full"`），功能正确 | `off` |
+| **我们的 920B 开发环境**（无 HDBSS） | 显式 `true` | 开，退化为 KVM 写保护 | 增量 | `kvm-wp` |
+
+950 没有外网，开发只能在 920B 上做；开发栈显式设 `true` 之后，920B 与 950 的差别基本只剩
+「增量靠什么实现」（KVM 写保护 / 硬件标脏），其余路径相同。在其它无 HDBSS 的机器上做开发或预验证，
+做法相同：给 orchestrator 进程设 `FC_TRACK_DIRTY_PAGES=true`。验收脚本 `checkpoint_verify.py` 里「增量」那条断言，
+在无 HDBSS 且未设该变量的机器上不成立，其余断言不受影响。
+本手册第五部分的实测数据目前出自 920B 开发环境（`kvm-wp`），各表的条件标签里都标着；
+950 上的数据待功能开发完成后补充或替换（[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖) 第 1–7 条）。
+
+其余变量：
+
 | 变量 | 何时需要设 |
 |---|---|
-| `FC_TRACK_DIRTY_PAGES=true` | **无 HDBSS 的机器上要做 checkpoint 时**（如 920B）。有 HDBSS 时默认就是开的 |
 | `FC_HDBSS_REQUIRED=true` | **生产回滚部署** —— 宁可启动失败，也不要静默走软件路径 |
 | `FC_HDBSS_ORDER` | 写密集负载下调优，目前无实测依据，先别动 |
 | `CHECKPOINT_FULL_ROOT=false` | 沙箱多、链短、存储紧、对象存储近的部署（[第 8 篇 §6.3](08-memory-diff-tree.md#63-全量根为什么是默认)） |

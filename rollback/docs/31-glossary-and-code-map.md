@@ -193,7 +193,7 @@
 
 | 变量 | 归属 | 取值 | 默认 | 作用 |
 |---|---|---|---|---|
-| `FC_TRACK_DIRTY_PAGES` | orchestrator | `true` / 其它 | 跟随硬件探测 | 强制开 / 关脏页跟踪（**第一层**） |
+| `FC_TRACK_DIRTY_PAGES` | orchestrator | 按 Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关；未设置或解析不了 → 跟随硬件探测（解析不了时启动打一条 WARN） | 跟随硬件探测（有 HDBSS 开，无则关） | 强制开 / 关脏页跟踪（**第一层**）。950 上不用设；三种情形见[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量) |
 | `FC_HDBSS_ORDER` | Firecracker | `1`–`9` | `1`（8 KiB/vCPU） | HDBSS buffer 大小编码 |
 | `FC_HDBSS_REQUIRED` | Firecracker | `true` / `1` | `false` | 必须启用 HDBSS，否则启动失败 |
 | `CHECKPOINT_FULL_ROOT` | orchestrator | `""` / `true` / `1` = 开 | 开 | 树根是否全量捕获 |

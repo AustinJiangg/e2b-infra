@@ -131,24 +131,37 @@ checkpointDuration.Record(ctx, time.Since(start).Milliseconds(), set)
 一次性、开门见山地说清楚这台机器能做什么：
 
 ```go
-fields := []zap.Field{
-    zap.String("store", storeDir),
-    zap.Bool("track_dirty_pages", fc.TrackDirtyPagesEnabled()),
-    zap.String("track_dirty_pages_reason", fc.TrackDirtyPagesReason()),
-}
+// packages/orchestrator/main.go:750 reportCheckpointCapabilities（deltabox-dev 4af2872c6，节选）
+capabilities := checkpoint.DescribeCapabilities(storeDir)
+fields := capabilities.Fields()      // store、track_dirty_pages、track_dirty_pages_reason 与各项界限的生效值
+
 logger.L().Info(ctx, "checkpoint capabilities", fields...)
 
-if !fc.TrackDirtyPagesEnabled() {
+if value, ignored := fc.TrackDirtyPagesIgnoredValue(); ignored {
+    logger.L().Warn(ctx, fmt.Sprintf(
+        "FC_TRACK_DIRTY_PAGES=%q is not a boolean and was ignored; this node decided dirty page "+
+            "tracking as if it were unset. Accepted values are 1/t/T/TRUE/true/True and "+
+            "0/f/F/FALSE/false/False.", value), fields...)
+}
+
+if !capabilities.TrackDirtyPages {
     logger.L().Warn(ctx, "dirty page tracking is off: every checkpoint will copy all of guest memory. "+
-        "Set FC_TRACK_DIRTY_PAGES=true to force it on.", fields...)
+        "Set FC_TRACK_DIRTY_PAGES=true (or 1) to force it on.", fields...)
 }
 ```
 
+两条 WARN 各管一件事：第一条只在 `FC_TRACK_DIRTY_PAGES` 设了、但按 `strconv.ParseBool` 解析不了时出现
+（`yes`、`on`、空串、拼错——这个值被忽略，节点按"未设置"跟硬件走）；第二条只在最终结论是"关"时出现。
+
 注意 `track_dirty_pages_reason` —— 不只报结论，还报**为什么**：
 
-- `"hardware dirty state tracking present (KVM capability 502)"`
-- `"no hardware dirty state tracking; software tracking costs a VM exit per clean page"`
-- `"FC_TRACK_DIRTY_PAGES=\"true\""`
+- `"hardware dirty state tracking present (KVM capability 502)"` —— 未设置，探到 HDBSS，开（950）
+- `"no hardware dirty state tracking; software tracking costs a VM exit per clean page"` —— 未设置，无 HDBSS，关
+- `"FC_TRACK_DIRTY_PAGES=\"true\""` —— 显式设置，照办（我们的 920B 开发环境是这一条）
+- `"FC_TRACK_DIRTY_PAGES=\"yes\" is not a boolean and was ignored; …"` —— 解析不了，后半句接上面前两条之一
+
+变量的取值语义与「950 / 无 HDBSS 的机器 / 920B 开发环境」三种情形的对照，统一写在
+[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量)。
 
 XFS 方案还多探一项 reflink，没有时打 **Error** 级日志并给出修复建议
 （[第 18 篇](18-ext4-vs-xfs.md)）。
