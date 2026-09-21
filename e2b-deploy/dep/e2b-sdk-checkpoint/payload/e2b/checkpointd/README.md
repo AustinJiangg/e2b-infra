@@ -38,8 +38,10 @@ e2b/
 ```
 
 RPC 错误映射复用 `e2b.envd.rpc.handle_rpc_exception()`；
-认证复用沙箱自己的 traffic access token（已经在公共 header 里，
-**不需要**额外的 Authorization header）。
+认证用沙箱自己的 traffic access token：`ConnectionConfig` 从创建/连接沙箱的
+响应里拿到它，`checkpointd_headers` 单独加一个 `e2b-traffic-access-token` 头
+（它**不在**公共 header 里）。允许公开访问的沙箱没有这个 token，服务端直接放行。
+两种情况都**不需要**额外的 Authorization header。
 
 ## API
 

@@ -5,8 +5,8 @@
 做法是**整文件覆盖**，不是字符串替换。payload/ 下的目录结构就是 site-packages
 里的结构，装的时候原样铺过去。
 
-为什么不用打补丁的方式：这一版一共动 16 个文件，其中 11 个是全新文件，
-只有 5 个是改上游既有文件。对着上游源码做字符串替换，上游一改版就可能替换错地方
+为什么不用打补丁的方式：这一版一共动 21 个文件，其中 12 个是全新文件，
+只有 9 个是改上游既有文件。对着上游源码做字符串替换，上游一改版就可能替换错地方
 而且不报错。整文件覆盖是版本锁死的 —— 只对 e2b==2.20.0 有效，装之前先核版本，
 对不上就停，不会悄悄装出一个半吊子。
 
@@ -34,7 +34,19 @@ UPSTREAM_FILES = {
     "e2b/sandbox/main.py",
     "e2b/sandbox_sync/main.py",
     "e2b/sandbox_async/main.py",
+    # 异常族（CheckpointException 及其子类）加在上游的 exceptions.py 里
+    "e2b/exceptions.py",
+    # restore 打断在途调用时报 CheckpointInterruptedException，而不是"端口没开"
+    "e2b/envd/api.py",
+    "e2b/envd/rpc.py",
+    # 不在 e2b/ 下，是 site-packages 顶层的另一个包：Connect-RPC 传输层。
+    # checkpoint 的四个 RPC 一个都不能重放，关掉重试（retries=0）要改的就是这里；
+    # 错误体里的 reason、Retry-After 也是它读出来的。
+    "e2b_connect/client.py",
 }
+
+# 要清 __pycache__ 的包目录。漏一个就会加载到旧字节码，看起来像没装上。
+PACKAGE_DIRS = ("e2b", "e2b_connect")
 
 
 def die(msg):
@@ -86,12 +98,27 @@ STALE = "e2b/gsd"
 STALE_PARKED = "e2b/gsd.replaced-by-checkpointd"
 
 VERIFY_SRC = r"""
+import inspect
 import sys
 from e2b import Sandbox, CheckpointInfo
+from e2b import (
+    CheckpointException,
+    CheckpointTornException,
+    CheckpointChainBrokenException,
+    CheckpointRootfsPoisonedException,
+    CheckpointGuestUnresponsiveException,
+    CheckpointBusyException,
+    CheckpointInterruptedException,
+    CheckpointDiskFullException,
+    CheckpointTooManyException,
+    SandboxException,
+)
 from e2b.sandbox_sync.checkpoint import Checkpoint
 from e2b.sandbox_async.checkpoint import AsyncCheckpoint
-from e2b.checkpointd.checkpoint import checkpoint_pb2
-from e2b.connection_config import ConnectionConfig
+from e2b.checkpointd.checkpoint import checkpoint_connect, checkpoint_pb2
+from e2b.connection_config import CHECKPOINT_REQUEST_TIMEOUT, ConnectionConfig
+from e2b.sandbox.checkpoint.errors import _CHECKPOINT_REASON_MAP
+from e2b_connect.client import Client, ConnectException
 
 problems = []
 if not isinstance(getattr(Sandbox, "checkpoint", None), property):
@@ -109,6 +136,63 @@ if ConnectionConfig.checkpointd_port != 49984:
     problems.append("checkpointd_port 不是 49984")
 if "Authorization" in ConnectionConfig().checkpointd_headers:
     problems.append("checkpointd_headers 里还有 Authorization")
+
+# 关闭公开访问的沙箱，checkpoint 的入口要带这个头才过得了服务端的 authorize()；
+# 没给 token 就不该带
+if "e2b-traffic-access-token" in ConnectionConfig().checkpointd_headers:
+    problems.append("没给 traffic token 却带了 e2b-traffic-access-token 头")
+if ConnectionConfig(traffic_access_token="tok").checkpointd_headers.get(
+    "e2b-traffic-access-token"
+) != "tok":
+    problems.append("给了 traffic token，checkpointd_headers 却没带 e2b-traffic-access-token")
+
+# 异常族：八个子类都挂在 CheckpointException 下，服务端的八个 reason 各有归属
+subclasses = (
+    CheckpointTornException, CheckpointChainBrokenException,
+    CheckpointRootfsPoisonedException, CheckpointGuestUnresponsiveException,
+    CheckpointBusyException, CheckpointInterruptedException,
+    CheckpointDiskFullException, CheckpointTooManyException,
+)
+if not issubclass(CheckpointException, SandboxException):
+    problems.append("CheckpointException 不是 SandboxException 的子类")
+for c in subclasses:
+    if not issubclass(c, CheckpointException):
+        problems.append("%s 不是 CheckpointException 的子类" % c.__name__)
+if set(_CHECKPOINT_REASON_MAP.values()) != set(subclasses):
+    problems.append("reason 映射表和八个异常子类对不上：%s" % sorted(_CHECKPOINT_REASON_MAP))
+
+# 传输层：重试次数可配、错误体的 reason / Retry-After 读得出来（e2b_connect/client.py 铺上了）
+if "retries" not in inspect.signature(Client.__init__).parameters:
+    problems.append("e2b_connect.client.Client 没有 retries 参数（client.py 没铺上？）")
+elif Client(url="http://x", response_type=None, retries=0)._connection_retries != 0:
+    problems.append("e2b_connect.client.Client 的 retries 没接到 _connection_retries")
+for p in ("reason", "retry_after"):
+    if p not in inspect.signature(ConnectException.__init__).parameters:
+        problems.append("ConnectException 没有 %s 参数" % p)
+
+# checkpoint 的四个 RPC（create/restore/list/delete）一个都不重放
+for cls, name in ((Checkpoint, "Checkpoint"), (AsyncCheckpoint, "AsyncCheckpoint")):
+    if "retries=0" not in inspect.getsource(cls.__init__):
+        problems.append("%s 没有用 retries=0 构造 RPC 客户端" % name)
+if "retries" in inspect.signature(Client.__init__).parameters:
+    rpc = checkpoint_connect.CheckpointClient("http://x", json=True, retries=0)
+    for attr in ("_create_checkpoint", "_restore_checkpoint", "_list_checkpoints", "_delete_checkpoint"):
+        if getattr(getattr(rpc, attr, None), "_connection_retries", None) != 0:
+            problems.append("CheckpointClient.%s 没有把 retries=0 传到传输层" % attr)
+
+# create/restore（和 delete）的默认超时 300 秒：服务端出错路径自己就要等 envd 45 秒，
+# 连接级的 60 秒默认值不能套到它们头上
+if CHECKPOINT_REQUEST_TIMEOUT < 300:
+    problems.append("CHECKPOINT_REQUEST_TIMEOUT=%s，低于 300 秒" % CHECKPOINT_REQUEST_TIMEOUT)
+got = ConnectionConfig().get_checkpoint_request_timeout()
+if got is None or got < 300:
+    problems.append("get_checkpoint_request_timeout() 默认给出 %s，低于 300 秒" % got)
+if ConnectionConfig().get_checkpoint_request_timeout(7) != 7:
+    problems.append("get_checkpoint_request_timeout 不认单次调用传入的 request_timeout")
+for cls, name in ((Checkpoint, "Checkpoint"), (AsyncCheckpoint, "AsyncCheckpoint")):
+    for m in ("create", "restore"):
+        if "get_checkpoint_request_timeout" not in inspect.getsource(getattr(cls, m)):
+            problems.append("%s.%s 没有用 checkpoint 专用超时" % (name, m))
 print("\n".join(problems))
 sys.exit(1 if problems else 0)
 """
@@ -139,7 +223,9 @@ def verify(sp):
     if r.returncode != 0:
         die("装完自检不过：\n    " + (r.stdout.strip() or r.stderr.strip()).replace("\n", "\n    "))
     print("  自检通过（干净子进程）：Sandbox.checkpoint / CheckpointInfo.mem_mode / "
-          "proto mem_mode / 六个方法 / 端口 49984 / 无死 Authorization 头")
+          "proto mem_mode / 六个方法 / 端口 49984 / 无死 Authorization 头 / "
+          "给了 token 才带头 / 异常族 9 个类 / Client(retries=) 且四个 RPC 不重放 / "
+          "create·restore 默认超时 ≥ 300 s")
     return
 
 
@@ -173,7 +259,7 @@ def do_install(sp, force):
         shutil.copy2(src, dst)
         copied += 1
     print("  铺了 %d 个文件，其中 %d 个上游文件是首次备份成 .orig" % (copied, backed))
-    n = drop_pycache(os.path.join(sp, "e2b"))
+    n = sum(drop_pycache(os.path.join(sp, d)) for d in PACKAGE_DIRS)
     print("  清了 %d 个 __pycache__（不清会加载到旧字节码）" % n)
     verify(sp)
     print("✓ checkpoint/restore SDK 已装好")
@@ -204,7 +290,8 @@ def do_uninstall(sp):
     if os.path.isdir(parked):
         os.rename(parked, os.path.join(sp, STALE))
         print("  把 %s 挪回 %s" % (STALE_PARKED, STALE))
-    drop_pycache(os.path.join(sp, "e2b"))
+    for d in PACKAGE_DIRS:
+        drop_pycache(os.path.join(sp, d))
     print("✓ 还原了 %d 个上游文件，删了 %d 个新增文件" % (restored, removed))
 
 
