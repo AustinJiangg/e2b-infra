@@ -23,44 +23,47 @@ bash run.sh func                           # ≤ 40 分钟：功能与健壮性
 bash run.sh perf                           # ≤ 40 分钟：性能分档、长尾、并发
 ```
 
-三条都不需要参数：`.env` 默认取 `/opt/e2b-infra/.env`，解释器默认 `python3`（也就是
-`build.sh -i` 装过 `e2b==2.20.0` / `e2b_code_interpreter==2.4.1` / `python-dotenv`、
-并由 `dep/e2b-sdk-checkpoint/install.py` 覆盖过的那个系统 python），
-结果落在 `950/results/<时间戳>-<档>/`。
+三条都不需要参数，默认值就是对的：
+
+- **`.env`**：优先取仓库里的 `benchmark/.env`（由 `benchmark/sync-env.sh` 生成，带
+  `E2B_API_KEY` / `E2B_ACCESS_TOKEN`），找不到才退到 `/opt/e2b-infra/.env`。部署根的
+  `.env` 是**服务端**配置，里面通常**没有客户端凭据** —— 拿它跑会在开头看到
+  `!! E2B_API_KEY 没有值`，随后建沙箱失败。所以正常流程是先生成一份：
+  `cd ../../../benchmark && bash sync-env.sh`（它从 `/root/.e2b/config.json` 和
+  `/data/nomad/acl.token` 取值）。要用别处的凭据就 `--env-file` 指过去。
+- **解释器**：默认 `python3`，但**要用装了 SDK 覆盖层的那一个**。`build.sh -i` 在哪个
+  环境里跑，`e2b==2.20.0` / `e2b_code_interpreter==2.4.1` / `python-dotenv` 和
+  `dep/e2b-sdk-checkpoint/install.py` 的覆盖层就装在哪里。**venv 或 conda 都行**：
+  仓库内 venv 是 `e2b-infra/.venv/bin/python`（推荐，`build.sh -i` 在激活它的 shell
+  里跑，SDK 就装进去了），conda 环境就是那个环境的 python，用 `--python` 指过去。
+  系统 `python3` 里不一定有。
+- 结果落在 `950/results/<时间戳>-<档>/`。
 
 只要这三条的 `SUMMARY.md` 里 `FAIL 0`，这台机器的 checkpoint / restore 就是好的。
 `run.sh` 的退出码 = FAIL 项数，所以 CI 里直接 `bash run.sh smoke && bash run.sh func` 即可。
 
-### 跑之前要确认的四件事
+### 跑之前要确认的五件事
+
+以下命令都在本目录（`rollback/scripts/950/`）里跑。
 
 | 事 | 怎么确认 | 不满足会怎样 |
 |---|---|---|
-| 客户端凭据在 `/opt/e2b-infra/.env` 里 | `grep -c E2B_API_KEY /opt/e2b-infra/.env` 回 1 | `run.sh` 开头会打 `!! E2B_API_KEY 没有值`，随后建沙箱失败 |
-| 系统 python 装了带 checkpoint 覆盖层的 e2b | `python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check` | smoke 第 2 项就会 FAIL |
+| 客户端凭据拿得到 | `grep -c E2B_API_KEY ../../../benchmark/.env` 回 1（没有就 `cd ../../../benchmark && bash sync-env.sh` 生成） | `run.sh` 开头会打 `!! E2B_API_KEY 没有值`，随后建沙箱失败 |
+| 要用的解释器装了带 checkpoint 覆盖层的 e2b | `../../../.venv/bin/python /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`（用 conda 就把路径换成那个环境的 python），同一个解释器再用 `--python` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
 | 模板 `base` 已经建好 | `nomad job status` 里 template-manager 在跑，且建过一次模板 | 每个用例开头建沙箱就失败 |
+| 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 24 篇 §5.0 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第五部分对比**（规格是条件标签的一部分，见手册 24 篇 §5.0 与 §4.2） |
 | 在**宿主机上**跑，且是 root | `id -u` 回 0 | 读不到服务端分段计时与产物目录，T32 会判失败、性能表会缺列 |
 
-凭据不在 `/opt/e2b-infra/.env` 里的话，从 e2b CLI 登录留下的 `/root/.e2b/config.json`
-和部署 env 里的 `SERVER_IP` 生成一份，三条命令照抄即可：
+`benchmark/.env` 由 `benchmark/sync-env.sh` 生成：它从 `/root/.e2b/config.json`
+（`build.sh -s` 的 seed 步骤写的团队凭据）和 `/data/nomad/acl.token` 取值，
+`E2B_API_URL` 要指向本机 api 的 REST 端口：
 
 ```bash
-python3 - <<'PYEOF' > /root/e2b-test.env
-import json, os, re
-cfg = json.load(open("/root/.e2b/config.json"))
-ip = "127.0.0.1"
-for line in open("/opt/e2b-infra/.env"):
-    m = re.match(r'\s*(?:export\s+)?SERVER_IP=\"?([^\"\s]+)', line)
-    if m:
-        ip = m.group(1)
-print('E2B_API_KEY="%s"' % cfg["teamApiKey"])
-print('E2B_ACCESS_TOKEN="%s"' % cfg["accessToken"])
-print('E2B_DOMAIN="e2b.app"')
-print('E2B_API_URL="http://%s:3000"' % ip)
-print('E2B_HTTP_SSL="false"')
-PYEOF
-
-chmod 600 /root/e2b-test.env
-bash run.sh smoke --env-file /root/e2b-test.env
+cd ../../../benchmark
+bash sync-env.sh
+grep -E '^E2B_(API_KEY|ACCESS_TOKEN|API_URL)=' .env      # 三行都要有值
+cd ../rollback/scripts/950
+bash run.sh smoke --python ../../../.venv/bin/python      # conda 就换成那个环境的 python
 ```
 
 ---
@@ -291,10 +294,11 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 
 ```bash
 cd /home/j30059180/projects/e2b-repo/e2b-infra/rollback/scripts/950
-bash run.sh smoke \
-    --env-file /home/j30059180/projects/e2b-repo/e2b-infra/benchmark/.env \
-    --python /root/miniconda3/envs/jll-e2b/bin/python
+bash run.sh smoke --python /home/j30059180/projects/e2b-repo/e2b-infra/.venv/bin/python
 ```
+
+（`--env-file` 不用给：默认就取仓库里的 `benchmark/.env`。解释器换成 conda 环境的
+python 也一样，只要它装过 SDK 覆盖层。）
 
 ---
 

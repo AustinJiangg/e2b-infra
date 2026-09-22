@@ -10,9 +10,12 @@
 # .log、脚本自己的 .json 产物。任一项 FAIL 则退出码非 0（= FAIL 项数）。
 #
 # 常用可选参数（都有能直接用的默认值，不需要占位符）：
-#   --env-file F      客户端凭据的 dotenv；默认 $CRTEST_ENV_FILE，再默认 $DEPLOY/.env
+#   --env-file F      客户端凭据的 dotenv；默认 $CRTEST_ENV_FILE，再默认仓库里的
+#                     benchmark/.env（sync-env.sh 生成，带 E2B_API_KEY），最后才是 $DEPLOY/.env
 #   --deploy-dir D    RPM 部署根，默认 /opt/e2b-infra
-#   --python P        跑脚本的解释器，默认 $CRTEST_PY，再默认 python3
+#   --python P        跑脚本的解释器，默认 $CRTEST_PY，再默认 python3。要用装了 SDK
+#                     覆盖层的那一个（build.sh -i 装在哪就是哪）：仓库内 venv
+#                     e2b-infra/.venv/bin/python 或 conda 环境的 python 都行
 #   --results-dir D   结果根目录，默认 <本目录>/results
 #   --template T      模板 id，默认 base
 #   --sdk-install P   SDK 覆盖层 install.py 的路径，默认 $DEPLOY/dep/e2b-sdk-checkpoint/install.py
@@ -74,7 +77,16 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$TIER" ] || die "要给一个档：smoke / func / perf / long"
 
-[ -n "$ENV_FILE" ] || ENV_FILE="$DEPLOY/.env"
+# env 默认值：优先用仓库里的 benchmark/.env —— 它由 benchmark/sync-env.sh 生成，带
+# E2B_API_KEY / E2B_ACCESS_TOKEN；而 $DEPLOY/.env 是服务端配置，通常不含客户端凭据。
+REPO_ROOT=$(cd "$SCRIPTS/../.." && pwd)
+if [ -z "$ENV_FILE" ]; then
+	if [ -r "$REPO_ROOT/benchmark/.env" ]; then
+		ENV_FILE="$REPO_ROOT/benchmark/.env"
+	else
+		ENV_FILE="$DEPLOY/.env"
+	fi
+fi
 [ -n "$SDK_INSTALL" ] || SDK_INSTALL="$DEPLOY/dep/e2b-sdk-checkpoint/install.py"
 
 # ---------------------------------------------------------------- long：只打清单

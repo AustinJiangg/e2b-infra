@@ -40,7 +40,7 @@
 | 实际脏页后端 | `hdbss` | `kvm-wp`（软件写保护） |
 | 根盘文件系统 | **ext4**，988 G | **XFS**，3.0 T |
 | 产物落在哪 | 根盘 **真盘 ext4** | 视轮次：调优过的 **loop** 卷（ext4 / XFS），或根盘真盘 XFS |
-| 模板 | `base`（内存规格那一轮**没有记录**） | `base`，2 vCPU / 2048 MB |
+| 模板 | `base`（内存规格那一轮**没有记录**） | `base`，规格见[第 24 篇 §5.0](24-test-overview.md#50-测试环境与沙箱规格) |
 | 二进制 | Firecracker 1.12.1；orchestrator sha **未记录** | 见 §1.2 逐轮 |
 
 硬件与 HDBSS 三层证据的完整版在[第 19 篇 §4.1](19-kunpeng-platform.md#41-硬件与系统)与
@@ -382,7 +382,8 @@ restore 端到端 0.2 ~ 1.3 s，修复前后同一噪声带；restore 后 `touch
 
 **条件**（开跑前实测，逐项记在数据目录里）：920B · 脏页后端 `kvm-wp`（`FC_TRACK_DIRTY_PAGES=true`，
 **920B 无 HDBSS**）· 产物盘 ext4 on loop（`direct-io=1`、扇区 4096、noatime）· 模板 `base`
-**2 vCPU / 2 GiB** · 私有沙箱 · **单沙箱、串行**，每次只有一个 Firecracker 在跑 ·
+（[第 24 篇 §5.0](24-test-overview.md#50-测试环境与沙箱规格) 那一档规格）· 私有沙箱 ·
+**单沙箱、串行**，每次只有一个 Firecracker 在跑 ·
 机器安静（loadavg 1.5–3.2，期间没有别人的 e2b 负载）· `ip netns list` 计数 486、
 连续 60 s 采样不变（[第 19 篇 §7.5](19-kunpeng-platform.md#75-orchestrator-每次重启都会漏掉一整池网络槽位)）·
 orchestrator `orchestrator-dev-4af2872c6`、FC `18f3faa7f47c173a`。
@@ -619,7 +620,8 @@ checkpoint 变慢** —— 第 1 层略高（29.5 ms）是因为它紧跟基线�
 ### 5.1 920B · ext4 方案（判定主轮：920B-0921-tiers）
 
 **条件标签**：920B · `kvm-wp`（**每个干净页的第一次写都要陷出一次虚机，这笔开销全含在下面每一格里**）·
-ext4 on loop（direct-io）· 模板 `base` 2 vCPU / 2 GiB · **单沙箱串行、页缓存全热** ·
+ext4 on loop（direct-io）· 模板 `base`（规格见[第 24 篇 §5.0](24-test-overview.md#50-测试环境与沙箱规格)）·
+**单沙箱串行、页缓存全热** ·
 **2026-09-21** · `deltabox-dev@4af2872c6` · 1040 次迭代全 `mem_mode=incremental` · 校验不一致 0。
 口径与样本数见 [§4.1](#41-这一轮怎么测的)；达标线照抄客户那组**粗略指标**（**未限定改动量**）：
 **checkpoint ≤ 200 ms、restore ≤ 100 ms**。

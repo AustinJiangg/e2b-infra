@@ -345,6 +345,36 @@ XFS 方案没有按代的 `mem_diff`，那一格就空着；宿主机之外跑�
 
 ## 5. 环境与产物
 
+### 5.0 测试环境与沙箱规格
+
+**全书的测试用同一个模板，规格固定。** 第五部分各篇引用的每一个数字都是在这个规格下采得的；
+规格变了，数字要重采（[§4.2](#42-一个数字要带的条件标签)）。
+
+| 项 | 值 | 怎么核对 |
+|---|---|---|
+| 模板别名 | `base` | 两个交付态脚本与 `rollback/scripts/950/run.sh` 的默认模板（`run.sh --template` 可改） |
+| 基础镜像 | `harbor:443/e2b-orchestration/ubuntu:22.04-custom` | `benchmark/build_template.py` 里的 `FROM` |
+| vCPU | **2** | `GET /templates` 回的 `cpuCount` |
+| 内存 | **2048 MB**（2 GiB） | `GET /templates` 回的 `memoryMB` |
+| 磁盘 | 约 **940 MB** | `GET /templates` 回的 `diskSizeMB` |
+| 谁建的 | `benchmark/build_template.py` | 自 `aebf028` 起该脚本把 `cpu_count=2` / `memory_mb=2048` 写死，不再跟随服务端默认值 |
+
+在宿主机上核对（access token 取部署时写下的 SDK 凭据）：
+
+```bash
+AT=$(jq -r .accessToken /root/.e2b/config.json)
+curl -s -H "Authorization: Bearer $AT" http://127.0.0.1:3000/templates \
+  | jq -r '.[] | select(any(.aliases[]?; . == "base"))
+           | "cpuCount=\(.cpuCount) memoryMB=\(.memoryMB) diskSizeMB=\(.diskSizeMB) buildStatus=\(.buildStatus)"'
+```
+
+预期输出：`cpuCount=2 memoryMB=2048 diskSizeMB=940 buildStatus=ready`。
+
+**为什么内存规格要写进条件标签**：全量 checkpoint 的代价 ≈ 整份 guest RAM（这里是 2 GiB），
+而增量的代价只跟本代脏页量有关。分档基准里的档位（0 / 4 / 8 / … / 512 MB）量的是**改动量**，
+不是内存规格。换一个内存更大的模板，全量那一列会等比变大、增量各档基本不动 ——
+两组数字**并列可以，相减和并表都不行**（[§4.5](#45-不同条件的数不相减)）。
+
 ### 5.1 跑起来需要什么
 
 两个交付态脚本的依赖完全一样，写在各自 docstring 里：
