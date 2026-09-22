@@ -47,7 +47,7 @@ header 记哪块在哪代的哪个偏移）、**③ 填**（恢复时 uffd 缺�
 | 缺页次数 | ×512 | 不变 |
 | TLB | guest 失去 2 MiB 大页 | 不变 |
 | 每次缺页多付 | 无 | 最多 512 次映射查表 + 一次 2 MiB memcpy（仅跨代块） |
-| 定位 | 一天内可验的对照开关 | 交付形态 |
+| 定位 | 一天内可验的对照开关 | 落进代码的方案 |
 
 选 B。关键判断是**拼接能力已经存在**：`build.File.ReadAt` 本来就是一个循环 —— 对每个 4 KiB 偏移查
 `GetShiftedMapping`，从对应代读 `min(mappedLength, remaining)`，不限长度、可跨多代。

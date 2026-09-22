@@ -1,8 +1,8 @@
 # rollback —— checkpoint / restore 的文档、配图与验证工具箱
 
 沙箱活着时的高频快速回退。本目录是这套功能的**文档与验证材料**；
-实现代码在仓库根的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm` 里；
-上游归宿是 openEuler [KASandbox `deltabox`](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入）。
+实现代码交付在 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入）；
+本仓库根的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm` 只用于我们在 950 测试环境上的 rpm 部署。
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
@@ -63,7 +63,7 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.2.4**（2026-09-22，江路路 j30059180）；每份产物的封面与侧栏都印着版本号，
+当前文档版本 **v0.2.5**（2026-09-22，江路路 j30059180）；每份产物的封面与侧栏都印着版本号，
 Release tag 与之一致，修订规则见 [`docs/README.md#版本`](docs/README.md#版本)。
 
 | 附件 | 大小 | 给谁 |

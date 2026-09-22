@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.2.4** · 2026-09-22 · 江路路（j30059180）
+> **v0.2.5** · 2026-09-22 · 江路路（j30059180）
 >
 > 实现已合入 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09；orchestrator、Firecracker、Python SDK 同仓）
 
@@ -122,6 +122,7 @@
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v0.2.5 | 2026-09-22 | 交付形态口径统一：第 30 篇 §1.2 改写为「交付形态只有两样」——代码是 `KASandbox_0904` 的 `deltabox` 分支（`firecracker/` / `packages/` / `py-sdk/` 同仓，开发在 `deltabox-dev`，测试通过后合并），文档是本手册（单个 HTML）；目标平台 950（鲲鹏、HDBSS），920B 是开发环境。原「patch + `firecracker.arm` + rpm」一段降级为新增的 §1.2.1「我们在 950 测试环境上的部署方式（不是交付形态）」并压缩；第 05 篇硬约束 5、第 09 篇 §6、第 22 篇路线表、第 28 篇 §8 缺口 15、`rollback/README.md` 抬头的同类措辞一并改正 |
 | v0.2.4 | 2026-09-22 | 对照现行代码补齐使用方契约：第 14 篇 §10 改写为「错误契约」（`reason` → HTTP / Connect code → SDK 异常类 → 沙箱状态 → 调用方动作，12 行），§3 restore 四档失败按现行状态码改正（断链为 412 `chain_broken`、envd 未应答带 `guest_unresponsive`、撕裂后 `list` / `delete` 仍可用且按代标记），§9 补三处保护性检查；第 15 篇新增 §9「限额与超时：四个服务端开关」（`CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` / `CHECKPOINT_LOCK_WAIT_TIMEOUT` / `CHECKPOINT_FC_CALL_TIMEOUT` 与 507 / 429 / 503 行为、产物盘容量规划），原 §9 / §10 顺延为 §10 / §11；§5 改写为「原子提交与持久性」（承诺什么 / 不承诺什么：不 fsync、store 根启动即清空、checkpoint 不跨 orchestrator 重启），第 06 / 09 / 13 篇相应改正；第 31 篇 §4 环境变量总表加四行、`PROXY_TRACE` 取值改正，§5.1 加 SDK 默认超时（300 s）与不重放说明，§5.2 换成状态码对照表；第 17 篇 §2.2 列出能力行全部字段，第 29 篇 §1 加「核对服务端配置」；仓库表述统一为单仓库 `KASandbox_0904`（交付分支 `deltabox`），第 00 / 18 / 24 / 30 / 31 篇更新，第 30 篇 §1.1 改名「代码仓库」；第 12 篇 §4 按现行实现更新连接跟踪清理（与回滚并行、内核过滤、合并扫表、socket 常驻）、代理连接池在 restore 开始时丢弃，新增 §4.6「对使用方的结论」，第 13 篇 restore 步骤表同步（视图装配移到窗口外）；第 09 篇 §3.3 撕裂判定改为 `fault` 字段；第 11 篇 §3.6–3.8 补 vCPU 挂起 MMIO 排干、GIC 绝对写回、串口与 tap offload；第 22 篇 §3.4、第 20 篇 §5.2 补「checkpoint 之后原生 pause」的内存正确性前提 |
 | v0.2.3 | 2026-09-22 | 平台口径统一：目标平台是带 HDBSS 的 950（不设 `FC_TRACK_DIRTY_PAGES`，自动硬件标脏）；920B 是开发环境（显式 `FC_TRACK_DIRTY_PAGES=true`，KVM 写保护，仍是增量）。第 19 篇 §6.3 新增该变量的取值语义（`strconv.ParseBool`，`deltabox-dev@4af2872c6`）与「950 / 无 HDBSS 的机器 / 920B 开发环境」三种情形对照，第 07 / 17 / 24 / 29 / 31 篇引用过去；第 17 篇 §2.2 的启动日志代码与 WARN 文案按现行代码更新；第 29 篇 §2.1 覆盖层文件数 16 → 21、自检输出按现行 `install.py` 更新；第 28 篇 §8 第 18 条「空闲之后的 restore 长尾」写入 2026-09-21 的调查结果（原因未定位、950 待测），新增 §7.2 |
 | v0.2.2 | 2026-09-21 | 第 16 篇新增 §1.4「原生 pause / resume 与 checkpoint 的代际边界」（resume 之后是新一代：`list` 为空、旧 id restore 回 `not_found`、新一代可正常重新 checkpoint / restore）；第 19 篇新增 §7.5「orchestrator 每次重启漏掉一整池网络槽位」（成因、上游修复对照、处置与清理办法）；第 26 篇 §7 按「清连接跟踪与回滚并行」改写服务端分段结论，旧说法留作交代；第 24 篇测试矩阵补 T41 / T23 三行，第 25 篇 §5 交叉引用第 16 篇 §1.4；第 28 篇 §8 缺口表更新；**第五部分换数据**——第 28 篇 §4 / §5.1 换成 2026-09-21 `deltabox-dev@4af2872c6` 的分档基准（混合档 n=100/60/30、真实一步场景、20 层链深），2026-08 / 09 旧栈数据整体移入新增的第 28A 篇「历史实测数据」 |
