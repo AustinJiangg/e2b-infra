@@ -5,10 +5,15 @@
 **`benchmark/.env`、`benchmark/.env.example`、`benchmark/sync-env.sh` 不动，仍是凭据的唯一来源。**
 
 ```
-acceptance/   交付态：单文件、零共享依赖，拷两个文件到目标机就能跑，验收方用
+950/          目标机上的一站式入口：run.sh smoke|func|perf|long，每次写一份 SUMMARY.md
+acceptance/   交付态：单文件、零共享依赖，拷一个文件到目标机就能跑，验收方用
+crtest/       沙箱级补充测试套件（20 个用例）+ bench/ 基准 + portability/ 预检 + probe950/ 探针
 probes/       开发态探针：回答某个具体机理问题，以及三套实现的横向对照
 dev/          开发态工具箱：宿主自检 / 造数据卷 / 换二进制 / 基准 / 出报告（原 test-950/）
 ```
+
+**部署完只想赶紧知道能不能用**：进 [`950/`](950/README.md)，三条命令跑完三档。
+下面这些是逐个脚本的说明，出了问题才需要往下看。
 
 ## 凭据：每台机器做一次软链
 
@@ -39,8 +44,10 @@ python-dotenv 从**脚本所在目录逐级向上**查找 `.env`，所以这一�
 
 | `checkpoint_bench_v2.py` | 耗时基准（对照组口径）：套用进程级那套 `demo_checkpoint_perf.py` 的档位表与两张汇总表，服务端分段与产物实占从 `timings.json` 读；三套横向对照里代表**我们这套** |
 | `native_snapshot_bench.py` | e2b **原生** snapshot（pause / create_snapshot 两种模式）的同一张档位表；三套横向对照里代表原生那套，也是原生精确增量修复的验证脚本 |
+| `checkpoint_concurrent.py` | 并发：A 跨沙箱扇出（N=1…16，barrier 对齐）/ B 同沙箱多调用方争用 / D 混合稳态 / C 生命周期竞争（默认关，**可能打挂 orchestrator**）。`950/run.sh perf` 跑它的 A、B 两段 |
 
-四个脚本互不依赖，也不依赖本目录其它任何文件 —— 拷哪个 `.py` 过去就能跑哪个。
+五个脚本互不依赖，也不依赖本目录其它任何文件 —— 拷哪个 `.py` 过去就能跑哪个。
+逐脚本的参数与判定行见 [`acceptance/README.md`](acceptance/README.md)。
 
 ### `probes/` —— 开发态探针与跨实现对照
 
@@ -54,6 +61,33 @@ python-dotenv 从**脚本所在目录逐级向上**查找 `.env`，所以这一�
 | `uffdwp_probe.c` | 这台 arm64 内核到底支不支持 uffd 写保护、pagemap 第 57 位会不会置上（`gcc -o uffdwp_probe uffdwp_probe.c` 后直接跑） |
 
 `pb3.py` / `pb4.py` `from pb2 import ...`，与 `pb2.py` 同目录即可，不必设 `PYTHONPATH`。
+
+### `crtest/` —— 沙箱级补充测试套件
+
+20 个用例（`T11`–`T41`），一个用例一个子命令、各出一份 JSON：并发与生命周期竞争、
+树形分支、文件系统边界、网络状态、restore 后的时间与串口健康、故障注入、配额闸、
+原生 pause/resume 的回归。2026-09-22 从工作区 `e2b-repo/rollback-tests/` 迁入，
+迁入时去掉了全部 920B 硬编码（env 文件、重启命令、解释器、数据卷挂载点都改成
+参数或环境变量）。
+
+```bash
+export PYTHONPATH=$PWD/crtest          # 套件根目录，里面才是 crtest/ 包
+export CRTEST_ENV_FILE=/opt/e2b-infra/.env
+python3 -m crtest --list
+python3 -m crtest T25 --out t25.json
+```
+
+同目录下还有：
+
+| 子目录 | 内容 |
+|---|---|
+| `bench/` | `bench_tiers.py`（按改动量分档的基准，`--tier-set full\|short`）、`serial_restore.py`（单沙箱串行 restore 长尾）、`compliance.py`（每档 p50/p99/max 与达标线对照）、`analyze.py`（完整分析：分段、拟合、离群、漂移） |
+| `portability/` | `preflight-customer.sh` —— 客户机器预检，零外部依赖、只读、退出码 = FAIL 数 |
+| `probe950/` | 「920B 的结论能不能搬到 950」：静态 `probe-host.sh` + 动态 `probe-dynamic.py` + 逐键 `compare.py`，`results/920b/` 里是 920B 的基线 |
+| `sdktests/` | `test_checkpoint_errors.py` —— 打桩服务端 + 真实客户端，验九个 checkpoint 异常类与 `.reason` 落点，纯本地 pytest |
+| `tests/` | 171 项离线单测，不需要沙箱、不需要栈，WSL 也能跑：`python3 -m unittest discover -s tests`（约 30 秒） |
+
+详见 [`crtest/README.md`](crtest/README.md)。
 
 ### `dev/` —— 开发态工具箱（原 `test-950/`）
 
@@ -94,6 +128,10 @@ HDBSS 三级证据（`hdbss_evidence.py`）、一条龙（`run-all.sh`）。
 
 判定"跑在哪个后端"不靠推测：`dev/lib.py` 让每个脚本开头打印这一次的
 `dirty_tracking`（`hdbss` / `kvm-wp` / `off`），报告里不会出现"不知道这组数字是哪个后端跑的"。
+注意这个值来自 **Firecracker** 自报（FC API `/` 的 `dirty_tracking` 字段），要起一个沙箱
+才问得到；orchestrator 启动时打的 `checkpoint capabilities` 那一行只说脏页跟踪
+**开没开、为什么开**（`track_dirty_pages` + `track_dirty_pages_reason`），里面没有
+`hdbss` / `kvm-wp` 字样，两者别混着引。
 
 ## 报告目录命名
 

@@ -1,0 +1,3 @@
+# 上级 rollback/.gitignore 把 `results/` 整个排除了，但本目录的 results/ 不是跑出来的
+# 临时数据，是 920B 的**基线**：compare.py 拿它和 950 逐键 diff，必须入库。
+!results/
