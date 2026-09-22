@@ -77,7 +77,7 @@ raw_exec、hugetlbfs），SELinux 策略未适配，直接放开。注意这**�
 
 ### 3.3 `install_postgre`（注意函数名没有 s）
 
-1. 校验 `dep/postgres.tar` 存在（**只校验不加载**——镜像加载在被注释的 `install_docker`
+1. 校验 docker 镜像 `postgres:latest` 已存在（镜像由部署前 `docker load` 到位；2026-09-22 前这里校验的是 `dep/postgres.tar` 文件本身，与实际需要不符，已改。镜像加载在被注释的 `install_docker`
    里，所以实际要求你提前 `docker load postgres:latest`，这正是 runbook §1.2 强调的坑）；
 2. 已有同名容器则**先停删**（避免端口/名字冲突）；
 3. 启动容器：
@@ -219,7 +219,7 @@ iptables 80→3002，沙箱 URL 在部署机上开箱即用。
 
 | 现象 | 原因/处置 |
 |---|---|
-| `PostgreSQL 镜像文件不存在：dep/postgres.tar` | 只是校验文件在不在；真正要保证的是 `docker images` 里有 `postgres:latest`（提前 load） |
+| `docker 镜像 postgres:latest 不存在` | 部署前没有 `docker load` postgres 离线镜像；按 single-node-offline-deploy.md §1.2 先 load |
 | `启动 PostgreSQL 容器失败` + `Unable to find image` | 镜像没提前 `docker load`（install_docker 被注释，不会自动加载 dep 下的 tar） |
 | MinIO 健康检查超时 | `journalctl -u minio -f` 看原因；常见是 9000 端口被占或数据目录权限 |
 | `openssl` 生成证书失败 | `dep/harbor.cnf` 没被正确拷到 `/etc/nginx/ssl/`；或系统缺 openssl |
