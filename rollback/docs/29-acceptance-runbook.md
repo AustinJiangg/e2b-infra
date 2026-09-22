@@ -57,6 +57,27 @@ python /opt/e2b-infra/patch_e2b.py                         # 再改端点
 | `E2B_API_URL` | api job 的 REST 端口，如 `http://<server_ip>:3000`。**占位符没替换掉会报 `Name or service not known`** |
 | `E2B_HTTP_SSL` | `false` |
 
+**模板。** 验收脚本默认用别名为 `base` 的模板，**规格固定 2 vCPU / 2048 MB、磁盘约 940 MB**，
+由仓库里的 `benchmark/build_template.py` 建（自 `aebf028` 起脚本写死这两个值）：
+
+```bash
+cd benchmark && bash sync-env.sh && python build_template.py
+```
+
+跑验收前核对一遍规格 —— 第五部分的性能数字都是在这个规格下采得的，规格不一样就不能直接
+对比（[第 24 篇 §5.0](24-test-overview.md#50-测试环境与沙箱规格)）：
+
+```bash
+AT=$(jq -r .accessToken /root/.e2b/config.json)
+curl -s -H "Authorization: Bearer $AT" http://127.0.0.1:3000/templates \
+  | jq -r '.[] | select(any(.aliases[]?; . == "base"))
+           | "cpuCount=\(.cpuCount) memoryMB=\(.memoryMB) diskSizeMB=\(.diskSizeMB) buildStatus=\(.buildStatus)"'
+```
+
+预期：`cpuCount=2 memoryMB=2048 diskSizeMB=940 buildStatus=ready`。
+（`buildStatus` 不是 `ready` 的模板会占着 `base` 这个别名让重建失败，处理办法见
+仓库根目录 `single-node-offline-deploy.md` §6.7。）
+
 **核对服务端配置。** 跑之前在 orchestrator 的启动日志里找到 `checkpoint capabilities` 这一行并留档：
 `track_dirty_pages` 应为 `true`（950 上 `track_dirty_pages_reason` 应指向 HDBSS），
 `lock_wait_timeout`、`fc_call_timeout`、`min_free_bytes`、`max_checkpoints_per_sandbox`
