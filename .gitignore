@@ -21,3 +21,6 @@ rollback/slides/.local-libs/
 # 每次重新生成都会产生一个几 MB 的全新二进制 blob，进 git 只会让仓库越来越胖。
 # 分发走 GitHub Release，源在 rollback/docs/。
 rollback/dist/
+
+# 5) 跑本仓库脚本用的 python 虚拟环境（build.sh -i 把 e2b SDK 与覆盖层装进它）
+.venv/
