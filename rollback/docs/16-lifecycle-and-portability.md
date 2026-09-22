@@ -366,6 +366,10 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 两者可以叠加：先用 checkpoint 把当前状态回退到某个已知良好的点，
 再对该状态打一次原生 snapshot 落盘。
 
+「进对象存储」取决于部署：本仓库的 nomad 单机部署用的是 `Local` provider，原生 snapshot 与模板都写在本机
+`/tmp/templates/<buildID>/`，而 openEuler 上 `/tmp` 是 tmpfs —— **宿主重启后这些产物全部丢失，模板要重新建**。
+依据与改到真盘的做法见 [`../../deploy-docs/10-模板与快照存储位置梳理.md`](../../deploy-docs/10-模板与快照存储位置梳理.md) §7.1。
+
 ### 7.2 不要依赖的用法
 
 | 别做 | 为什么 |
