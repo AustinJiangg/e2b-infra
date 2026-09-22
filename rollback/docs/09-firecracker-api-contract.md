@@ -366,8 +366,9 @@ if r := numPages % 64; r != 0 {
 
 ## 6. 版本配对
 
-**orchestrator 与 Firecracker 必须成对交付。** 交付形态是 `e2b-infra` 仓库里的
-`0001-adapted-for-arm-architecture.patch`（orchestrator 侧）与 `firecracker.arm`（二进制）。
+**orchestrator 与 Firecracker 必须成对交付。** 两者同在交付分支 `deltabox` 里
+（`packages/` 与 `firecracker/`）；我们在 950 测试环境上按 rpm 部署时，它们分别对应
+`0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`（[第 30 篇 §1.2](30-extending.md#12-交付形态)）。
 
 配错的后果：
 

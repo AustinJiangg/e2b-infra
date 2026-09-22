@@ -65,7 +65,7 @@
 | 2 | **产物盘是 ext4** | 整条数据路径**不得依赖 reflink**（[第 18 篇](18-ext4-vs-xfs.md)） |
 | 3 | **不改动原生路径** | 两条路径必须并存，本方案是纯加法 |
 | 4 | **沙箱内不装任何代理程序** | 全部动作在宿主侧完成（[第 6 篇 §2](06-architecture.md#2-控制面请求发往沙箱却由宿主应答)） |
-| 5 | **交付形态是 patch + 二进制** | 单元测试不进交付物；orchestrator 与 Firecracker 成对交付 |
+| 5 | **orchestrator 与 Firecracker 必须成对** | 两侧版本配错就用不了（[第 9 篇 §6](09-firecracker-api-contract.md#6-版本配对)）；950 测试环境按 rpm 部署，rpm 构建不跑单元测试（[第 30 篇 §1.2](30-extending.md#12-交付形态)） |
 
 约束 2 的影响最深远：它直接否掉了「每代自足」这个更简单的设计
 （[第 8 篇 §1.1](08-memory-diff-tree.md#11-reflink-是什么为什么-ext4-没有)），

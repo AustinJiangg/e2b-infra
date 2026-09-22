@@ -12,7 +12,7 @@
 
 ## 0. 本篇要回答的问题
 
-1. 代码在哪几个仓库、哪几个分支？交付形态是什么？
+1. 代码在哪个仓库、哪个分支？交付形态是什么？
 2. 要加一个设备 / 支持一种新文件系统 / 加一个 API，分别要动哪里？
 3. 哪些不变量碰不得？改动时怎么自查？
 4. 怎么在机器上验证一次改动？
@@ -29,7 +29,7 @@
 | | 在哪 | 装着什么 |
 |---|---|---|
 | **代码** | openEuler 交付仓库 `KASandbox_0904`，交付分支 `deltabox` | 三个组件同仓，见下表。首次合入是 openEuler KASandbox 的 [MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)「feat: host-side sandbox checkpoint/restore (ARM64, HDBSS)」（2026-09-09） |
-| **手册与验收** | `e2b-infra` 仓库的 `rollback/` | 本手册、验收脚本（`rollback/scripts/acceptance/`）、部署文档、rpm 打包件（§1.2） |
+| **手册与验收** | `e2b-infra` 仓库的 `rollback/` | 本手册的源文件、验收脚本（`rollback/scripts/acceptance/`），以及 950 测试环境的部署文档与 rpm 打包件（§1.2） |
 
 | 组件 | 目录 | 单元测试在哪 | 怎么跑 |
 |---|---|---|---|
@@ -48,31 +48,31 @@
 
 ### 1.2 交付形态
 
-产品交付的不是仓库，是 `e2b-infra` 里的两样东西：
+交付形态只有两样：
 
-| 交付物 | 内容 |
+| 交付物 | 是什么 |
 |---|---|
-| `0001-adapted-for-arm-architecture.patch` | ARM 适配 + 本方案的全部 orchestrator 侧改动（约 12800 行，122 个文件） |
-| `firecracker.arm` | 分叉 Firecracker 的编译产物 |
+| **代码** | openEuler 交付仓库 `KASandbox_0904` 的 `deltabox` 分支 —— `firecracker/`、`packages/`、`py-sdk/` 三个组件同仓（§1.1）。开发在 `deltabox-dev` 分支上做，开发测试通过后合并进 `deltabox` |
+| **文档** | 本手册，导出为单个 HTML 文件 |
 
-打包由 `e2b-infra.spec` 完成：
+目标平台是 **950**（鲲鹏，带 HDBSS）；920B 是开发环境
+（[第 19 篇 §6.3](19-kunpeng-platform.md#63-环境变量)）。
 
-```spec
-Source0: https://github.com/e2b-dev/infra/archive/refs/tags/%{tag}.tar.gz
-Patch1:  0001-adapted-for-arm-architecture.patch
-...
-%build
-# 只做 go build，不跑测试
-```
+#### 1.2.1 我们在 950 测试环境上的部署方式（不是交付形态）
 
-**两个后果**：
+自己上机验证时走的是另一条路：用 `e2b-infra` 仓库出一个 rpm，装到 `/opt/e2b-infra`。
 
-1. **rpm 构建不跑单元测试** —— `%build` 只做 `go build`。测试要在代码仓库里自己跑（§1.1）；
-2. **改动必须能表达成 patch** —— 新增文件可以，但要注意 patch 的可维护性。
+`e2b-infra.spec` 以上游 tarball 为 `Source0`，打上 `0001-adapted-for-arm-architecture.patch`
+（ARM 适配 + 本方案的全部 orchestrator 侧改动，约 12800 行、122 个文件），
+分叉 Firecracker 的编译产物 `firecracker.arm` 作为 `Source8` 随包带上；
+`%build` 只做 `go build`，**不跑单元测试** —— 测试要在代码仓库里自己跑（§1.1）。
+装完用 `e2b-deploy/build.sh -i` 安装、`build.sh -s` 拉起。
 
-> 交付脚本 `e2b-deploy/dep/init-client.sh` 会把 `firecracker.arm` 拷进
-> `/fc-versions/v<ver>/firecracker`。注意 950 上版本目录名与二进制真实版本脱钩，
-> 换错目录**不会报错**（[第 19 篇 §7.1](19-kunpeng-platform.md#71-fc-versions-的版本号与二进制脱钩)）。
+> 其中 `init-client.sh` 会把 `firecracker.arm` 拷进 `/fc-versions/v<ver>/firecracker`。
+> 注意 950 上版本目录名与二进制真实版本脱钩，换错目录**不会报错**
+> （[第 19 篇 §7.1](19-kunpeng-platform.md#71-fc-versions-的版本号与二进制脱钩)）。
+
+这条路子只服务于我们的测试环境；它怎么打包、怎么装，不构成对外的交付形态。
 
 ### 1.3 阅读源码的建议顺序
 
