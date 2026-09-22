@@ -18,11 +18,33 @@
 
 `build.sh` 里的 `install_docker` 已被注释掉——假定 **docker 由你自行安装维护**。请确保：
 
-1. 版本达标（Harbor 的 `install.sh` 依赖 `docker-compose` 命令）：
+1. 版本达标：
    ```bash
    docker --version         # >= 25.0.3
    runc --version           # >= 1.0.2
-   docker-compose version   # 必须存在 docker-compose 命令
+   docker compose version   # 必须是 Docker Compose v2 插件
+   ```
+
+   ⚠️ **必须是 Compose v2，光有老的 `docker-compose` 命令不够**。openEuler 24.03 源里的
+   `docker-compose` 是 1.22.0（2018 年）：它能通过 Harbor `common.sh:119-133` 的 `>= 1.18.0`
+   版本检查，但解析不了 Harbor 2.13 生成的新版 Compose Spec 文件（该文件没有 `version:` 键），
+   `build.sh -s` 装 Harbor 那一步会退出：
+
+   ```
+   The Compose file './docker-compose.yml' is invalid because:
+   Unsupported config option for services: 'core'
+   Unsupported config option for networks: 'harbor'
+   ❌ Harbor 安装脚本执行失败
+   ```
+
+   而且 Harbor 的 `common.sh:113` 本身就优先探测 `docker compose`，`e2b-deploy/build.sh:618`
+   用的也是 `docker compose` v2 语法。装法（aarch64；离线环境先在有网机器上下好这个文件）：
+
+   ```bash
+   # 来源：github.com/docker/compose 的 release 资产 docker-compose-linux-aarch64
+   install -D -m 755 docker-compose-linux-aarch64 /usr/libexec/docker/cli-plugins/docker-compose
+   install -D -m 755 docker-compose-linux-aarch64 /usr/local/bin/docker-compose   # 兼容仍调用旧命令的脚本
+   docker compose version
    ```
 2. 把本机 Harbor registry 加进 `insecure-registries`（HTTP，端口 2900）。**合并**进现有 `daemon.json`，不要整个覆盖：
    ```bash
@@ -31,6 +53,11 @@
    #   "insecure-registries": ["<SERVER_IP>:2900"]
    systemctl restart docker   # ⚠️ 会重启现有容器，挑好时机
    ```
+
+   ⚠️ 仓库里的 `e2b-deploy/dep/daemon.json` 只是样例：除 `insecure-registries` 外还带了五个
+   国内 registry 镜像加速地址。照抄前先确认本机能连上它们——在只有代理才能出网的机器上这五个
+   mirror 连不通，`docker pull` 会逐个去试、表现为长时间静默卡住（不报错）。这种机器上
+   只保留 `insecure-registries` 一项即可。
 
 ### 0.2 自定义 nbd 内核模块（`nbd.ko`，需自备，**一次性固化，开机自动加载**）
 
@@ -97,6 +124,57 @@ sha256sum /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko   # 仍是 patch 
 4. 本机的模块是未压缩 `.ko`（上面 hash 对比已验证）。若在别的机器上原版是 `nbd.ko.xz`/
    `nbd.ko.zst` 压缩形态，覆盖前要先把压缩原版移走，否则目录里会同时存在两个候选模块。
 
+### 0.3 `net.ipv4.ip_forward` 必须为 1（且要在 `build.sh -s` 之前生效）
+
+orchestrator 的每个沙箱槽位是一个 netns：里面是 `eth0`（veth，10.12.x.x/31）↔ `tap0`
+（169.254.0.22/30），靠 netns 内的 DNAT/SNAT 把宿主侧地址映射到 guest：
+
+```
+-A PREROUTING  -d 10.11.0.2/32 -i eth0 -j DNAT --to-destination 169.254.0.21
+-A POSTROUTING -s 169.254.0.21/32 -o eth0 -j SNAT --to-source 10.11.0.2
+```
+
+`ip_forward=0` 时 netns 内这两张网卡之间不转发，宿主就探不到 guest 里的 envd，**建模板会在
+等 envd 那一步 60 秒超时**，报 `ERROR Build failed: build was cancelled`。这个现象很容易看错
+方向：`build.sh -i/-s` 全部成功、四个 job 都 running，guest 日志里 systemd 也一路 OK 并且
+打出了 `Started Env Daemon Service`。
+
+关键在顺序：**新 netns 的 `ip_forward` 是创建那一刻从初始 netns 继承的**，`build.sh -s`
+起 orchestrator 时会一次建出一整池槽位（按机器规格，320 核机器实测约 300 个），
+事后再改宿主机的值对已经建好的槽位池无效。
+
+`init-client.sh` 自 2026-09-22 起会自动处理这一项（把 `/etc/sysctl.conf` 里的
+`net.ipv4.ip_forward` 行改成 1，并在 `sysctl -p` 之后补一次 `sysctl -w`），它由 `build.sh -s`
+在 `deploy.sh` 之前调用，所以走标准流程的新机器不用管。**手工部署、或用的是更早版本的脚本**，
+必须在跑 `build.sh -s` 之前自己做一遍：
+
+```bash
+grep -n '^net.ipv4.ip_forward' /etc/sysctl.conf      # openEuler 24.03 自带这行，且写死 =0
+sed -i -E 's|^[[:space:]]*net\.ipv4\.ip_forward[[:space:]]*=.*|net.ipv4.ip_forward = 1|' /etc/sysctl.conf
+sysctl -p && sysctl -n net.ipv4.ip_forward           # 应输出 1
+```
+
+> ⚠️ 放 `/etc/sysctl.d/99-xxx.conf` 里**无效**：不带参数的 `sysctl -p` 只读 `/etc/sysctl.conf`，
+> 而 `init-client.sh` 每跑一次都会执行它，docker 启动时设好的 1 会被重新压回 0。
+
+已经装完才发现的话，光改宿主机的 sysctl 不够（槽位池是启动时建的），还要重启 template-manager
+让整池 netns 按新值重建：
+
+```bash
+cd /opt/e2b-infra && source .env
+nomad job stop --token "$NOMAD_ACL_TOKEN" template-manager-system
+# 等旧 alloc 退干净再 run，否则撞端口占用，见 §6.6
+nomad job run  --token "$NOMAD_ACL_TOKEN" /opt/e2b-infra/rendered/template-manager.hcl
+```
+
+核对（挑几个槽位看，应全是 1）：
+
+```bash
+for ns in $(ip netns list | awk '{print $1}' | head -5); do
+  printf '%s %s\n' "$ns" "$(ip netns exec "$ns" sysctl -n net.ipv4.ip_forward)"
+done
+```
+
 ---
 
 ## 1. 准备离线大件与镜像
@@ -111,9 +189,37 @@ sha256sum /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko   # 仍是 patch 
 # 在有网机器上下载（aarch64）
 wget https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_arm64.zip
 wget https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_arm64.zip
-wget https://github.com/goharbor/harbor/releases/download/v2.13.0/harbor-offline-installer-aarch64-v2.13.0.tgz
-wget -O minio https://dl.min.io/server/minio/release/linux-arm64/minio
+
+# Harbor：aarch64 离线包不在 goharbor 官方，用社区构建（见下方说明）
+wget https://github.com/wise2c-devops/build-harbor-aarch64/releases/download/v2.13.0/harbor-offline-installer-aarch64-v2.13.0.tgz
+
+# MinIO：官方下载站与 Docker Hub 都已不可用（见下方说明），从 quay.io 的 arm64 镜像里取二进制
+docker pull --platform linux/arm64 quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+cid=$(docker create quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z)
+docker cp "$cid:/usr/bin/minio" ./minio && docker rm "$cid"
+chmod +x ./minio && ./minio --version
 ```
+
+这两个文件的来源与文档早先写的不一样，2026-09-22 复核：
+
+- **Harbor 的 aarch64 离线包不在 goharbor 官方仓库**。`goharbor/harbor` 的 v2.13.0 只发布了
+  `harbor-offline-installer-v2.13.0.tgz`（x86_64）与 `harbor-online-installer-v2.13.0.tgz`，
+  没有任何 aarch64 资产，按 `github.com/goharbor/harbor/releases/...` 的路径下会 404。
+  上面用的是社区项目 `wise2c-devops/build-harbor-aarch64` 的 v2.13.0 发布，文件名与
+  `build.sh` 硬编码要求的完全一致。校验：669,795,545 字节、
+  sha256 `4c2c6b2055e79c364166529349187d5edc78055941ffec3d5b4e70269f778320`。
+- **MinIO 的历史下载地址已全部失效**：`https://dl.min.io/server/minio/release/linux-arm64/minio`
+  以及带版本号的 archive 形式都返回 **410**；GitHub `minio/minio` 的 release 不带二进制资产；
+  Docker Hub 的 `minio/minio` 仓库已下架（`pull access denied: repository does not exist`）。
+  官方现在只在 quay.io 发镜像。`build.sh` 的 `install_minio` 只需要 `dep/minio` 这一个可执行
+  文件（`cp` 到 `/usr/local/bin` + 装 systemd 服务），所以从镜像里抠出来即可，**`build.sh`
+  不用改**。校验：镜像 RepoDigest
+  `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`、Architecture
+  `arm64`；抠出的 `minio` 105,251,000 字节，`minio --version` 为 `RELEASE.2025-09-07T16-13-09Z`。
+
+> 换下载源之后**不要**用 `wget -c` 续传：它会把新内容接在旧残片后面，得到一个大小对不上的
+> 损坏包（实测拿到过 `zipfile.testzip()` 报错的 zip）。换源要删掉重下，并按 `content-length`
+> 核对字节数。
 
 拷到目标机后（RPM 装完会生成 `/opt/e2b-infra/dep/`，见第 2 步）：
 
@@ -154,7 +260,40 @@ done
 ```
 
 > 制作 VM 模板时沙箱内会联网装依赖，离线需另外准备 `ubuntu:22.04-custom` 基础镜像，
-> 做法见根目录 `README.md` 的「无网环境准备」，属另一条线，与本文的集群部署无关。
+> 做法见根目录 `README.md` 的「无网环境准备」。本仓库的部署包里已带做好的镜像，
+> 怎么落位与推送见下面的 §1.3。
+
+### 1.3 Harbor 主机名与 `ubuntu:22.04-custom` 基础镜像（建模板前必做）
+
+下面两件事 `build.sh` 都不做，漏掉就建不出模板——`benchmark/build_template.py` 里模板的
+`FROM` 是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom`。**在第 4 步 `build.sh -s`
+跑完之后、建第一个模板之前**补上。
+
+1. **`harbor` 这个主机名要能解析**。`build.sh` 配的 nginx 是 `server_name harbor;
+   listen 443 ssl;` 反代到 `127.0.0.1:2900`，证书也装在 `/etc/docker/certs.d/harbor:443/`，
+   但没有任何地方写 hosts 条目：
+
+   ```bash
+   SERVER_IP=$(grep ^SERVER_IP /opt/e2b-infra/dep/.env | cut -d= -f2)
+   grep -qE "[[:space:]]harbor([[:space:]]|$)" /etc/hosts || echo "$SERVER_IP harbor" >> /etc/hosts
+   getent hosts harbor
+   ```
+
+2. **`dep/ubuntu-22.04-custom.tar.gz` 不会被自动 load/push**（`build.sh --make/-m` 是另一条
+   流程，做的是 `openclaw-openviking:custom`，跟这个无关）：
+
+   ```bash
+   docker load -i /opt/e2b-infra/dep/ubuntu-22.04-custom.tar.gz
+   docker tag ubuntu:22.04-custom harbor:443/e2b-orchestration/ubuntu:22.04-custom
+   docker login -u admin -p Harbor12345 harbor:443
+   docker push harbor:443/e2b-orchestration/ubuntu:22.04-custom
+   ```
+
+   核对（应输出 `{"name":"e2b-orchestration/ubuntu","tags":["22.04-custom"]}`）：
+
+   ```bash
+   curl -s -u admin:Harbor12345 http://127.0.0.1:2900/v2/e2b-orchestration/ubuntu/tags/list
+   ```
 
 ---
 
@@ -567,6 +706,51 @@ ss -tlnp | grep 4646
 
 > 另外：另一个终端 `curl 127.0.0.1:4646` 卡住，多半是 shell 里设了 `http_proxy`/`https_proxy`
 > 把本地请求也走代理了——和这个无关，`unset http_proxy https_proxy` 或 `export no_proxy=127.0.0.1,localhost`。
+
+### 6.6 `nomad job stop` 之后立刻 `run` 报 `reserved port collision`
+
+```
+Task Group "template-manager" (failed to place 1 allocation):
+  * Dimension "network: reserved port collision template-manager=5008" exhausted on 1 nodes
+```
+
+不是配置错误：旧 alloc 还没完全退出，预留端口还占着（`template-manager.hcl` 的
+`kill_timeout = "30s"` 是留给它拆网络暖池的，见 05 篇 §12）。等旧 alloc 退干净再 `run`：
+
+```bash
+source /opt/e2b-infra/.env
+nomad job stop --token "$NOMAD_ACL_TOKEN" template-manager-system
+# 等到该 job 没有 running/pending 的 alloc（最多等 120 秒）
+for i in $(seq 120); do
+  busy=$(nomad job allocs -token "$NOMAD_ACL_TOKEN" -json template-manager-system 2>/dev/null \
+         | jq '[.[] | select(.ClientStatus == "running" or .ClientStatus == "pending")] | length')
+  [ "${busy:-0}" = 0 ] && break
+  sleep 1
+done
+nomad job run --token "$NOMAD_ACL_TOKEN" /opt/e2b-infra/rendered/template-manager.hcl
+```
+
+### 6.7 模板构建失败后别名不释放：`403: Alias 'base' already used`
+
+第一次构建失败（例如踩了 §0.3 的 ip_forward）之后直接重试，会报：
+
+```
+e2b.exceptions.BuildException: 403: Alias 'base' already used
+```
+
+失败的模板以 `buildStatus: error` 继续占着 `base` 这个别名，重试前必须先删掉它。
+access token 取 `build.sh -s` 写下的 SDK 凭据：
+
+```bash
+AT=$(jq -r .accessToken /root/.e2b/config.json)
+TID=$(curl -s -H "Authorization: Bearer $AT" http://127.0.0.1:3000/templates \
+      | jq -r '.[] | select(any(.aliases[]?; . == "base")) | .templateID')
+echo "$TID"
+curl -s -X DELETE -H "Authorization: Bearer $AT" "http://127.0.0.1:3000/templates/$TID"
+# 确认已释放：下面应为空
+curl -s -H "Authorization: Bearer $AT" http://127.0.0.1:3000/templates \
+  | jq -r '.[] | select(any(.aliases[]?; . == "base")) | .templateID'
+```
 
 ---
 
