@@ -14,8 +14,8 @@
 #                     benchmark/.env（sync-env.sh 生成，带 E2B_API_KEY），最后才是 $DEPLOY/.env
 #   --deploy-dir D    RPM 部署根，默认 /opt/e2b-infra
 #   --python P        跑脚本的解释器，默认 $CRTEST_PY，再默认 python3。要用装了 SDK
-#                     覆盖层的那一个（build.sh -i 装在哪就是哪）：仓库内 venv
-#                     e2b-infra/.venv/bin/python 或 conda 环境的 python 都行
+#                     覆盖层的那一个（build.sh -i 装在哪就是哪）：推荐 conda 环境
+#                     jll-e2b 的 python（如 /root/miniforge3/envs/jll-e2b/bin/python）
 #   --results-dir D   结果根目录，默认 <本目录>/results
 #   --template T      模板 id，默认 base
 #   --sdk-install P   SDK 覆盖层 install.py 的路径，默认 $DEPLOY/dep/e2b-sdk-checkpoint/install.py

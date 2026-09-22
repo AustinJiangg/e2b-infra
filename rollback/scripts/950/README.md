@@ -33,9 +33,10 @@ bash run.sh perf                           # ≤ 40 分钟：性能分档、长�
   `/data/nomad/acl.token` 取值）。要用别处的凭据就 `--env-file` 指过去。
 - **解释器**：默认 `python3`，但**要用装了 SDK 覆盖层的那一个**。`build.sh -i` 在哪个
   环境里跑，`e2b==2.20.0` / `e2b_code_interpreter==2.4.1` / `python-dotenv` 和
-  `dep/e2b-sdk-checkpoint/install.py` 的覆盖层就装在哪里。**venv 或 conda 都行**：
-  仓库内 venv 是 `e2b-infra/.venv/bin/python`（推荐，`build.sh -i` 在激活它的 shell
-  里跑，SDK 就装进去了），conda 环境就是那个环境的 python，用 `--python` 指过去。
+  `dep/e2b-sdk-checkpoint/install.py` 的覆盖层就装在哪里。**推荐 conda 环境 `jll-e2b`**：
+  `build.sh -i` 要在 `conda activate jll-e2b` 之后的 shell 里跑，SDK 和覆盖层才会装进
+  这个环境；跑测试时同样先 `conda activate jll-e2b`，再用
+  `--python "$(command -v python)"` 把这个环境的 python 传给 `run.sh`。
   系统 `python3` 里不一定有。
 - 结果落在 `950/results/<时间戳>-<档>/`。
 
@@ -49,7 +50,7 @@ bash run.sh perf                           # ≤ 40 分钟：性能分档、长�
 | 事 | 怎么确认 | 不满足会怎样 |
 |---|---|---|
 | 客户端凭据拿得到 | `grep -c E2B_API_KEY ../../../benchmark/.env` 回 1（没有就 `cd ../../../benchmark && bash sync-env.sh` 生成） | `run.sh` 开头会打 `!! E2B_API_KEY 没有值`，随后建沙箱失败 |
-| 要用的解释器装了带 checkpoint 覆盖层的 e2b | `../../../.venv/bin/python /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`（用 conda 就把路径换成那个环境的 python），同一个解释器再用 `--python` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
+| 要用的解释器装了带 checkpoint 覆盖层的 e2b | 先 `conda activate jll-e2b`，再 `python /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`，同一个解释器再用 `--python "$(command -v python)"` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
 | 模板 `base` 已经建好 | `nomad job status` 里 template-manager 在跑，且建过一次模板 | 每个用例开头建沙箱就失败 |
 | 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 24 篇 §5.0 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第五部分对比**（规格是条件标签的一部分，见手册 24 篇 §5.0 与 §4.2） |
 | 在**宿主机上**跑，且是 root | `id -u` 回 0 | 读不到服务端分段计时与产物目录，T32 会判失败、性能表会缺列 |
@@ -63,7 +64,8 @@ cd ../../../benchmark
 bash sync-env.sh
 grep -E '^E2B_(API_KEY|ACCESS_TOKEN|API_URL)=' .env      # 三行都要有值
 cd ../rollback/scripts/950
-bash run.sh smoke --python ../../../.venv/bin/python      # conda 就换成那个环境的 python
+conda activate jll-e2b
+bash run.sh smoke --python "$(command -v python)"
 ```
 
 ---
@@ -294,11 +296,12 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 
 ```bash
 cd /home/j30059180/projects/e2b-repo/e2b-infra/rollback/scripts/950
-bash run.sh smoke --python /home/j30059180/projects/e2b-repo/e2b-infra/.venv/bin/python
+bash run.sh smoke --python /root/miniforge3/envs/jll-e2b/bin/python
 ```
 
-（`--env-file` 不用给：默认就取仓库里的 `benchmark/.env`。解释器换成 conda 环境的
-python 也一样，只要它装过 SDK 覆盖层。）
+（`--env-file` 不用给：默认就取仓库里的 `benchmark/.env`。解释器是 920B 上 conda 环境
+`jll-e2b` 的 python，SDK 覆盖层装在里面；先 `conda activate jll-e2b` 再用
+`--python "$(command -v python)"` 也一样。）
 
 ---
 
