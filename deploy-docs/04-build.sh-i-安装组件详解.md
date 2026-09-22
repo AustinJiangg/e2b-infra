@@ -11,6 +11,10 @@
    后续 harbor/registry/nomad 地址全部从它推导，写错则全盘皆错；
 3. Docker **自备且在跑**（`install_docker` 已被注释，脚本不装 docker），并且
    `/etc/docker/daemon.json` 的 `insecure-registries` 已含 `SERVER_IP:2900`；
+   还要有 **Docker Compose v2 插件**（`docker compose version` 能输出）——`-s` 装 Harbor 时
+   老的 `docker-compose` 1.22.0 解析不了 Harbor 2.13 的 compose 文件，详见 runbook §0.1。
+   另外 `dep/daemon.json` 那份样例带五个国内 registry 镜像加速地址，只有代理能出网的机器上
+   连不通、会让 `docker pull` 静默卡住，照抄时按本机出网方式取舍；
 4. 离线大件已放进 `/opt/e2b-infra/dep/`：consul/nomad 的 zip、firecracker tgz、
    harbor 离线安装包、minio 二进制（文件名必须与脚本硬编码的一致，清单见 runbook §1.1）；
 5. 三个 docker 镜像已 `docker load`：`postgres:latest`、`redis:7.4.4-alpine`、
@@ -109,9 +113,16 @@ docker run -d --name postgres \
 MinIO 在整个系统里存**模板与构建缓存**（`.env`：`TEMPLATE_BUCKET_NAME=e2b-dev-fc-templates`、
 `BUILD_CACHE_BUCKET_NAME=e2b-dev-fc-cache`，`STORAGE_PROVIDER=MinioBucket`）。
 
+> `dep/minio` 这个二进制要自己准备，且 2026-09-22 复核时官方的历史下载地址已全部失效
+> （`dl.min.io` 的全路径返回 410、Docker Hub 的 `minio/minio` 已下架、GitHub release 不带
+> 二进制资产）。现在从 `quay.io/minio/minio` 的 arm64 镜像里取 `/usr/bin/minio`，
+> 取法与校验值见 runbook §1.1。本函数只要这一个可执行文件，所以 `build.sh` 不用改。
+
 ### 3.5 `install_harbor`——只"备菜"，不"下锅"
 
-1. 校验 `dep/harbor-offline-installer-aarch64-v2.13.0.tgz`；
+1. 校验 `dep/harbor-offline-installer-aarch64-v2.13.0.tgz`（文件名硬编码。注意这个
+   aarch64 离线包**不在 goharbor 官方**——官方 v2.13.0 只发 x86_64 的离线包和在线安装包，
+   实际来源是社区项目 `wise2c-devops/build-harbor-aarch64`，文件名一致，见 runbook §1.1）；
 2. 解压到 `/opt/e2b-infra/harbor/`；
 3. `cp harbor.yml.tmpl harbor.yml`，然后用 sed 改配置：
    - **注释掉整个 https 块**（port 443/certificate/private_key）——Harbor 走纯 HTTP；

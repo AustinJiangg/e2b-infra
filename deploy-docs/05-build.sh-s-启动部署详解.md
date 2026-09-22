@@ -12,7 +12,11 @@
 - `-i` 已成功执行（postgres/minio/nginx/dnsmasq 在跑、harbor 已解压、overlay 已重放、
   consul/nomad zip 已缓存到 `/tmp`）；
 - 自编译 `nbd.ko` 已加载（`ls /dev/nbd* | wc -l` = 512；按 runbook §0.2 一次性固化后开机自动加载——脚本**不**负责加载）；
-- docker 在跑且 daemon.json 已含 `SERVER_IP:2900`。
+- docker 在跑且 daemon.json 已含 `SERVER_IP:2900`，并且装了 **Docker Compose v2 插件**
+  （步骤②的 Harbor `install.sh` 用它；老的 `docker-compose` 1.22.0 解析不了 Harbor 2.13 的
+  compose 文件，`build.sh:618` 用的也是 `docker compose` 语法，见 runbook §0.1）；
+- `net.ipv4.ip_forward` 为 1——步骤⑦的 `init-client.sh` 自 2026-09-22 起自动保证（见 §6），
+  更早的脚本要在跑 `-s` 之前自己改 `/etc/sysctl.conf`（见 runbook §0.3）。
 
 ## 1. `start()` 总流程
 
@@ -200,6 +204,13 @@ plugin "raw_exec" { config { enabled = true } }   # template-manager-system 要�
 与 start-client.sh 重复的宿主机调优（目录/swap/tmpfs/大页）再幂等跑一遍，另外：
 
 - sysctl 这次写进 **`/etc/sysctl.conf`**（持久化，有存在性检查防重复追加）+ `sysctl -p`；
+- **`net.ipv4.ip_forward` 强制为 1**（2026-09-22 加）：把 `/etc/sysctl.conf` 里已有的那一行
+  改写成 1（没有就补一行），并在 `sysctl -p` 之后再 `sysctl -w` 一次。openEuler 24.03 自带的
+  `/etc/sysctl.conf` 写死 `net.ipv4.ip_forward=0`，`sysctl -p` 会把 docker 设好的 1 压回 0；
+  而沙箱槽位 netns 的 ip_forward 是创建那一刻继承初始 netns 的，为 0 则 netns 内
+  `eth0 ↔ tap0` 不转发、宿主探不到 guest 的 envd，建模板 60 秒超时报
+  `build was cancelled`。本步骤（⑦）在步骤⑪ `deploy.sh` 起 template-manager、建出槽位池
+  之前，所以在这里设好来得及；背景与事后补救见 runbook §0.3；
 - **envd**：`cp bin/envd /fc-envd/envd`（模板构建时注入沙箱 rootfs 的代理）；
 - **客户机内核**：`cp bin/vmlinux.bin /fc-kernels/vmlinux-6.1.158/`（外加 `vmlinux-6.1.102/` 兼容旧模板，
   以及 openEuler 变体 `vmlinux-6.6.0-132.0.0/`）。orchestrator 按
@@ -338,7 +349,15 @@ docker ps | grep -E "postgres|harbor"                  # 依赖在跑
 ls /root/.e2b/config.json                              # SDK 凭据已生成（首次）
 ```
 
-然后构建首个模板（`python /opt/e2b-infra/build_prod.py base`）→ `Sandbox.create("base")`。
+然后构建首个模板（`python /opt/e2b-infra/build_prod.py base`）→ `Sandbox.create("base")`。**建模板前还有两件 `build.sh` 不做的事**
+（漏掉就会失败，详见 runbook §1.3）：模板的 `FROM` 是
+`harbor:443/e2b-orchestration/ubuntu:22.04-custom`，所以 ① `/etc/hosts` 要有
+`<SERVER_IP> harbor`（nginx 是 `server_name harbor`，但没人写 hosts 条目）；
+② `dep/ubuntu-22.04-custom.tar.gz` 要手工 `docker load` → `docker tag` → `docker push`
+进 Harbor。
+
+> 构建失败后重试会报 `403: Alias 'base' already used`——失败的模板以 `buildStatus: error`
+> 占着别名，重试前要先 `DELETE /templates/{id}` 释放，命令见 runbook §6.7。
 
 > **为什么 `-d` 要清 netns / veth**：orchestrator 的网络槽位暖池最多留 132 个已创建但闲置的
 > 槽位（`NewSlotsPoolSize` 32 + `ReusedSlotsPoolSize` 100）。进程被杀时来不及走
