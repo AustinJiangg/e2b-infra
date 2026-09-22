@@ -6,7 +6,7 @@ if __name__ == '__main__':
     Template.build(
         Template().from_dockerfile('FROM harbor:443/e2b-orchestration/ubuntu:22.04-custom'),
         alias="base",
-        cpu_count=1,
-        memory_mb=1024,
+        cpu_count=2,
+        memory_mb=2048,
         on_build_logs=default_build_logger()
     )
