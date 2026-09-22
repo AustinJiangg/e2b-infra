@@ -1,0 +1,9 @@
+# 每次跑出来的结果目录不入库（原始日志体积大、带本机路径与沙箱 id）。
+# 要归档就手工把 SUMMARY.md 与需要的 .json 拷到 e2b-repo/rollback-reports/。
+#
+# 头一行的 `!results/` 是必需的：上级 rollback/.gitignore 已经把 `results/` 整个
+# 排除了，而 git 不允许"父目录被排除之后再把里面的文件放回来"。先把目录本身放回来，
+# 再排除它的内容，才留得住下面那个 .gitkeep。
+!results/
+results/*
+!results/.gitkeep

@@ -1,0 +1,866 @@
+{
+ "meta": {
+  "host": "hostname-tdi1m.foreman.pxe",
+  "started": "20260917-161848",
+  "steps": [
+   "guest",
+   "checkpoint",
+   "restore",
+   "vgic",
+   "writeheavy"
+  ],
+  "sizes": [
+   16,
+   128,
+   512
+  ],
+  "env_file": "/home/j30059180/projects/e2b-repo/e2b-infra/rollback/scripts/.env",
+  "store": "/mnt/ext4dev/orchestrator/build/checkpoints",
+  "fc_before": 1,
+  "python": "3.12.13",
+  "orchestrator_env": {
+   "FC_TRACK_DIRTY_PAGES": "true",
+   "ORCHESTRATOR_BASE_PATH": "/mnt/ext4dev/orchestrator",
+   "FIRECRACKER_VERSIONS_DIR": "/home/j30059180/projects/e2b-repo/tmp/fc-versions",
+   "ENVIRONMENT": "local"
+  },
+  "sandbox_id": "ir1l3ncb6h1vwvz27u131",
+  "sandbox_create_s": 0.2785943020135164,
+  "fc_after": 1,
+  "own_fc_gone": true,
+  "fc_balanced": true,
+  "elapsed_s": 29.66769552230835
+ },
+ "steps": {
+  "guest": {
+   "kernel": "6.1.158+",
+   "nproc": "2",
+   "pagesize": "4096",
+   "cpuinfo_count": "2",
+   "cmdline": "console=ttyS0 init=/usr/bin/overlay-init ip=169.254.0.21::169.254.0.22:255.255.255.252:instance:eth0:off:tap0 ipv6.autoconf=1 ipv6.disable=0 loglevel=5 panic=1 reboot=k root=/dev/vda rw earlycon=uart,mmio,0x40003000",
+   "interrupts_raw": "           CPU0       CPU1       \n 11:        498        304     GICv3  27 Level     arch_timer\n 13:        259          0     GICv3  67 Edge      ttyS0\n 14:          4          0     GICv3  66 Edge      virtio2\n 15:       1200          0     GICv3  64 Edge      virtio0\n 16:       1042          0     GICv3  65 Edge      virtio1\n 17:          1          0     GICv3  69 Edge      vmgenid\nIPI0:       218        225       Rescheduling interrupts\nIPI1:       849       1027       Function call interrupts\nIPI2:         0          0       CPU stop interrupts\nIPI3:         0          0       CPU stop (for crash dump) interrupts\nIPI4:         0          0       Timer broadcast interrupts\nIPI5:         0          1       IRQ work interrupts\nIPI6:         0          0       CPU wake-up interrupts\nErr:          0\n",
+   "interrupts": {
+    "arch_timer": {
+     "line": 11,
+     "chip": "GICv3",
+     "intid": 27,
+     "trigger": "Level",
+     "counts": [
+      498,
+      304
+     ]
+    },
+    "ttyS0": {
+     "line": 13,
+     "chip": "GICv3",
+     "intid": 67,
+     "trigger": "Edge",
+     "counts": [
+      259,
+      0
+     ]
+    },
+    "virtio2": {
+     "line": 14,
+     "chip": "GICv3",
+     "intid": 66,
+     "trigger": "Edge",
+     "counts": [
+      4,
+      0
+     ]
+    },
+    "virtio0": {
+     "line": 15,
+     "chip": "GICv3",
+     "intid": 64,
+     "trigger": "Edge",
+     "counts": [
+      1200,
+      0
+     ]
+    },
+    "virtio1": {
+     "line": 16,
+     "chip": "GICv3",
+     "intid": 65,
+     "trigger": "Edge",
+     "counts": [
+      1042,
+      0
+     ]
+    },
+    "vmgenid": {
+     "line": 17,
+     "chip": "GICv3",
+     "intid": 69,
+     "trigger": "Edge",
+     "counts": [
+      1,
+      0
+     ]
+    }
+   },
+   "intids": {
+    "arch_timer": 27,
+    "ttyS0": 67,
+    "virtio2": 66,
+    "virtio0": 64,
+    "virtio1": 65,
+    "vmgenid": 69
+   },
+   "envd": [
+    "0.5.3",
+    "__rc=0"
+   ],
+   "os": "PRETTY_NAME=\"Ubuntu 22.04.5 LTS\"\n               total        used        free      shared  buff/cache   available\nMem:            1987          68        1821           0          97        1848\n__rc=0",
+   "ok": true,
+   "elapsed_s": 0.4949205429293215
+  },
+  "checkpoint": {
+   "fc_get": {
+    "id": "anonymous-instance",
+    "state": "Running",
+    "vmm_version": "1.12.1",
+    "app_name": "Firecracker",
+    "memory_regions": null,
+    "dirty_tracking": "kvm-wp"
+   },
+   "dirty_tracking": "kvm-wp",
+   "vmm_version": "1.12.1",
+   "creates": [
+    {
+     "n": 0,
+     "id": "ckpt_1789633130491851691",
+     "wall_s": 1.9427578158210963,
+     "mem_mode": "full",
+     "dir": "/mnt/ext4dev/orchestrator/build/checkpoints/ir1l3ncb6h1vwvz27u131/ckpt_1789633130491851691",
+     "dir_alloc_bytes": 2147590144,
+     "dir_apparent_bytes": 2147573693,
+     "files": {
+      "manifest.json": {
+       "alloc": 4096,
+       "apparent": 1037
+      },
+      "timings.json": {
+       "alloc": 4096,
+       "apparent": 407
+      },
+      "mem_bitmap": {
+       "alloc": 69632,
+       "apparent": 65560
+      },
+      "snapfile": {
+       "alloc": 12288,
+       "apparent": 11657
+      },
+      "mem_diff": {
+       "alloc": 2147487744,
+       "apparent": 2147483648
+      },
+      "rootfs.header": {
+       "alloc": 12288,
+       "apparent": 11384
+      }
+     },
+     "timings": {
+      "append_header_write": 0.054,
+      "append_layer": 0.253,
+      "append_lock_wait": 0,
+      "append_merge": 0.03,
+      "append_meta_write": 0.065,
+      "checkpoint_to_files": 1528.716,
+      "commit": 0.275,
+      "commit_files": 0.052,
+      "commit_index": 0.068,
+      "commit_manifest": 0.152,
+      "frozen": 1528.622,
+      "pause": 0.286,
+      "prepare": 0.492,
+      "prepare_manifest": 0.337,
+      "resume": 0.525,
+      "rootfs_header": 0.001,
+      "seal": 1.693,
+      "seal_move": 0.071,
+      "snapshot": 1526.103,
+      "total": 1529.815
+     }
+    },
+    {
+     "n": 1,
+     "id": "ckpt_1789633132023859461",
+     "wall_s": 0.01688833092339337,
+     "mem_mode": "incremental",
+     "dir": "/mnt/ext4dev/orchestrator/build/checkpoints/ir1l3ncb6h1vwvz27u131/ckpt_1789633132023859461",
+     "dir_alloc_bytes": 3387392,
+     "dir_apparent_bytes": 2147573946,
+     "files": {
+      "manifest.json": {
+       "alloc": 4096,
+       "apparent": 1298
+      },
+      "timings.json": {
+       "alloc": 4096,
+       "apparent": 399
+      },
+      "mem_bitmap": {
+       "alloc": 69632,
+       "apparent": 65560
+      },
+      "snapfile": {
+       "alloc": 12288,
+       "apparent": 11657
+      },
+      "mem_diff": {
+       "alloc": 3284992,
+       "apparent": 2147483648
+      },
+      "rootfs.header": {
+       "alloc": 12288,
+       "apparent": 11384
+      }
+     },
+     "timings": {
+      "append_header_write": 0.042,
+      "append_layer": 0.209,
+      "append_lock_wait": 0,
+      "append_merge": 0.029,
+      "append_meta_write": 0.05,
+      "checkpoint_to_files": 14.953,
+      "commit": 0.252,
+      "commit_files": 0.056,
+      "commit_index": 0.094,
+      "commit_manifest": 0.099,
+      "frozen": 14.889,
+      "pause": 0.341,
+      "prepare": 0.205,
+      "prepare_manifest": 0.097,
+      "resume": 0.375,
+      "rootfs_header": 0.002,
+      "seal": 0.102,
+      "seal_move": 0.047,
+      "snapshot": 14.062,
+      "total": 15.638
+     }
+    }
+   ],
+   "ok": true,
+   "elapsed_s": 1.9619852108880877
+  },
+  "restore": {
+   "restore_ok": true,
+   "restore_wall_s": 0.03625883301720023,
+   "before": {
+    "mono": "9.182158",
+    "epoch": "1789633137.055173",
+    "uptime": "9.18",
+    "cpu": "cpu  30 0 69 1708 23 0 9 0 0 0",
+    "cpu0": "cpu0 14 0 43 844 12 0 9 0 0 0",
+    "timer": "11:        843        502     GICv3  27 Level     arch_timer",
+    "sleep1": "1.0010"
+   },
+   "after": {
+    "mono": "2.653327",
+    "epoch": "1789633138.117559",
+    "uptime": "2.65",
+    "cpu": "cpu  27 0 69 407 22 0 9 0 0 0",
+    "cpu0": "cpu0 12 0 44 194 12 0 9 0 0 0",
+    "timer": "11:        653        377     GICv3  27 Level     arch_timer",
+    "sleep1": "1.0010"
+   },
+   "later": {
+    "mono": "12.701739",
+    "epoch": "1789633148.165984",
+    "uptime": "12.70",
+    "cpu": "cpu  33 0 72 2407 23 0 9 0 0 0",
+    "cpu0": "cpu0 16 0 46 1194 12 0 9 0 0 0",
+    "timer": "11:        976        728     GICv3  27 Level     arch_timer",
+    "sleep1": "1.0011"
+   },
+   "host_epoch": 1789633138.0997999,
+   "restore_timings": {
+    "assemble_view": 0.043,
+    "conntrack": 9.966,
+    "fc_bitmap": 1.525,
+    "fc_devices": 0.086,
+    "fc_gic": 0.178,
+    "fc_memory": 3.671,
+    "fc_quiesce": 0.799,
+    "fc_rollback": 6.879,
+    "fc_rollback_disk_read_mb": 0,
+    "fc_total": 6.546,
+    "fc_validate": 0.147,
+    "fc_vcpus": 0.114,
+    "frozen": 30.825,
+    "materialize": 8.335,
+    "materialize_disk_read_mb": 0,
+    "materialize_lock_wait": 0,
+    "pause": 0.272,
+    "reset_view": 2.746,
+    "resume": 0.318,
+    "revert_bitmap_write": 0.074,
+    "revert_mem_write": 8.157,
+    "rollback_in_place": 32.629,
+    "save_live_bitmap": 2.115,
+    "total": 35.188,
+    "wait_envd": 2.274
+   },
+   "e1_uptime_before": 9.18,
+   "e1_uptime_after": 2.65,
+   "e1_uptime_delta_s": -6.529999999999999,
+   "e1_rolled_back": true,
+   "t25": {
+    "sleep1_after": 1.001,
+    "sleep1_later": 1.0011,
+    "cpu0_idle": 0.9940357852882704,
+    "arch_timer_hz_max": 34.93089256292438,
+    "guest_epoch_after": 1789633138.117559,
+    "host_epoch": 1789633138.0997999,
+    "date_skew_s": 0.017759084701538086,
+    "pass_sleep1": true,
+    "pass_idle": true,
+    "pass_timer": true
+   },
+   "ok": true,
+   "elapsed_s": 17.13760093599558
+  },
+  "vgic": {
+   "fc_pid": 446893,
+   "watch_intids": {
+    "ttyS0": 67,
+    "virtio0": 64,
+    "virtio1": 65,
+    "virtio2": 66,
+    "vtimer_ppi27": 27,
+    "ptimer_ppi30": 30
+   },
+   "restore_ok": true,
+   "restore_wall_s": 0.04118776507675648,
+   "vgic_after_restore": {
+    "available": true,
+    "note": "/sys/kernel/debug/kvm/446893-15/vgic-state",
+    "rows": {
+     "ttyS0": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 67,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   67      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "virtio0": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 64,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   64      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "virtio1": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 65,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   65      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "virtio2": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 66,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   66      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "vtimer_ppi27": [
+      {
+       "vcpu": 0,
+       "typ": "PPI",
+       "intid": 27,
+       "bits": "00011110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   27      0 00011110       27        0   0 160      -1"
+      },
+      {
+       "vcpu": 1,
+       "typ": "PPI",
+       "intid": 27,
+       "bits": "00011110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   27      1 00011110       27        0   0 160      -1"
+      }
+     ],
+     "ptimer_ppi30": [
+      {
+       "vcpu": 0,
+       "typ": "PPI",
+       "intid": 30,
+       "bits": "00001110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "0",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   30      0 00001110       30        0   0 160      -1"
+      },
+      {
+       "vcpu": 1,
+       "typ": "PPI",
+       "intid": 30,
+       "bits": "00001110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "0",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   30      1 00001110       30        0   0 160      -1"
+      }
+     ]
+    }
+   },
+   "serial_write": {
+    "rc": 0,
+    "elapsed_s": 0.03272228501737118,
+    "out": "4+0 records in\n4+0 records out\n4096 bytes (4.1 kB, 4.0 KiB) copied, 0.00046591 s, 8.8 MB/s\n__rc=0",
+    "wedged": false
+   },
+   "vgic_after_write": {
+    "available": true,
+    "note": "/sys/kernel/debug/kvm/446893-15/vgic-state",
+    "rows": {
+     "ttyS0": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 67,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   67      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "virtio0": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 64,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   64      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "virtio1": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 65,
+       "bits": "00110010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "1",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   65      0 00110010        0        0   0 160       0"
+      }
+     ],
+     "virtio2": [
+      {
+       "vcpu": null,
+       "typ": "SPI",
+       "intid": 66,
+       "bits": "00010010",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "0",
+        "C": "0",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       SPI   66      0 00010010        0        0   0 160      -1"
+      }
+     ],
+     "vtimer_ppi27": [
+      {
+       "vcpu": 0,
+       "typ": "PPI",
+       "intid": 27,
+       "bits": "00011110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   27      0 00011110       27        0   0 160      -1"
+      },
+      {
+       "vcpu": 1,
+       "typ": "PPI",
+       "intid": 27,
+       "bits": "00011110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "1",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   27      1 00011110       27        0   0 160      -1"
+      }
+     ],
+     "ptimer_ppi30": [
+      {
+       "vcpu": 0,
+       "typ": "PPI",
+       "intid": 30,
+       "bits": "00001110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "0",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   30      0 00001110       30        0   0 160      -1"
+      },
+      {
+       "vcpu": 1,
+       "typ": "PPI",
+       "intid": 30,
+       "bits": "00001110",
+       "flags": {
+        "P": "0",
+        "L": "0",
+        "A": "0",
+        "E": "0",
+        "H": "1",
+        "C": "1",
+        "G": "1",
+        "N": "0"
+       },
+       "raw": "       PPI   30      1 00001110       30        0   0 160      -1"
+      }
+     ]
+    }
+   },
+   "ttyS0_counts_after": [
+    262,
+    0
+   ],
+   "ok": true,
+   "elapsed_s": 0.22320705885067582
+  },
+  "writeheavy": {
+   "rows": [
+    {
+     "dirty_mb": 16,
+     "md5": "13b9235e9430888fb1b13bc5448bc0af",
+     "write_s": 0.09306336217559874,
+     "create_s": 0.04868022515438497,
+     "id": "ckpt_1789633149494477259",
+     "mem_mode": "incremental",
+     "dir": "/mnt/ext4dev/orchestrator/build/checkpoints/ir1l3ncb6h1vwvz27u131/ckpt_1789633149494477259",
+     "dir_alloc_bytes": 31371264,
+     "dir_apparent_bytes": 2147573947,
+     "files": {
+      "manifest.json": {
+       "alloc": 4096,
+       "apparent": 1298
+      },
+      "timings.json": {
+       "alloc": 4096,
+       "apparent": 400
+      },
+      "mem_bitmap": {
+       "alloc": 69632,
+       "apparent": 65560
+      },
+      "snapfile": {
+       "alloc": 12288,
+       "apparent": 11657
+      },
+      "mem_diff": {
+       "alloc": 31268864,
+       "apparent": 2147483648
+      },
+      "rootfs.header": {
+       "alloc": 12288,
+       "apparent": 11384
+      }
+     },
+     "mem_diff_file": "mem_diff",
+     "mem_diff_alloc_bytes": 31268864,
+     "mem_diff_apparent_bytes": 2147483648,
+     "timings": {
+      "append_header_write": 0.045,
+      "append_layer": 0.233,
+      "append_lock_wait": 0,
+      "append_merge": 0.031,
+      "append_meta_write": 0.061,
+      "checkpoint_to_files": 47.065,
+      "commit": 0.307,
+      "commit_files": 0.049,
+      "commit_index": 0.132,
+      "commit_manifest": 0.124,
+      "frozen": 46.985,
+      "pause": 0.176,
+      "prepare": 0.171,
+      "prepare_manifest": 0.083,
+      "resume": 0.251,
+      "rootfs_header": 0.001,
+      "seal": 0.301,
+      "seal_move": 0.066,
+      "snapshot": 46.244,
+      "total": 47.794
+     },
+     "restore_ok": true,
+     "restore_s": 0.0355267939157784,
+     "md5_after": "13b9235e9430888fb1b13bc5448bc0af",
+     "md5_ok": true
+    },
+    {
+     "dirty_mb": 128,
+     "md5": "f15175d214f9536e437d9d638ecc345e",
+     "write_s": 0.6414203529711813,
+     "create_s": 0.1265989989042282,
+     "id": "ckpt_1789633150310618557",
+     "mem_mode": "incremental",
+     "dir": "/mnt/ext4dev/orchestrator/build/checkpoints/ir1l3ncb6h1vwvz27u131/ckpt_1789633150310618557",
+     "dir_alloc_bytes": 148037632,
+     "dir_apparent_bytes": 2147574160,
+     "files": {
+      "manifest.json": {
+       "alloc": 4096,
+       "apparent": 1510
+      },
+      "timings.json": {
+       "alloc": 4096,
+       "apparent": 401
+      },
+      "mem_bitmap": {
+       "alloc": 69632,
+       "apparent": 65560
+      },
+      "snapfile": {
+       "alloc": 12288,
+       "apparent": 11657
+      },
+      "mem_diff": {
+       "alloc": 147935232,
+       "apparent": 2147483648
+      },
+      "rootfs.header": {
+       "alloc": 12288,
+       "apparent": 11384
+      }
+     },
+     "mem_diff_file": "mem_diff",
+     "mem_diff_alloc_bytes": 147935232,
+     "mem_diff_apparent_bytes": 2147483648,
+     "timings": {
+      "append_header_write": 0.036,
+      "append_layer": 0.2,
+      "append_lock_wait": 0,
+      "append_merge": 0.024,
+      "append_meta_write": 0.047,
+      "checkpoint_to_files": 124.69,
+      "commit": 0.295,
+      "commit_files": 0.048,
+      "commit_index": 0.143,
+      "commit_manifest": 0.102,
+      "frozen": 124.623,
+      "pause": 0.281,
+      "prepare": 0.174,
+      "prepare_manifest": 0.078,
+      "resume": 0.323,
+      "rootfs_header": 0.001,
+      "seal": 0.112,
+      "seal_move": 0.052,
+      "snapshot": 123.895,
+      "total": 125.375
+     },
+     "restore_ok": true,
+     "restore_s": 0.029887062963098288,
+     "md5_after": "f15175d214f9536e437d9d638ecc345e",
+     "md5_ok": true
+    },
+    {
+     "dirty_mb": 512,
+     "md5": "7f357d053f6e910dd639edccb4cbe906",
+     "write_s": 2.5737604841124266,
+     "create_s": 0.48693129792809486,
+     "id": "ckpt_1789633153401367031",
+     "mem_mode": "incremental",
+     "dir": "/mnt/ext4dev/orchestrator/build/checkpoints/ir1l3ncb6h1vwvz27u131/ckpt_1789633153401367031",
+     "dir_alloc_bytes": 563019776,
+     "dir_apparent_bytes": 2147574370,
+     "files": {
+      "manifest.json": {
+       "alloc": 4096,
+       "apparent": 1721
+      },
+      "timings.json": {
+       "alloc": 4096,
+       "apparent": 400
+      },
+      "mem_bitmap": {
+       "alloc": 69632,
+       "apparent": 65560
+      },
+      "snapfile": {
+       "alloc": 12288,
+       "apparent": 11657
+      },
+      "mem_diff": {
+       "alloc": 562917376,
+       "apparent": 2147483648
+      },
+      "rootfs.header": {
+       "alloc": 12288,
+       "apparent": 11384
+      }
+     },
+     "mem_diff_file": "mem_diff",
+     "mem_diff_alloc_bytes": 562917376,
+     "mem_diff_apparent_bytes": 2147483648,
+     "timings": {
+      "append_header_write": 0.068,
+      "append_layer": 0.252,
+      "append_lock_wait": 0,
+      "append_merge": 0.028,
+      "append_meta_write": 0.057,
+      "checkpoint_to_files": 484.959,
+      "commit": 0.313,
+      "commit_files": 0.05,
+      "commit_index": 0.15,
+      "commit_manifest": 0.11,
+      "frozen": 484.876,
+      "pause": 0.252,
+      "prepare": 0.173,
+      "prepare_manifest": 0.08,
+      "resume": 0.247,
+      "rootfs_header": 0.001,
+      "seal": 0.134,
+      "seal_move": 0.059,
+      "snapshot": 484.229,
+      "total": 485.715
+     },
+     "restore_ok": true,
+     "restore_s": 0.03700931300409138,
+     "md5_after": "7f357d053f6e910dd639edccb4cbe906",
+     "md5_ok": true
+    }
+   ],
+   "ok": true,
+   "elapsed_s": 5.832306433934718
+  }
+ },
+ "errors": []
+}

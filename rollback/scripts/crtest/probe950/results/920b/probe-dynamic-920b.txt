@@ -1,0 +1,38 @@
+=== probe-dynamic 摘要  host=hostname-tdi1m.foreman.pxe  20260917-161848 ===
+沙箱 ir1l3ncb6h1vwvz27u131   产物目录 /mnt/ext4dev/orchestrator/build/checkpoints
+orchestrator env: {"FC_TRACK_DIRTY_PAGES": "true", "ORCHESTRATOR_BASE_PATH": "/mnt/ext4dev/orchestrator", "FIRECRACKER_VERSIONS_DIR": "/home/j30059180/projects/e2b-repo/tmp/fc-versions", "ENVIRONMENT": "local"}
+自己的 firecracker 已退出：True；总数 1 → 1（差额可能是别人的沙箱）
+
+[guest] kernel=6.1.158+ vCPU=2 pagesize=4096
+[guest] INTID: {"arch_timer": 27, "ttyS0": 67, "virtio2": 66, "virtio0": 64, "virtio1": 65, "vmgenid": 69}
+
+[checkpoint] dirty_tracking=kvm-wp  vmm_version=1.12.1
+[checkpoint] #0 mem_mode=full         wall=1.943 s 产物实占=2147590144 B（表观 2147573693 B）
+[checkpoint] #1 mem_mode=incremental  wall=0.017 s 产物实占=3387392 B（表观 2147573946 B）
+
+[E1] uptime 9.180 → 2.650（Δ -6.530 s，倒退=True）
+[T25] sleep1=1.001(True) CPU0 空闲=99.4%(True) arch_timer=35 次/s(True) date 偏差=0.02 s
+[restore] 服务端分段: {"assemble_view": 0.043, "conntrack": 9.966, "fc_bitmap": 1.525, "fc_devices": 0.086, "fc_gic": 0.178, "fc_memory": 3.671, "fc_quiesce": 0.799, "fc_rollback": 6.879, "fc_rollback_disk_read_mb": 0, "fc_total": 6.546, "fc_validate": 0.147, "fc_vcpus": 0.114, "frozen": 30.825, "materialize": 8.335, "materialize_disk_read_mb": 0, "materialize_lock_wait": 0, "pause": 0.272, "reset_view": 2.746, "resume
+
+[X1] vgic-state: /sys/kernel/debug/kvm/446893-15/vgic-state
+[X1] vgic_after_restore ttyS0        vcpu=None SPI 67 PLAEHCGN=00010010
+[X1] vgic_after_restore virtio0      vcpu=None SPI 64 PLAEHCGN=00010010
+[X1] vgic_after_restore virtio1      vcpu=None SPI 65 PLAEHCGN=00010010
+[X1] vgic_after_restore virtio2      vcpu=None SPI 66 PLAEHCGN=00010010
+[X1] vgic_after_restore vtimer_ppi27 vcpu=0 PPI 27 PLAEHCGN=00011110
+[X1] vgic_after_restore vtimer_ppi27 vcpu=1 PPI 27 PLAEHCGN=00011110
+[X1] vgic_after_restore ptimer_ppi30 vcpu=0 PPI 30 PLAEHCGN=00001110
+[X1] vgic_after_restore ptimer_ppi30 vcpu=1 PPI 30 PLAEHCGN=00001110
+[X1] vgic_after_write   ttyS0        vcpu=None SPI 67 PLAEHCGN=00010010
+[X1] vgic_after_write   virtio0      vcpu=None SPI 64 PLAEHCGN=00010010
+[X1] vgic_after_write   virtio1      vcpu=None SPI 65 PLAEHCGN=00110010
+[X1] vgic_after_write   virtio2      vcpu=None SPI 66 PLAEHCGN=00010010
+[X1] vgic_after_write   vtimer_ppi27 vcpu=0 PPI 27 PLAEHCGN=00011110
+[X1] vgic_after_write   vtimer_ppi27 vcpu=1 PPI 27 PLAEHCGN=00011110
+[X1] vgic_after_write   ptimer_ppi30 vcpu=0 PPI 30 PLAEHCGN=00001110
+[X1] vgic_after_write   ptimer_ppi30 vcpu=1 PPI 30 PLAEHCGN=00001110
+[T26] guest 写 /dev/ttyS0 4 KB: rc=0 用时 0.03 s 楔死=False
+
+[写密集]   16 MB mem_mode=incremental  产物实占=31371264 B 差分=mem_diff 实占=31268864 表观=2147483648 create=0.05 s restore=0.04 s md5=OK
+[写密集]  128 MB mem_mode=incremental  产物实占=148037632 B 差分=mem_diff 实占=147935232 表观=2147483648 create=0.13 s restore=0.03 s md5=OK
+[写密集]  512 MB mem_mode=incremental  产物实占=563019776 B 差分=mem_diff 实占=562917376 表观=2147483648 create=0.49 s restore=0.04 s md5=OK
