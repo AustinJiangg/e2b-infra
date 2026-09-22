@@ -252,7 +252,7 @@ FC 的判据 present && !uffd-wp 恒为真
 ### 5.1 环境与命令
 
 - 单台 ARM 服务器，本仓库 RPM 部署（`build.sh -i` + `build.sh -s`）；
-- 模板 `base`：1 vCPU / **1024 MiB 内存**（`benchmark/build_template.py`）；
+- 模板 `base`：2 vCPU / **2048 MiB 内存**（`benchmark/build_template.py`，2026-09-22 起；此前为 1 vCPU / 1024 MiB，第 09 篇的实测数据是在旧规格下采的）；
 - 存储 provider 实际生效值为 `Local`，产物在 `/orchestrator/`；
 - 脚本：`benchmark/snapshot.py --mode diff`——对同一个沙箱连打三次快照，
   #1 基线、#2 中间什么都不做、#3 写入 200 MiB `/dev/urandom` 之后。
