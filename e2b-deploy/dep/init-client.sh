@@ -97,7 +97,29 @@ vm.max_map_count=1048576
 
 EOF
 fi
+
+# net.ipv4.ip_forward 必须是 1，而且必须在 build.sh -s 创建 netns 池之前生效。
+# 原因：orchestrator 的每个沙箱槽位是一个 netns，里面是 eth0(veth,10.12.x.x/31) ↔
+# tap0(169.254.0.22/30)，靠 netns 内的 DNAT/SNAT 把宿主侧的 10.11.x.x 映射到 guest 的
+# 169.254.0.21；ip_forward=0 时这两张网卡之间转不了包，宿主就探不到 guest 里的 envd，
+# 建模板会在等 envd 的那一步 60 秒超时，报 "build was cancelled"。
+# 而新 netns 的 ip_forward 是创建那一刻从初始 netns 继承的，事后改宿主值对已建好的
+# 槽位池无效（要重启 template-manager 让整池重建）。
+# 本脚本由 build.sh -s 的 start() 调用，位置在 deploy.sh（起 template-manager，槽位池
+# 由它创建）之前，所以在这里设好来得及。
+# 还要改 /etc/sysctl.conf 这一行本身：openEuler 24.03 自带的 /etc/sysctl.conf 写死了
+# net.ipv4.ip_forward=0，下面不带参数的 sysctl -p 只读这个文件，会把 docker 启动时设好
+# 的 1 又压回 0（所以写 /etc/sysctl.d/*.conf 无效）。
+if grep -qE '^[[:space:]]*net\.ipv4\.ip_forward[[:space:]]*=' /etc/sysctl.conf 2>/dev/null; then
+    sudo sed -i -E 's|^[[:space:]]*net\.ipv4\.ip_forward[[:space:]]*=.*|net.ipv4.ip_forward = 1|' /etc/sysctl.conf
+else
+    echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf >/dev/null
+fi
+
 sudo sysctl -p
+# sysctl -p 之后再写一次：万一 /etc/sysctl.conf 之外还有别的地方把它改回去，
+# 以及让本次运行立刻生效，不依赖文件解析结果。
+sudo sysctl -w net.ipv4.ip_forward=1
 
 echo "Disabling inotify for NBD devices"
 # https://lore.kernel.org/lkml/20220422054224.19527-1-matthew.ruffell@canonical.com/
