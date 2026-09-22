@@ -54,9 +54,10 @@ function yum_install() {
 }
 function install_postgre() {
     info "开始安装 PostgreSQL..."
-    # 检查镜像文件是否存在
-    if [ ! -f "$DEP_DIR/postgres.tar" ]; then
-        error "PostgreSQL 镜像文件不存在：$DEP_DIR/postgres.tar"
+    # 镜像由部署前 docker load 到位（见 single-node-offline-deploy.md §1.2），
+    # 这里只确认镜像在，不再要求 dep/postgres.tar 文件本身存在（脚本从不 load 它）
+    if ! docker image inspect postgres:latest >/dev/null 2>&1; then
+        error "docker 镜像 postgres:latest 不存在，请先 docker load 离线镜像"
     fi
     
     # 停止并删除已有容器（避免冲突）
