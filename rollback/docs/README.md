@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.2.7** · 2026-09-23 · 江路路（j30059180）
+> **v0.2.8** · 2026-09-23 · 江路路（j30059180）
 >
 > 实现已合入 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09；orchestrator、Firecracker、Python SDK 同仓）
 
@@ -122,6 +122,7 @@
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v0.2.8 | 2026-09-23 | 更正过期的未结项：完整 `rpmbuild` 已在 920B 开发环境上离线端到端跑通（2026-09-22，约 2 分 15 秒，产物 `e2b-infra-2026.09-3.aarch64.rpm` 154,258,133 字节、sha256 `01d969d0…7614`；用它部署后 `rollback/scripts/950/run.sh` 的 smoke / func / perf 无 FAIL）。第 28 篇 §8 第 15 条按第 11 条的写法划掉并改为「已解决」，写明 sha、耗时、产物大小与三档结果目录名，并注明 950 上还没有用本期代码出包部署、以 LFS 原件为 `Source0` 的 rpmbuild 还没跑过；第 30 篇 §5.1「尚未跑到的实测」去掉 rpmbuild 一项，§1.2.1 补一句该部署方式在 920B 上走通、950 上未走；`rollback/scripts/dev/MANIFEST.md` 第三节「未验证」里的 rpmbuild 一条移入「已验证」并补第二次的实测 |
 | v0.2.7 | 2026-09-23 | 第 16 篇 §7.1 补一段：本仓库 nomad 单机部署的原生 snapshot 与模板写在本机 `/tmp/templates/<buildID>/`（`Local` provider），openEuler 上 `/tmp` 是 tmpfs，宿主重启后全部丢失、模板要重新建；依据与落盘做法链到 `deploy-docs/10` §7.1（同批新写：file:line 依据表、核对命令、`tmpfiles` 10 天清理规则、可选的 `LOCAL_*_BASE_PATH` 落盘做法）；`deploy-docs/06` §8.4 重启恢复清单加第 7 步「重新建模板」 |
 | v0.2.6 | 2026-09-22 | 测试用的沙箱规格进手册：第 24 篇新增 §5.0「测试环境与沙箱规格」——模板 `base` = `harbor:443/e2b-orchestration/ubuntu:22.04-custom`、**2 vCPU / 2048 MB**、磁盘约 940 MB，由 `benchmark/build_template.py` 建（`aebf028` 起写死该规格），并给出 `GET /templates` 的 `cpuCount` / `memoryMB` / `diskSizeMB` 核对命令；第五部分各篇的数据均在该规格下采得，规格变了要重采。第 26 篇 §（条件标签）、第 28 篇 §1 条件表与 §4 / §5.1 的条件标签改为引用该节；第 29 篇 §1 新增「模板」前置条件（建法 + 规格核对 + 别名占用的处理指路）。`rollback/scripts/950/README.md` 的「跑之前要确认」四件事改为五件（加模板规格一行），env 默认值改为「仓库 `benchmark/.env` 优先、找不到再退 `/opt/e2b-infra/.env`」并删掉手工拼 env 的那段，解释器写明用装了 SDK 覆盖层的那个（venv 或 conda 均可）；`run.sh` 的默认 env 逻辑同步改 |
 | v0.2.5 | 2026-09-22 | 交付形态口径统一：第 30 篇 §1.2 改写为「交付形态只有两样」——代码是 `KASandbox_0904` 的 `deltabox` 分支（`firecracker/` / `packages/` / `py-sdk/` 同仓，开发在 `deltabox-dev`，测试通过后合并），文档是本手册（单个 HTML）；目标平台 950（鲲鹏、HDBSS），920B 是开发环境。原「patch + `firecracker.arm` + rpm」一段降级为新增的 §1.2.1「我们在 950 测试环境上的部署方式（不是交付形态）」并压缩；第 05 篇硬约束 5、第 09 篇 §6、第 22 篇路线表、第 28 篇 §8 缺口 15、`rollback/README.md` 抬头的同类措辞一并改正 |

@@ -1,6 +1,6 @@
 # 交付清单
 
-最后更新：2026-09-21（第三、四节同步到 deltabox-dev 融合后的状态；其余各节仍是 2026-08-28 开发收尾时的记录，
+最后更新：2026-09-23（第三节「已验证 / 未验证」补上完整 rpmbuild 与按 RPM 部署的实测）；2026-09-21（第三、四节同步到 deltabox-dev 融合后的状态；其余各节仍是 2026-08-28 开发收尾时的记录，
 其中的分支名、commit、`bin/` 二进制与实测数字对应当时的代码，保留作历史。仓库级总索引见开发仓库根目录 `交付件清单.md`）
 
 > **2026-09-21 起，RPM 仓库里 checkpoint / restore 三个组件的来源换了**：不再是 KASandbox / infra-arm / e2b-arm
@@ -168,9 +168,14 @@ spec 不用动的原因：`e2b-deploy.tar.gz` 本来就是 `Source9`，整个 `e
 - 生成脚本会自动把改过的 `packages/shared` 文件同步进各包的 `vendor/` 树
   （infra-arm 没有 vendor/，漏了这步 orchestrator 会编不过）
 
+已验证（2026-09-22，完整 rpmbuild 与按 RPM 部署）——两次都用重建的源码包：`e2b-infra-2026.09.tar.gz` 在仓库里是 git-lfs 指针，
+LFS 原件（sha256 `59f05d43…5ea9`）在开发机上拿不到：
+- 第一次（`3842caf` 记录）：用从原件解开的工作树重新打的等价包（去掉 `vendor/` 后与上游 2026.09 标签归档只差 `go.work.sum` 与被 Source1 覆盖的 busybox）。`%prep` 以 `--fuzz=0` 打 0001 无失败无偏移，`%build`、成包通过；拆包核对 `bin/firecracker` sha256 `18f3faa7…d4c9`、SDK 覆盖层 21 个文件与仓库逐字节相同
+- 第二次在 920B 开发环境（openEuler 24.03 LTS-SP4 · aarch64）上离线端到端跑：`Source0` 从 `e2b-src-bak/e2b-infra-2026.09` 的 `upstream` 标签（`773c26c20`）重打，143,911,087 字节、sha256 `f4f5ad9e…c38b`；spec、0001、`firecracker.arm` 与 `54808b9` 中的同名文件逐字节相同。`rpmbuild -bb` 约 2 分 15 秒（Go 走 vendor，不出网），产物 `e2b-infra-2026.09-3.aarch64.rpm` 154,258,133 字节、sha256 `01d969d0…7614`。装上后 `build.sh -i` / `-s` 拉起，`rollback/scripts/950/run.sh` 三档无 FAIL：smoke `20260922-171530-smoke` PASS 5/5、func `20260922-195528-func` PASS 16 · FAIL 0 · SKIP 5、perf `20260922-201551-perf` PASS 4/4（结果目录不入库）
+
 未验证：
-- **完整 rpmbuild 只用重建的源码包跑过**（2026-09-22，920B）：`e2b-infra-2026.09.tar.gz` 在仓库里是 git-lfs 指针，LFS 原件（sha256 `59f05d43…5ea9`）在开发机上拿不到，验证用的是从原件解开的工作树重新打的等价包（去掉 `vendor/` 后与上游 2026.09 标签归档只差 `go.work.sum` 与被 Source1 覆盖的 busybox）。`%prep` 以 `--fuzz=0` 打 0001 无失败无偏移，`%build`、成包通过；拆包核对 `bin/firecracker` sha256 `18f3faa7…d4c9`、SDK 覆盖层 21 个文件与仓库逐字节相同。用 LFS 原件的 rpmbuild 由部署机（950）完成
-- 950 上的实际部署与运行
+- 用 LFS 原件的 rpmbuild（由部署机 950 完成）
+- 950 上的实际部署与运行（本期代码还没上过 950）
 
 ### 为什么 firecracker 也在仓库里换
 
