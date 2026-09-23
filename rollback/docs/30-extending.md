@@ -72,6 +72,10 @@
 > 注意 950 上版本目录名与二进制真实版本脱钩，换错目录**不会报错**
 > （[第 19 篇 §7.1](19-kunpeng-platform.md#71-fc-versions-的版本号与二进制脱钩)）。
 
+这条路在 920B 开发环境上离线端到端走通过一次（2026-09-22：`rpmbuild` 出包 → `build.sh -i` / `-s` 部署 →
+`rollback/scripts/950/run.sh` 的 smoke / func / perf 三档无 FAIL，sha、产物大小与结果目录见
+[第 28 篇 §8 第 15 条](28-results-and-compliance.md#8-尚未覆盖)）；**950 上还没有用本期代码走过**。
+
 这条路子只服务于我们的测试环境；它怎么打包、怎么装，不构成对外的交付形态。
 
 ### 1.3 阅读源码的建议顺序
@@ -234,7 +238,7 @@ Firecracker 侧是 `FC_ROLLBACK_FAULT_INJECT`，只在用 cargo feature `rollbac
 （[第 17 篇 §2.2](17-observability-and-verification.md#22-启动时的能力上报)）。
 
 **尚未跑到的实测**（950 上的分档基准、HDBSS 与软件写保护的收益对照、
-`FC_HDBSS_ORDER` 取 1 / 2 / 4 的调优、完整 `rpmbuild` 流程）连同上面三项，
+`FC_HDBSS_ORDER` 取 1 / 2 / 4 的调优）连同上面三项，
 统一在[第 28 篇 §8](28-results-and-compliance.md#8-尚未覆盖)维护**一份**清单 ——
 缺口散在多篇里就一定会各自过期，所以只在那一处更新。
 

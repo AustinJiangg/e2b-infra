@@ -839,7 +839,7 @@ restore 端到端：
 | 12 | **跨树回滚** | 无测试覆盖 | 断链后新根开新树，跨树回滚会退化成全量；逻辑上正确（[第 8 篇 §4.5](08-memory-diff-tree.md#45-最近公共祖先怎么求)）但没测 |
 | 13 | **并发操作同一沙箱** | 无针对性的竞态测试 | 依赖 `opLocks`（[第 15 篇 §10](15-state-and-concurrency.md#10-单元测试守着哪些不变量)） |
 | 14 | **HDBSS 武装时序** | 只靠调用点位置保证，没有断言 | 不变量 #13 无测试守护 |
-| 15 | **完整 `rpmbuild` 流程** | 尚未端到端跑通 | 950 测试环境的部署方式未验证（不影响交付形态，见[第 30 篇 §1.2](30-extending.md#12-交付形态)） |
+| 15 | ~~**完整 `rpmbuild` 流程**~~ | —— | **已解决**（2026-09-22，920B 开发环境，openEuler 24.03 LTS-SP4 · aarch64，离线）：`rpmbuild -bb e2b-infra.spec` 端到端跑通，约 2 分 15 秒；`%prep` 以 `--fuzz=0` 打 `0001-adapted-for-arm-architecture.patch`，`%build` 与成包通过，产物 `e2b-infra-2026.09-3.aarch64.rpm` 154,258,133 字节（sha256 `01d969d0…7614`）。所用 `e2b-infra.spec`、`0001-adapted-for-arm-architecture.patch`、`firecracker.arm` 与 `54808b9` 中的同名文件逐字节相同；`Source0` 是按上游 2026.09 标签重打的等价源码包（LFS 原件在开发机上拿不到）。随后用这个 RPM 以 `build.sh -i` / `-s` 部署，`rollback/scripts/950/run.sh` 三档都没有 FAIL：smoke `20260922-171530-smoke` PASS 5 / 5（`checkpoint_verify.py` 59 项全过）、func `20260922-195528-func` PASS 16 · FAIL 0 · SKIP 5（4 项要改服务端配置并重启，1 项是该解释器没装 pytest）、perf `20260922-201551-perf` PASS 4 / 4（结果目录在 `rollback/scripts/950/results/` 下，不入库）。更早 `3842caf` 还用重建的源码包跑过一次（`--fuzz=0` 无失败、无偏移），记录在 `../scripts/dev/MANIFEST.md` 第三节。**仍未做**：950 上还没有用本期代码出包、部署和跑测试；以 LFS 原件为 `Source0` 的 rpmbuild 也还没跑过。部署方式见[第 30 篇 §1.2.1](30-extending.md#121-我们在-950-测试环境上的部署方式不是交付形态)，它不影响交付形态（[§1.2](30-extending.md#12-交付形态)） |
 | 16 | **二进制 sha 与模板规格的留档** | 补进 `00-context.md`（[第 29 篇 §5](29-acceptance-runbook.md#5-结果回传规范)） | 08-24 / 08-25 / 08-29 三轮的这两项**空着**，事后补不上（§1.3） |
 
 > 第 16 条是这张表里唯一一条**不需要机器就能修**的：它是流程缺口，不是能力缺口。
