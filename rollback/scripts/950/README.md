@@ -84,7 +84,7 @@ bash run.sh smoke --python "$(command -v python)"
 | 项 | 脚本 | 看什么 | PASS 判据 |
 |---|---|---|---|
 | 宿主预检 | `crtest/portability/preflight-customer.sh` | CPU / KVM / GIC / 大页 / 产物盘 / 二进制身份，共约 19 项 | 退出码 = 0，即 `FAIL 0`（`WARN` 不算 FAIL） |
-| SDK 覆盖层自检 | `/opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check` | 覆盖层 21 个文件在不在位、九个异常类、端口 49984、四个 RPC 不重放 | 打出「自检通过（干净子进程）」，退出码 0 |
+| SDK 覆盖层自检 | `/opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check` | 覆盖层 21 个文件在不在位、异常族（原 8 个子类都在且映射表全是子类）、端口 49984、四个 RPC 不重放 | 打出「自检通过（干净子进程）」，退出码 0 |
 | capabilities 日志行 | 从 `/data/nomad/alloc/*/alloc/logs/start.stdout.*` 里抓 | `track_dirty_pages` 是不是 `true`、为什么 | 抓到且带 `track_dirty_pages` |
 | firecracker sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 跑的到底是哪个二进制 | 至少找到一个 |
 | 功能正确性 | `acceptance/checkpoint_verify.py` | 三代现场、内存/根文件系统/删除/权限位共 59 项，心跳进程 pid 证明是内存回来了 | 打出「✓ 59 项校验全部通过。」 |
@@ -111,7 +111,7 @@ bash run.sh smoke --python "$(command -v python)"
 
 一句话说明见 `python3 -m crtest --list`，详细判据见 `crtest/README.md`。
 再加一项 **SDK 异常语义 pytest**（`crtest/sdktests/test_checkpoint_errors.py`）：
-起一个打桩 HTTP 服务端，驱动真实客户端，验九个 checkpoint 异常类与 `.reason` 落点。
+起一个打桩 HTTP 服务端，驱动真实客户端，验十个 checkpoint 异常类（含字节配额的 CheckpointBytesLimitException）与 `.reason` 落点。
 纯本地，不建沙箱、不碰栈。没装 pytest 就判 SKIP —— 950 能连外网，装上再重跑即可：
 
 ```bash
@@ -239,8 +239,13 @@ cp results/*-perf/compliance.log results/*-perf/analyze.log results/*-perf/seria
 
 ```bash
 cd rollback/scripts/950            # 在 clone 下来的 e2b-infra 目录里
-PY=python3
-ENVF=/opt/e2b-infra/.env
+# 解释器：装了 SDK 覆盖层的那一个（同 run.sh 的 --python，见 §1）
+PY=/root/miniforge3/envs/jll-e2b/bin/python
+# 客户端凭据：仓库里的 benchmark/.env（同 run.sh 的默认值）。/opt/e2b-infra/.env 是服务端配置，
+# 不带 E2B_API_KEY。checkpoint_concurrent.py 用不带路径的 load_dotenv()，所以还要 export 一遍。
+ENVF=$(cd ../../../benchmark && pwd)/.env
+set -a; . "$ENVF"; set +a
+export PYTHONPATH=$PWD/../crtest   # `-m crtest` 要找得到包
 OUT=/var/log/e2b-verify/long-$(date +%Y%m%d-%H%M%S); mkdir -p "$OUT"
 
 # ① 并发 C / D 段（C 段可能把 orchestrator 打挂，机器上有别人的沙箱时不要开）
@@ -249,15 +254,13 @@ $PY ../acceptance/checkpoint_concurrent.py --stages D --soak-sandboxes 8 --soak-
 $PY ../acceptance/checkpoint_concurrent.py --stages C --lifecycle \
     --out "$OUT/concurrent-C.json" 2>&1 | tee "$OUT/concurrent-C.log"
 
-# ② 空闲之后的 restore 长尾：空闲 0 / 5 / 10 秒各 n=30
-for T in 0 5 10; do
-  $PY ../crtest/bench/serial_restore.py --env-file "$ENVF" -n 30 --outdir "$OUT" \
-      --out "$OUT/idle-$T.json" 2>&1 | tee "$OUT/idle-$T.log"
-  sleep "$T"
-done
+# ② 空闲之后的 restore 长尾：仓库里暂时没有对应脚本，这里不列命令。
+#    serial_restore.py 是背靠背连续 restore，没有"空闲 T 秒后再 restore"的参数；
+#    在它外面 sleep 不等于空闲后 restore。
 
-# ③ 数千次循环：混合稳态全规模（1800 秒）+ 串行 restore 数千次
-$PY -m crtest T36 --env-file "$ENVF" --seconds 1800 --out "$OUT/T36-full.json" 2>&1 | tee "$OUT/T36-full.log"
+# ③ 数千次循环：混合稳态全规模（16 沙箱 × 1800 秒）+ 串行 restore 5000 次
+$PY -m crtest T36 --env-file "$ENVF" --sandboxes 16 --seconds 1800 \
+    --out "$OUT/T36-full.json" 2>&1 | tee "$OUT/T36-full.log"
 $PY ../crtest/bench/serial_restore.py --env-file "$ENVF" -n 5000 --deadline-min 600 \
     --outdir "$OUT" --out "$OUT/serial-5000.json" 2>&1 | tee "$OUT/serial-5000.log"
 
@@ -266,9 +269,6 @@ $PY ../crtest/bench/bench_tiers.py --env-file "$ENVF" --tier-set full --passes 3
     --deadline-min 90 --outdir "$OUT" --out "$OUT/bench-full.json" 2>&1 | tee "$OUT/bench-full.log"
 $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance-full.log"
 ```
-
-跑长测前把 `PYTHONPATH` 指到 crtest 套件根（`export PYTHONPATH=$PWD/../crtest`），
-`-m crtest` 才找得到包。
 
 ## 长测清单结束
 

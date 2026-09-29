@@ -21,6 +21,7 @@ from packaging.version import Version
 from e2b import (
     AuthenticationException,
     CheckpointBusyException,
+    CheckpointBytesLimitException,
     CheckpointChainBrokenException,
     CheckpointDiskFullException,
     CheckpointException,
@@ -152,13 +153,69 @@ REASONS = [
     (500, "internal", "guest_unresponsive", CheckpointGuestUnresponsiveException),
     (503, "unavailable", "busy", CheckpointBusyException),
     (409, "aborted", "sandbox_restored", CheckpointInterruptedException),
-    # Both of these refuse the call before anything is touched, so the
-    # sandbox keeps running - but they are cleared up by different people:
-    # a full artifact disk by whoever operates the host, a sandbox over
-    # its own limit by deleting checkpoints it no longer needs.
+    # These refuse the call before anything is touched, so the sandbox
+    # keeps running - but they are cleared up by different people: a full
+    # artifact disk by whoever operates the host, a sandbox over one of its
+    # own limits by deleting checkpoints it no longer needs.
     (507, "resource_exhausted", "disk_full", CheckpointDiskFullException),
     (429, "resource_exhausted", "too_many_checkpoints", CheckpointTooManyException),
+    (
+        429,
+        "resource_exhausted",
+        "checkpoint_bytes_limit",
+        CheckpointBytesLimitException,
+    ),
 ]
+
+
+def test_the_byte_limit_is_caught_where_the_count_limit_is(server, checkpoint):
+    # Both limits are cleared by deleting checkpoints, so code written for the
+    # count limit has to keep working when it is the bytes that refuse.
+    server.answer(
+        429,
+        {
+            "code": "resource_exhausted",
+            "reason": "checkpoint_bytes_limit",
+            "message": "the checkpoints occupy 5368709120 bytes, at or over the limit",
+        },
+    )
+
+    with pytest.raises(CheckpointTooManyException) as excinfo:
+        checkpoint.create()
+
+    assert isinstance(excinfo.value, CheckpointBytesLimitException)
+    assert excinfo.value.reason == "checkpoint_bytes_limit"
+    assert not isinstance(excinfo.value, CheckpointDiskFullException)
+
+
+def test_the_byte_limit_message_reaches_the_caller_whole(server, checkpoint):
+    # The server's sentence is what tells the caller which checkpoints to
+    # delete; it has to arrive as the exception's text, unshortened.
+    message = (
+        "the sandbox is at its checkpoint storage limit: the checkpoints of "
+        "sandbox sbx occupy 5368709120 bytes, at or over the limit of "
+        "4294967296 bytes. Deleting ckpt_3, the checkpoint the sandbox runs "
+        "from, frees almost nothing; delete the oldest checkpoints first "
+        "(each folds into the next, freeing the pages it overwrote), or "
+        "restore to an earlier checkpoint and delete those after it; restores "
+        "are never refused by this limit, and the sandbox always needs about "
+        "1073741824 bytes (one full memory image)."
+    )
+    server.answer(
+        429,
+        {
+            "code": "resource_exhausted",
+            "reason": "checkpoint_bytes_limit",
+            "message": message,
+        },
+    )
+
+    with pytest.raises(CheckpointBytesLimitException) as excinfo:
+        checkpoint.create()
+
+    assert message in str(excinfo.value)
+    assert "ckpt_3" in str(excinfo.value)
+    assert "delete the oldest checkpoints first" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("status,code,reason,expected", REASONS)
