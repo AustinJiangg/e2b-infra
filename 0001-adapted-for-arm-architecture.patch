@@ -8114,10 +8114,10 @@ index 000000000..67d534a33
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/compact.go b/packages/orchestrator/internal/checkpoint/compact.go
 new file mode 100644
-index 000000000..c103226c8
+index 000000000..514038eae
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/compact.go
-@@ -0,0 +1,1075 @@
+@@ -0,0 +1,1077 @@
 +package checkpoint
 +
 +import (
@@ -8142,10 +8142,12 @@ index 000000000..c103226c8
 +// hidden entry used to go only once it became a childless non-base leaf
 +// (pruneLocked). A client that keeps its newest N checkpoints and deletes the
 +// oldest never produces such a leaf: every entry it deletes is the parent of
-+// the next one. The hidden entries then pile up without bound -- the long runs
-+// measured ~1300 per sandbox after 12 hours, chains ~1100 deep -- and so does
-+// the disk, and a restore's materialize walks the whole chain. The limit on
-+// checkpoints per sandbox counts only visible ones, so it does not stop it.
++// the next one. The hidden entries then pile up without bound -- one per such
++// delete, in a chain as deep as the sandbox has been checkpointing -- and so
++// does the disk, and a restore's materialize walks the whole chain. The limit
++// on checkpoints per sandbox counts only visible ones, so it does not stop it.
++// With folding caught up, a tree with V visible entries holds at most V+1
++// hidden ones, 2V+1 entries in all (see checkFoldBounds in the tests).
 +//
 +// Compaction folds such an entry into its child instead of keeping it. A
 +// candidate H is hidden, is not the base, and has exactly one child C (the
@@ -12728,10 +12730,10 @@ index 000000000..07e45a66f
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/store.go b/packages/orchestrator/internal/checkpoint/store.go
 new file mode 100644
-index 000000000..b747d5ac4
+index 000000000..f6e5a0089
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/store.go
-@@ -0,0 +1,2377 @@
+@@ -0,0 +1,2382 @@
 +// Package checkpoint implements the host side of sandbox checkpoint/rollback:
 +// a per-sandbox tree of diff checkpoints and the service that answers the
 +// in-sandbox checkpoint port (49984) on the host.
@@ -13759,8 +13761,13 @@ index 000000000..b747d5ac4
 +	return e, nil
 +}
 +
-+// commitFiles moves the temp artifacts into their final names, durably. A
-+// diff checkpoint must have its sidecar: it is the only record of which
++// commitFiles moves the temp artifacts into their final names. Each rename is
++// atomic, but nothing is fsynced, so the files need not survive a host crash.
++// The store does not claim that durability: the index that references them
++// lives in process memory (see the comment in the loop below and the package
++// comment).
++//
++// A diff checkpoint must have its sidecar: it is the only record of which
 +// pages the diff file holds, so without it neither content resolution nor
 +// revert sets can ever use the entry.
 +func commitFiles(e *Entry, memMode string, withSnapfile bool) error {
@@ -17128,10 +17135,10 @@ index 0df559681..a6dc64b56 100644
  
 diff --git a/packages/orchestrator/internal/sandbox/checkpoint.go b/packages/orchestrator/internal/sandbox/checkpoint.go
 new file mode 100644
-index 000000000..2ad871ec6
+index 000000000..84e0af59b
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/checkpoint.go
-@@ -0,0 +1,708 @@
+@@ -0,0 +1,710 @@
 +package sandbox
 +
 +import (
@@ -17326,11 +17333,13 @@ index 000000000..2ad871ec6
 +// running afterwards. The files are Firecracker's own snapshot output, so they
 +// can be handed straight back to it later.
 +//
-+// With diff set, the memory file only holds the pages dirtied since the
-+// previous snapshot, written at their original offsets. The caller passes a
-+// file that already holds the previous full view, so the overwrite yields the
-+// full view of this moment. Dirty page tracking has to have been armed when
-+// the VM was started or loaded.
++// With diff set, Firecracker writes only the pages dirtied since the previous
++// snapshot or rollback, at their guest-physical offsets, into a fresh sparse
++// file at memfilePath -- holes everywhere else -- and names those pages in the
++// sidecar at dirtyBitmapPath. The file is not a full view of this moment and
++// never becomes one: a restore resolves each page through the checkpoint's
++// ancestor chain. Without diff the file is a full capture. Dirty page
++// tracking has to have been armed when the VM was started or loaded.
 +//
 +// epochAdvanced reports whether Firecracker wrote the snapshot: doing so
 +// clears its dirty-page bitmap, so from that point on the memory file is the

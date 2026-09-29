@@ -403,7 +403,7 @@ grep -h 'dirty page tracking is off\|is not a boolean and was ignored' $(ls -v "
 `e2b-deploy/dep/deploy.sh` 的 `envsubst` 白名单（`deploy.sh:131` 起）里也没有——这是有意的默认。
 
 `FC_TRACK_DIRTY_PAGES` 是 orchestrator 进程的环境变量，用来覆盖探测结果
-（deltabox-dev `93ccb02`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
+（deltabox-dev `57a3063`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
 按 Go 的 `strconv.ParseBool` 读，`1/t/T/TRUE/true/True` 强制开，`0/f/F/FALSE/false/False` 强制关；
 没设、或值解析不了（`yes`、`on`、空串、拼错），都按硬件探测结果决定，后一种情况启动日志另打一条 WARN
 （`packages/orchestrator/main.go:795-800`）。按平台：
