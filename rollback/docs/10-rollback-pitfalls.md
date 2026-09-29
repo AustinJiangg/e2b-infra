@@ -1,11 +1,21 @@
-# 18 · 原地回滚特有的问题
+# 10 · 原地回滚特有的问题
 
-> 这篇给要在回滚路径上继续开发的人看。把状态写回一个**活着**的进程，与从零**构造**一个新进程，
-> 会遇到完全不同的问题。本篇讲五类「重建路线永远不会遇到」的问题：网络 RX 描述符缓存、
-> VMGenID 的次序、宿主连接跟踪（连同代理连接池）、时间、队列页的脏标记。
-> 读完能说清每一类的根因与修法，并能用 §8 的检查表审自己的改动。
->
-> 预备：[17 · 进程内原地回滚](17-in-place-rollback.md)。其中两类问题的表现是**挂死而不是报错**。
+## 本章目标
+
+读完本章，你应当能回答：
+
+1. 为什么原地回滚会有"重建路线永远不会遇到"的问题？有没有一个判据能提前把它们找出来？
+2. 一个网络 RX 描述符缓存，怎么会让 guest 的收包方向永久卡死？修法为什么只能原地清空、不能重建对象？
+3. 宿主内核的连接跟踪表为什么必须清、怎么清才不误伤同节点的其他沙箱、为什么清理可以和回滚并行？
+4. guest 恢复之后它的时钟是什么样的；这对验收判据和使用方意味着什么？
+5. 给回滚路径加新设备或新代码时，用什么检查表审自己的改动？
+
+---
+
+上一章（[09](09-in-place-rollback.md)）按九个阶段讲了原地回滚的正常路径。把状态写回一个**活着**的进程，和从零**构造**一个新进程，
+会遇到完全不同的问题。本章讲五类"重建路线永远不会遇到"的问题：网络 RX 描述符缓存、VMGenID 的次序、宿主连接跟踪（连同代理连接池）、时间、
+队列页的脏标记。其中两类的表现是**挂死而不是报错**，这也是它们最难查的原因。最后给出一张检查表（§8），供继续开发的人逐条审自己的改动。
+下一章（[11](11-end-to-end.md)）把 04–10 章串起来，按时间顺序完整走一遍一次 checkpoint 与一次 restore。
 
 ---
 
@@ -47,12 +57,17 @@ virtio 队列有两个环：guest 把可用缓冲区的描述符放进 **avail �
 
 ### 2.3 根因
 
-回滚时 avail 环的内容（在 guest 内存里）回到目标时刻，队列索引 `next_avail` 按快照重置，
-但设备对象里的 `parsed_descriptors` **没人动它**，还装着按被丢弃时间线解析出来的描述符链。
-于是第 3 步用一个 guest 从未发出过的描述符 id 写了 used 项，驱动认定环已损坏，拒绝继续处理 RX 队列。
+回滚时发生了三件事：
+
+- **avail 环的内容**（在 guest 内存里）被阶段 4 回退到目标时刻；
+- **队列索引** `next_avail` 被 `apply_one_device` 按快照重置；
+- 但设备对象里的 `rx_buffer.parsed_descriptors` **没人动它** —— 它还装着按**被丢弃的时间线**解析出来的描述符链。
+
+于是第 3 步用一个已经不存在的描述符 id 写了一条 used 项。guest 驱动拿到这个 id 去自己的表里查，查不到 —— 在目标时刻它没有发出过这个描述符。
+驱动认定环已损坏，拒绝继续处理 RX 队列：**永久卡死**。
 只在「回滚时缓存里有已解析的链，且回滚后很快有帧到达」时出现，所以不是每次都有。
 
-重建路线的新设备 `rx_buffer` 是空的，会从刚加载好的 avail 环重新解析 —— 构造函数天然做对了这件事。
+为什么重建路线不会遇到？新建的 net 设备 `rx_buffer` 是空的，它会从刚加载好的 avail 环重新解析一遍 —— 构造函数天然做对了这件事。
 
 ### 2.4 修法
 
@@ -76,12 +91,20 @@ self.rx_buffer.used_bytes = used_bytes;
 
 ### 2.5 连带约束：seccomp
 
-上面是 `clear()` 而不是「换一个新的 `RxBuffers`」。代码注释说明了原因：新建 `RxBuffers` 会 mmap 一个新的
-`IovDeque`，其底层用 `memfd_create` + 双重映射实现环形缓冲；而 `memfd_create` 只在 seccomp 过滤器安装**之前**
-被调用过，VMM 线程的白名单里没有它。
+上面是 `clear()` 而不是「换一个新的 `RxBuffers`」。代码注释说明了原因：
+
+```rust
+// Cleared in place rather than rebuilt: a fresh RxBuffers would mmap a
+// new IovDeque, and the vmm thread's seccomp filter has no
+// memfd_create rule — that syscall is only ever made before the
+// filters are installed.
+```
+
+`IovDeque` 底层用 `memfd_create` + 双重映射实现环形缓冲；而 `memfd_create` 只在 seccomp 过滤器安装**之前**（初始化阶段）
+被调用过，所以 VMM 线程的白名单里没有它。若换成新建对象，第一次回滚就会让进程被 SIGSYS 杀掉。
 
 > **运行期能做的事比初始化期少。** 重建路线在一个还没装过滤器的新进程里什么都能做。
-> 同类的还有：回滚用到的 vCPU ioctl 必须在 vCPU 线程执行（[17](17-in-place-rollback.md)），
+> 同类的还有：回滚用到的 vCPU ioctl 必须在 vCPU 线程执行（[09](09-in-place-rollback.md)），
 > 「取脏页位图」路径需要放行 VMM 线程的 `pread64`。改动回滚路径时，**凡是新增系统调用，都要同步检查 seccomp 白名单**。
 
 ---
@@ -95,7 +118,14 @@ guest 据此重新播种随机数生成器等依赖时间单调的东西。**它
 写入新代号  →  内存回滚  →  新代号被目标时刻的旧值覆盖
 ```
 
-guest 醒来看到的是它熟悉的代号，不知道时间被回拨了。修法是放在阶段 8，内存写回之后。
+guest 醒来看到的是它熟悉的代号，不知道时间被回拨了。修法是放在阶段 8，内存写回之后，代码在那里写明了理由：
+
+```rust
+// ── Phase 8: VMGenID. The guest must learn that time was rewound; a new
+// generation (never the snapshot's) is written after the memory revert so
+// the revert cannot clobber it. ──
+```
+
 写的是**新**代号而不是快照里的那个：guest 需要知道的是「你被回滚了」，而不是「你回到了那个时刻」——
 后者会让 guest 以为自己一直在那个时刻，从而不做任何重播种。
 
@@ -145,7 +175,8 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 中途发删除会把 dump 的一部分当成自己的回复读走。dump 被内核中断（`ErrDumpInterrupted`）时，已经回来的照删。
 
 **③ 选路：按实测代价模型。** 另一条路是让内核过滤（带 `CTA_FILTER` 的 dump，`conntrack_filter.go`）。一个过滤器内的条件是「与」，
-「地址在任一端」要两个过滤器，也就是**每个地址两次 dump**，而且每次 dump 内核仍要逐条比较全表。`sweepUsesFilter`
+多个过滤器之间才是「或」：若把「源是 slot 地址」和「目的是 slot 地址」写进同一个过滤器，语义就变成「源和目的**同时**是 slot 地址」，
+一条也匹配不上。所以「地址在任一端」要两个过滤器，也就是**每个地址两次 dump**，而且每次 dump 内核仍要逐条比较全表。`sweepUsesFilter`
 （`conntrack_sweeper.go:280`）比较两者：
 
 ```
@@ -170,12 +201,15 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 （`EINVAL`、`EOPNOTSUPP` 等）进程级记住，此后一律走整表路径。
 
 每批的开销分解进 restore 的计时：`conntrack_host_queue`（等在途清扫）、`conntrack_host_sweep`（覆盖本次的那次清扫）、
-`conntrack_host_batch_count`、`conntrack_host_entries_count`。定义见 [07](07-observability-reference.md)，实测见
-[25](25-results-and-compliance.md)。
+`conntrack_host_batch_count`、`conntrack_host_entries_count`。定义见 [28](28-observability-reference.md)；
+并发与长跑下宿主表的增长、攒批与改算法前后的对比见 [22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)。
 
 ### 4.5 时机：pause 后启动、与回滚并行、resume 前 join
 
-清表要满足一条约束：**表项必须在流量放回来之前清完**。它只要求「虚机已停」，不要求「回滚已完成」。所以：
+清表要满足一条约束：**表项必须在流量放回来之前清完**。反过来想：若放到 resume 之后再清，guest 已经在跑、可能已经发出了包，
+我们正在删的表项里可能就有它刚刚建立的新连接；而在删完之前，那些跨越回滚的旧表项仍在丢 guest 的包。两种错误都表现为连接挂死，没有任何报错。
+
+这条约束只要求「虚机已停」，不要求「回滚已完成」。所以：
 
 - `RollbackInPlace` 在 pause 之后立刻在后台启动清理（`startConntrackFlush`，`internal/sandbox/checkpoint.go:495`），
   与导出位图、物化、Firecracker 回滚、`ResetView` 并行；
@@ -199,7 +233,14 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 
 orchestrator 自己的代理对每个沙箱维护一个连接池。回滚之后，池里那些还开着的连接，对端（guest 里的服务）已经不记得了。
 
-丢弃发生在 restore **一开始**：磁盘视图装配完、暂停虚机之前（`service.go` — `beginRestore`，`:1058`）。跨越回滚的连接此刻已注定作废：
+```go
+// service.go — beginRestore
+if s.dropConnections != nil {
+    if err := s.dropConnections(connectionKey); err != nil { ... }   // 只记 WARN
+}
+```
+
+丢弃发生在 restore **一开始**：磁盘视图装配完、暂停虚机之前（`service.go` — `beginRestore`，`:1058`），而不是等回滚完成之后。跨越回滚的连接此刻已注定作废：
 早断开，持有它们的调用方毫秒级得到应答（unary 调用被改判成 409 `sandbox_restored`）；晚断开，它们要挂到 restore 结束，
 最坏是 45 s 的 envd 等待。代价是 restore 若在提交点之前失败，这些调用方白白重连一次 —— 两种错里便宜的那种。
 丢弃失败只记警告：池里的坏连接会在下次使用时报错被剔除。
@@ -207,8 +248,8 @@ orchestrator 自己的代理对每个沙箱维护一个连接池。回滚之后�
 ### 4.7 对使用方的结论
 
 restore 会作废该沙箱上**全部跨越回滚的 TCP 连接**，同节点其他沙箱不受影响，restore 之后新建的连接不受影响。
-面向使用方的完整说明在 [02](02-semantics-and-limits.md)，调用方看到的错误形态（unary 的 409、流式的传输层错误）在
-[03](03-errors-timeouts-concurrency.md)。
+面向使用方的完整说明在 [24](24-semantics-and-limits.md)，调用方看到的错误形态（unary 的 409、流式的传输层错误）在
+[25](25-errors-timeouts-concurrency.md)。
 
 ---
 
@@ -219,13 +260,25 @@ restore 会作废该沙箱上**全部跨越回滚的 TCP 连接**，同节点其
 **单调时钟真的会倒退。** guest 的 `CLOCK_MONOTONIC` 来自 vCPU 的计时器寄存器，而它们在阶段 5 被恢复成快照时刻的值。
 这违反 POSIX 对单调时钟的承诺，但在快照语义下是唯一自洽的做法：guest 的所有状态都与那个时刻一致。
 
-**墙钟由 envd 校回。** 恢复流程最后等 guest 里的 envd 应答，envd 初始化会把墙钟校回当前时间
-（`service.go` — `finishRestore` 的注释）。这与 e2b 原生 pause/resume 路径的行为一致。
+**墙钟由 envd 校回。** 墙钟（`CLOCK_REALTIME`）不能留在过去 —— 那会让 guest 里的一切时间戳都错。恢复流程最后等 guest 里的 envd 应答，
+envd 初始化会把墙钟校回当前时间（`service.go` — `finishRestore`）：
+
+```go
+// The guest woke up with the clock of checkpoint time; envd init brings
+// the wall clock back to now, same as the pause/resume path. Monotonic
+// time staying rolled back is part of restore semantics.
+err := waitForEnvd(ctx)   // 即 sbx.WaitForEnvdAfterRestore(ctx, envdRestoreTimeout)
+```
+
+这与 e2b 原生 pause/resume 路径的行为一致，不是本方案特有的语义。
 
 **对验收判据的影响。**「恢复后心跳进程还在跑」不能用「时间戳在推进」或「tick 速率正常」判：墙钟在恢复瞬间跳变，
 单调时钟被拨回，基于它的速率会得到荒谬的值。验收脚本的活性判据因此只断言**心跳计数在增长**，不对时间做任何假设
-（[23](23-testing-and-functional-verification.md)）。反过来，时间倒退也是有用的证据：心跳进程在多代之间保持
-**同一个 PID 和同一个启动时刻**，证明打快照没有重启虚机。
+（[19](19-testing-and-functional-verification.md)）。这一条是「先想清楚语义、再写测试」的典型：若按直觉用时间判活，
+测试会在一个完全正确的 restore 上报失败。
+
+反过来，时间倒退也是有用的证据：验收里心跳进程在多代 checkpoint / restore 之间保持**同一个 PID 和同一个启动时刻**，
+这证明打快照没有重启虚机，而且是「回到那一刻」最硬的一条证据。
 
 ---
 
@@ -233,8 +286,8 @@ restore 会作废该沙箱上**全部跨越回滚的 TCP 连接**，同节点其
 
 这一类属于「回滚破坏了别的机制的前提」。阶段 9 清空脏页跟踪，让下一代 Diff 相对刚恢复的状态；但 virtio 队列的环页
 **在运行期被 Firecracker 自己写**（设备往 used 环放条目），这些写不经过 Stage-2 故障，KVM 不知道
-（[13](13-dirty-page-tracking-and-hdbss.md)）。清空之后位图里没有这些页，下一代 Diff 会**漏掉**它们，
-破坏 [14](14-memory-diff-tree.md) 里回滚集的正确性证明。所以阶段 9 清完立刻对已激活设备调 `mark_queue_memory_dirty`
+（[05](05-dirty-page-tracking-and-hdbss.md)）。清空之后位图里没有这些页，下一代 Diff 会**漏掉**它们，
+破坏 [06](06-memory-diff-tree.md) 里回滚集的正确性证明。所以阶段 9 清完立刻对已激活设备调 `mark_queue_memory_dirty`
 （未激活的设备还没有队列内存可标）。
 
 ---
@@ -250,9 +303,10 @@ rollback: device {id} (type {ty}) q0 avail=… next_avail=… next_used=… pend
 
 avail / used 是按设备读环的方式从已回滚的 guest 内存里读出来的，所以这一行就是「设备和 guest 分别认为进行到哪里」的快照，
 两者对不上就是问题所在。pause 路径上也输出同样的诊断，但降为 debug 级别 —— 每次 pause 都走这条路，默认不该刷屏；
-需要对比「回滚前」与「回滚后」时调高日志级别即可。这类日志的价值在于**罕见故障只有一次现场**。
+需要对比「回滚前」与「回滚后」时调高日志级别即可。这类日志的价值在于**罕见故障只有一次现场**：一个几百次才复现一次的挂死，
+如果现场只有「沙箱没反应」，基本无从下手；有了这一行，至少能分清是设备没往下走，还是 guest 没往下走。
 
-按症状排查的步骤（连接挂死、RX 卡死、串口卡住等）见 [08](08-troubleshooting.md)。
+按症状排查的步骤（连接挂死、RX 卡死、串口卡住等）见 [29](29-troubleshooting.md)。
 
 ---
 
@@ -269,23 +323,10 @@ avail / used 是按设备读环的方式从已回滚的 guest 内存里读出来
 | 宿主上有没有「记得这个 guest」的状态？ | 要在流量放回来之前清掉（如 conntrack、代理连接池） |
 | 新代码有没有引入新的系统调用？ | 检查 seccomp 白名单（VMM 线程、vCPU 线程各一份） |
 | 有没有在途的异步 I/O？ | 阶段 2 要排空它 |
-| 有没有「KVM 内部挂起、不在快照里」的状态（如 arm64 延迟完成的 MMIO 退出）？ | pause 停车前与回滚写寄存器前都要排干（[17](17-in-place-rollback.md)） |
-| 往活着的内核对象写「写 1 生效」的成对寄存器（GIC enable / pending / active）？ | 必须先清后设的绝对写回（[17](17-in-place-rollback.md)） |
+| 有没有「KVM 内部挂起、不在快照里」的状态（如 arm64 延迟完成的 MMIO 退出）？ | pause 停车前与回滚写寄存器前都要排干（[09](09-in-place-rollback.md)） |
+| 往活着的内核对象写「写 1 生效」的成对寄存器（GIC enable / pending / active）？ | 必须先清后设的绝对写回（[09](09-in-place-rollback.md)） |
 | 设备状态与宿主侧后端（tap 的 offload 标志等）有没有必须一致的配对？ | 回滚设备状态后按回滚后的值重设后端 |
 | 新设备支持热插拔或动态配置吗？ | `validate_topology` 要能表达，否则应当拒绝 |
-
----
-
-## 9. 小结
-
-1. 原地回滚特有的问题有统一形式：**从活对象推导出来、又没进快照的状态**，以及**宿主上记得 guest 的状态**。
-2. **RX 描述符缓存**：环页回滚了、缓存没有，第一个完成的帧让 guest 驱动认定环损坏。修法是清空缓存、退回 `next_avail`、重新解析；
-   修法本身受 seccomp 约束，只能原地清空。
-3. **VMGenID 必须在内存回滚之后刷新**，且写新代号。
-4. **连接跟踪**：命名空间表整表 flush，宿主表只删本 slot 地址的表项；宿主侧由清扫器攒批，每批一次原始报文整表扫描，
-   单地址大表才按代价模型改走内核过滤；清理在 pause 后启动、与回滚并行、resume 前 join。代理连接池在 pause 前丢弃。
-5. **时间**：单调时钟倒退，墙钟由 envd 校回，活性判据不能用时间。
-6. **队列页要重新标脏**，否则下一代 Diff 漏页。
 
 ---
 
@@ -304,3 +345,17 @@ avail / used 是按设备读环的方式从已回滚的 guest 内存里读出来
 | 调用时机与计时 | `internal/sandbox/checkpoint.go` — `RollbackInPlace`；`internal/sandbox/conntrack_flush.go` — `startConntrackFlush`、`join`、`recordConntrackReport` |
 | 代理连接池丢弃 | `internal/checkpoint/service.go` — `beginRestore`、`SetConnectionDropper` |
 | 等 envd 与墙钟校回 | 同上 — `finishRestore`、`envdRestoreTimeout` |
+
+---
+
+## 本章要点
+
+1. 原地回滚特有的问题有统一形式：**从活对象推导出来、又没进快照的状态**，以及**宿主上记得 guest 的状态**。
+2. **RX 描述符缓存**：环页回滚了、缓存没有，第一个完成的帧让 guest 驱动认定环损坏。修法是清空缓存、退回 `next_avail`、重新解析；
+   修法本身受 seccomp 约束，只能原地清空。
+3. **VMGenID 必须在内存回滚之后刷新**，且写新代号。
+4. **连接跟踪**：命名空间表整表 flush，宿主表只删本 slot 地址的表项；宿主侧由清扫器攒批，每批一次原始报文整表扫描，
+   单地址大表才按代价模型改走内核过滤；清理在 pause 后启动、与回滚并行、resume 前 join。代理连接池在 pause 前丢弃。
+5. **时间**：单调时钟倒退，墙钟由 envd 校回，活性判据不能用时间。
+6. **队列页要重新标脏**，否则下一代 Diff 漏页。
+7. 这些问题的共同教训是一张检查表（§8）：给回滚路径加设备、加代码时逐条过一遍，比事后在挂死的沙箱上找原因便宜得多。

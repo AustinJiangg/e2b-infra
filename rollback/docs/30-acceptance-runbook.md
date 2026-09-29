@@ -1,7 +1,16 @@
-# 09 · 上机验收
+# 30 · 上机验收
 
-> 给做验收的人：拿到交付件、按 [05](05-deployment-prerequisites.md) 部署完之后，用一站式入口 `rollback/scripts/950/run.sh` 把 checkpoint / restore 验一遍——
-> 每一档跑什么、要多久、怎么判过、结果怎么留档回传。判据背后的道理见 [23](23-testing-and-functional-verification.md)，性能口径见 [24](24-performance-methodology.md)。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 在宿主机上用正确的解释器、凭据与模板准备好验收环境；
+2. 说出 `run.sh` 四档各跑什么、要多久、怎么判过，并按顺序跑完 smoke、func、perf；
+3. 知道哪几条用例不在交付态机器上跑、为什么，`long` 档的清单该怎么安排；
+4. 把结果连同 `00-context.md` 留档并回传，写清这份数不能拿来干什么。
+
+上一章（[29](29-troubleshooting.md)）按症状讲了排障。本章是第六部分的最后一章，也是交付的最后一步：拿到交付件、按 [26](26-deployment-prerequisites.md) 部署完之后，用一站式入口 `rollback/scripts/950/run.sh`
+把 checkpoint / restore 验一遍——每一档跑什么、要多久、怎么判过、结果怎么留档回传。判据背后的道理见 [19](19-testing-and-functional-verification.md)，性能口径见 [20](20-performance-methodology.md)。
 
 ---
 
@@ -10,7 +19,7 @@
 **在哪跑。** 在跑 orchestrator 的**宿主机**上、以 root 跑。远程也能验正确性，但读不到服务端分段计时、产物目录和脏页后端，部分用例会判失败、性能表会缺列。
 
 **测试套件在哪。** 不在 RPM 里，跟着 e2b-infra 仓库走：出 RPM 时 clone 下来的那个仓库里就有 `rollback/scripts/`，不需要再装任何东西。
-**本篇所有命令都在这个仓库的根目录执行。**
+**本章所有命令都在这个仓库的根目录执行。**
 
 **用哪个 Python。** 用 **`build.sh -i` 时装 SDK 的那个解释器**：`build.sh -i` 在哪个 Python 环境里跑，`e2b==2.20.0`、`python-dotenv` 和 checkpoint 覆盖层就装在哪里。
 系统 Python 里不一定有 SDK；如果那个解释器装在虚拟环境或 conda 环境里，先在当前 shell 里激活它，让 `python3` 指向它。然后记下它的路径并确认：
@@ -33,10 +42,10 @@ grep -E '^E2B_(API_KEY|ACCESS_TOKEN|API_URL)=' benchmark/.env
 
 三行都要有值。`sync-env.sh` 从 `/root/.e2b/config.json`（部署 seed 步骤写的团队凭据）取 key 与 token，从部署件的 `SERVER_IP` 填 `E2B_API_URL`。
 
-**模板。** 所有脚本默认用别名 `base` 的模板，规格 2 vCPU / 2048 MB / 磁盘约 940 MB；规格不同结果仍有效，但性能数字不能与 [25](25-results-and-compliance.md) 对比。核对命令见 [23 §8](23-testing-and-functional-verification.md#8-测试环境与沙箱规格)。
+**模板。** 所有脚本默认用别名 `base` 的模板，规格 2 vCPU / 2048 MB / 磁盘约 940 MB；规格不同结果仍有效，但性能数字不能与 [21](21-benchmarks-and-compliance.md) 对比。核对命令见 [19 §8](19-testing-and-functional-verification.md#8-测试环境与沙箱规格)。
 
 **服务端状态。**
-- 按 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力) 留档能力文件（没有就抓能力行）：`track_dirty_pages=true`，`fault_inject=[]`，各限额与部署意图一致。
+- 按 [26 §4.3](26-deployment-prerequisites.md#43-orchestrator-自报的能力) 留档能力文件（没有就抓能力行）：`track_dirty_pages=true`，`fault_inject=[]`，各限额与部署意图一致。
 - orchestrator 刚重启过的话，等 `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5008/health` 回 `200`，并且 `ip netns list | grep -cE '^ns-[0-9]+$'` 连续几分钟不变再开始（槽位暖池在填充时性能数字带扰动）。
 - 产物盘余量高于 `min_free_bytes`，否则第一次 checkpoint 就是 507。
 
@@ -71,7 +80,7 @@ bash rollback/scripts/950/run.sh long
 | 宿主预检 | `crtest/portability/preflight-customer.sh`：CPU、KVM、GIC、HDBSS 能力、内核特性、模块、大页、产物盘、FC 二进制身份、SDK | 退出码 0（`WARN` 不算 FAIL） | `preflight.log` |
 | SDK 覆盖层自检 | `install.py --check` | 打出 `自检通过（干净子进程）` | `sdk-check.log` |
 | 能力文件 / 能力行 | 先读能力文件 `checkpoint-capabilities.json`（目录取正在运行的进程环境里的 `DEFAULT_CACHE_DIR`，没有就 `$ORCHESTRATOR_BASE_PATH/build`，再没有就 `/orchestrator/build`；给了 `--store` 就取它的父目录），其中 `pid` 须是该进程；没有有效的文件（此前的版本不写）就从**正在运行**的 orchestrator 所在 alloc 的日志里找最后一次 `checkpoint capabilities`，再退到 journald | 读到有效的能力文件，或抓到带 `track_dirty_pages` 的能力行；两样都没有时判 SKIP，按 §1 手工留档 | `capabilities.log` |
-| FC sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 至少找到一个；值应是 `18f3faa7…`（[05 §3](05-deployment-prerequisites.md#3-版本配对)） | `fc-sha256.log` |
+| FC sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 至少找到一个；值应是 `18f3faa7…`（[26 §3](26-deployment-prerequisites.md#3-版本配对)） | `fc-sha256.log` |
 | 功能正确性 | `acceptance/checkpoint_verify.py`：三代现场，内存 / 根文件系统 / 删除 / 权限位，心跳进程 pid 证明内存真的回来了 | 打出 `✓ 59 项校验全部通过。` | `checkpoint_verify.log` |
 
 两件要顺手确认的事：
@@ -86,18 +95,18 @@ bash rollback/scripts/950/run.sh long
 默认跑 crtest 里**不需要重启服务端、不改服务端 env** 的 16 个用例，短的在前：
 `T12 T15 T22 T24 T23 T34 T32 T41 T39 T26 T14 T40 T25 T36 T11 T13`，
 再加一项 SDK 异常语义 pytest（`crtest/sdktests/test_checkpoint_errors.py`：打桩服务端、驱动真实客户端，验 10 个 checkpoint 异常类与 `.reason`；不建沙箱）。
-每个用例的一句话说明：`PYTHONPATH=rollback/scripts/crtest python3 -m crtest --list`；逐条判据见 [23 §5](23-testing-and-functional-verification.md#5-crtest-用例)。
+每个用例的一句话说明：`PYTHONPATH=rollback/scripts/crtest python3 -m crtest --list`；逐条判据见 [19 §5](19-testing-and-functional-verification.md#5-crtest-用例)。
 
 另有 4 行 SKIP，SUMMARY 里写明原因：
 
 | 用例 | 为什么默认跳 | 要跑的开关 |
 |---|---|---|
 | T18（重启后账本不跨重启） | 要重启 orchestrator，全机沙箱都会没 | `--allow-restart --restart-cmd "…"`（重启命令按本机部署方式给，脚本不替你猜） |
-| T21（四条故障注入） | 要服务端带 `CHECKPOINT_FAULT_INJECT` 重启 | 按 [06 §5](06-configuration-and-capacity.md#5-改一个开关操作步骤) 改 env 重启后加 `--fault-cases` |
+| T21（四条故障注入） | 要服务端带 `CHECKPOINT_FAULT_INJECT` 重启 | 按 [27 §5](27-configuration-and-capacity.md#5-改一个开关操作步骤) 改 env 重启后加 `--fault-cases` |
 | T38（FC 侧 faulted 路径） | 要带 `rollback-fault-inject` 特性的 FC 并设 `FC_ROLLBACK_FAULT_INJECT=post_commit`；交付的 FC 不带 | 同上 |
 | T37（水位闸与个数上限） | 要服务端带 `CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` 重启 | `--quota-cases` |
 
-**交付态的机器上不建议跑这四条**（要改线上配置、重启或换 FC）；它们在 920B 上已覆盖（[25 §2.3](25-results-and-compliance.md#23-重启与注入类)），不影响交付结论。
+**交付态的机器上不建议跑这四条**（要改线上配置、重启或换 FC）；它们在 920B 上已覆盖（[21 §2.3](21-benchmarks-and-compliance.md#23-重启与注入类)），不影响交付结论。
 解释器里没装 pytest 时那一项也判 SKIP，装上后重跑：`python3 -m pip install "pytest>=7.4,<8" "pytest-asyncio>=0.23,<0.24"`。
 
 **PASS 判据**：每个用例退出码 0 = 通过，1 = 断言不过，3 = 前置不满足（记 SKIP）。整档 FAIL = 0。
@@ -114,11 +123,11 @@ bash rollback/scripts/950/run.sh long
 | 串行长尾 | `crtest/bench/serial_restore.py -n 100`（单沙箱、单调用方、同一 checkpoint 连回 100 次；`-n` 可改） | `serial-restore.log/.json` |
 | 并发 | `acceptance/checkpoint_concurrent.py --stages A,B`（A：跨沙箱扇出 1–16；B：同沙箱 4 线程争用） | `concurrent-ab.log/.json` |
 
-**达标线**是客户给的参考指标：checkpoint ≤ 200 ms、restore ≤ 100 ms，量的是**客户端墙钟**；每遍开头那次全量 checkpoint **单列、不判定**（口径见 [24](24-performance-methodology.md)）。
+**达标线**是客户给的参考指标：checkpoint ≤ 200 ms、restore ≤ 100 ms，量的是**客户端墙钟**；每遍开头那次全量 checkpoint **单列、不判定**（口径见 [20](20-performance-methodology.md)）。
 **超线不判 FAIL**——超线是结论不是故障，看 `compliance.log` 末尾"按 p50 超线的档"。PASS 只表示没有失败的操作、没有现场不一致。
 
 判读时还要看：`analyze.log` 里各档 `mem_mode` 应全为 `incremental`；数字所在平台（920B 为 `kvm-wp`、950 为 `hdbss`）写进留档。
-920B 上的结果与判定在 [25](25-results-and-compliance.md)；**950 的性能数字待补**，在 950 上跑出的这一档就是它的来源。
+920B 上的结果与判定在 [21](21-benchmarks-and-compliance.md)；**950 的性能数字待补**，在 950 上跑出的这一档就是它的来源。
 
 ---
 
@@ -190,9 +199,12 @@ cat "$OUT/00-context.md"
 
 ---
 
-## 8. 小结
+## 本章要点
 
-1. 在宿主机上、用装了覆盖层的解释器、从仓库根目录跑；凭据用 `benchmark/sync-env.sh` 生成。
-2. `smoke`（≤ 3 分钟，5 项全过、59 项）→ `func`（≤ 40 分钟，FAIL 0）→ `perf`（≤ 40 分钟，超线不算失败）；`long` 只打印清单。
-3. 交付态不跑要重启、改 env 或换 FC 的四条用例。
-4. 每个结果目录配 `00-context.md`，写全二进制 sha、脏页后端、产物盘、模板规格与"这份数不能拿来干什么"。
+- 在跑 orchestrator 的宿主机上、以 root、用装了覆盖层的那个解释器、从仓库根目录跑；凭据用 `benchmark/sync-env.sh` 生成。
+- `smoke`（≤ 3 分钟，5 项全过，其中验收脚本 59 项）→ `func`（≤ 40 分钟，FAIL 为 0）→ `perf`（≤ 40 分钟，超达标线不判 FAIL）；`long` 只打印清单，要单独安排、单独授权。
+- `run.sh` 的退出码等于 FAIL 项数；每档写一份 `SUMMARY.md`、整轮的 `run.log` 和每项的日志与 JSON。
+- 交付态机器上不跑要重启、改 env 或换 FC 的四条用例，它们已在开发机上覆盖。
+- perf 档判读先看各档 `mem_mode` 全为 `incremental`，并写明平台（920B 为 `kvm-wp`、950 为 `hdbss`）；950 上跑出的这一档就是 950 性能数字的来源。
+- 驱动建沙箱的寿命是 3600 s，清单里的长跑都在这之内；加长到 1 h 以上时沙箱会先被回收，结果作废。
+- 每个结果目录配一份 `00-context.md`，写全二进制 sha、脏页后端、产物盘、模板规格、项数（59 还是 57）与"这份数不能拿来干什么"；没有它的日志不能被引用。

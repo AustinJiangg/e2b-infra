@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """把 bench_tiers.py 的原始 JSONL 压成一张「每档 p50 / p99 / 最大 + 达标与否」的表。
 
-达标线照抄手册 24 篇 §1.1（客户那组粗略指标，未限定改动量）：
+达标线照抄手册 20 篇 §1.1（客户那组粗略指标，未限定改动量）：
 **checkpoint ≤ 200 ms、restore ≤ 100 ms**，量的都是**客户端墙钟**。
-全量 checkpoint（每遍开头那一次）按 24 篇 §1.1 的口径**单列不判定**。
+全量 checkpoint（每遍开头那一次）按 20 篇 §1.1 的口径**单列不判定**。
 
 `bench/analyze.py` 是完整分析（分段、拟合、离群、漂移）；这里只出验收要看的那一张表，
 给 950/run.sh 的 SUMMARY.md 用。
@@ -74,7 +74,7 @@ def main(argv):
         print("没有可用的迭代记录（找的文件：%s）" % ", ".join(paths))
         return 2
 
-    print("达标线（手册 24 篇 §1.1，客户粗略指标，未限定改动量）："
+    print("达标线（手册 20 篇 §1.1，客户粗略指标，未限定改动量）："
           "checkpoint ≤ %.0f ms、restore ≤ %.0f ms，量的是客户端墙钟。"
           % (CK_LIMIT_MS, RS_LIMIT_MS))
     print("")

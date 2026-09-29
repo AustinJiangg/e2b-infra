@@ -1,8 +1,17 @@
-# 05 · 部署前提与检查清单
+# 26 · 部署前提与检查清单
 
-> 给负责部署与运维的人：部署之前这台机器要满足什么，装完之后用哪几条命令确认 checkpoint / restore 真的就位、而且是增量。
-> 部署步骤本身不在这里重复，照 [`single-node-offline-deploy.md`](../../single-node-offline-deploy.md) 与 [`deploy-docs/`](../../deploy-docs/) 做；
-> 开关的完整语义见 [06](06-configuration-and-capacity.md)，出了问题按症状查 [08](08-troubleshooting.md)。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 分清增量 checkpoint 的两层前提（要不要记脏页、用什么方式记），知道 950、没有 HDBSS 的机器和 920B 开发机上 `FC_TRACK_DIRTY_PAGES` 各该怎么设；
+2. 部署之前逐项核对平台前提，并用预检脚本一次查完；
+3. 说清 orchestrator、Firecracker、SDK 覆盖层、guest 内核为什么必须成套，配错时各是什么表现；
+4. 部署之后按顺序做完自检，确认 checkpoint 能力就位、而且真的是增量。
+
+上一章（[25](25-errors-timeouts-concurrency.md)）讲完了调用方要处理的错误与超时；前三章都面向调用方，从本章起面向部署与运维。本章讲部署之前这台机器要满足什么，装完之后用哪几条命令确认 checkpoint / restore 真的就位、而且是增量。
+部署步骤本身不在这里重复，照 [`single-node-offline-deploy.md`](../../single-node-offline-deploy.md) 与 [`deploy-docs/`](../../deploy-docs/) 做；
+开关的完整语义见下一章（[27](27-configuration-and-capacity.md)），出了问题按症状查 [29](29-troubleshooting.md)。
 
 ---
 
@@ -26,8 +35,8 @@
 | 没有 HDBSS、要增量（例如 920B 开发机） | **显式 `true`** | 开，走 KVM 写保护；checkpoint 为增量 | `kvm-wp` |
 
 交付件（`e2b-deploy/dep/template-manager.hcl`）**有意不传**这个变量：950 上不需要。
-没有 HDBSS 的机器不设时默认关，是因为软件写保护要让每个干净页的第一次写入陷出一次，对从不做 checkpoint 的沙箱是净亏（原理见 [13](13-dirty-page-tracking-and-hdbss.md)）。
-取值只认 Go `strconv.ParseBool` 的写法，`yes`、`on` 之类会被忽略并打 WARN，详见 [06 §2.1](06-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
+没有 HDBSS 的机器不设时默认关，是因为软件写保护要让每个干净页的第一次写入陷出一次，对从不做 checkpoint 的沙箱是净亏（原理见 [05](05-dirty-page-tracking-and-hdbss.md)）。
+取值只认 Go `strconv.ParseBool` 的写法，`yes`、`on` 之类会被忽略并打 WARN，详见 [27 §2.1](27-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
 
 ---
 
@@ -40,15 +49,15 @@
 | 1 | aarch64；回滚路径（GIC 清线、vCPU 重置、HDBSS）只在 aarch64 上实现 | `uname -m` | 不能用 |
 | 2 | 宿主内核：openEuler 24.03 LTS-SP4，`6.6.0-159.4.3.154.oe2403sp4.aarch64`（950 与 920B 开发机上实测的版本），带 KVM 与 userfaultfd | `uname -r`；`grep -E 'CONFIG_KVM=\|CONFIG_USERFAULTFD=' /boot/config-$(uname -r)` | 换内核后第 6 项的 `nbd.ko` 也要重编 |
 | 3 | `/dev/kvm` 存在且 root 可读写；KVM 跑在 VHE 模式 | `ls -l /dev/kvm`；`dmesg \| grep -Ei 'kvm.*VHE mode initialized'` | 沙箱起不来；非 VHE 时 HDBSS 启用会被内核拒绝 |
-| 4 | **HDBSS**（只对 950 要求）：内核编了 `CONFIG_ARM64_HDBSS=y`，**并且** CPU 支持（KVM 能力 502）。只有内核配置不够：920B 的内核也是 `=y`，但 CPU 没有 | `grep CONFIG_ARM64_HDBSS /boot/config-$(uname -r)`；能力以 orchestrator 能力行的 `track_dirty_pages_reason` 为准（§4.3），或跑 `preflight-customer.sh` 的第 3 节（本机有 gcc 时会编一个探针真开一次） | 950 上 Firecracker 静默退回 `kvm-wp`；想让它直接拒绝启动，见 [06](06-configuration-and-capacity.md) 的 `FC_HDBSS_REQUIRED` |
+| 4 | **HDBSS**（只对 950 要求）：内核编了 `CONFIG_ARM64_HDBSS=y`，**并且** CPU 支持（KVM 能力 502）。只有内核配置不够：920B 的内核也是 `=y`，但 CPU 没有 | `grep CONFIG_ARM64_HDBSS /boot/config-$(uname -r)`；能力以 orchestrator 能力行的 `track_dirty_pages_reason` 为准（§4.3），或跑 `preflight-customer.sh` 的第 3 节（本机有 gcc 时会编一个探针真开一次） | 950 上 Firecracker 静默退回 `kvm-wp`；想让它直接拒绝启动，见 [27](27-configuration-and-capacity.md) 的 `FC_HDBSS_REQUIRED` |
 | 5 | GICv3 | `preflight-customer.sh` 第 2 节 | v2 未实测 |
 | 6 | 自编译的 `nbd.ko`（`nbds_max=512`），vermagic 与运行内核一致，已固化为开机加载 | `lsmod \| grep -w nbd`；`cat /sys/module/nbd/parameters/nbds_max`（应为 512） | 沙箱根盘走 NBD，没有它沙箱起不来。固化步骤见部署指南 §0.2 |
 | 7 | `tun` 模块与 `/dev/net/tun` | `ls -d /sys/module/tun /dev/net/tun` | 沙箱网卡起不来。`preflight-customer.sh` 还会查 `vhost_net`，未加载时只判 WARN（920B 开发机上它就没加载，沙箱照常） |
 | 8 | `net.ipv4.ip_forward=1`，**且在 `build.sh -s` 之前生效**（槽位 netns 在创建时继承这个值） | `sysctl -n net.ipv4.ip_forward` | 建模板在等 envd 那一步 60 s 超时。已经装完才发现要重建整池槽位，见部署指南 §0.3 |
 | 9 | 2 MiB 大页：guest 内存走 hugetlb，`init-client.sh` 启动时预留一部分，其余走 overcommit | `grep -i huge /proc/meminfo`；`cat /proc/sys/vm/nr_overcommit_hugepages` | 沙箱数被大页数卡住 |
-| 10 | **产物盘**：store 根 `/orchestrator/build/checkpoints`（由 `ORCHESTRATOR_BASE_PATH`、`DEFAULT_CACHE_DIR` 决定，目录布局见 [12 §5](12-architecture.md#5-数据面目录布局)）所在文件系统为 **ext4**，支持稀疏文件 | `df -T /orchestrator/build` | 交付方案只在 ext4 上验证过；为什么是 ext4 见 [12 §8](12-architecture.md#8-为什么交付用-ext4) |
+| 10 | **产物盘**：store 根 `/orchestrator/build/checkpoints`（由 `ORCHESTRATOR_BASE_PATH`、`DEFAULT_CACHE_DIR` 决定，目录布局见 [04 §5](04-architecture.md#5-数据面目录布局)）所在文件系统为 **ext4**，支持稀疏文件 | `df -T /orchestrator/build` | 交付方案只在 ext4 上验证过；为什么是 ext4 见 [04 §8](04-architecture.md#8-为什么交付用-ext4) |
 | 11 | 产物盘与沙箱缓存盘（`/orchestrator/sandbox`，活写层所在）是**同一个文件系统** | `findmnt -no SOURCE --target /orchestrator/build; findmnt -no SOURCE --target /orchestrator/sandbox` 两行相同 | 封层从 rename 退化为拷贝，checkpoint 变慢 |
-| 12 | 产物盘余量：按 [06 §4](06-configuration-and-capacity.md#4-容量规划) 估；服务端另有水位闸，低于 max(4 GiB, 2 × guest 内存) 时拒绝 checkpoint 与 restore | `df -h /orchestrator/build` | 507 `disk_full` |
+| 12 | 产物盘余量：按 [27 §4](27-configuration-and-capacity.md#4-容量规划) 估；服务端另有水位闸，低于 max(4 GiB, 2 × guest 内存) 时拒绝 checkpoint 与 restore | `df -h /orchestrator/build` | 507 `disk_full` |
 
 把 2–11 项一次查完的脚本是 `rollback/scripts/crtest/portability/preflight-customer.sh`（零依赖、只读，退出码 = FAIL 项数），在 clone 下来的 e2b-infra 仓库根目录执行：
 
@@ -56,7 +65,7 @@
 bash rollback/scripts/crtest/portability/preflight-customer.sh
 ```
 
-它也是 [09](09-acceptance-runbook.md) 里 `run.sh smoke` 的第一项。`WARN` 不算失败，但要逐条看一眼说明。
+它也是 [30](30-acceptance-runbook.md) 里 `run.sh smoke` 的第一项。`WARN` 不算失败，但要逐条看一眼说明。
 
 ---
 
@@ -76,6 +85,8 @@ RPM 里分别对应 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.a
 模板建时记的是 `v1.13.1`，而放在这个目录里的交付 FC 自报 `Firecracker v1.12.1`（`/fc-versions/v1.13.1/firecracker --version`）。
 这不影响功能，但**换 FC 时必须换 `v1.13.1/firecracker` 这一个文件**，放错目录等于没换，而且不报错。
 
+**核对 Firecracker 身份以 sha256 为准。** `--version` 报的 `v1.12.1` 是分叉所基于的上游版本号，目录名 `v1.13.1` 是模板记录的查找键，两者都区分不了交付的分叉与上游原版；orchestrator 能力文件里的 `commit` 目前也是空串（RPM 构建没有注入提交号，[27 §3.1](27-configuration-and-capacity.md#31-能力文件)）。所以核对二进制只看上表的 sha256。
+
 配错的后果：
 
 | 配法 | 表现 |
@@ -83,7 +94,7 @@ RPM 里分别对应 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.a
 | 新 orchestrator + 未打补丁的 Firecracker | checkpoint 与 restore 都失败（500 `internal`）：未打补丁的 FC 不认识 `dirty_bitmap_path` 字段、没有 `save-dirty-bitmap` 与 `rollback` 端点；消息里可见 `save-dirty-bitmap`、`does not support in-place rollback` 等字样。是明确的失败，不会静默降级 |
 | 旧 orchestrator + 新 Firecracker | 沙箱照常，但没有 checkpoint 能力（Firecracker 的扩展是加法） |
 | SDK 没装覆盖层 | `sb.checkpoint` 不存在 |
-| 覆盖层版本旧、没有 `mem_mode` 字段 | 功能可用，但验收脚本只能跑 57 项，"是不是增量"那两条判据跳过（[09](09-acceptance-runbook.md)） |
+| 覆盖层版本旧、没有 `mem_mode` 字段 | 功能可用，但验收脚本只能跑 57 项，"是不是增量"那两条判据跳过（[30](30-acceptance-runbook.md)） |
 | 宿主内核换了而 `nbd.ko` 没重编 | 开机加载的是发行版原版 `nbd.ko`，设备数照样 512，从数量上看不出来；用 `sha256sum /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko` 对比 |
 
 ---
@@ -109,20 +120,20 @@ for p in $(pidof firecracker); do readlink /proc/$p/exe; done | sort | uniq -c
 
 ### 4.2 SDK 覆盖层
 
-用**装 SDK 的那个解释器**（`build.sh -i` 在哪个 Python 环境里跑，SDK 就装在哪，[09 §1](09-acceptance-runbook.md#1-跑之前)）：
+用**装 SDK 的那个解释器**（`build.sh -i` 在哪个 Python 环境里跑，SDK 就装在哪，[30 §1](30-acceptance-runbook.md#1-跑之前)）：
 
 ```bash
 python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 ```
 
 期望看到 `payload 的 21 个文件都在位` 和 `自检通过（干净子进程）：…`。异常族的判据是"原有 8 个子类都在，且 reason 映射表里每一项都是 `CheckpointException` 的子类"——
-现在是基类加 9 个子类共 10 个（新增 `CheckpointBytesLimitException`，[03](03-errors-timeouts-concurrency.md)）。
+现在是基类加 9 个子类共 10 个（新增 `CheckpointBytesLimitException`，[25](25-errors-timeouts-concurrency.md)）。
 
 ### 4.3 orchestrator 自报的能力
 
-orchestrator 启动时打一行 `checkpoint capabilities`，说清脏页跟踪开没开、为什么，以及各项限额的生效值和来源（字段逐个解释在 [06 §3](06-configuration-and-capacity.md#3-启动能力行)）。
+orchestrator 启动时打一行 `checkpoint capabilities`，说清脏页跟踪开没开、为什么，以及各项限额的生效值和来源（字段逐个解释在 [27 §3](27-configuration-and-capacity.md#3-启动能力行)）。
 从 deltabox-dev `93ccb02` 起，同样的内容还写进**能力文件** `checkpoint-capabilities.json`：在 `DEFAULT_CACHE_DIR` 下（默认 `/orchestrator/build/`，即 store 根的父目录），
-另带 `pid`、`started_at`、`version`、`commit` 四个键（[06 §3.1](06-configuration-and-capacity.md#31-能力文件)）。
+另带 `pid`、`started_at`、`version`、`commit` 四个键（[27 §3.1](27-configuration-and-capacity.md#31-能力文件)）。
 日志行在当前 alloc 的 `start.stdout.<n>` 里，**会轮转**（负载下几分钟就把启动行滚掉）；能力文件不会，下次启动时整份替换。
 
 先看能力文件。文件里的 `pid` 必须是正在运行的进程，否则是以前那次启动留下的，不算：
@@ -167,12 +178,12 @@ tr '\0' '\n' < /proc/$(pidof -s template-manager)/environ | grep -E '^(CHECKPOIN
 ip netns list | grep -cE '^ns-[0-9]+$'
 ```
 
-记下这个数。正常水位 = 300（预建池）+ 历史峰值并发；每重启一次 orchestrator 会多漏约一池（[08](08-troubleshooting.md#9-网络槽位netns泄漏)）。
+记下这个数。正常水位 = 300（预建池）+ 历史峰值并发；每重启一次 orchestrator 会多漏约一池（[29](29-troubleshooting.md#9-网络槽位netns泄漏)）。
 刚启动时这个数还在涨（暖池填充），**做任何性能测试前等它连续几分钟不变**。
 
 ### 4.6 增量真的生效
 
-这一步要建沙箱，用 [09](09-acceptance-runbook.md) 的 `run.sh smoke` 一次做完。smoke 里的 `checkpoint_verify.py` 开头打印
+这一步要建沙箱，用 [30](30-acceptance-runbook.md) 的 `run.sh smoke` 一次做完。smoke 里的 `checkpoint_verify.py` 开头打印
 `脏页后端 : …`——这是 Firecracker 自己报的第 ② 层（950 应为 HDBSS，显式开启的无 HDBSS 机器为 KVM 写保护），能力行只能回答第 ① 层。
 
 另外两个独立证据：
@@ -189,9 +200,11 @@ dmesg | grep 'Enable HDBSS success' | tail -3
 
 ---
 
-## 5. 小结
+## 本章要点
 
-1. 增量 checkpoint 有两层前提：orchestrator 决定"记不记"（`FC_TRACK_DIRTY_PAGES`，950 不设即开），Firecracker 决定"用什么记"（HDBSS 或 KVM 写保护）。
-2. 平台前提 12 项，`preflight-customer.sh` 一次查完；HDBSS 要内核配置和 CPU 能力同时具备。
-3. orchestrator、Firecracker、SDK 覆盖层、guest 内核成套交付；FC 只认 `/fc-versions/v1.13.1/firecracker` 这一个位置。
-4. 部署后六步自检：二进制 sha、SDK `--check`、能力文件或能力行（后者立刻留档）、宿主预检、netns 基线、`run.sh smoke`。
+- 增量有两层前提：orchestrator 决定"记不记"（`FC_TRACK_DIRTY_PAGES`，950 不设即自动开，没有 HDBSS 的机器要增量就显式设 `true`），Firecracker 决定"用什么记"（HDBSS 或 KVM 写保护）。"增量退化成全量"说的是第一层关着，与 HDBSS 在不在无关。
+- 交付件有意不传 `FC_TRACK_DIRTY_PAGES`：950 不需要；没有 HDBSS 的机器默认不开，是因为软件写保护对从不做 checkpoint 的沙箱是净亏。
+- 平台前提共 12 项，`preflight-customer.sh` 一次查完；HDBSS 要内核配置与 CPU 能力同时具备。
+- orchestrator、Firecracker、SDK 覆盖层、guest 内核成套交付；FC 只认 `/fc-versions/v1.13.1/firecracker` 这一个位置，放错目录等于没换，而且不报错。
+- 新 orchestrator 配未打补丁的 FC 会明确失败，不会静默降级；SDK 覆盖层版本旧时功能可用，但验收只剩 57 项，"是不是增量"的判据失效。
+- 部署后六步自检：二进制 sha、SDK `--check`、能力文件或能力行（后者立刻留档）、宿主预检、netns 基线、`run.sh smoke`；最后确认除每个沙箱的第一个外，`mem_mode` 全是 `incremental`。

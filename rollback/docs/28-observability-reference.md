@@ -1,7 +1,17 @@
-# 07 · 可观测性参考
+# 28 · 可观测性参考
 
-> 给运维和开发：orchestrator 为 checkpoint / restore / delete 留下的每一个数字在哪、叫什么、怎么读。
-> 本篇是**计时键与 timings 字段的唯一定义处**，其他篇只引用。各键以 [README](README.md) 所列代码基准里实际打点的为准。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 知道一次 checkpoint / restore / delete 留下的数字在哪几个地方，并能只读地把它们取出来；
+2. 用能力行与 `memMode` 判断这台机器记不记脏页、每次 checkpoint 是全量还是增量、哪几种 `full` 是正常的；
+3. 查到 checkpoint、restore、delete 每个计时键的含义、单位，以及它是否落在冻结窗口里；
+4. 读懂 Firecracker 自报的分段、metrics，以及 `CHECKPOINT_RUNTIME_METRICS` 与 `PROXY_TRACE` 两个取证开关的输出；
+5. 拿到一行日志，按关键字查到它的含义和对应的排障条目。
+
+上一章（[27](27-configuration-and-capacity.md)）讲开关怎么设，本章讲设好之后怎么看：orchestrator 为 checkpoint / restore / delete 留下的每一个数字在哪、叫什么、怎么读。
+本章是**计时键与 timings 字段的唯一定义处**，其他章只引用。各键以 [README](README.md) 所列代码基准里实际打点的为准。下一章（[29](29-troubleshooting.md)）按症状讲排障。
 
 ---
 
@@ -29,15 +39,15 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -3
 
 ## 2. 能力行与 memMode
 
-**能力行**：启动时一行 `checkpoint capabilities`，字段逐个解释在 [06 §3](06-configuration-and-capacity.md#3-启动能力行)。它回答"这台机器记不记脏页、为什么、各限额按什么值跑"。
-同样的内容还写在**能力文件** `${DEFAULT_CACHE_DIR}/checkpoint-capabilities.json`（默认 `/orchestrator/build/` 下，[06 §3.1](06-configuration-and-capacity.md#31-能力文件)），不随日志轮转丢失；其中的 `pid` 须是正在运行的进程。
-它不回答"用什么记"——`hdbss` / `kvm-wp` / `off` 是 Firecracker 自报的，由 `checkpoint_verify.py` 开头的"脏页后端"打印（[05 §4.6](05-deployment-prerequisites.md#46-增量真的生效)）。
+**能力行**：启动时一行 `checkpoint capabilities`，字段逐个解释在 [27 §3](27-configuration-and-capacity.md#3-启动能力行)。它回答"这台机器记不记脏页、为什么、各限额按什么值跑"。
+同样的内容还写在**能力文件** `${DEFAULT_CACHE_DIR}/checkpoint-capabilities.json`（默认 `/orchestrator/build/` 下，[27 §3.1](27-configuration-and-capacity.md#31-能力文件)），不随日志轮转丢失；其中的 `pid` 须是正在运行的进程。
+它不回答"用什么记"——`hdbss` / `kvm-wp` / `off` 是 Firecracker 自报的，由 `checkpoint_verify.py` 开头的"脏页后端"打印（[26 §4.6](26-deployment-prerequisites.md#46-增量真的生效)）。
 
 **memMode**：每次 checkpoint 的返回值（SDK `CheckpointInfo.mem_mode`）、`created checkpoint` 日志行的 `mem_mode`、metrics `orchestrator.sandbox.checkpoint.calls` 的 `mem_mode` 属性，三处是同一个值：
 
 | 值 | 什么时候出现 | 正常吗 |
 |---|---|---|
-| `full` | 每沙箱的第一个 checkpoint（树根，`CHECKPOINT_FULL_ROOT` 默认开）；断链之后的下一个（日志 `incremental chain is broken; capturing full memory as a new root`）；脏页跟踪关着时**每一个**（日志 `dirty page tracking is off; every checkpoint captures full memory`） | 前两种正常；第三种就是"增量退化成全量"（[08 §1](08-troubleshooting.md#1-增量退化成全量)） |
+| `full` | 每沙箱的第一个 checkpoint（树根，`CHECKPOINT_FULL_ROOT` 默认开）；断链之后的下一个（日志 `incremental chain is broken; capturing full memory as a new root`）；脏页跟踪关着时**每一个**（日志 `dirty page tracking is off; every checkpoint captures full memory`） | 前两种正常；第三种就是"增量退化成全量"（[29 §1](29-troubleshooting.md#1-增量退化成全量)） |
 | `incremental` | 其余 | 正常 |
 
 判据一句话：**除了沙箱的第一个 checkpoint 和断链后的那一个，出现 `full` 就是有问题**。
@@ -94,7 +104,7 @@ total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
 | `commit_lock_wait` | 发布条目等全局锁 | 外 | |
 | `commit_index` | 拿到锁之后发布条目的工作 | 外 | 名字沿用；现在只计锁内这一段，与链深无关（`index.json` 不再在热路径上写） |
 
-checkpoint 失败而 Firecracker 已写出快照时，条目会被"救成隐藏条目"，这时分段里也会出现 `commit_lock_wait` / `commit_index`（[20](20-failure-semantics.md)）。
+checkpoint 失败而 Firecracker 已写出快照时，条目会被"救成隐藏条目"，这时分段里也会出现 `commit_lock_wait` / `commit_index`（[12](12-failure-semantics.md)）。
 
 ### 3.3 restore
 
@@ -139,7 +149,7 @@ total ≈ disk_view_read + assemble_view_pre + rollback_in_place + wait_envd
 | `conntrack_host_entries_count` | 选路时读到的宿主 conntrack 表条目数 | 个 | —— | 读不到内核计数时缺席 |
 | `wait_envd` | 回滚后等 guest 里 envd 应答 | ms | 外 | 服务端最多等 45 s，超时报 `guest_unresponsive` |
 
-宿主表清扫怎么选路（整表扫描 vs 内核过滤）、为什么放在冻结窗口外并行，见 [18](18-rollback-pitfalls.md#44-宿主表怎么删每批一次整表扫描按代价模型选路)。
+宿主表清扫怎么选路（整表扫描 vs 内核过滤）、为什么放在冻结窗口外并行，见 [10](10-rollback-pitfalls.md#44-宿主表怎么删每批一次整表扫描按代价模型选路)。
 
 ### 3.4 delete
 
@@ -161,7 +171,7 @@ total ≈ disk_view_read + assemble_view_pre + rollback_in_place + wait_envd
 | `deleted checkpoint` | `checkpoint_id`、`sandbox_checkpoint_bytes`、`freed_bytes` | 删后的总占盘；本次删除（含合并）实际释放的字节 |
 | `refused a checkpoint operation`（WARN） | `reason`、`operation`，以及按原因不同：`free_bytes`/`min_free_bytes`/`min_free_bytes_source`；`checkpoints_held`/`max_checkpoints_per_sandbox`；`checkpoint_bytes_held`/`max_checkpoint_bytes_per_sandbox`/`base_checkpoint_id`/`floor_bytes`/`floor_bytes_source` | 哪道闸、判定用的数字。`floor_bytes_source` 为 `full_root`（基准链上全量根的大小）或 `guest_memory`（链上没有全量根，按 guest 内存估） |
 
-格式示例（节选；数值只示意格式，性能数字见 [25](25-results-and-compliance.md)）：
+格式示例（节选；数值只示意格式，性能数字见 [21](21-benchmarks-and-compliance.md)）：
 
 ```
 INFO  restored checkpoint  {"sandbox.id": "…", "checkpoint_id": "ckpt_1790650329519085360", "timings_ms": {"assemble_view":0,
@@ -178,7 +188,7 @@ restore 调用 Firecracker 的原地回滚接口，它在应答里带回自己�
 | 键 | Firecracker 里这一步做什么 |
 |---|---|
 | `fc_validate` | 校验快照与运行中的虚机是否匹配 |
-| `fc_quiesce` | 静默在途设备 I/O。**空闲一段时间后不先 checkpoint 直接 restore 时它会显著变大**（[08 §6](08-troubleshooting.md#6-空闲后第一次-restore-慢)） |
+| `fc_quiesce` | 静默在途设备 I/O。**空闲一段时间后不先 checkpoint 直接 restore 时它会显著变大**（[29 §6](29-troubleshooting.md#6-空闲后第一次-restore-慢)） |
 | `fc_bitmap` | 取活跃脏图并并入回滚集；与总内存成正比，是 `fc_memory` 的下限 |
 | `fc_memory` | 把回滚集里的页写回 guest 内存；随回滚量线性增长 |
 | `fc_vcpus` | 恢复 vCPU 状态 |
@@ -196,7 +206,7 @@ orchestrator 通过 OpenTelemetry 导出以下指标。**要部署里有 collect
 
 | 指标 | 类型 | 属性 | 含义 |
 |---|---|---|---|
-| `orchestrator.sandbox.checkpoint.calls` | 计数 | `operation`（create / restore / list / delete）、`success`、`mem_mode`（仅 create） | 调用次数；`mem_mode=full` 的比例就是"退化成全量"的看板 |
+| `orchestrator.sandbox.checkpoint.calls` | 计数 | `operation`（`create` / `restore` / `list` / `delete`；`create` 即 checkpoint）、`success`、`mem_mode`（仅 `create`） | 调用次数；`mem_mode=full` 的比例就是"退化成全量"的看板 |
 | `orchestrator.sandbox.checkpoint.duration` | 直方图，ms | 同上 | 服务端时长 |
 | `orchestrator.sandbox.checkpoint.paused.duration` | 直方图，ms | —— | checkpoint 的冻结窗口 |
 | `orchestrator.sandbox.checkpoint.vcpu.events` | 计数 | `operation`、`event`（mmio_drained / mmio_drain_failed / readback_mismatch） | 后两个应恒为 0 |
@@ -208,7 +218,7 @@ orchestrator 通过 OpenTelemetry 导出以下指标。**要部署里有 collect
 
 ## 6. `CHECKPOINT_RUNTIME_METRICS` 输出
 
-打开后（[06 §2.4](06-configuration-and-capacity.md#24-调试与取证用完即关)）每 10 s 一行 INFO `runtime GC pauses`，数据来自 Go runtime/metrics 的两个直方图：
+打开后（[27 §2.4](27-configuration-and-capacity.md#24-调试与取证用完即关)）每 10 s 一行 INFO `runtime GC pauses`，数据来自 Go runtime/metrics 的两个直方图：
 `/sched/pauses/stopping/gc`（STW 里"等所有 P 停下"那部分）和 `/sched/pauses/total/gc`（整个 STW）。
 
 ```
@@ -227,7 +237,7 @@ INFO  runtime GC pauses  {"gc_cycles": 4, "gc_cycles_cumulative": 68, "stw_stopp
 
 - 一轮 GC 停两次世界，所以 `stw_*_count` 约为 `gc_cycles` 的两倍。
 - 分位取的是直方图桶的**上界**，不会低估；桶宽最多约五分之一个 2 的幂。
-- **长停顿里 `stopping` 占了 `total` 的几乎全部**，说明时间花在"等某个 goroutine 让出 P"上，而不是收集器本身——典型原因是 goroutine 在缺页里撞上 memory cgroup 回收（[08 §8](08-troubleshooting.md#8-gc-长停顿与-memory-cgroup-回收)）。
+- **长停顿里 `stopping` 占了 `total` 的几乎全部**，说明时间花在"等某个 goroutine 让出 P"上，而不是收集器本身——典型原因是 goroutine 在缺页里撞上 memory cgroup 回收（[29 §8](29-troubleshooting.md#8-gc-长停顿与-memory-cgroup-回收)）。
 - 配合 `GODEBUG=gctrace=1`（stderr，每轮一行）看每轮细节。
 
 ---
@@ -243,7 +253,7 @@ INFO  runtime GC pauses  {"gc_cycles": 4, "gc_cycles_cumulative": 68, "stw_stopp
 | `proxy trace: upstream connection reset` | 上游连接被重置 |
 | `proxy trace: proxy client removed from pool` | `drop_reason`（`restore` / `sandbox_stopped` / `envd_restarted` / `build_done` / `unspecified`）、`active_connections` |
 
-用它区分两类流截断（机制见 [03](03-errors-timeouts-concurrency.md#53-两类流式截断要分清)）：
+用它区分两类流截断（机制见 [25](25-errors-timeouts-concurrency.md#53-两类流式截断要分清)）：
 
 - **restore 造成的**（既定限制）：同一沙箱先有 `removed from pool` 且 `drop_reason=restore`，随后那条流 `request ended` 带 `aborted_after_headers=true`。
 - **与 restore 无关的**（代理未开 full duplex，已修）：`aborted_after_headers=true`、`abort="net/http: abort Handler"`、`upstream_conn_reused=false`，前后**没有** `drop_reason=restore`。修复后不应再出现；若出现，先确认 orchestrator 与 client-proxy 两个镜像都是修复后的版本。
@@ -258,26 +268,38 @@ INFO  runtime GC pauses  {"gc_cycles": 4, "gc_cycles_cumulative": 68, "stw_stopp
 
 | 关键字 | 级别 | 代表什么 | 去哪看 |
 |---|---|---|---|
-| `checkpoint capabilities` | INFO | 启动能力行 | [06 §3](06-configuration-and-capacity.md#3-启动能力行) |
-| `capabilities file written` | INFO | 能力文件已写好，字段 `path` 是它的位置 | [06 §3.1](06-configuration-and-capacity.md#31-能力文件) |
-| `failed to write the capabilities file` | WARN | 能力文件没写成，只剩能力行；启动不受影响 | [06 §3.1](06-configuration-and-capacity.md#31-能力文件) |
-| `deleted checkpoint but could not remove all of its files` | WARN | delete 已生效、按成功应答，只是它的目录或 manifest 没处理完；残留随沙箱回收 | [03](03-errors-timeouts-concurrency.md#2-错误总表) |
-| `dirty page tracking is off` | WARN | 脏页跟踪关，checkpoint 全是全量 | [08 §1](08-troubleshooting.md#1-增量退化成全量) |
-| `is not a boolean and was ignored` | WARN | `FC_TRACK_DIRTY_PAGES` 值无效，按硬件决定 | [06 §2.1](06-configuration-and-capacity.md#21-脏页跟踪与-hdbss) |
-| `ignoring unusable … in the environment`、`ignoring a … setting that is not a boolean` | WARN | 某个开关写错，用了默认值；字段 `env` 说是哪个 | [06 §2](06-configuration-and-capacity.md#2-开关总表) |
-| `checkpoint fault injection is armed` | WARN | 故障注入开着；生产节点不应出现 | [06 §2.5](06-configuration-and-capacity.md#25-故障注入仅供测试交付态不要设) |
+| `checkpoint capabilities` | INFO | 启动能力行 | [27 §3](27-configuration-and-capacity.md#3-启动能力行) |
+| `capabilities file written` | INFO | 能力文件已写好，字段 `path` 是它的位置 | [27 §3.1](27-configuration-and-capacity.md#31-能力文件) |
+| `failed to write the capabilities file` | WARN | 能力文件没写成，只剩能力行；启动不受影响 | [27 §3.1](27-configuration-and-capacity.md#31-能力文件) |
+| `deleted checkpoint but could not remove all of its files` | WARN | delete 已生效、按成功应答，只是它的目录或 manifest 没处理完；残留随沙箱回收 | [25](25-errors-timeouts-concurrency.md#2-错误总表) |
+| `dirty page tracking is off` | WARN | 脏页跟踪关，checkpoint 全是全量 | [29 §1](29-troubleshooting.md#1-增量退化成全量) |
+| `is not a boolean and was ignored` | WARN | `FC_TRACK_DIRTY_PAGES` 值无效，按硬件决定 | [27 §2.1](27-configuration-and-capacity.md#21-脏页跟踪与-hdbss) |
+| `ignoring unusable … in the environment`、`ignoring a … setting that is not a boolean` | WARN | 某个开关写错，用了默认值；字段 `env` 说是哪个 | [27 §2](27-configuration-and-capacity.md#2-开关总表) |
+| `checkpoint fault injection is armed` | WARN | 故障注入开着；生产节点不应出现 | [27 §2.5](27-configuration-and-capacity.md#25-故障注入仅供测试交付态不要设) |
 | `created checkpoint` / `restored checkpoint` / `deleted checkpoint` | INFO | 成功的操作与分段 | §3 |
-| `checkpoint create failed` / `checkpoint restore failed` | WARN | 失败的操作与分段 | [08](08-troubleshooting.md) |
-| `refused a checkpoint operation` | WARN | 被水位闸 / 个数上限 / 字节上限拒绝 | [08 §2](08-troubleshooting.md#2-checkpoint-被拒507--429) |
-| `checkpoint byte limit is below …` | WARN / ERROR | 字节上限对这个沙箱的 guest 内存偏小 | [06 §4.4](06-configuration-and-capacity.md#44-字节上限怎么选) |
-| `incremental chain is broken; capturing full memory as a new root` | WARN | 丢过一段脏页记录，这次以全量起新树 | [20](20-failure-semantics.md) |
-| `failed to keep the advanced epoch; chain broken until a full checkpoint` | ERROR | 失败的 checkpoint 没能救成隐藏条目，链断开 | [20](20-failure-semantics.md) |
-| `restore failed past the commit point; the sandbox is torn and must be recreated` | ERROR | 撕裂 | [08 §3](08-troubleshooting.md#3-撕裂torn与虚机-faulted) |
-| `rollback succeeded but the guest's envd never answered` | ERROR | `guest_unresponsive`，带完整分段 | [08 §4](08-troubleshooting.md#4-guest-失联guest_unresponsive) |
-| `sealing the write layer failed; checkpoints are refused until a restore reseeds …`、`failed to reset rootfs bookkeeping after restore` | ERROR | 磁盘账本污染（`rootfs_poisoned`），restore 一次即修复 | [20](20-failure-semantics.md) |
-| `failed to fold a hidden checkpoint into its only child; the tree is unchanged` | WARN | 一次合并失败，树原样不动，下次 delete 重试（最多 3 次） | [14](14-memory-diff-tree.md#10-删除隐藏与合并) |
-| `failed to delete dropped checkpoint files` | WARN | 锁外删文件失败，残留等下次启动清空 store 时处理 | [21](21-state-concurrency-durability.md) |
-| `failed to flush conntrack during in-place rollback` | WARN | 连接跟踪清理失败；restore 不因此失败 | [18](18-rollback-pitfalls.md) |
+| `checkpoint create failed` / `checkpoint restore failed` | WARN | 失败的操作与分段 | [29](29-troubleshooting.md) |
+| `refused a checkpoint operation` | WARN | 被水位闸 / 个数上限 / 字节上限拒绝 | [29 §2](29-troubleshooting.md#2-checkpoint-被拒507--429) |
+| `checkpoint byte limit is below …` | WARN / ERROR | 字节上限对这个沙箱的 guest 内存偏小 | [27 §4.4](27-configuration-and-capacity.md#44-字节上限怎么选) |
+| `incremental chain is broken; capturing full memory as a new root` | WARN | 丢过一段脏页记录，这次以全量起新树 | [12](12-failure-semantics.md) |
+| `failed to keep the advanced epoch; chain broken until a full checkpoint` | ERROR | 失败的 checkpoint 没能救成隐藏条目，链断开 | [12](12-failure-semantics.md) |
+| `restore failed past the commit point; the sandbox is torn and must be recreated` | ERROR | 撕裂 | [29 §3](29-troubleshooting.md#3-撕裂torn与虚机-faulted) |
+| `rollback succeeded but the guest's envd never answered` | ERROR | `guest_unresponsive`，带完整分段 | [29 §4](29-troubleshooting.md#4-guest-失联guest_unresponsive) |
+| `sealing the write layer failed; checkpoints are refused until a restore reseeds …`、`failed to reset rootfs bookkeeping after restore` | ERROR | 磁盘账本污染（`rootfs_poisoned`），restore 一次即修复 | [12](12-failure-semantics.md) |
+| `failed to fold a hidden checkpoint into its only child; the tree is unchanged` | WARN | 一次合并失败，树原样不动，下次 delete 重试（最多 3 次） | [06](06-memory-diff-tree.md#10-删除隐藏与合并) |
+| `failed to delete dropped checkpoint files` | WARN | 锁外删文件失败，残留等下次启动清空 store 时处理 | [13](13-state-concurrency-durability.md) |
+| `failed to flush conntrack during in-place rollback` | WARN | 连接跟踪清理失败；restore 不因此失败 | [10](10-rollback-pitfalls.md) |
 | `runtime GC pauses` | INFO | `CHECKPOINT_RUNTIME_METRICS` 的输出 | §6 |
 | `proxy trace: …` | INFO | `PROXY_TRACE` 的输出 | §7 |
-| `httputil: ReverseProxy read error during body copy … use of closed network connection` | WARN | 代理在转发响应体时连接被关；与客户端的 `incomplete chunked read` 对应 | [08 §5](08-troubleshooting.md#5-restore-后连接挂死或流截断) |
+| `httputil: ReverseProxy read error during body copy … use of closed network connection` | WARN | 代理在转发响应体时连接被关；与客户端的 `incomplete chunked read` 对应 | [29 §5](29-troubleshooting.md#5-restore-后连接挂死或流截断) |
+
+---
+
+## 本章要点
+
+- 宿主分阶段计时落在四处：成功与失败时的日志行、每个 checkpoint 的 `timings.json`、沙箱级的 `last-restore-timings.json`；后者每次 restore 覆盖，要紧接着读。
+- 能力行回答"记不记脏页、各限额按什么值跑"；用什么记（`hdbss` / `kvm-wp` / `off`）由 Firecracker 自报。`memMode` 在返回值、日志行、metrics 三处是同一个值。
+- 除了沙箱的第一个 checkpoint 和断链后的那一个，出现 `full` 就是"增量退化成全量"。
+- 计时键默认是毫秒，`_mb` 结尾是兆字节、`_count` 结尾是个数，`fc_*` 由 Firecracker 回报；checkpoint 与 restore 的 `total` 含在沙箱操作锁上的排队，`*_lock_wait` 等的是 store 的全局锁。
+- 分段里既有冻结窗口内的、也有窗口外的，只看分布、不做加总（[20 §1.2](20-performance-methodology.md#12-三个钟)）。
+- 并发时看 restore 读了多少用 `materialize_read_mb`；`materialize_disk_read_mb` 是进程级的，会混入别的沙箱的读。
+- `CHECKPOINT_RUNTIME_METRICS` 与 `PROXY_TRACE` 是取证开关，用完即关；GC 长停顿里"等 P 停下"占满整个 STW，说明卡在某个 goroutine 让不出 P 上。

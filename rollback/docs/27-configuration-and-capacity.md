@@ -1,7 +1,17 @@
-# 06 · 配置参考与容量规划
+# 27 · 配置参考与容量规划
 
-> 给运维：本书**唯一的开关总表**、启动能力行的逐字段说明、产物盘与两种每沙箱上限怎么定，以及改一个开关的完整操作。
-> 每个开关的读法都按 [README](README.md) 所列代码基准的代码核实过；代码位置见附录 [A](A-glossary-and-code-map.md)。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 说清全部开关由谁读、什么时候读、怎么生效，以及改一个开关为什么要重启整个 job、会带走什么；
+2. 在开关总表里查到任一开关的默认值、取值规则、作用和核对办法；
+3. 读懂启动能力行与能力文件，用它确认每个开关的生效值与来源；
+4. 为一个节点估算产物盘，选定个数上限与字节上限，并能推导字节上限的下限；
+5. 按步骤安全地改一个开关并逐层验证，知道怎样让改动在升级之后仍然有效。
+
+上一章（[26](26-deployment-prerequisites.md)）确认了机器与部署件就位。本章讲部署之后怎么调：本书**唯一的开关总表**、启动能力行的逐字段说明、产物盘与两种每沙箱上限怎么定，
+以及改一个开关的完整操作。每个开关的读法都按 [README](README.md) 所列代码基准的代码核实过；代码位置见附录 [A](A-glossary-and-code-map.md)。下一章（[28](28-observability-reference.md)）讲设好之后怎么看。
 
 ---
 
@@ -22,7 +32,7 @@
 
 | 变量 | 读取方 | 默认 | 取值与解析 | 作用 | 能力行 |
 |---|---|---|---|---|---|
-| `FC_TRACK_DIRTY_PAGES` | orchestrator，启动时一次 | 未设 = 跟随硬件：探到 KVM 能力 502（HDBSS）则开，否则关 | Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关。其他值（`yes`、`on`、空串、拼错）**忽略**，按未设处理，并打 WARN `FC_TRACK_DIRTY_PAGES="…" is not a boolean and was ignored` | 第 ① 层：虚机启动时是否武装脏页跟踪。关着时每次 checkpoint 都是全量。950 不设；无 HDBSS 而要增量的机器设 `true`（走 KVM 写保护，[05 §1](05-deployment-prerequisites.md#1-先分清两层要不要记脏页用什么方式记)） | `track_dirty_pages`、`track_dirty_pages_reason` |
+| `FC_TRACK_DIRTY_PAGES` | orchestrator，启动时一次 | 未设 = 跟随硬件：探到 KVM 能力 502（HDBSS）则开，否则关 | Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关。其他值（`yes`、`on`、空串、拼错）**忽略**，按未设处理，并打 WARN `FC_TRACK_DIRTY_PAGES="…" is not a boolean and was ignored` | 第 ① 层：虚机启动时是否武装脏页跟踪。关着时每次 checkpoint 都是全量。950 不设；无 HDBSS 而要增量的机器设 `true`（走 KVM 写保护，[26 §1](26-deployment-prerequisites.md#1-先分清两层要不要记脏页用什么方式记)） | `track_dirty_pages`、`track_dirty_pages_reason` |
 | `FC_HDBSS_ORDER` | Firecracker，每台虚机构建时 | `1`（每 vCPU 8 KiB） | 按无符号整数解析，解析不了或未设都取 `1`；值原样交给内核，内核不接受则 HDBSS 启用失败 | 每 vCPU HDBSS 缓冲区大小的编码（`n` → 4 KiB × 2^n）。写密集负载下的取值收益未实测，先别动 | 无；FC 日志 `HDBSS enabled (buffer order …)`，950 上 `dmesg` 的 `Enable HDBSS success, HDBSS buffer size: …` |
 | `FC_HDBSS_REQUIRED` | Firecracker，每台虚机构建时 | 关 | **只认 `true` 和 `1`**，其余（含 `TRUE`）一律为关 | 开：HDBSS 启用失败时虚机构建失败（沙箱起不来）；关：静默退回 KVM 写保护。交付件不设 | 无；看 `checkpoint_verify.py` 打印的"脏页后端" |
 
@@ -36,7 +46,7 @@
 | `CHECKPOINT_LOCK_WAIT_TIMEOUT` | `60s` | Go 时长（`90s`、`2m`），须 > 0；否则 WARN，用默认 | checkpoint / restore / delete 在同一沙箱的操作锁上排队的上限，超过回 **503** `busy`，带 `Retry-After: 1`，本次什么都没做 | `lock_wait_timeout`、`_source` |
 | `CHECKPOINT_FC_CALL_TIMEOUT` | `2m` | Go 时长，须 > 0；否则 WARN，用默认 | 单次 Firecracker API 调用（pause / snapshot / rollback / resume）的时限。pause 超时：补一次 resume 后按普通失败返回；**rollback 超时：无法判断虚机停在哪个时刻，按撕裂处理**（500 `torn`） | `fc_call_timeout`、`_source` |
 
-各拒绝在 SDK 里对应哪个异常、调用方该做什么，见 [03](03-errors-timeouts-concurrency.md)。
+各拒绝在 SDK 里对应哪个异常、调用方该做什么，见 [25](25-errors-timeouts-concurrency.md)。
 SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁等待与服务端 45 s envd 等待之和；**把 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 调大时，客户端超时要跟着调大**。
 
 ### 2.3 树与存储行为
@@ -44,7 +54,7 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 | 变量 | 默认 | 取值与解析 | 作用 | 能力行 |
 |---|---|---|---|---|
 | `CHECKPOINT_FULL_ROOT` | 开 | **只有 `""`（未设或空）、`true`、`1` 算开，其余一律算关**——包括 `TRUE`、`True`、`yes`。不打 WARN | 开：每沙箱第一个 checkpoint 捕获整份内存，做树根，树自己能解析每一页。关：第一个 checkpoint 也是增量、根在模板内存源上，省一份 guest 内存的盘，但回滚时早于所有 checkpoint 的页要从模板内存文件读，字节配额的"下限"也只能按 guest 内存估 | **无**；看进程环境 |
-| `CHECKPOINT_COMPACT` | 开 | `strconv.ParseBool`；未设为开；解析不了 → WARN，按开 | 开：删除操作结尾把"隐藏、非基准、恰有一个子节点"的条目**并入它的子节点**（内存与 rootfs 层成对合并），使条目数有上界 2V+1（机制与证明见 [14](14-memory-diff-tree.md#10-删除隐藏与合并)）。关：隐藏条目无界积累，只供对照测试 | `compact`、`compact_source` |
+| `CHECKPOINT_COMPACT` | 开 | `strconv.ParseBool`；未设为开；解析不了 → WARN，按开 | 开：删除操作结尾把"隐藏、非基准、恰有一个子节点"的条目**并入它的子节点**（内存与 rootfs 层成对合并），使条目数有上界 2V+1（机制与证明见 [06](06-memory-diff-tree.md#10-删除隐藏与合并)）。关：隐藏条目无界积累，只供对照测试 | `compact`、`compact_source` |
 | `CHECKPOINT_COMPACT_MAX_PER_OP` | `8` | 十进制整数，**须 ≥ 1**（关合并用上一行）；否则 WARN，用 `8` | 一次 delete 最多做几次合并。合并在 delete 调用里同步做，这个数越大单次 delete 越可能变长，越小则积压越慢消化（每个未处理候选让上界多 1） | `compact_max_per_op`、`compact_max_per_op_source` |
 | `CHECKPOINT_DEBUG_INDEX` | 关 | `strconv.ParseBool`；未设为关；解析不了 → WARN，按关 | 开：后台写者每沙箱最多每 5 s 重写一次 `<store>/<sandbox>/index.json`，进程退出时再写一次。**只供事后查看，没有任何代码读它**；正确性不依赖它 | `debug_index`、`debug_index_source` |
 
@@ -52,8 +62,8 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 
 | 变量 | 默认 | 取值与解析 | 作用 | 怎么确认生效 |
 |---|---|---|---|---|
-| `CHECKPOINT_RUNTIME_METRICS` | 关 | `strconv.ParseBool`；解析不了 → WARN，按关 | 每 10 s 打一行 `runtime GC pauses`：GC STW 的"等 P 停下"与"总时长"两个直方图（读法见 [07 §6](07-observability-reference.md#6-checkpoint_runtime_metrics-输出)）。关时零开销 | 启动时一行 INFO `logging runtime GC pause histograms` |
-| `PROXY_TRACE` | 关 | 不分大小写，`1`、`true`、`yes`、`on` 为开，其余为关；进程内第一次用到时读一次 | orchestrator 沙箱代理的逐请求日志（开始 / 结束两行）和连接池丢弃行，用于取证流截断（[07 §7](07-observability-reference.md#7-proxy_trace)）。日志量大 | 能力行后紧跟一行 `proxy trace`，字段 `enabled` |
+| `CHECKPOINT_RUNTIME_METRICS` | 关 | `strconv.ParseBool`；解析不了 → WARN，按关 | 每 10 s 打一行 `runtime GC pauses`：GC STW 的"等 P 停下"与"总时长"两个直方图（读法见 [28 §6](28-observability-reference.md#6-checkpoint_runtime_metrics-输出)）。关时零开销 | 启动时一行 INFO `logging runtime GC pause histograms` |
+| `PROXY_TRACE` | 关 | 不分大小写，`1`、`true`、`yes`、`on` 为开，其余为关；进程内第一次用到时读一次 | orchestrator 沙箱代理的逐请求日志（开始 / 结束两行）和连接池丢弃行，用于取证流截断（[28 §7](28-observability-reference.md#7-proxy_trace)）。日志量大 | 能力行后紧跟一行 `proxy trace`，字段 `enabled` |
 | `GODEBUG=gctrace=1` | —— | Go 运行时标准变量 | 每次 GC 一行写到 stderr（alloc 日志 `start.stderr.<n>`），配合上一项判断 GC 停顿 | 看 stderr |
 
 client-proxy 用的是同一份代理代码，在它的 job 里设 `PROXY_TRACE` 同样生效。
@@ -71,14 +81,14 @@ client-proxy 用的是同一份代理代码，在它的 job 里设 `PROXY_TRACE`
 |---|---|---|
 | `ORCHESTRATOR_BASE_PATH` | `/orchestrator` | 决定 store 根：`${DEFAULT_CACHE_DIR}/checkpoints` |
 | `DEFAULT_CACHE_DIR` | `${ORCHESTRATOR_BASE_PATH}/build` | 同上；产物盘就是它所在的文件系统 |
-| `FIRECRACKER_VERSIONS_DIR` | `/fc-versions` | FC 二进制按 `<它>/<模板记录的版本>/firecracker` 找（[05 §3](05-deployment-prerequisites.md#3-版本配对)）；T38 用它指向注入版 FC |
+| `FIRECRACKER_VERSIONS_DIR` | `/fc-versions` | FC 二进制按 `<它>/<模板记录的版本>/firecracker` 找（[26 §3](26-deployment-prerequisites.md#3-版本配对)）；T38 用它指向注入版 FC |
 
 ---
 
 ## 3. 启动能力行
 
 orchestrator 启动时打一行 INFO `checkpoint capabilities`，同样的键和值还写进能力文件（§3.1）。每个值都是用运行时那组函数读出来的，不会出现"日志说一个值、实际按另一个值跑"。
-怎么抓见 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力)。
+怎么抓见 [26 §4.3](26-deployment-prerequisites.md#43-orchestrator-自报的能力)。
 
 | 字段 | 含义 |
 |---|---|
@@ -114,7 +124,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
   | `pid` | 写这个文件的 orchestrator 进程号（RPM 部署里是 `template-manager` 进程） |
   | `started_at` | 该进程的启动时间，RFC3339 |
   | `version` | orchestrator 的版本号（`main.go` 的 `version`） |
-  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串） |
+  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。RPM 构建目前没有注入，交付件上它是空串，核对二进制以 sha256 为准（[26 §3](26-deployment-prerequisites.md#3-版本配对)） |
 
 - **何时写**：每次启动写一次，先写同目录下的临时文件、再改名覆盖旧文件，读到的要么是上次启动的整份、要么是这次的整份。
   写成功打 INFO `capabilities file written`（字段 `path`）；写失败只打 WARN `failed to write the capabilities file; the log line above is the only copy`，启动照常。
@@ -133,7 +143,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 
 - **树根**：每沙箱第一个 checkpoint 是全量，约 M（`CHECKPOINT_FULL_ROOT=false` 时没有这一份）。
 - **每个增量**：约等于本代写过的内存页（稀疏文件，只占写过的页）+ 本代写盘封成的一层。
-- **隐藏条目**：删除中间节点时，被后代依赖的会被隐藏而不是删掉；开合并时隐藏条目数 ≤ 可见数 + 1（[14](14-memory-diff-tree.md#10-删除隐藏与合并)），所以占盘随可见 checkpoint 数有界。
+- **隐藏条目**：删除中间节点时，被后代依赖的会被隐藏而不是删掉；开合并时隐藏条目数 ≤ 可见数 + 1（[06](06-memory-diff-tree.md#10-删除隐藏与合并)），所以占盘随可见 checkpoint 数有界（不合并时隐藏条目怎样无界积累，见 [22 §4.8](22-long-run-and-concurrency.md#48-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
 - **restore 的临时文件**：物化的回滚内存最多一份 guest 内存，restore 结束即删。
 
 ### 4.2 节点产物盘怎么估
@@ -143,7 +153,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 ```
 
 设了字节上限 L 时，每沙箱占用不超过 L 加一次 checkpoint 的量，于是 `Σ ≤ 沙箱数 × (L + M + 一层)`；没设时只能按业务的保留习惯估。
-**产物盘写满影响的是整个节点**：同一文件系统上每个沙箱往稀疏映射里的写都会失败。水位闸就是为此提前拒绝。920B 上各负载的实测占盘见 [25 §5](25-results-and-compliance.md#5-长跑与并发摘要)。
+**产物盘写满影响的是整个节点**：同一文件系统上每个沙箱往稀疏映射里的写都会失败。水位闸就是为此提前拒绝。920B 上各负载的实测占盘见 [22 §5.2](22-long-run-and-concurrency.md#52-上限-60-的最终长测30-min-时间序列)（上限 60）与 [§5.3](22-long-run-and-concurrency.md#53-滚动保留-10一小时与两小时)（滚动保留 10）。
 
 ### 4.3 数量上限怎么选
 
@@ -168,7 +178,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 
 几件运维要知道的事：
 
-- **删基准（沙箱当前所在的那个 checkpoint）几乎不释放空间**（只还 snapfile 与 header，几十 KiB），删分叉点同理；释放空间要删**最旧的**，或 restore 到更早的点再删掉之后那一支（用户视角的说明在 [02](02-semantics-and-limits.md#44-在字节上限下删哪个才能释放空间)）。
+- **删基准（沙箱当前所在的那个 checkpoint）几乎不释放空间**（只还 snapfile 与 header，几十 KiB），删分叉点同理；释放空间要删**最旧的**，或 restore 到更早的点再删掉之后那一支（用户视角的说明在 [24](24-semantics-and-limits.md#44-在字节上限下删哪个才能释放空间)）。
 - 两个增量改的页互不相交时，合并释放为 0；最旧的是全量根、而子节点改了大部分内存时，合并释放接近一份 guest 内存。
 - 拒绝时 WARN 行 `refused a checkpoint operation` 带 `checkpoint_bytes_held`、`max_checkpoint_bytes_per_sandbox`、`base_checkpoint_id`、`floor_bytes`、`floor_bytes_source`；
   删除行 `deleted checkpoint` 带 `sandbox_checkpoint_bytes` 与 `freed_bytes`（含合并效果）。注意 delete 的 `compact_mb` 是合并**写入**量，不是释放量。
@@ -177,8 +187,8 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 ### 4.5 合并让"保留最新 N 个"收敛
 
 客户端"保留最新 N 个、删最旧"时，每次删的都是下一个的父节点：不合并的话它只能被隐藏，隐藏条目、目录数、链深和占盘随时间线性增长，最终写满节点；
-开合并后每个被隐藏的节点并进它唯一的子节点，条目数稳定在 2N + 1 以内，占盘走平（920B 实测见 [25 §5](25-results-and-compliance.md#5-长跑与并发摘要)）。
-代价是 delete 里同步做合并、delete 变慢（已知项，[25 §7](25-results-and-compliance.md#7-已知项与缺口)）。**生产不要关 `CHECKPOINT_COMPACT`。**
+开合并后每个被隐藏的节点并进它唯一的子节点，条目数稳定在 2N + 1 以内，占盘走平（920B 开与不开合并的对照见 [22 §4.8](22-long-run-and-concurrency.md#48-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
+代价是 delete 里同步做合并、delete 变慢（已知项，[21 §7](21-benchmarks-and-compliance.md#7-已知项与缺口)）。**生产不要关 `CHECKPOINT_COMPACT`。**
 
 **脏页跟踪关着时合并不起作用**：每个 checkpoint 都是全量根，没有"隐藏且只有一个子节点"的条目，层照样累积。无 HDBSS 又不开跟踪的节点，必须靠数量上限与字节上限兜住。
 
@@ -197,7 +207,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 按部署指南 §5 场景三（改单个 job 的 env）。**先知道代价**：
 
 - 重启 `template-manager-system` 会**带走这台机器上的全部沙箱**；store 在启动时清空，**所有 checkpoint 一并作废**。
-- 每重启一次会多漏约一池网络槽位，重启后按 [08](08-troubleshooting.md#9-网络槽位netns泄漏) 判断要不要清。
+- 每重启一次会多漏约一池网络槽位，重启后按 [29](29-troubleshooting.md#9-网络槽位netns泄漏) 判断要不要清。
 - 重启后 API 要一两分钟才就绪。
 
 以把字节上限设为 `4563402752` 为例（换别的开关只换变量名和值）：
@@ -236,3 +246,15 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'checkpoint capabilities' | tai
 去掉一个开关：删掉模板里那一行，再做第 2、3 步。
 
 **持久化**：`nomad/template-manager.hcl` 会在下次 `rpm -Uvh` 并重放 overlay 时被 `dep/template-manager.hcl` 覆盖。要长期生效，改仓库的 `e2b-deploy/dep/template-manager.hcl`，重建 `e2b-deploy.tar.gz` 与 RPM（部署指南 §2、§5.0）。
+
+---
+
+## 本章要点
+
+- 开关全是进程环境变量，统一写在 nomad job `template-manager-system` 的 `env {}` 里，启动时读一次；改任何一个都要重启这个 job，会带走本机全部沙箱、作废全部 checkpoint，并多漏一池网络槽位。Firecracker 读的变量只对重启之后新起的虚机生效。
+- 启动能力行与能力文件给出各开关的生效值与来源（`env` / `default`）；能力文件不随日志轮转丢失，但要先核对其中的 `pid` 是当前进程。
+- 一个沙箱的 checkpoint 占盘约为：一份全量根，加各增量本代写过的页与封层，加有界的隐藏条目；产物盘写满影响的是整个节点，水位闸为此提前拒绝，不要把它设成 0。
+- 个数上限数的是可见 checkpoint，它的价值是给"只打点不删除"的客户端一个能处理的 429；开合并时条目总数不超过 2 × 上限 + 1。
+- 字节上限 L > M + ε 不会卡死，L > 2M + ε 才能在最坏负载下保留一个早期恢复点；取 L ≥ 2 × 节点上最大 guest 内存 + 256 MiB。
+- 生产保持 `CHECKPOINT_COMPACT` 开：它让"保留最新 N 个"收敛；脏页跟踪关着时合并不起作用，只能靠两种上限兜住。
+- 改开关改的是渲染模板，改完逐层验证到进程环境与能力行；要长期生效，改仓库里的 `e2b-deploy/dep/template-manager.hcl` 并重建部署件。

@@ -1,9 +1,17 @@
-# 03 · 错误、超时与并发调用
+# 25 · 错误、超时与并发调用
 
-> **这篇给谁看**：要把 checkpoint / restore 接进生产代码、需要处理失败的客户开发者；排障时要对照错误含义的运维。
-> **读完能做什么**：拿到任何一个 checkpoint 相关的错误，知道它是哪个异常类、沙箱此刻处于什么状态、下一步该做什么；
-> 知道 SDK 的默认超时和"不自动重发"约定；知道多个调用方同时操作一个沙箱时会发生什么，分清两类流式截断。
-> **本篇是全书错误表的唯一定义处**，其他篇只链接过来。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 拿到任何一个 checkpoint 相关的错误，按 `reason` 查到对应的异常类、沙箱此刻的状态和下一步该做什么；
+2. 写出按异常类分别处置的调用代码：哪些可以等一下重试、哪些要删了再来、哪些只能销毁重建；
+3. 说清 SDK 的默认超时，以及为什么三个写操作不继承连接级超时、为什么四个 RPC 都不自动重发，超时或断线后该先做什么；
+4. 知道多个调用方同时操作一个沙箱时在途调用的下场，分清"被 restore 打断"和"与 restore 无关的偶发截断"。
+
+上一章（[24](24-semantics-and-limits.md)）讲了成功时 restore 做了什么。本章讲失败时怎么办：错误怎么到达调用方、每种错误意味着沙箱处于什么状态、超时与重发的约定，
+以及多个调用方同时操作一个沙箱时会发生什么。本章面向要把 checkpoint / restore 接进生产代码的开发者，排障时要对照错误含义的运维也用它。
+**本章是全书错误表的唯一定义处**，其他章只链接过来。下一章（[26](26-deployment-prerequisites.md)）起面向部署与运维。
 
 ---
 
@@ -38,12 +46,12 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
 | `guest_unresponsive` | 500 / `internal` | `CheckpointGuestUnresponsiveException` | restore | 宿主一侧的回滚**已经完成**，虚机在目标时刻；是 guest 里的 envd 在服务端等待时间（45 s）内没有应答。**不是撕裂** | 不要当成"没回滚成"处理。此时 guest 暂时执行不了命令，由调用方按业务决定：稍后再试命令，或销毁重建 |
 | `busy` | 503 / `unavailable`，带 `Retry-After: 1` | `CheckpointBusyException` | checkpoint / restore / delete | 无影响：同一沙箱上另一个 checkpoint 操作还没结束，本次排队超过了服务端的锁等待时限（默认 60 s），什么都没做 | **可重试**。等 `e.retry_after` 秒（服务端没给或给的是日期时为 `None`）再发 |
 | `sandbox_restored` | 409 / `aborted` | `CheckpointInterruptedException` | **不是** checkpoint 接口自己的错误：是 restore 发生时，对同一沙箱的**其他**经代理进沙箱的调用（命令、文件读写等）收到的（§5） | 沙箱已回到 checkpoint 那一刻，沙箱里的服务没坏 | 重新连接、重试这次调用。它在被打断前是否已在 guest 里生效无从得知 —— 但回滚反正已经把 checkpoint 之后的一切撤销了 |
-| `disk_full` | 507 / `resource_exhausted` | `CheckpointDiskFullException` | checkpoint / restore | 无影响：服务端在动手之前查产物盘余量，不足就拒绝；沙箱照常运行，已有 checkpoint 完好 | 这是**宿主**的问题：删本沙箱的 checkpoint 通常腾不出足够空间，要请运维清理产物盘（[08](08-troubleshooting.md)）。清理之后可重试；紧循环重试只会重复同一个拒绝 |
+| `disk_full` | 507 / `resource_exhausted` | `CheckpointDiskFullException` | checkpoint / restore | 无影响：服务端在动手之前查产物盘余量，不足就拒绝；沙箱照常运行，已有 checkpoint 完好 | 这是**宿主**的问题：删本沙箱的 checkpoint 通常腾不出足够空间，要请运维清理产物盘（[29](29-troubleshooting.md)）。清理之后可重试；紧循环重试只会重复同一个拒绝 |
 | `too_many_checkpoints` | 429 / `resource_exhausted` | `CheckpointTooManyException` | checkpoint | 无影响：本沙箱可见的 checkpoint 个数到了每沙箱上限，检查在写任何东西之前 | 调用方自己能解决：`list()` → `delete()` 掉任意一个不再需要的 → 再 checkpoint |
-| `checkpoint_bytes_limit` | 429 / `resource_exhausted` | `CheckpointBytesLimitException`（`CheckpointTooManyException` 的子类） | checkpoint | 无影响：本沙箱全部 checkpoint 的占盘到了每沙箱字节上限，检查在写任何东西之前。**restore 从不被这个上限拒绝** | 删**最旧**的 checkpoint（或 restore 到较早的点再删掉之后那一支）；删最新的那个几乎不释放空间（[02](02-semantics-and-limits.md) §4.4）。异常文本里写明了当前占用、上限、删了没用的那个 checkpoint ID 和下限 |
+| `checkpoint_bytes_limit` | 429 / `resource_exhausted` | `CheckpointBytesLimitException`（`CheckpointTooManyException` 的子类） | checkpoint | 无影响：本沙箱全部 checkpoint 的占盘到了每沙箱字节上限，检查在写任何东西之前。**restore 从不被这个上限拒绝** | 删**最旧**的 checkpoint（或 restore 到较早的点再删掉之后那一支）；删最新的那个几乎不释放空间（[24](24-semantics-and-limits.md) §4.4）。异常文本里写明了当前占用、上限、删了没用的那个 checkpoint ID 和下限 |
 | `internal` | 500 / `internal` | `CheckpointException`（基类） | checkpoint / restore / delete | 服务端没有更具体的说法；checkpoint 失败时虚机已恢复运行，restore 在提交点之前失败时沙箱保持原状态（错误文本会写明），delete 回它时什么都没删（下面的补充） | 可以稍后重试或换一个目标；持续出现时记录 `str(e)` 与 `e.reason`，请运维查 orchestrator 日志 |
-| `not_found` | 404 / `not_found` | `NotFoundException`（SDK 既有异常） | 全部四个 | 沙箱或 checkpoint 不存在。也包括：排队期间沙箱被删除、沙箱经原生 pause / resume 换了一代（旧 checkpoint 作废，[02](02-semantics-and-limits.md) §3.1）、拿别的沙箱的 checkpoint ID 来用 | 核对 ID 与沙箱；换代之后要重新 checkpoint |
-| `unauthenticated` | 401 / `unauthenticated` | `AuthenticationException`（SDK 既有异常） | 全部四个 | —— | checkpoint 接口用沙箱自己的 traffic access token 鉴权；用 `Sandbox.create` / `Sandbox.connect` 拿到的对象会自动带上。确认覆盖层是当前版本（[01](01-quickstart.md) §1.3） |
+| `not_found` | 404 / `not_found` | `NotFoundException`（SDK 既有异常） | 全部四个 | 沙箱或 checkpoint 不存在。也包括：排队期间沙箱被删除、沙箱经原生 pause / resume 换了一代（旧 checkpoint 作废，[24](24-semantics-and-limits.md) §3.1）、拿别的沙箱的 checkpoint ID 来用 | 核对 ID 与沙箱；换代之后要重新 checkpoint |
+| `unauthenticated` | 401 / `unauthenticated` | `AuthenticationException`（SDK 既有异常） | 全部四个 | —— | checkpoint 接口用沙箱自己的 traffic access token 鉴权；用 `Sandbox.create` / `Sandbox.connect` 拿到的对象会自动带上。确认覆盖层是当前版本（[23](23-quickstart.md) §1.3） |
 | `invalid_argument` | 400 / `invalid_argument` | `InvalidArgumentException`（SDK 既有异常） | checkpoint / restore / delete | —— | 修正请求（例如请求体解析不了，或 `checkpoint_id` 为空、格式不对） |
 
 补充：
@@ -60,7 +68,7 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
 - `AuthenticationException` 不是 `SandboxException` 的子类（SDK 原有设计），`except SandboxException` 接不住它。
 - `disk_full`、`too_many_checkpoints`、`checkpoint_bytes_limit` 三种拒绝会在服务端各打一条 WARN
   `refused a checkpoint operation`，带 `reason` 和判定用的数字，运维据此区分是哪一个限额。
-  限额怎么配见 [06](06-configuration-and-capacity.md)，日志字段见 [07](07-observability-reference.md)。
+  限额怎么配见 [27](27-configuration-and-capacity.md)，日志字段见 [28](28-observability-reference.md)。
 
 ### 2.2 没有 `reason` 时（老服务端）
 
@@ -218,4 +226,16 @@ restore 一开始就会丢掉进这个沙箱的所有在途连接（沙箱马上
 | 现状 | 保留；按 §5.2 处理 | 代理 handler 已开启 full duplex（提交 `baae30b`）。orchestrator 的沙箱代理与 client-proxy 共用这份代理代码，两者都已修复 |
 
 如果在**没有 restore** 的情况下仍然看到偶发的流式截断，先请运维确认部署的 orchestrator 和 client-proxy 都已包含上述修复，
-排查方法见 [08](08-troubleshooting.md)；orchestrator 的代理连接日志开关见 [07](07-observability-reference.md)。
+排查方法见 [29](29-troubleshooting.md)；orchestrator 的代理连接日志开关见 [28](28-observability-reference.md)。
+
+---
+
+## 本章要点
+
+- 错误响应带 `code`、`reason`、`message` 三个字段；SDK 先按 `reason` 选异常类，因为 `reason` 回答的是"下一步该做什么"，同一个 `code` 下可能要做完全不同的事。
+- 异常族是基类 `CheckpointException` 加 9 个子类；`CheckpointBytesLimitException` 是 `CheckpointTooManyException` 的子类，按个数上限写的处理代码不改也接得住。
+- 不要自动重试的几类：撕裂（销毁重建）、账本污染（先 restore 一个已有的 checkpoint）、产物盘满（找运维）、断链（先 checkpoint 一次再 restore）。
+- `create`、`restore`、`delete` 默认超时 300 s，不要调到 60 s 以下：服务端排队 60 s 后回可重试的 `busy`，客户端先超时就丢掉了这个信息。
+- 客户端超时或断开不会让服务端中止；四个 RPC 都不幂等，所以一律不自动重发，超时或断线后先 `list()` 核对再决定。
+- 同一沙箱的写操作串行、不同沙箱互不排队；restore 会切断在途调用：响应头还没写出的得到 409 `CheckpointInterruptedException`，已经在流式回数据的只能被切断。
+- restore 造成的流截断是既定限制；没有 restore 时的偶发截断是已修复的缺陷，仍出现时先确认 orchestrator 与 client-proxy 都已更新。

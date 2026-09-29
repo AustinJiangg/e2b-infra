@@ -1,6 +1,7 @@
 # `rollback/scripts/acceptance/` —— 交付态验收脚本
 
-五个脚本，**互不依赖，也不依赖本目录以外的任何文件**：拷哪个 `.py` 到目标机就能跑哪个。
+五个独立脚本，**互不依赖，也不依赖本目录以外的任何文件**：拷哪个 `.py` 到目标机就能跑哪个；
+唯一例外是 `rolling_keep10.py`，它从同目录导入 `checkpoint_concurrent.py`，两个要一起拷。
 `dev/` 与 `crtest/` 那两套共享库、有开发态假设，和这里不要混用。
 
 想要「部署完几行命令跑完一轮」，别一个个手跑，用 [`../950/run.sh`](../950/README.md)。
@@ -20,7 +21,7 @@ python3 /opt/e2b-infra/patch_e2b.py                        # 顺序不能反
 （外加 `E2B_ACCESS_TOKEN`）。
 
 **都要在宿主机上跑。** 远程只拿得到客户端墙钟；服务端分段计时、产物实占、脏页后端、
-产物盘文件系统这四类信息只有在宿主机上才读得到（手册 23 篇 §2）。
+产物盘文件系统这四类信息只有在宿主机上才读得到（手册 19 篇 §2）。
 
 ## 五个脚本
 
@@ -31,6 +32,7 @@ python3 /opt/e2b-infra/patch_e2b.py                        # 顺序不能反
 | `checkpoint_bench_v2.py` | 耗时基准的**对照组口径**：照搬进程级那套 `demo_checkpoint_perf.py` 的档位表与两张汇总表，服务端分段从 `timings.json` 读 | 同上 | 同上 | 约 12 s |
 | `native_snapshot_bench.py` | e2b **原生** snapshot（`--mode pause` / `--mode snapshot`）的同一张档位表，外加 `touch` 懒加载列；三套横向对照里代表原生那套 | `--mode pause` | — | 约 44 s |
 | `checkpoint_concurrent.py` | 并发四段：**A** 跨沙箱扇出（N=1…16，barrier 对齐）、**B** 同沙箱多调用方争用、**D** 混合稳态、**C** 生命周期竞争 | `--stages A,B --fanout 1,2,4,8,16 --soak-seconds 180 --out x.json` | 各段表尾的对账行 | 随 `--fanout` / `--soak-seconds` |
+| `rolling_keep10.py` | 滚动保留长跑：S 个沙箱各自循环 dirty → checkpoint → 超过 `--keep` 个删最旧 → 按 `--restore-p` 概率 restore 到保留集合随机一个并逐项验现场；复用 `checkpoint_concurrent.py`（同目录导入）只替换其 D 段，参数与 JSON 格式同它；沙箱寿命由环境变量 `SPAWN_TIMEOUT`（默认 10800 s）给 | `--soak-sandboxes 16 --soak-seconds 1800 --keep 10 --restore-p 0.25 --keep-on-failure` | `restore 现场逐项验证：x/y 一致`、`abort：False` | 约 `--soak-seconds` |
 
 ### `checkpoint_concurrent.py` 的两个坑
 
@@ -50,7 +52,7 @@ python3 /opt/e2b-infra/patch_e2b.py                        # 顺序不能反
 | 开头 `脏页后端 : 软件写保护` | `kvm-wp`，920B 是这个；checkpoint 耗时里含 VM exit 开销 |
 | 开头 `产物落盘 : 未知（本脚本没跑在宿主机上？）` | 跑错机器了，服务端那几列全会缺 |
 
-达标线（手册 24 篇 §1.1，照抄客户那组粗略指标，未限定改动量）：
+达标线（手册 20 篇 §1.1，照抄客户那组粗略指标，未限定改动量）：
 **checkpoint ≤ 200 ms、restore ≤ 100 ms**，量的都是客户端墙钟；
 全量 checkpoint 单列不判定。逐档对照表由 `../crtest/bench/compliance.py` 出。
 

@@ -1,9 +1,17 @@
-# 02 · 语义与边界
+# 24 · 语义与使用边界
 
-> **这篇给谁看**：用 checkpoint / restore 写业务的客户开发者。
-> **读完能做什么**：说清一次 restore 把什么带回过去、什么带不回；知道 checkpoint 在什么情况下失效；
-> 在有配额的环境里知道该删哪个 checkpoint 才能腾出空间；知道它和原生 snapshot（pause / resume）怎么一起用。
-> 接口与示例见 [01](01-quickstart.md)，错误与并发见 [03](03-errors-timeouts-concurrency.md)。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 说清一次 restore 把哪些东西带回 checkpoint 那一刻，以及为什么内存和磁盘不会出现半新半旧；
+2. 说清 restore 带不回什么（外部世界、跨越 restore 的连接、单调时钟、用户态缓存的随机状态），业务代码各自该怎么应对；
+3. 列出让 checkpoint 失效的全部事件，并解释为什么原生 pause / resume 之后旧 checkpoint 必然作废；
+4. 在设了个数上限或字节上限的环境里，知道 delete 实际做了什么、该删哪个才能腾出空间；
+5. 按"沙箱活着时回退用 checkpoint、离场用原生 snapshot"的分工，把两者串进一个工作流。
+
+上一章（[23](23-quickstart.md)）跑通了接口。本章讲用它写业务之前必须知道的语义：restore 带回什么、带不回什么，checkpoint 什么时候失效，删除之后空间怎么回收，
+以及它和原生 snapshot 怎么分工。接口与示例见 [23](23-quickstart.md)，错误与并发在下一章（[25](25-errors-timeouts-concurrency.md)）。
 
 ---
 
@@ -23,7 +31,7 @@ restore 把**这台正在运行的虚机**原地放回 checkpoint 那一刻。�
 内存和磁盘是在**同一次暂停**里拍下、在同一次暂停里换回的，所以两者是同一瞬间的镜像：
 guest 还没刷到盘上的数据留在内存镜像里，restore 之后不会出现"内存新、磁盘旧"的半新半旧状态。
 
-checkpoint 期间业务能感到的只有一次短暂停顿（冻结窗口）；restore 同样只停一次。量级见 [04](04-performance-expectations.md)。
+checkpoint 期间业务能感到的只有一次短暂停顿（冻结窗口）；restore 同样只停一次。量级见 [21](21-benchmarks-and-compliance.md#结论先行)。
 
 ---
 
@@ -48,7 +56,7 @@ restore 让 guest 的 TCP 状态也回到了 checkpoint 时刻，跨越 restore 
 - **所有跨越 restore 的连接都要重建**：进沙箱的连接（SDK 的命令、文件读写、你自己暴露的服务端口），
   以及沙箱里的程序连到外面的长连接。SDK 自己的调用会重新建连；你在沙箱里起的服务、沙箱里连外部的客户端，要自己处理重连；
 - restore 那一刻还在途的 SDK 调用会被打断，调用方会收到 `CheckpointInterruptedException` 或传输层错误，
-  两种情形的区别见 [03](03-errors-timeouts-concurrency.md)；
+  两种情形的区别见 [25](25-errors-timeouts-concurrency.md)；
 - **restore 返回之后新建的连接不受影响**，guest 往外新建的连接也不受影响；
 - **同一节点上的其他沙箱不受影响**：宿主侧只删属于这个沙箱的表项，从不整表清空。
 
@@ -63,7 +71,7 @@ restore 让 guest 的 TCP 状态也回到了 checkpoint 时刻，跨越 restore 
   这与 e2b 原生 pause / resume 走的是同一条路径。
   由此可知：guest 从回滚后恢复运行，到这次 `/init` 被处理，这段时间里墙钟仍停在 checkpoint 时刻附近；
   这段时间在 restore 调用返回之前，调用方在 restore 返回后发起的命令看到的已是校正后的时间（误差不超过上面的阈值）。
-  如果 envd 始终不应答（restore 以 guest 失联报错，见 [03](03-errors-timeouts-concurrency.md)），墙钟就没有被校正。
+  如果 envd 始终不应答（restore 以 guest 失联报错，见 [25](25-errors-timeouts-concurrency.md)），墙钟就没有被校正。
 
 对业务代码的影响：
 
@@ -83,7 +91,7 @@ restore 把它原样带回 checkpoint 时刻，VMGenID 也不会替它重新播�
 ## 3. checkpoint 什么时候失效
 
 checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有效。它不进对象存储，不跟随沙箱迁移，
-也没有加载回来的机制 —— 即使把目录完整拷走也恢复不了（原因见 [22](22-lifecycle-reasoning.md)）。
+也没有加载回来的机制 —— 即使把目录完整拷走也恢复不了（原因见 [14](14-lifecycle-reasoning.md)）。
 
 | 事件 | 结果 |
 |---|---|
@@ -111,8 +119,8 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 
 ## 4. 删除与空间回收：用户视角
 
-这一节只讲调用方需要知道的规则和该怎么做；删除、隐藏、合并的机制与正确性证明见 [14](14-memory-diff-tree.md)，
-相关开关与容量规划见 [06](06-configuration-and-capacity.md)。
+这一节只讲调用方需要知道的规则和该怎么做；删除、隐藏、合并的机制与正确性证明见 [06](06-memory-diff-tree.md)，
+相关开关与容量规划见 [27](27-configuration-and-capacity.md)。
 
 ### 4.1 `delete` 做了什么
 
@@ -139,7 +147,7 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 
 ### 4.3 两种每沙箱上限
 
-运维可以给每个沙箱设两种上限（默认都不设），被拒时的异常与状态码见 [03](03-errors-timeouts-concurrency.md)：
+运维可以给每个沙箱设两种上限（默认都不设），被拒时的异常与状态码见 [25](25-errors-timeouts-concurrency.md)：
 
 | 上限 | 数什么 | 被拒时怎么办 |
 |---|---|---|
@@ -163,66 +171,46 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 一个沙箱在运行期间至少要保留一份全量内存镜像（它的树根，或合并后成为树根的那个 checkpoint）。
 因此上限设得比"一份 guest 内存加少量开销"还小，沙箱一旦顶到上限就再也删不回来；
 要在最坏负载下还能保留一个更早的恢复点，上限应不低于"两份 guest 内存加少量开销"。
-服务端在沙箱第一次 checkpoint 时发现上限过小会打日志告警，推荐值与推导见 [06](06-configuration-and-capacity.md)。
+服务端在沙箱第一次 checkpoint 时发现上限过小会打日志告警，推荐值与推导见 [27](27-configuration-and-capacity.md)。
 
 ---
 
 ## 5. 与原生 snapshot（pause / resume）怎么配合
 
-两者是分工关系，**不互相替代**。与原生 snapshot 的逐项对比见 [11](11-baseline-goals-and-native.md)。
+一句话分工：**沙箱活着时的回退用 checkpoint，沙箱离场用原生 snapshot。** checkpoint 是宿主本地、原地、只存本代改动的；
+原生 snapshot 是可以离开这台宿主、另起沙箱的。按需求选哪一个的对照表（[18 §1.3](18-native-and-checkpoint-together.md#13-分工)）、两者为什么这样分工、逐项对比与优化点，都在 [18](18-native-and-checkpoint-together.md)。
 
-| 需求 | 用哪个 |
-|---|---|
-| 任务执行中的快速回退、试错、在几个方案之间来回跳 | **checkpoint / restore** |
-| 沙箱要离场，之后还想回来 | 原生 snapshot |
-| 跨节点迁移、进程崩溃后恢复 | 原生 snapshot |
-| 跨会话、长期保存状态 | 原生 snapshot |
+两者可以串起来用：先用 checkpoint / restore 把沙箱精确定位到想要的那一刻，再对这个状态做一次原生 pause 固化下来。一个完整的 Agent 工作流、以及每一步底下发生了什么，见 [18 §6.2](18-native-and-checkpoint-together.md#62-一个-agent-工作流以及底下发生了什么)。
 
-一句话：**沙箱活着时的回退用 checkpoint，沙箱离场用原生 snapshot。**
+使用时记住三条：
 
-两者可以串起来用：先用 checkpoint / restore 把沙箱精确定位到想要的那一刻，再对这个状态做一次原生 pause 固化下来。
-一个 Agent 工作流的样子：
-
-```
-① 沙箱起来
-② checkpoint「干净环境」                ← 第一次，全量根
-③ 装依赖 → checkpoint「依赖装好」        ← 增量
-④ 改配置 → 跑构建 → 失败
-⑤ restore 到「依赖装好」                 ← 沙箱不中断，不用重装依赖
-⑥ 换个改法 → 跑构建 → 成功 → checkpoint「构建通过」   ← 从③分出的新分支
-⑦ 跑测试 → 失败 → restore 到「构建通过」
-⑧ 任务完成，对最终状态做一次原生 pause   ← 跨会话保留
-⑨ 之后 resume：②③⑥ 的 checkpoint 已作废，⑧ 的状态还在
-```
-
-注意方向：checkpoint → 原生 pause 可以，pause / resume 之后原来的 checkpoint 就作废了（§3.1）。
-
-原生 snapshot 的产物存在哪里取决于部署。单机部署把它和模板写在本机，宿主重启后是否还在，见部署文档
-[`../../deploy-docs/10-模板与快照存储位置梳理.md`](../../deploy-docs/10-模板与快照存储位置梳理.md)。
-
-### 5.1 checkpoint / restore 之后再原生 pause：正确性前提
-
-原生 pause 导出的内存差分是相对模板内存文件的，必须包含 guest **自启动以来**写过的每一页。
-而 checkpoint 和 restore 都会让 Firecracker 清零它的写跟踪记录，restore 还会绕开写跟踪直接把回滚集写进 guest 内存。
-如果 pause 只看 Firecracker 当下的记录，打过 checkpoint 的沙箱就会漏导出较早写过的页，resume 之后 guest 内存由两个时刻拼成、
-内核崩溃，而 pause 本身却报告成功。
-
-服务端的做法是：把每次 checkpoint、restore 时 Firecracker 即将清掉的那几份脏页记录并进一个每虚机的累积集合，
-pause 时一并导出。任何一份并不进去时，整个累积集合标为不可信，pause 退回按"内存里驻留过的页"导出 ——
-导多了只多花时间，不会导少。从不做 checkpoint 的沙箱不受影响。
-
-对调用方意味着：**checkpoint / restore 之后可以放心做原生 pause**，resume 回来的内存是完整的；
-只有在退回驻留判据的那种少见情形下，pause 才会比平常多导出一些页、多花一些时间。机制细节见 [14](14-memory-diff-tree.md)。
+- **方向只能是先 checkpoint、后原生 pause。** pause / resume 之后，原来的 checkpoint 全部作废（§3.1）；resume 之后可以重新 checkpoint，那一代的第一次是新的全量根。
+- **checkpoint / restore 之后可以放心做原生 pause**，resume 回来的内存是完整的。服务端会把 checkpoint、restore 过程中被清掉的脏页记录补进 pause 的导出里；
+  记录不完整的少见情形下，它退回按"驻留过的页"多导出一些，只会多花时间，不会少导（机制见 [18 §7](18-native-and-checkpoint-together.md#7-checkpoint-之后做原生-pause-的正确性前提)）。
+- **原生 snapshot 的产物存在哪里取决于部署。** 单机部署把它和模板写在本机，宿主重启后是否还在，见部署文档
+  [`../../deploy-docs/10-模板与快照存储位置梳理.md`](../../deploy-docs/10-模板与快照存储位置梳理.md)。
 
 ---
 
 ## 6. 其他需要知道的边界
 
 - **操作按沙箱串行**。同一个沙箱上的 checkpoint、restore、delete 在宿主上排队执行，不同沙箱之间互不排队。
-  排队太久会被告知稍后重试。多个调用方共用一个沙箱时的行为见 [03](03-errors-timeouts-concurrency.md)。
+  排队太久会被告知稍后重试。多个调用方共用一个沙箱时的行为见 [25](25-errors-timeouts-concurrency.md)。
 - **沙箱要活着**。checkpoint 和 restore 都要求沙箱处于运行状态。
 - **不要直接动宿主上的 checkpoint 目录**。手工删除会打断后代的恢复链；删除一律走 `delete`。
   备份这个目录也保不住 checkpoint（§3）。
 - **checkpoint ID 只在所属沙箱的这一代里有意义**，拿到别的沙箱上用是 `not_found`。
 - **restore 失败的绝大多数情形下沙箱保持原状继续可用**；唯一的例外是"撕裂"，那时只能销毁重建。
-  各种失败的含义与处理见 [03](03-errors-timeouts-concurrency.md)。
+  各种失败的含义与处理见 [25](25-errors-timeouts-concurrency.md)。
+
+---
+
+## 本章要点
+
+- restore 原地把正在运行的虚机放回那一刻：内存、vCPU、中断控制器、设备逻辑状态、整个根盘和进程都回去；内存与磁盘在同一次暂停里拍、在同一次暂停里换，不会半新半旧。
+- 外部世界回不去，需要"恰好一次"的外部操作由业务自己做幂等；跨越 restore 的连接一律作废、要重连，restore 返回后新建的连接和同节点其他沙箱不受影响。
+- 单调时钟会倒退，墙钟在 restore 返回之前由 envd 校回；活性判断用计数器而不用时间；用户态缓存的随机状态要在 restore 之后自己重新初始化。
+- checkpoint 只存在宿主本地、只属于沙箱当前这一代：沙箱销毁、orchestrator 或宿主重启、迁移、原生 pause / resume 都会让它作废，拷走目录也恢复不了。
+- delete 立即让 checkpoint 从接口上消失；仍被后代或当前点需要的只是隐藏，隐藏且只剩一个子节点的会被合并，所以"保留最新 N 个、删最旧"会收敛。
+- 两种上限只拦 checkpoint、不拦 restore；字节上限下删最新的几乎不释放，删最旧的或整支删掉才有效，上限不应低于两份 guest 内存加少量开销。
+- 活着时回退用 checkpoint，离场、迁移、跨会话用原生 snapshot；可以先 checkpoint 再原生 pause，反过来不行。

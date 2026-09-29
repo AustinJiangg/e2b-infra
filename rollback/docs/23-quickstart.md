@@ -1,9 +1,20 @@
-# 01 · 快速上手
+# 23 · 快速上手
 
-> **这篇给谁看**：要在自己的代码里调用 checkpoint / restore 的客户开发者。
-> **读完能做什么**：装好 SDK 覆盖层并自检；跑通"checkpoint → 改动 → restore → list → delete"和树形分叉两个示例；
-> 看懂 `mem_mode` 字段、知道历史是一棵树而不是一条链。
-> 回滚的语义与边界见 [02](02-semantics-and-limits.md)，错误与超时见 [03](03-errors-timeouts-concurrency.md)。
+## 本章目标
+
+读完本章，你应该能：
+
+1. 装好 `e2b==2.20.0` 与 checkpoint SDK 覆盖层，并用 `install.py --check` 与一行导入确认它装进了业务代码用的那个解释器；
+2. 设好四个连接变量，用同步与异步两种写法跑通"checkpoint → 改动 → restore → list → delete"；
+3. 读懂 `CheckpointInfo` 的各个字段，尤其是 `mem_mode`：第一次为什么是 `full`，之后仍是 `full` 意味着什么；
+4. 按树形历史使用 checkpoint：从同一起点分叉、跨分支来回跳，并自己记录父子关系；
+5. 遇到上手阶段最常见的几种报错时，知道多半是哪一步没配好。
+
+上一章（[22](22-long-run-and-concurrency.md)）给完了长跑与并发的实测，第五部分到此结束。第六部分是实践手册。前面五个部分讲了原理与证据：为什么这样设计、怎么实现、失败时怎么办，以及怎么证明它对、它快。
+从本章起换一个角度，不再追问"为什么"，只讲"怎么用、怎么部署、怎么运维、出了问题怎么查"：23–25 章面向在代码里调用 checkpoint / restore 的开发者，
+26–30 章面向部署、运维与验收。各章可以单独查阅，需要原理时按链接回到前面各部分。
+
+本章是第一步：把 SDK 装好，跑通第一个例子。回滚的语义与边界是下一章（[24](24-semantics-and-limits.md)），错误与超时见 [25](25-errors-timeouts-concurrency.md)。
 
 ---
 
@@ -11,8 +22,8 @@
 
 ### 1.1 服务端
 
-服务端已按部署文档装好并启动（[05](05-deployment-prerequisites.md)、[`single-node-offline-deploy.md`](../../single-node-offline-deploy.md)），
-并且至少建过一个模板。本篇示例默认用模板 `base`（单机部署的验收与基准都用它，见 [09](09-acceptance-runbook.md)）。
+服务端已按部署文档装好并启动（[26](26-deployment-prerequisites.md)、[`single-node-offline-deploy.md`](../../single-node-offline-deploy.md)），
+并且至少建过一个模板。本章示例默认用模板 `base`（单机部署的验收与基准都用它，见 [30](30-acceptance-runbook.md)）。
 
 checkpoint 接口在沙箱地址的 **49984** 端口上，但请求由宿主上的 orchestrator 截下并直接应答，
 **沙箱里不需要安装任何守护进程**：做 checkpoint 要暂停虚机、驱动 Firecracker 的快照接口，这两件事 guest 内部做不到。
@@ -143,11 +154,11 @@ finally:
 | `create(name=None, request_timeout=None)` | `CheckpointInfo` | 做一次 checkpoint。`name` 只是给人看的标签，不要求唯一；ID 由服务端生成 |
 | `restore(checkpoint_id, request_timeout=None)` | `bool` | 把沙箱原地回滚到该 checkpoint。**只会返回 `True`**，失败一律抛异常，不要拿返回值做分支 |
 | `list(request_timeout=None)` | `List[CheckpointInfo]` | 本沙箱当前这一代的全部可见 checkpoint，按创建时间从旧到新 |
-| `delete(checkpoint_id, request_timeout=None)` | `bool` | 从接口上删除一个 checkpoint（空间何时释放见 [02](02-semantics-and-limits.md)）。同样只会返回 `True` |
+| `delete(checkpoint_id, request_timeout=None)` | `bool` | 从接口上删除一个 checkpoint（空间何时释放见 [24](24-semantics-and-limits.md)）。同样只会返回 `True` |
 | `is_available(request_timeout=None)` | `bool` | checkpoint 接口是否应答（探的是宿主侧服务，不是 guest） |
 | `is_running(request_timeout=None)` | `bool` | `is_available` 的旧名，为兼容保留 |
 
-各方法的默认超时和"不自动重发"的约定见 [03](03-errors-timeouts-concurrency.md)。
+各方法的默认超时和"不自动重发"的约定见 [25](25-errors-timeouts-concurrency.md)。
 
 ### 2.2 `CheckpointInfo`
 
@@ -196,13 +207,13 @@ asyncio.run(main())
 
 对调用方意味着：
 
-- **第一次 checkpoint 必然是 `full`，这是正常的**。每个沙箱只付一次；经原生 pause / resume 换代之后，新一代的第一次也是 `full`（[02](02-semantics-and-limits.md)）。
+- **第一次 checkpoint 必然是 `full`，这是正常的**。每个沙箱只付一次；经原生 pause / resume 换代之后，新一代的第一次也是 `full`（[24](24-semantics-and-limits.md)）。
 - **之后仍是 `full`，说明宿主没在跟踪脏页**。功能完全正确、不报错，只是每次都按全量付时间和空间 ——
   所以这种退化只能从这个字段看出来。鲲鹏 950 上 orchestrator 探测到 HDBSS 会自动打开跟踪；
-  没有 HDBSS 的机器默认不跟踪，需要运维显式打开（开关见 [06](06-configuration-and-capacity.md)）。
-- 极少数失败之后（服务端丢了一段脏页记录，见 [03](03-errors-timeouts-concurrency.md) 的 `chain_broken`），
+  没有 HDBSS 的机器默认不跟踪，需要运维显式打开（开关见 [27](27-configuration-and-capacity.md)）。
+- 极少数失败之后（服务端丢了一段脏页记录，见 [25](25-errors-timeouts-concurrency.md) 的 `chain_broken`），
   下一次 checkpoint 也会是 `full`，它会起一棵新的树根。
-- `list()` 里报的 `mem_mode` 是这个 checkpoint **被拍下时**的模式；之后服务端整理存储（[02](02-semantics-and-limits.md) §4）不会改变它。
+- `list()` 里报的 `mem_mode` 是这个 checkpoint **被拍下时**的模式；之后服务端整理存储（[24](24-semantics-and-limits.md) §4）不会改变它。
 
 业务依赖增量耗时的话，可以在自己的代码里加一道断言：
 
@@ -215,7 +226,7 @@ def checkpoint_expect_incremental(sbx, name=None, first=False):
 ```
 
 `mem_mode` 为 `None` 时说明服务端版本太老、不上报这个字段，此时不要据此判断。
-耗时量级见 [04](04-performance-expectations.md)。
+耗时量级见 [21](21-benchmarks-and-compliance.md#结论先行)。
 
 ---
 
@@ -284,15 +295,15 @@ finally:
 
 - **跨分支跳转的代价**主要取决于两个点之间被改过的页有多少（沿树路径经最近公共祖先汇总），而不是树有多少分支。
 - **删除**一个还有后代依赖的 checkpoint，它只是从 `list()` 里消失，数据由服务端按需保留或合并（compact / fold）；
-  怎样删才能真正释放空间见 [02](02-semantics-and-limits.md)。
-- 树只属于**这一个沙箱的这一代**：沙箱销毁、orchestrator 重启、经原生 pause / resume 换代，树都随之作废（[02](02-semantics-and-limits.md)）。
+  怎样删才能真正释放空间见 [24](24-semantics-and-limits.md)。
+- 树只属于**这一个沙箱的这一代**：沙箱销毁、orchestrator 重启、经原生 pause / resume 换代，树都随之作废（[24](24-semantics-and-limits.md)）。
 
 ---
 
 ## 6. 出错时
 
 checkpoint 接口的错误按"调用方下一步该做什么"分类，每一种有自己的异常类；
-完整的表、异常类层次、超时与重试约定在 [03](03-errors-timeouts-concurrency.md)。上手阶段最常见的几种：
+完整的表、异常类层次、超时与重试约定在 [25](25-errors-timeouts-concurrency.md)。上手阶段最常见的几种：
 
 | 现象 | 多半是 |
 |---|---|
@@ -301,4 +312,16 @@ checkpoint 接口的错误按"调用方下一步该做什么"分类，每一种�
 | `import e2b` 报 `duplicate file name checkpoint/checkpoint.proto` | site-packages 里残留了旧版覆盖层的目录；重跑 `install.py`，它会把旧目录挪开 |
 | `AttributeError: 'Sandbox' object has no attribute 'checkpoint'` | 覆盖层没装进当前解释器（§1.2、§1.3） |
 | `mem_mode` 一直是 `full` | 宿主没开脏页跟踪（§4） |
-| restore 之后别的调用抛 `CheckpointInterruptedException` | 那次调用跨越了 restore，被回滚掐断；重连重试即可（[03](03-errors-timeouts-concurrency.md)） |
+| restore 之后别的调用抛 `CheckpointInterruptedException` | 那次调用跨越了 restore，被回滚掐断；重连重试即可（[25](25-errors-timeouts-concurrency.md)） |
+
+---
+
+## 本章要点
+
+- checkpoint 接口由宿主上的 orchestrator 截下并应答，沙箱里不需要装任何东西；客户端需要 `e2b==2.20.0` 加整文件覆盖层，先铺覆盖层、后跑 `patch_e2b.py`，并且装进业务代码实际使用的那个解释器。
+- 装完做两步自检：`install.py --check`（在干净子进程里验字段、方法、端口、异常族、不重放与默认超时）和一行导入。
+- 五个方法都挂在 `sandbox.checkpoint` 下；`restore` 与 `delete` 只会返回 `True`，失败一律抛异常；`created_at` 只有 `list()` 返回的对象才带。
+- restore 同时带回内存、整个根文件系统（包括被删的文件）；它不剪枝，比目标新的 checkpoint 仍然可以前滚过去。
+- `mem_mode`：沙箱这一代的第一次是 `full` 属正常；之后仍是 `full` 说明宿主没开脏页跟踪或刚断过链，功能正确但按全量付时间和空间，只有这个字段能看出来。
+- 历史是一棵树：新 checkpoint 挂在"拍下时沙箱所处的点"下面，任意两点可以直接跳，代价取决于两点之间改过的页；接口不返回父节点，要按树管理就自己记。
+- 树只属于这个沙箱的这一代：沙箱销毁、orchestrator 重启、原生 pause / resume 之后都作废。
