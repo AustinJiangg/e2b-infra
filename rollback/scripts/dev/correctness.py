@@ -77,18 +77,24 @@ try:
     rst("ck2", "路径经 LCA=ck1")
     rst("ck7", "路径经 LCA=ck2")
 
-    print("\n=== 4. 删除语义：被引用者隐藏、叶子物理回收 ===", flush=True)
-    b.sbx.checkpoint.delete(b.cks["ck2"])  # 有后代 → 隐藏
+    print("\n=== 4. 删除语义：被引用者隐藏（单子节点时合并进子节点）、叶子物理回收 ===", flush=True)
+    b.sbx.checkpoint.delete(b.cks["ck2"])  # 有后代 → 隐藏；只有一个子节点时再被合并进它
+    # ck2 不是基准（基准是 ck7）且只有一个子节点 ck3，所以 CHECKPOINT_COMPACT 开着（默认）时，
+    # 删除结尾会把它合并进 ck3：ck2 的目录消失，ck3 直接挂到 ck1 下。关掉合并则按旧语义隐藏保留。
     m2 = b.manifest("ck2")
-    check(m2 is not None and m2.get("hidden") is True, "ck2 有后代，删除后隐藏而非物理删除")
-    check(os.path.exists(os.path.join(b.dir_of("ck2"), "mem_bitmap")), "ck2 的 sidecar 保留（跨它回滚要用）")
-    check(not os.path.exists(os.path.join(b.dir_of("ck2"), "snapfile")), "ck2 的 snapfile 已丢弃（隐藏条目不是恢复目标）")
-    if SCHEME == "xfs":
-        check(not os.path.exists(os.path.join(b.dir_of("ck2"), MEMFILE)),
-              "XFS 套：隐藏条目的 %s 可丢（内容来自目标自己）" % MEMFILE)
+    if m2 is None and not os.path.exists(b.dir_of("ck2")):
+        check((b.manifest("ck3") or {}).get("parent_id") == b.cks["ck1"],
+              "ck2 被合并进唯一子节点 ck3（CHECKPOINT_COMPACT 开）：ck3 的父节点变成 ck1")
     else:
-        check(os.path.exists(os.path.join(b.dir_of("ck2"), MEMFILE)),
-              "ext4 套：隐藏条目的 %s 必须留（后代靠它解析内容）" % MEMFILE)
+        check(m2 is not None and m2.get("hidden") is True, "ck2 有后代，删除后隐藏而非物理删除（CHECKPOINT_COMPACT 关）")
+        check(os.path.exists(os.path.join(b.dir_of("ck2"), "mem_bitmap")), "ck2 的 sidecar 保留（跨它回滚要用）")
+        check(not os.path.exists(os.path.join(b.dir_of("ck2"), "snapfile")), "ck2 的 snapfile 已丢弃（隐藏条目不是恢复目标）")
+        if SCHEME == "xfs":
+            check(not os.path.exists(os.path.join(b.dir_of("ck2"), MEMFILE)),
+                  "XFS 套：隐藏条目的 %s 可丢（内容来自目标自己）" % MEMFILE)
+        else:
+            check(os.path.exists(os.path.join(b.dir_of("ck2"), MEMFILE)),
+                  "ext4 套：隐藏条目的 %s 必须留（后代靠它解析内容）" % MEMFILE)
     names = {c.name for c in b.sbx.checkpoint.list()}
     check("ck2" not in names, "list 里看不到 ck2：%s" % sorted(names))
     rst("ck1", "跨隐藏的 ck2 纪元")
