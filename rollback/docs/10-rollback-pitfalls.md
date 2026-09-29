@@ -204,6 +204,8 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 `conntrack_host_batch_count`、`conntrack_host_entries_count`。定义见 [28](28-observability-reference.md)；
 并发与长跑下宿主表的增长、攒批与改算法前后的对比见 [22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)。
 
+注意这个代价与**整张宿主表**成正比，不是与本沙箱或全部沙箱的条目数成正比：宿主表里还有本机其他进程的连接，920B 长跑里约 95% 的条目与沙箱无关（lo:80 的 `TIME_WAIT`、本机 DNS）。宿主上其他流量一多，restore 的 `conntrack_bg` 就跟着变长，数据与根因见 [22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)。
+
 ### 4.5 时机：pause 后启动、与回滚并行、resume 前 join
 
 清表要满足一条约束：**表项必须在流量放回来之前清完**。反过来想：若放到 resume 之后再清，guest 已经在跑、可能已经发出了包，
@@ -211,9 +213,9 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 
 这条约束只要求「虚机已停」，不要求「回滚已完成」。所以：
 
-- `RollbackInPlace` 在 pause 之后立刻在后台启动清理（`startConntrackFlush`，`internal/sandbox/checkpoint.go:495`），
+- `RollbackInPlace` 在 pause 之后立刻在后台启动清理（`startConntrackFlush`，`internal/sandbox/checkpoint.go:497`），
   与导出位图、物化、Firecracker 回滚、`ResetView` 并行；
-- 在 resume 之前 join（`checkpoint.go:692`）；提交点之前失败、需要原样恢复虚机的路径同样**先 join 再 resume**（`:518`）；
+- 在 resume 之前 join（`checkpoint.go:694`）；提交点之前失败、需要原样恢复虚机的路径同样**先 join 再 resume**（`:520`）；
   另有一个 `defer` 兜底（`:510`）；
 - 清理内部，命名空间表的 flush 与宿主侧的等待**也是并行的**（`Slot.FlushConntrack`，`conntrack.go:44`）：
   两张表互不依赖，flush 在宿主请求排队期间做完；

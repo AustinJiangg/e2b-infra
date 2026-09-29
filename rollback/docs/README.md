@@ -1,8 +1,8 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.0**（2026-09-29，教材版：按教学顺序重排，恢复原生精确增量，新增长跑与并发实测）· 江路路（j30059180）
+> **v0.4.1**（2026-09-30，写入两个已知项：宿主 conntrack 表的根因、80 端口转发劫持 hyperloop）· 江路路（j30059180）
 >
-> 代码基准：KASandbox_0904 的 deltabox-dev@93ccb02（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理
+> 代码基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理
 
 **在不中断沙箱的前提下，把一台正在运行的 e2b 沙箱虚机退回到过去某一时刻** —— 这套 checkpoint / restore 的原理、实现、工程保障、证据与使用运维。
 

@@ -211,7 +211,7 @@ revert = ⋃ E_x (x ∈ P)  ∪  L
 
 ### 4.4 最近公共祖先怎么求，以及哨兵
 
-不需要通用的 LCA 算法（`revertPathLocked`，`store.go:1352`）。目标的祖先链本来就要算（§6 要用），把它做成集合，
+不需要通用的 LCA 算法（`revertPathLocked`，`store.go:1357`）。目标的祖先链本来就要算（§6 要用），把它做成集合，
 然后从基准往上爬，第一个落在集合里的就是 LCA：
 
 ```go
@@ -241,7 +241,7 @@ for _, e := range targetChain {                 // 再从目标往下走到 LCA
 
 **全量根的回滚因子恒为全 1。** 全量条目永远是树根（checkpoint 决定全量时把 `parentID` 置空，`service.go:591-595`），只在跨树回滚时进入路径。
 此时它的因子必须覆盖"它的时刻与启动内存源之间所有可能不同的页"，**包括之前丢失的纪元里写过的页** —— 那些页不在任何侧车里，只有全 1 能带进来。
-`entryBitmap`（`store.go:1419-1422`）对 `MemModeFull` 直接返回全 1、不读侧车；只有增量条目读侧车，没有侧车就报错。
+`entryBitmap`（`store.go:1424-1427`）对 `MemModeFull` 直接返回全 1、不读侧车；只有增量条目读侧车，没有侧车就报错。
 Firecracker 对 Full 快照本来就写全 1 侧车（`firecracker/src/vmm/src/vstate/vm.rs:519-530`），所以这条是零代价的加固：
 它让跨树回滚不再依赖 writer 的这个约定。守它的测试是 `full_root_revert_test.go:190` `TestCrossTreeRevertAfterLostEpoch`
 与 Firecracker 侧 `vm.rs:731` `test_full_snapshot_sidecar_is_all_ones`。
@@ -301,7 +301,7 @@ revert = {9,11} ∪ {2,5} ∪ {5,7} ∪ {1,5,9} ∪ {3}
 | 5 | 9 | ck2 |
 | 6 | 11 | ck1 |
 
-页 5 和 7 同源但不连续（页 6 不在回滚集里），所以是两个 extent。单个 extent 最多 1024 页（`revertExtentPages`，`store.go:1608`），
+页 5 和 7 同源但不连续（页 6 不在回滚集里），所以是两个 extent。单个 extent 最多 1024 页（`revertExtentPages`，`store.go:1613`），
 避免一次巨大的回滚要一个巨大的缓冲区。
 
 这个场景的骨架由单元测试守着：`bitmap_test.go:156` `TestMaterializeRevertTreePath` 断言"最近公共祖先不参与回滚集"，
@@ -319,7 +319,7 @@ revert = {9,11} ∪ {2,5} ∪ {5,7} ∪ {1,5,9} ∪ {3}
 
 ## 5. 物化：交给 Firecracker 的两个文件
 
-orchestrator 算出回滚集之后，在目标 checkpoint 目录下写两个临时文件（`MaterializeRevert`，`store.go:1510`）：
+orchestrator 算出回滚集之后，在目标 checkpoint 目录下写两个临时文件（`MaterializeRevert`，`store.go:1515`）：
 
 | 文件 | 内容 |
 |---|---|
@@ -343,7 +343,7 @@ Firecracker 另有一道防线：提交点之前用 `SEEK_DATA` / `SEEK_HOLE` �
 ### 5.2 短读是错误
 
 按构造，差分文件在它侧车声明的页上一定有数据。如果读的时候文件提前结束（短读），说明文件与自己的位图矛盾。
-`writeRevertMem`（`store.go:1710-1725`）直接拒绝这次 restore，而不是把缓冲区剩下的部分清零继续：清零意味着把一页零写进 guest 内存而不告诉任何人，
+`writeRevertMem`（`store.go:1715-1730`）直接拒绝这次 restore，而不是把缓冲区剩下的部分清零继续：清零意味着把一页零写进 guest 内存而不告诉任何人，
 guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore —— 物化仍在回滚的提交点之前，虚机虽然暂停着但没被动过，调用方拿回的是一台照常运行的沙箱。
 
 文件内部的空洞不算短读：写成全零的页是合法页，读出来是零、读取长度也是满的。只有从启动内存源读、窗口被夹在 guest 内存末尾时才允许短读，
@@ -358,7 +358,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 对回滚集中的每一页 `p`，沿目标的祖先链 `t → parent(t) → …` 找**第一个**"文件里含有 `p`"的条目，从它的 `mem_diff` 的偏移
 `p × page_size` 处读一页。
 
-"文件里含有"用的是**内容位图**（`entryContentBitmap`，`store.go:1397`），与纪元位图（`entryBitmap`，:1419）的区别只在全量条目：
+"文件里含有"用的是**内容位图**（`entryContentBitmap`，`store.go:1402`），与纪元位图（`entryBitmap`，:1419）的区别只在全量条目：
 
 | 条目类型 | 纪元位图（算回滚集用） | 内容位图（解析内容用） |
 |---|---|---|
@@ -399,7 +399,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 
 差分根的情形下要读模板 memfile，而它由 chunker 提供，`ReadAt` 只接受**块对齐**的偏移和长度。页（4 KiB）小于块，
 所以要读的窗口先向外对齐到块边界，逐块读进临时缓冲，再切出需要的那一段；窗口末端用 guest 内存大小夹一下，避免越过设备末尾
-（`readAlignedFromBase`，`store.go:1614`）。这段代码只在 `CHECKPOINT_FULL_ROOT=false` 时才会走到。
+（`readAlignedFromBase`，`store.go:1619`）。这段代码只在 `CHECKPOINT_FULL_ROOT=false` 时才会走到。
 
 ---
 
@@ -418,7 +418,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 
 直觉上"沿祖先链逐页解析"是最可能被长链拖垮的地方。实际上：
 
-- 内容解析按字进行（`forEachRevertRun`，`store.go:1760`）：回滚集通常只占内存的几个百分点，绝大多数 64 位字为零，一次比较就跳过；
+- 内容解析按字进行（`forEachRevertRun`，`store.go:1765`）：回滚集通常只占内存的几个百分点，绝大多数 64 位字为零，一次比较就跳过；
   每个非零字对链上各代做一次 AND，全部页找到归属即离开链。所有位图在解析开始前就已加载进内存，链深只增加这些位运算；
 - 真正的文件 I/O 只发生在**命中的那一代**、按 extent 进行，与链深无关；
 - 创建侧不做克隆，也与链深无关。
@@ -459,7 +459,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 ### 10.1 三种处理
 
 `ck2` 有个后代 `ck3`，`ck3` 的很多页要靠 `ck2` 的差分文件解析内容（§6）。直接删掉 `ck2` 的文件，`ck3` 就变成了一个看起来正常、
-恢复时却会读到错误内容的条目。所以删除必须**依赖感知**。`Delete`（`store.go:2009`）的账本部分 `deleteLocked`（:2043）按条目的处境处理：
+恢复时却会读到错误内容的条目。所以删除必须**依赖感知**。`Delete`（`store.go:2014`）的账本部分 `deleteLocked`（:2043）按条目的处境处理：
 
 | 情形 | 处理 |
 |---|---|
@@ -477,13 +477,13 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 有子节点，只能隐藏；它永远不会变成"无子"的叶子，级联也就永远删不到它。隐藏条目于是无界积累，磁盘跟着涨，restore 的解析链越来越长；
 个数上限只数可见条目，拦不住它。合并解决这个问题。
 
-**条件**（`compactCandidateLocked`，`compact.go:230`）：候选 H **隐藏、已提交、不是基准、恰有一个子节点** C。
+**条件**（`compactCandidateLocked`，`compact.go:232`）：候选 H **隐藏、已提交、不是基准、恰有一个子节点** C。
 
 **做法**：把 H 并入 C，C 接管 H 的父节点，H 离开树：
 
 - 回滚因子取并集：`rev(C') = rev(H) ∪ rev(C)`；
 - 内容以 C 为准：`cont(C') = cont(H) ∪ cont(C)`，两者都有的页取 C 的；
-- H 是全量（必为树根）时 C' 成为全量根（`foldMemory`，`compact.go:697-700`），`ListedMemMode` 保留 C 被拍时的模式；
+- H 是全量（必为树根）时 C' 成为全量根（`foldMemory`，`compact.go:699-702`），`ListedMemMode` 保留 C 被拍时的模式；
 - 数据往少的一边拷：`H 有而 C 没有`的页不多于 C 的页时，把这些页填进 C 差分的空洞；否则把 C 的页覆盖到 H 的差分上，
   再以新名字 `mem_diff.<H-id>` 硬链接进 C 的目录；并集侧车写成 `mem_bitmap.<H-id>`（:739-801）；
 - rootfs 层在条件满足时**成对合并**（C 封存的层与紧挨在下面那层），条件与证明见 [07](07-disk-layering.md#10-层合并)。
@@ -496,7 +496,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 候选之后的 delete 重试，失败满 3 次（`compactMaxAttempts`，:133）就放弃，行为等同没有合并。用新名字而不是覆盖改名，是为了避免切换失败后
 H 与 C 共享一个 inode。
 
-**何时运行**：没有后台任务。合并在 `Delete` 末尾同步执行（`store.go:2034` → `runCompaction`，`compact.go:423`），每次最多
+**何时运行**：没有后台任务。合并在 `Delete` 末尾同步执行（`store.go:2039` → `runCompaction`，`compact.go:425`），每次最多
 `CHECKPOINT_COMPACT_MAX_PER_OP`（默认 8，:127）个，剩下的等下一次 delete。候选在"隐藏、级联停下的节点、基准移动"三处入队（`queueCompactLocked`，:208）。
 合并从不让触发它的 delete 失败。delete 因此多了合并的耗时，这是已知项（数字见 [22 §4.10](22-long-run-and-concurrency.md#410-删除同步合并delete-变慢)）。
 
@@ -550,7 +550,7 @@ V + h₂ + b − r ≥ 2·h₂   ⇒   h₂ ≤ V + b − 1
 
 ### 10.5 关掉合并
 
-`CHECKPOINT_COMPACT=false`（按 `strconv.ParseBool` 读，`compact.go:141-157`）时 `queueCompactLocked` 不入队、`runCompaction` 直接返回，
+`CHECKPOINT_COMPACT=false`（按 `strconv.ParseBool` 读，`compact.go:143-159`）时 `queueCompactLocked` 不入队、`runCompaction` 直接返回，
 行为回到没有合并时：隐藏条目只在成为"无子、非基准"的叶子时才被级联删除。由 `compact_test.go:509` `TestFoldingOffKeepsTheOldBehaviour` 守着。
 给用户看的"怎么删才释放空间"见 [24](24-semantics-and-limits.md)，开关总表见 [27](27-configuration-and-capacity.md)。
 

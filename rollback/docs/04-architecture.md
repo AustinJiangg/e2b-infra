@@ -227,7 +227,7 @@ store 从不读回（包注释 `store.go:26-32`）。
 | `s.Rootfs()` 断言为 `rootfs.LayerSealer` / `rootfs.ViewResetter` | 封存写层、切换磁盘视图 |
 | `s.Slot` | 清连接跟踪表 |
 
-两个 rootfs 接口是**类型断言**取得的（`internal/sandbox/checkpoint.go:211-214`）：
+两个 rootfs 接口是**类型断言**取得的（`internal/sandbox/checkpoint.go:213-216`）：
 
 ```go
 sealer, ok := provider.(rootfs.LayerSealer)
@@ -307,7 +307,7 @@ store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`packages/orchestra
 
 ### 5.1 原子提交
 
-产物先写成 `<name>.tmp`，再 `rename` 到最终名字（`commitFiles`，`store.go:1032`），**不做 fsync**：原子性来自 rename，
+产物先写成 `<name>.tmp`，再 `rename` 到最终名字（`commitFiles`，`store.go:1037`），**不做 fsync**：原子性来自 rename，
 而 checkpoint 不承诺活过 orchestrator 进程（承诺什么、不承诺什么见 [13](13-state-concurrency-durability.md)）。条目在账本里有两个状态：
 
 - `prepared` —— 目录已建、临时文件在写，`Get` / `List` 都看不见；

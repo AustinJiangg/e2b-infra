@@ -78,7 +78,7 @@ pub fn faults_vm(&self) -> bool {
 - **撕裂按代记**：标记记在 `Sandbox.LifecycleID` 下（每个 Firecracker 进程一个），不按沙箱 id。同一个 id 经原生 pause/resume 换了新进程之后从干净状态开始
   （`service.go` — `refuseIfTorn`、`markTorn`）。撕裂时服务端同时标记断链与磁盘账本 poisoned，并**让虚机保持暂停**：它持有回滚写到一半的内容，
   是事后分析唯一的材料；恢复运行会让一个半新半旧的 guest 写它的磁盘。
-- **前两档的关键是恢复虚机**（`internal/sandbox/checkpoint.go:514`）：
+- **前两档的关键是恢复虚机**（`internal/sandbox/checkpoint.go:516`）：
 
   ```go
   resumeOnError := func(err error) error {
@@ -190,7 +190,7 @@ Firecracker 一旦写完差分快照就**清空了脏页位图**（`dump_dirty` 
 
 `InvalidateBase` 把基准标记成 `invalid`。此后：
 
-- **恢复被拒绝**，因为回滚集不可能算对（`MaterializeRevert`，`store.go:1527`）：
+- **恢复被拒绝**，因为回滚集不可能算对（`MaterializeRevert`，`store.go:1532`）：
 
   ```go
   base := s.bases[sandboxID]
@@ -212,12 +212,12 @@ Firecracker 一旦写完差分快照就**清空了脏页位图**（`dump_dirty` 
 
 ## 7. 删除：依赖感知的回收与合并
 
-`delete(id)` 不能简单删文件 —— 后代要靠它解析内容。`Store.Delete`（`store.go:2009`）分三段：锁内改账本、锁外删文件、最后做合并。
+`delete(id)` 不能简单删文件 —— 后代要靠它解析内容。`Store.Delete`（`store.go:2014`）分三段：锁内改账本、锁外删文件、最后做合并。
 机制细节（合并的证明、层合并的条件）在 [06](06-memory-diff-tree.md) 与 [07](07-disk-layering.md)；给用户看的「怎么删才释放空间」在 [24](24-semantics-and-limits.md)。
 
 ### 7.1 锁内：隐藏还是移除
 
-`deleteLocked`（`store.go:2043`）只改账本，要删的文件收进一个 `reclaim` 列表：
+`deleteLocked`（`store.go:2048`）只改账本，要删的文件收进一个 `reclaim` 列表：
 
 ```go
 if !s.ownsLocked(sandboxID, lifecycleID) { return "", nil, notFound(...) }   // 上一代的树不归本代删
@@ -241,13 +241,13 @@ s.pruneLocked(sandboxID, entries[parentID], rc)          // 沿父指针级联
 return e.Dir, nil, nil                                    // 目录放锁后再删
 ```
 
-- `hasChildLocked` 查的是**子节点计数表** `Store.children[sandbox][parentID]`（`store.go:1907`），O(1)，在条目进出账本处维护，
+- `hasChildLocked` 查的是**子节点计数表** `Store.children[sandbox][parentID]`（`store.go:1912`），O(1)，在条目进出账本处维护，
   不再扫描全部条目。
 - 删除路径**不写 index.json**：它默认不存在，只在 `CHECKPOINT_DEBUG_INDEX` 打开时由后台写者至多每 5 s 重写一次（[04](04-architecture.md)）。
 
 ### 7.2 级联回收
 
-`pruneLocked`（`store.go:1293`）的条件是三个「且」：**隐藏 且 非基准 且 无子**。三者同时成立，说明没有任何祖先链或回滚路径经过它，可以从账本移除；
+`pruneLocked`（`store.go:1298`）的条件是三个「且」：**隐藏 且 非基准 且 无子**。三者同时成立，说明没有任何祖先链或回滚路径经过它，可以从账本移除；
 然后对它的父亲重复同样的判断，一路向上。爬升停下的那个条目若恰好「隐藏、只剩一个子节点」，就被排进合并队列。
 
 基准移动时也做同样的检查（`setBaseLocked` → `pruneLocked`）：一个隐藏条目如果只是因为「身为基准」才被保留，基准一挪走它就该走。
@@ -260,7 +260,7 @@ return e.Dir, nil, nil                                    // 目录放锁后再�
 ### 7.3 锁外：删文件
 
 放锁之后、返回之前，`Delete` 执行 `reclaim`：删被移除条目的目录、被级联回收的祖先目录、隐藏条目的 snapfile 与 header、计数归零的层文件及其 `.meta`；
-隐藏时的 manifest 也在锁外重写（`store.go:2016-2029`）。为什么放锁后删是安全的，见 [13](13-state-concurrency-durability.md)。
+隐藏时的 manifest 也在锁外重写（`store.go:2021-2034`）。为什么放锁后删是安全的，见 [13](13-state-concurrency-durability.md)。
 删除的失败于是分成三种结局，服务端 `deleteFailure`（`service.go:1482`）逐一对应：
 
 | `Store.Delete` 返回 | 含义 | 服务端应答 |
@@ -276,7 +276,7 @@ return e.Dir, nil, nil                                    // 目录放锁后再�
 
 ### 7.4 结尾：合并
 
-最后调用 `runCompaction`（`store.go:2034`，`compact.go:423`）。候选是**隐藏、非基准、已提交、恰有一个子节点**的条目 H；
+最后调用 `runCompaction`（`store.go:2039`，`compact.go:425`）。候选是**隐藏、非基准、已提交、恰有一个子节点**的条目 H；
 做法是把 H 并入它唯一的子节点 C：C 接管 H 的父节点，回滚位图取并集，内容以 C 为准；两者的 rootfs 层在「永远成对出现」时一起合并。
 
 开关与默认值（`CHECKPOINT_COMPACT` 默认开，`CHECKPOINT_COMPACT_MAX_PER_OP` 默认 8）见 [27 §2.3](27-configuration-and-capacity.md#23-树与存储行为)，合并的机制与证明见 [06 §10](06-memory-diff-tree.md#10-删除隐藏与合并)。放在失败语义里要说的是它怎么失败：

@@ -61,7 +61,7 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
   - **checkpoint 不存在** → 404 `not_found`，SDK 抛 `NotFoundException`。包括没有这个 ID、已经删过（重发的 delete 就落在这里）、已被隐藏、
     是上一代沙箱的 ID；错误文本仍是 `checkpoint <id> not found`。服务端按 `ErrCheckpointNotFound` 判定，不靠匹配字符串。
   - **删除已生效、只是清理文件失败** → 按**成功**返回（`delete()` 返回 `True`）。账本已经移除或隐藏了这个条目，它已从 `list()` 里消失、不能再作 restore 目标、
-    也不再计入配额，只是之后删它的目录或重写它的 manifest 失败了（`store.go:2022-2028`，`*DeleteCleanupError`）。服务端打一条 WARN
+    也不再计入配额，只是之后删它的目录或重写它的 manifest 失败了（`store.go:2027-2033`，`*DeleteCleanupError`）。服务端打一条 WARN
     `deleted checkpoint but could not remove all of its files; the leftovers are reclaimed when the sandbox is removed`；
     残留在该沙箱目录下，随沙箱删除时整棵目录一起回收；同一沙箱 ID 的新一代接管、orchestrator 下次启动清空 store 根时也会回收。
   - **其他错误** → 500 `internal`（`reason` 为 `internal`），SDK 抛基类 `CheckpointException`。这类失败发生在账本改动之前，什么都没删，可以重试。

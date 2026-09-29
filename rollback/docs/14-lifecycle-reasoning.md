@@ -30,8 +30,8 @@
 
 | 触发 | 代码事实 |
 |---|---|
-| 沙箱从 orchestrator 的沙箱表中移除 | `Service.OnRemove`（`service.go:355`）取该沙箱的操作锁后调 `Store.RemoveSandbox`：锁内把整个沙箱目录改名为 `.trash-<uuid>` 并从账本摘掉全部状态，放锁后删除（`store.go:2148`、`:894`） |
-| 同一个 id 的新一代接管 | `admitLocked` / `AdoptSandbox` 丢弃上一代留下的全部状态，同样先改名再删（`store.go:820`、`:2197`） |
+| 沙箱从 orchestrator 的沙箱表中移除 | `Service.OnRemove`（`service.go:355`）取该沙箱的操作锁后调 `Store.RemoveSandbox`：锁内把整个沙箱目录改名为 `.trash-<uuid>` 并从账本摘掉全部状态，放锁后删除（`store.go:2153`、`:894`） |
+| 同一个 id 的新一代接管 | `admitLocked` / `AdoptSandbox` 丢弃上一代留下的全部状态，同样先改名再删（`store.go:820`、`:2202`） |
 | orchestrator 启动 | `NewStore` 先 `os.RemoveAll` 整个 store 根目录，再 `MkdirAll` 重建（`store.go:535-542`） |
 
 ### 1.1 代际边界的规则
@@ -125,7 +125,7 @@ revert = 树路径上各代的纪元位图并集  ∪  Firecracker 当前的活�
 
 ### 3.2 磁盘产物不自足
 
-`AssembleView`（`internal/sandbox/checkpoint.go:339`）永远以模板 rootfs 为底，再把各封存层叠进层栈：
+`AssembleView`（`internal/sandbox/checkpoint.go:341`）永远以模板 rootfs 为底，再把各封存层叠进层栈：
 
 ```go
 base, err := s.Template.Rootfs()                   // ← 底座永远是模板

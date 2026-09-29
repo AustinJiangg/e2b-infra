@@ -270,7 +270,7 @@ defer httpClient.CloseIdleConnections()
 | **禁用 keep-alive**（`fc/rollback.go:121`、:241） | Firecracker 的 API server 有并发连接上限。这个 client 每次调用新建，池化连接会一直开到 transport 被回收 —— 回滚够多次就用光上限，此后每次都是 503 |
 | **client 自己不设超时**（`Timeout: 0`，:126、:244） | 时限由调用方的 context 统一给（`CHECKPOINT_FC_CALL_TIMEOUT`，见 [27](27-configuration-and-capacity.md)）；transport 里再藏一个固定值，两者不一致时它会悄悄胜出 |
 
-rollback 调用超时按撕裂处理（`internal/sandbox/checkpoint.go:631`，`RollbackInPlace`）：主机放弃等待时，说不清 Firecracker 停在提交点的哪一侧 ——
+rollback 调用超时按撕裂处理（`internal/sandbox/checkpoint.go:633`，`RollbackInPlace`）：主机放弃等待时，说不清 Firecracker 停在提交点的哪一侧 ——
 它可能已经把半个回滚集写进了活的 guest 内存。恢复运行这样一个 guest，会让它把一个说不清的状态写进磁盘。
 
 ---
@@ -367,7 +367,7 @@ guest 内存可能由**多个 region** 组成（架构上有保留洞时）。�
 
 | 位置 | 检查 |
 |---|---|
-| `entryBitmap`（orchestrator，`store.go:1434`） | 与当前 guest 的页数、页大小对比，不符则报错 |
+| `entryBitmap`（orchestrator，`store.go:1439`） | 与当前 guest 的页数、页大小对比，不符则报错 |
 | `merge`（orchestrator，`bitmap.go:62`） | 两个位图必须同几何才能求并 |
 | 回滚端点（Firecracker，`rollback.rs:307-323`） | 位图几何 + 内存文件长度，都要对上运行中的虚机 |
 

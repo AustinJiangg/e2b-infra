@@ -311,7 +311,7 @@ FC 单测那次跑的源码早于 `8ea5322bf`；此后 FC 目录只多了测试�
 | 1 | delete 同步做合并 | 服务端 delete p50 从约 2 ms 升到约 10 ms（上限 60）/ 约 26 ms（滚动保留 10），客户端墙钟 p50 从约 4 ms 升到约 12 / 27 ms，p99 基本不变。需要时可改后台异步合并（[22 §4.10](22-long-run-and-concurrency.md#410-删除同步合并delete-变慢)） |
 | 2 | 空闲后不先 checkpoint 直接 restore | p50 80.9 ms，大头在 FC 的 `fc_quiesce`（47.1 ms）；空闲 ≥ 2 s 后的 checkpoint 也升到 67–78 ms。根因未查，只作记录 |
 | 3 | 16 路并发的首个增量 checkpoint 有两种形态 | p50 约 450 ms 一簇与约 100–130 ms 一簇都出现过，修复前就存在，同一二进制两次运行可分属两簇，未找到稳定触发条件（[22 §4.11](22-long-run-and-concurrency.md#411-16-路并发的首个增量-checkpoint-有两种形态)） |
-| 4 | conntrack 后台清扫贴近关键路径 | `conntrack_bg` p50 在滚动负载下 52–55 ms、上限 60 负载下 74.9 ms（宿主表约 1.9 万条），已接近冻结窗口；下一个优化候选（[22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)） |
+| 4 | conntrack 后台清扫贴近关键路径 | `conntrack_bg` p50 在滚动负载下 52–55 ms、上限 60 负载下 74.9 ms（宿主表约 1.9 万条），已接近冻结窗口。清扫代价跟着整张宿主表走，表里约 95% 是与沙箱无关的条目；long11 第二个小时本机 DNS 条目堆积把它推到 69 ms。按 ct mark 过滤的方案 A 已设计，用户 09-30 决定暂不实施（[22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)） |
 | 5 | 滚动负载下 restore 随回滚量增长 | 60 min 内 `materialize_read_mb` p50 44 → 57 MB，写回滚内存约 0.65 ms/MB，restore p50 71 → 84 ms。guest 后台写让回滚量真实变大，是工作量不是缺陷（[22 §4.9](22-long-run-and-concurrency.md#49-视图块数增长restore-随时间变慢)） |
 | 6 | 脏页跟踪关闭时不合并 | 每个 checkpoint 都是全量根，没有"隐藏且只有一个子节点"的条目，层照样累积。950 用 HDBSS、920B 显式开跟踪，都不走这条路 |
 | 7 | 每重启一次 orchestrator 泄漏约 290 个 netns | 上游问题，靠运维清理（[29 §9](29-troubleshooting.md#9-网络槽位netns泄漏)） |
@@ -328,6 +328,7 @@ FC 单测那次跑的源码早于 `8ea5322bf`；此后 FC 目录只多了测试�
 | 18 | 跨树回滚 | 有单元测试（丢失 epoch 后跨树 restore 三种 sidecar 形态），无端到端用例 |
 | 19 | HDBSS 在 vCPU 创建之后武装 | 只靠调用点位置保证，没有断言 |
 | 20 | 条件标签留档 | 每轮必须记全机型、脏页后端、产物盘、模板、二进制 sha、脚本参数；漏记的数据事后补不上 |
+| 21 | 部署脚本的 80 → 3002 转发劫持 hyperloop 请求 | `build.sh` 装的 `nat PREROUTING --dport 80 -j REDIRECT --to-port 3002` 不限入口网卡、排在各槽位的 hyperloop 规则（→ 5010）前面，guest 发往 hyperloop 的请求全被转给 client-proxy：hyperloop 这条链路实际不通，client-proxy 在 16 沙箱负载下每秒约 900 条 `invalid host`，long11 两小时写出约 9.1 GB 日志。不影响 checkpoint / restore 与本期结果。用户 09-30 决定暂不改，改法是给该规则加 `! -i veth+`（[26 §5.1](26-deployment-prerequisites.md#51-80-端口的转发规则劫持-hyperloop-请求)） |
 
 ---
 
