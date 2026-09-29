@@ -184,10 +184,10 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 - 清理内部，命名空间表的 flush 与宿主侧的等待**也是并行的**（`Slot.FlushConntrack`，`conntrack.go:44`）：
   两张表互不依赖，flush 在宿主请求排队期间做完；
 - 后台清理写自己的计时 map，join 时再拷进 restore 的 map —— restore 的 map 必须保持单写者，
-  Go 的 map 并发写是直接让进程崩溃的 fatal error（`conntrack_flush.go:80` 注释）。
+  Go 的 map 并发写是直接让进程崩溃的 fatal error（`conntrack_flush.go:92` 注释）。
 
 提前启动把「表项已删」到「guest 恢复运行」之间的空隙从不到 1 ms 拉长到整个回滚的长度。这段空隙里宿主侧到达的包可能
-重建一条表项，代码注释（`conntrack_flush.go:25-52`）逐条论证了为什么可以接受：代理连接池在 pause 之前已丢弃、restore
+重建一条表项，代码注释（`conntrack_flush.go:37-64`）逐条论证了为什么可以接受：代理连接池在 pause 之前已丢弃、restore
 窗口内到达的请求被拒而不是转发；一条表项只由宿主侧的包决定，虚机停着还是在跑不影响它长什么样，这条包晚几毫秒到达也会建出同一条表项；
 真正变化的只是不重传的裸 ACK，它建出的松散表项会被恢复后的 guest 用 RST 关掉。另有一处行为变化：提交点之前失败、原样恢复的沙箱，
 也付了一次本不需要的清表。

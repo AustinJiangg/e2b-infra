@@ -66,7 +66,7 @@ flowchart TD
     CK5 == "② 本次：ck5 → ck3，跨分支，经最近公共祖先 ck1" ==> CK3
 ```
 
-支持回滚后前滚、跨分支跳转、删除中间节点不打断后代（§10）。条目结构（`store.go:331`）的要点：`State`（prepared / committed，
+支持回滚后前滚、跨分支跳转、删除中间节点不打断后代（§10）。条目结构（`store.go:342`）的要点：`State`（prepared / committed，
 只有 committed 可见）、`ParentID`（`""` 为树根）、`Hidden`（在树里、不在 API 里）、`MemDiff`、`MemMode`（full / incremental）、
 `ListedMemMode`（合并改了模式时，List 仍报拍摄时的模式）、`MemBitmap`、`Rootfs`（视图）、`layer`（本条目封存的层）。
 `bases[sandbox]` 记当前基准和"链已断"标志，是每沙箱的运行时状态，不属于任何一代。
@@ -102,7 +102,7 @@ revert = ⋃ E_x (x ∈ P)  ∪  L
 
 ### 4.4 最近公共祖先与哨兵
 
-不需要通用 LCA 算法（`revertPathLocked`，`store.go:1303`）：
+不需要通用 LCA 算法（`revertPathLocked`，`store.go:1352`）：
 
 ```go
 inTargetChain := map[string]bool{"": true}      // 哨兵：树根之上
@@ -118,7 +118,7 @@ for _, e := range targetChain { if e.ID == lca { break }; path = append(path, e)
 
 **全量根的回滚因子恒为全 1。** 全量条目永远是树根（checkpoint 决定全量时把 `parentID` 置空，`service.go:591-595`），只在跨树回滚时
 进入路径。此时它的因子必须覆盖"它的时刻与启动内存源之间所有可能不同的页"，**包括之前丢失的纪元里写过的页** —— 那些页不在任何侧车里，
-只有全 1 能带进来。`entryBitmap`（`store.go:1369-1372`）对 `MemModeFull` 直接返回全 1、不读侧车；只有增量条目读侧车，
+只有全 1 能带进来。`entryBitmap`（`store.go:1419-1422`）对 `MemModeFull` 直接返回全 1、不读侧车；只有增量条目读侧车，
 没有侧车就报错。Firecracker 对 Full 快照本来就写全 1 侧车（`firecracker/src/vmm/src/vstate/vm.rs:519-530`），
 所以这条是零代价的加固：它让跨树回滚不再依赖 writer 的这个约定。守它的测试是 `full_root_revert_test.go:190`
 `TestCrossTreeRevertAfterLostEpoch` 与 Firecracker 侧 `vm.rs:731` `test_full_snapshot_sidecar_is_all_ones`。
@@ -136,7 +136,7 @@ for _, e := range targetChain { if e.ID == lca { break }; path = append(path, e)
 - 逐页解析（沿 `[ck3, ck2, ck1]` 找第一个含该页的内容位图）：页 5、7 取自 ck3；页 1、9 取自 ck2；页 2、3、11 取自 ck1。
 - 页 3 之所以进回滚集是因为**现在**脏（`L`），内容却要一路回溯到全量根。"为什么要回写"和"内容从哪来"是两个独立问题，用两组不同的位图。
 - 按页号扫描，把"连续且同源"的页合成一个 extent：`1←ck2`、`2–3←ck1`、`5←ck3`、`7←ck3`、`9←ck2`、`11←ck1`，单个 extent 最多 1024 页
-  （`revertExtentPages`，`store.go:1558`）。
+  （`revertExtentPages`，`store.go:1608`）。
 
 骨架由 `bitmap_test.go:156` `TestMaterializeRevertTreePath`（LCA 不参与回滚集）和 :200
 `TestMaterializeRevertResolvesThroughAncestors`（因新纪元回滚、内容来自老祖先）守着。
@@ -151,13 +151,13 @@ for _, e := range targetChain { if e.ID == lca { break }; path = append(path, e)
 ## 5. 物化：交给 Firecracker 的两个文件
 
 orchestrator 在目标条目目录下写 `revert_bitmap.tmp`（回滚集本身，FCDB）和 `revert_mem.tmp`（稀疏文件，逻辑大小 = guest 内存，
-回滚集中每一页的目标时刻内容写在各自偏移上），调 `PUT /snapshot/rollback`，结束后无论成败都删掉（`MaterializeRevert`，`store.go:1460`）。
+回滚集中每一页的目标时刻内容写在各自偏移上），调 `PUT /snapshot/rollback`，结束后无论成败都删掉（`MaterializeRevert`，`store.go:1510`）。
 
 **契约**：Firecracker 回滚时会把自己的活跃脏页并进写回集，再按页从 `revert_mem` 读内容，所以它写回的集合 ⊇ orchestrator 给的位图。
 `revert` 的定义已并入 `L`，两边相等。Firecracker 另有一道防线：提交点之前用 `SEEK_DATA` / `SEEK_HOLE` 检查内存文件在回滚集的每个偏移上都有数据，
 没有就以可恢复错误拒绝（`rollback.rs:858` `validate_mem_file_coverage`；文件系统不支持时跳过并告警）。所以漏物化的后果是 restore 被拒，而不是页被清零。
 
-**短读是错误**（`writeRevertMem`，`store.go:1660-1675`）：差分文件在它侧车声明的页上必须有数据，读短了说明文件与自己的位图矛盾，
+**短读是错误**（`writeRevertMem`，`store.go:1710-1725`）：差分文件在它侧车声明的页上必须有数据，读短了说明文件与自己的位图矛盾，
 直接拒绝这次 restore（此时仍在提交点之前，虚机未动）。文件内部的空洞不算短读：写成全零的页是合法页。只有从启动内存源读、
 窗口被夹在 guest 内存末尾时才允许短读并把复用缓冲的尾部清零。
 
@@ -166,7 +166,7 @@ orchestrator 在目标条目目录下写 `revert_bitmap.tmp`（回滚集本身�
 ## 6. 内容解析：这一页的目标时刻内容在哪
 
 对回滚集中的每一页 `p`，沿目标祖先链找**第一个**"文件里含有 `p`"的条目，从它的 `mem_diff` 偏移 `p × page_size` 读一页。
-"文件里含有"用的是**内容位图**（`entryContentBitmap`，`store.go:1347`），与纪元位图的区别只在全量条目：
+"文件里含有"用的是**内容位图**（`entryContentBitmap`，`store.go:1397`），与纪元位图的区别只在全量条目：
 
 | 条目类型 | 纪元位图（算回滚集） | 内容位图（解析内容） |
 |---|---|---|
@@ -179,7 +179,7 @@ orchestrator 在目标条目目录下写 `revert_bitmap.tmp`（回滚集本身�
 **全量根为什么是默认**：模板 memfile 在宿主本地并不存在，由 chunker 从对象存储按需拉取（[10](10-background.md)）。差分根意味着回滚路径上
 藏着一段跨网络依赖，而且发生在虚机暂停期间。全量根让整棵树自给自足，代价只落在每个沙箱的第一次 checkpoint（写全内存、存全内存）。
 什么时候值得关：沙箱多、每个只打两三个点、存储紧、对象存储就在同机房 —— 这是部署决策（[06](06-configuration-and-capacity.md)）。
-差分根时读模板 memfile 要按块对齐（`readAlignedFromBase`，`store.go:1564`），只在开关关掉时走到。
+差分根时读模板 memfile 要按块对齐（`readAlignedFromBase`，`store.go:1614`），只在开关关掉时走到。
 
 ---
 
@@ -194,7 +194,7 @@ orchestrator 在目标条目目录下写 `revert_bitmap.tmp`（回滚集本身�
 | 物化写出 / Firecracker 写回 | O(回滚集) |
 | 存储 | O(Σ 各代脏页) + 一份全量 |
 
-内容解析按字进行（`forEachRevertRun`，`store.go:1710`）：回滚集通常只占内存的几个百分点，绝大多数字为零，一次比较就跳过。
+内容解析按字进行（`forEachRevertRun`，`store.go:1760`）：回滚集通常只占内存的几个百分点，绝大多数字为零，一次比较就跳过。
 链深只增加内存里的位运算，真正的文件 I/O 只发生在命中的那一代上，所以**恢复成本与链深无关**：差分树是按页寻址的，不是按代重放的。
 （链深对 restore 的实测影响见 [25](25-results-and-compliance.md)。）
 
@@ -243,7 +243,7 @@ pause 退回按驻留判据导出 —— 导多了只费时间，导少了毁掉
 ### 10.1 三种处理
 
 `ck2` 有后代 `ck3`，`ck3` 的很多页要靠 `ck2` 的差分解析，直接删 `ck2` 的文件会让 `ck3` 变成一个看起来正常、恢复时读到错内容的条目。
-`Delete`（`store.go:1948`）的账本部分 `deleteLocked`（:1980）按条目的处境处理：
+`Delete`（`store.go:2009`）的账本部分 `deleteLocked`（:1980）按条目的处境处理：
 
 | 情形 | 处理 |
 |---|---|
@@ -276,7 +276,7 @@ pause 退回按驻留判据导出 —— 导多了只费时间，导少了毁掉
 候选之后的 delete 重试，失败满 3 次（`compactMaxAttempts`，:133）就放弃，行为等同没有合并。用新名字而不是覆盖改名，是为了避免切换失败后
 H 与 C 共享一个 inode。
 
-**何时运行**：没有后台任务。合并在 `Delete` 末尾同步执行（`store.go:1971` → `runCompaction`，`compact.go:423`），每次最多
+**何时运行**：没有后台任务。合并在 `Delete` 末尾同步执行（`store.go:2034` → `runCompaction`，`compact.go:423`），每次最多
 `CHECKPOINT_COMPACT_MAX_PER_OP`（默认 8，:126-127）个，剩下的等下一次 delete。候选在"隐藏、级联停下的节点、基准移动"三处入队（:208）。
 合并从不让触发它的 delete 失败。delete 因此多了合并的耗时，这是已知项（数字见 [25](25-results-and-compliance.md)）。
 

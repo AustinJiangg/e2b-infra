@@ -36,7 +36,7 @@ grep -E '^E2B_(API_KEY|ACCESS_TOKEN|API_URL)=' benchmark/.env
 **模板。** 所有脚本默认用别名 `base` 的模板，规格 2 vCPU / 2048 MB / 磁盘约 940 MB；规格不同结果仍有效，但性能数字不能与 [25](25-results-and-compliance.md) 对比。核对命令见 [23 §8](23-testing-and-functional-verification.md#8-测试环境与沙箱规格)。
 
 **服务端状态。**
-- 按 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力) 抓一次能力行留档：`track_dirty_pages=true`，`fault_inject=[]`，各限额与部署意图一致。
+- 按 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力) 留档能力文件（没有就抓能力行）：`track_dirty_pages=true`，`fault_inject=[]`，各限额与部署意图一致。
 - orchestrator 刚重启过的话，等 `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5008/health` 回 `200`，并且 `ip netns list | grep -cE '^ns-[0-9]+$'` 连续几分钟不变再开始（槽位暖池在填充时性能数字带扰动）。
 - 产物盘余量高于 `min_free_bytes`，否则第一次 checkpoint 就是 507。
 
@@ -70,7 +70,7 @@ bash rollback/scripts/950/run.sh long
 |---|---|---|---|
 | 宿主预检 | `crtest/portability/preflight-customer.sh`：CPU、KVM、GIC、HDBSS 能力、内核特性、模块、大页、产物盘、FC 二进制身份、SDK | 退出码 0（`WARN` 不算 FAIL） | `preflight.log` |
 | SDK 覆盖层自检 | `install.py --check` | 打出 `自检通过（干净子进程）` | `sdk-check.log` |
-| 能力行 | 从**正在运行**的 orchestrator 所在 alloc 的日志里找最后一次 `checkpoint capabilities` | 抓到且带 `track_dirty_pages`；启动行已被轮转掉时判 SKIP，按 §1 手工留档 | `capabilities.log` |
+| 能力文件 / 能力行 | 先读能力文件 `checkpoint-capabilities.json`（目录取正在运行的进程环境里的 `DEFAULT_CACHE_DIR`，没有就 `$ORCHESTRATOR_BASE_PATH/build`，再没有就 `/orchestrator/build`；给了 `--store` 就取它的父目录），其中 `pid` 须是该进程；没有有效的文件（此前的版本不写）就从**正在运行**的 orchestrator 所在 alloc 的日志里找最后一次 `checkpoint capabilities`，再退到 journald | 读到有效的能力文件，或抓到带 `track_dirty_pages` 的能力行；两样都没有时判 SKIP，按 §1 手工留档 | `capabilities.log` |
 | FC sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 至少找到一个；值应是 `18f3faa7…`（[05 §3](05-deployment-prerequisites.md#3-版本配对)） | `fc-sha256.log` |
 | 功能正确性 | `acceptance/checkpoint_verify.py`：三代现场，内存 / 根文件系统 / 删除 / 权限位，心跳进程 pid 证明内存真的回来了 | 打出 `✓ 59 项校验全部通过。` | `checkpoint_verify.log` |
 
@@ -163,8 +163,13 @@ A=$(tr '\0' '\n' < /proc/$p/environ | sed -n 's/^NOMAD_ALLOC_DIR=//p')
   echo "- RPM：$(rpm -q e2b-infra)"
   echo "- e2b：$("$PY" -m pip show e2b 2>/dev/null | sed -n 's/^Version: //p')，解释器 $PY"
   echo "- 产物盘：$(df -T /orchestrator/build | awk 'NR==2{print $1, $2}')"
-  echo "- 能力行："
-  ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'checkpoint capabilities' | tail -1
+  F=/orchestrator/build/checkpoint-capabilities.json   # 设了 DEFAULT_CACHE_DIR 就换成它下面的同名文件
+  if grep -qE "^  \"pid\": $p,?\$" "$F" 2>/dev/null; then
+    echo "- 能力文件（$F）："; tr -d '\n' < "$F" | tr -s ' '; echo
+  else
+    echo "- 能力行："
+    ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'checkpoint capabilities' | tail -1
+  fi
 } > "$OUT/00-context.md"
 cat "$OUT/00-context.md"
 ```

@@ -12,7 +12,7 @@
 - 进程环境在启动时就定了，**改任何一个都要重启这个 job**（§5）。Firecracker 读的变量只对重启之后新起的虚机生效。
 - 写错的值**不会**让节点不带保护地跑：数值和时长解析不了就回落默认值并打一条 WARN（`ignoring unusable … in the environment` 一类）；布尔值见各行的"解析"一列，
   **各开关的布尔写法并不统一**，照表写。
-- 生效值与来源（`env` / `default`）大部分打在启动能力行里（§3）。能力行里没有的，表里注明了别的核对办法。
+- 生效值与来源（`env` / `default`）大部分打在启动能力行里，也写在能力文件里（§3）。能力行里没有的，表里注明了别的核对办法。
 
 ---
 
@@ -77,7 +77,7 @@ client-proxy 用的是同一份代理代码，在它的 job 里设 `PROXY_TRACE`
 
 ## 3. 启动能力行
 
-orchestrator 启动时打一行 INFO `checkpoint capabilities`。每个值都是用运行时那组函数读出来的，不会出现"日志说一个值、实际按另一个值跑"。
+orchestrator 启动时打一行 INFO `checkpoint capabilities`，同样的键和值还写进能力文件（§3.1）。每个值都是用运行时那组函数读出来的，不会出现"日志说一个值、实际按另一个值跑"。
 怎么抓见 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力)。
 
 | 字段 | 含义 |
@@ -98,6 +98,30 @@ orchestrator 启动时打一行 INFO `checkpoint capabilities`。每个值都是
 `_source` 为 `env` 表示环境变量被读到并采用；为 `default` 表示没设、或设了但无效（那时另有一条 WARN）。
 能力行**不含** `CHECKPOINT_FULL_ROOT`、`CHECKPOINT_RUNTIME_METRICS`、`FC_HDBSS_*`；它们的核对办法见 §2 各表。
 能力行之后可能紧跟两条 WARN：`FC_TRACK_DIRTY_PAGES` 值无效；以及结论为关时的 `dirty page tracking is off: every checkpoint will copy all of guest memory`。
+
+### 3.1 能力文件
+
+能力行只打一次，负载下 alloc 日志几分钟就把它轮转掉，那时运维和 `run.sh smoke` 都查不到节点按什么跑。所以从 deltabox-dev `93ccb02` 起，
+orchestrator 启动时把同样的内容再写进一个文件（`internal/checkpoint/capabilities_file.go`，由 `main.go` 的 `reportCheckpointCapabilities` 调用）：
+
+- **位置**：`${DEFAULT_CACHE_DIR}/checkpoint-capabilities.json`，默认 `/orchestrator/build/checkpoint-capabilities.json`。它在 store 根（`${DEFAULT_CACHE_DIR}/checkpoints`）的**父目录**，
+  不在 store 根里，因为 store 根每次启动都被清空。RPM 部署不设 `DEFAULT_CACHE_DIR` 与 `ORCHESTRATOR_BASE_PATH`，就是默认位置。
+- **内容**：一个 JSON 对象，两格缩进、键按字母序，权限 `0644`。上表的键与值全部在内，按能力行同一套编码写出，所以时长同样是 `"1m0s"` 这种写法、不是纳秒数。
+  另多 4 个键，说明是谁写的：
+
+  | 键 | 含义 |
+  |---|---|
+  | `pid` | 写这个文件的 orchestrator 进程号（RPM 部署里是 `template-manager` 进程） |
+  | `started_at` | 该进程的启动时间，RFC3339 |
+  | `version` | orchestrator 的版本号（`main.go` 的 `version`） |
+  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串） |
+
+- **何时写**：每次启动写一次，先写同目录下的临时文件、再改名覆盖旧文件，读到的要么是上次启动的整份、要么是这次的整份。
+  写成功打 INFO `capabilities file written`（字段 `path`）；写失败只打 WARN `failed to write the capabilities file; the log line above is the only copy`，启动照常。
+  这两行的措辞刻意不含 `checkpoint capabilities`，按这个关键字 grep 能力行不会误中。
+- **是不是当前的**：文件一直留到下次启动才被替换，进程停了它还在。**`pid` 等于正在运行的进程**才算数；对不上就是以前那次启动留下的，回到能力行。
+  同一个 `DEFAULT_CACHE_DIR` 上起了多个 orchestrator 进程时，后启动的覆盖先启动的。
+- 此前的版本不写这个文件，这时只有能力行。
 
 ---
 
@@ -201,11 +225,14 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:
 p=$(pidof -s template-manager)
 tr '\0' '\n' < /proc/$p/environ | grep CHECKPOINT_MAX_BYTES_PER_SANDBOX
 ps -o pid,lstart,cmd -p "$p"
+F=/orchestrator/build/checkpoint-capabilities.json   # 能力文件（§3.1）；设了 DEFAULT_CACHE_DIR 就换成它下面的同名文件
+grep -qE "^  \"pid\": $p,?\$" "$F" 2>/dev/null && grep '"max_checkpoint_bytes_per_sandbox' "$F"
 A=$(tr '\0' '\n' < /proc/$p/environ | sed -n 's/^NOMAD_ALLOC_DIR=//p')
 ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'checkpoint capabilities' | tail -1 | grep -o '"max_checkpoint_bytes_per_sandbox[^,]*,[^,]*'
 ```
 
-最后一行应显示 `"max_checkpoint_bytes_per_sandbox": 4563402752, "max_checkpoint_bytes_per_sandbox_source": "env"`。
+能力文件里应是 `"max_checkpoint_bytes_per_sandbox": 4563402752,` 与 `"max_checkpoint_bytes_per_sandbox_source": "env",` 两行（没有文件、或 `pid` 不是新进程时这一条没有输出）；
+最后一行（能力行）应显示 `"max_checkpoint_bytes_per_sandbox": 4563402752, "max_checkpoint_bytes_per_sandbox_source": "env"`，启动行已被轮转掉时它没有输出。
 去掉一个开关：删掉模板里那一行，再做第 2、3 步。
 
 **持久化**：`nomad/template-manager.hcl` 会在下次 `rpm -Uvh` 并重放 overlay 时被 `dep/template-manager.hcl` 覆盖。要长期生效，改仓库的 `e2b-deploy/dep/template-manager.hcl`，重建 `e2b-deploy.tar.gz` 与 RPM（部署指南 §2、§5.0）。

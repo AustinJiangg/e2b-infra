@@ -147,7 +147,7 @@ checkpoint 与 restore 都用 `context.WithoutCancel(r.Context())`（`service.go
 
 ### 3.2 Store：账本
 
-`Store`（`internal/checkpoint/store.go:446`）是所有 checkpoint 语义的所在地。主要的表：
+`Store`（`internal/checkpoint/store.go:457`）是所有 checkpoint 语义的所在地。主要的表：
 
 | 表 | 内容 |
 |---|---|
@@ -163,10 +163,10 @@ checkpoint 与 restore 都用 `context.WithoutCancel(r.Context())`（`service.go
 
 **这些表只在进程内存里。** `NewStore`（:524）启动时先 `os.RemoveAll(root)` 再 `MkdirAll`：上一个进程留下的产物没人引用、
 也永远不会被回收，所以直接清空，**从不读盘恢复**。磁盘上的 `manifest.json`（和可选的 `index.json`）只为事后排查，
-store 从不读回（包注释 `store.go:18-24`）。orchestrator 重启本来就会带走它上面的所有沙箱，推论见 [22](22-lifecycle-reasoning.md)。
+store 从不读回（包注释 `store.go:26-32`）。orchestrator 重启本来就会带走它上面的所有沙箱，推论见 [22](22-lifecycle-reasoning.md)。
 
 所有账本变更在一把全局锁 `Store.mu` 下完成；**删文件不在锁内**：锁内只把要删的东西从表里摘下、收进 `reclaim`，
-放锁后由调用方在返回前删除（`store.go:125-166`，论证见 [21](21-state-concurrency-durability.md)）。
+放锁后由调用方在返回前删除（`store.go:133-174`，论证见 [21](21-state-concurrency-durability.md)）。
 
 ### 3.3 Sandbox 对象：活体资源的持有者
 
@@ -198,7 +198,7 @@ store 从不读回（包注释 `store.go:18-24`）。orchestrator 重启本来�
 
 ## 5. 数据面：目录布局
 
-store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`main.go:396`；`DefaultCacheDir` 默认
+store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`main.go:400`；`DefaultCacheDir` 默认
 `${ORCHESTRATOR_BASE_PATH}/build`，`ORCHESTRATOR_BASE_PATH` 默认 `/orchestrator`，见 `internal/cfg/model.go:23`、:28）。
 
 ```
@@ -232,7 +232,7 @@ store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`main.go:396`；`De
 | `layer-<uuid>` | **guest**（经 NBD 写进去的写层文件，改名而来）；层合并时 orchestrator 补块 | 运行中的沙箱 + restore 重开 | **引用计数归零**（最后一个列它的视图和活账本都放手）或**被合并**时；否则随沙箱 |
 | `layer-<uuid>.meta` | orchestrator | orchestrator（重开层、层合并） | 与层文件同时 |
 | `manifest.json` | orchestrator | 无人（事后排查） | 随条目目录 |
-| `index.json` | 后台写者，每沙箱最多每 5 s 一次（`store.go:110`、:2219） | 无人（事后排查） | 随沙箱目录 |
+| `index.json` | 后台写者，每沙箱最多每 5 s 一次（`store.go:118`、:2219） | 无人（事后排查） | 随沙箱目录 |
 | `timings.json` / `last-restore-timings.json` | orchestrator | 基准脚本 | 随目录 |
 | `mem_bitmap.tmp.live` | Firecracker（全量捕获前导出活跃脏图） | orchestrator | 用完即删（`sandbox/checkpoint.go:173`） |
 | `live_bitmap.tmp` / `revert_mem.tmp` / `revert_bitmap.tmp` | Firecracker / orchestrator | orchestrator / Firecracker | 一次 restore 结束即删，无论成败 |
@@ -242,7 +242,7 @@ store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`main.go:396`；`De
 
 ### 5.1 原子提交
 
-产物先写成 `<name>.tmp`，再 `rename` 到最终名字（`commitFiles`，`store.go:983`），**不做 fsync**：原子性来自 rename，
+产物先写成 `<name>.tmp`，再 `rename` 到最终名字（`commitFiles`，`store.go:1032`），**不做 fsync**：原子性来自 rename，
 而 checkpoint 不承诺活过 orchestrator 进程（[21](21-state-concurrency-durability.md)）。条目有两个状态：
 `prepared`（目录已建、临时文件在写，`Get` / `List` 看不见）和 `committed`（可见、可恢复）。
 **半写完的快照永远不可能成为恢复目标。**

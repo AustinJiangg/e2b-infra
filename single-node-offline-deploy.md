@@ -380,13 +380,20 @@ sha256sum /opt/e2b-infra/bin/firecracker /fc-versions/v1.13.1/firecracker
 python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 
 # ③ orchestrator 启动时自报的能力：脏页跟踪开/关及原因、各项界限
-#    只读正在运行的那个进程所在 alloc 的日志：/data/nomad/alloc 下还留着以前各次部署的旧 alloc，
-#    它们的启动行不代表现状。alloc 目录取自该进程的 NOMAD_ALLOC_DIR（做法同 rollback/scripts/950/run.sh）。
+#    先看能力文件（deltabox-dev 93ccb02 起）：DEFAULT_CACHE_DIR 下的 checkpoint-capabilities.json，
+#    本部署不设该变量，就是 /orchestrator/build/ 下。文件里的 pid 必须是正在运行的进程，
+#    否则是以前那次启动留下的（做法同 rollback/scripts/950/run.sh）。
 pid=$(pidof -s template-manager)
-alloc=$(tr '\0' '\n' < /proc/$pid/environ | sed -n 's/^NOMAD_ALLOC_DIR=//p')
+env=$(tr '\0' '\n' < /proc/$pid/environ)
+cache=$(sed -n 's/^DEFAULT_CACHE_DIR=//p' <<<"$env"); base=$(sed -n 's/^ORCHESTRATOR_BASE_PATH=//p' <<<"$env")
+capfile=${cache:-${base:-/orchestrator}/build}/checkpoint-capabilities.json
+grep -qE "^  \"pid\": $pid,?\$" "$capfile" 2>/dev/null && cat "$capfile" || echo "没有 $capfile 或不是当前进程写的，看下面的日志行"
+#    日志行：只读正在运行的那个进程所在 alloc 的日志（/data/nomad/alloc 下还留着以前各次部署的旧 alloc，
+#    它们的启动行不代表现状）。两条 WARN 只在日志里，能力文件里没有。
+alloc=$(sed -n 's/^NOMAD_ALLOC_DIR=//p' <<<"$env")
 grep -h 'checkpoint capabilities' $(ls -v "$alloc"/logs/start.stdout.*) | tail -1
 grep -h 'dirty page tracking is off\|is not a boolean and was ignored' $(ls -v "$alloc"/logs/start.stdout.*)
-#    日志会轮转；进程跑久了启动行可能已被挤掉，这时两条 grep 都没有输出，重启该 job 后再看
+#    日志会轮转；进程跑久了启动行可能已被挤掉，这时两条 grep 都没有输出。有能力文件就以它为准，没有就重启该 job 后再看
 ```
 
 **checkpoint 是增量还是全量，由脏页跟踪开没开决定；本部署不设开关，跟着硬件走。**
@@ -396,10 +403,10 @@ grep -h 'dirty page tracking is off\|is not a boolean and was ignored' $(ls -v "
 `e2b-deploy/dep/deploy.sh` 的 `envsubst` 白名单（`deploy.sh:131` 起）里也没有——这是有意的默认。
 
 `FC_TRACK_DIRTY_PAGES` 是 orchestrator 进程的环境变量，用来覆盖探测结果
-（deltabox-dev `8ea5322bf`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
+（deltabox-dev `93ccb02`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
 按 Go 的 `strconv.ParseBool` 读，`1/t/T/TRUE/true/True` 强制开，`0/f/F/FALSE/false/False` 强制关；
 没设、或值解析不了（`yes`、`on`、空串、拼错），都按硬件探测结果决定，后一种情况启动日志另打一条 WARN
-（`packages/orchestrator/main.go:771-776`）。按平台：
+（`packages/orchestrator/main.go:795-800`）。按平台：
 
 | 宿主 | 不设变量（本部署的默认） | 显式 `FC_TRACK_DIRTY_PAGES=true` |
 |---|---|---|

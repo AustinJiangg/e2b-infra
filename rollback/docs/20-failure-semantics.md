@@ -121,12 +121,12 @@ Firecracker 一旦写完差分快照就**清空了脏页位图**。从那一刻�
 
 ## 7. 删除：依赖感知的回收与合并
 
-`delete(id)` 不能简单删文件 —— 后代要靠它解析内容。`Store.Delete`（`store.go:1948`）分三段：锁内改账本、锁外删文件、最后做合并。
+`delete(id)` 不能简单删文件 —— 后代要靠它解析内容。`Store.Delete`（`store.go:2009`）分三段：锁内改账本、锁外删文件、最后做合并。
 机制细节（合并的证明、层合并的条件）在 [14](14-memory-diff-tree.md) 与 [16](16-disk-layering.md)；给用户看的「怎么删才释放空间」在 [02](02-semantics-and-limits.md)。
 
 ### 7.1 锁内：隐藏还是移除
 
-`deleteLocked`（`store.go:1980`）只改账本，要删的文件收进一个 `reclaim` 列表：
+`deleteLocked`（`store.go:2043`）只改账本，要删的文件收进一个 `reclaim` 列表：
 
 ```go
 if s.hasChildLocked(sandboxID, id) || base.entryID == id {
@@ -146,13 +146,13 @@ s.pruneLocked(sandboxID, entries[parentID], rc)          // 沿父指针级联
 return e.Dir, nil, nil                                    // 目录放锁后再删
 ```
 
-- `hasChildLocked` 查的是**子节点计数表** `Store.children[sandbox][parentID]`（`store.go:1857`），O(1)，在条目进出账本处维护，
+- `hasChildLocked` 查的是**子节点计数表** `Store.children[sandbox][parentID]`（`store.go:1907`），O(1)，在条目进出账本处维护，
   不再扫描全部条目。
 - 删除路径**不写 index.json**：它默认不存在，只在 `CHECKPOINT_DEBUG_INDEX` 打开时由后台写者至多每 5 s 重写一次（[12](12-architecture.md)）。
 
 ### 7.2 级联回收
 
-`pruneLocked`（`store.go:1244`）的条件是三个「且」：**隐藏 且 非基准 且 无子**。三者同时成立，说明没有任何祖先链或回滚路径经过它，可以从账本移除；
+`pruneLocked`（`store.go:1293`）的条件是三个「且」：**隐藏 且 非基准 且 无子**。三者同时成立，说明没有任何祖先链或回滚路径经过它，可以从账本移除；
 然后对它的父亲重复同样的判断，一路向上。爬升停下的那个条目若恰好「隐藏、只剩一个子节点」，就被排进合并队列。
 
 基准移动时也做同样的检查（`setBaseLocked` → `pruneLocked`）：一个隐藏条目如果只是因为「身为基准」才被保留，基准一挪走它就该走。
@@ -162,12 +162,14 @@ return e.Dir, nil, nil                                    // 目录放锁后再�
 ### 7.3 锁外：删文件
 
 放锁之后、返回之前，`Delete` 执行 `reclaim`：删被移除条目的目录、被级联回收的祖先目录、隐藏条目的 snapfile 与 header、计数归零的层文件及其 `.meta`；
-隐藏时的 manifest 也在锁外重写（`store.go:1955-1966`）。为什么放锁后删是安全的，见 [21](21-state-concurrency-durability.md)。
-只有与被删条目自身有关的失败（移除时删不掉它的目录、隐藏时写不了它的 manifest）才让这次 delete 返回错误；祖先与层的删除失败只记日志。
+隐藏时的 manifest 也在锁外重写（`store.go:2016-2029`）。为什么放锁后删是安全的，见 [21](21-state-concurrency-durability.md)。
+只有与被删条目自身有关的失败（移除时删不掉它的目录、隐藏时写不了它的 manifest）才让 `Delete` 返回错误，而且包成 `*DeleteCleanupError`：
+此时删除已经生效，服务端按成功应答、打一条 WARN，残留随沙箱回收；祖先与层的删除失败只记日志。
+ID 不指向任何条目（不存在、已隐藏、属于上一代）时 `Delete` 在锁内就返回 `ErrCheckpointNotFound`，服务端回 404；其余错误回 500 `internal`（[03](03-errors-timeouts-concurrency.md#2-错误总表) 的补充）。
 
 ### 7.4 结尾：合并
 
-最后调用 `runCompaction`（`store.go:1971`，`compact.go:423`）。候选是**隐藏、非基准、已提交、恰有一个子节点**的条目 H；
+最后调用 `runCompaction`（`store.go:2034`，`compact.go:423`）。候选是**隐藏、非基准、已提交、恰有一个子节点**的条目 H；
 做法是把 H 并入它唯一的子节点 C：C 接管 H 的父节点，回滚位图取并集，内容以 C 为准；两者的 rootfs 层在「永远成对出现」时一起合并。
 
 | 规则 | 值 |
