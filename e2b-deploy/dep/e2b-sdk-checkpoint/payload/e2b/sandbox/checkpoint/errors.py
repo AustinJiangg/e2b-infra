@@ -5,6 +5,7 @@ from e2b_connect.client import Code, ConnectException
 from e2b.envd.rpc import handle_rpc_exception
 from e2b.exceptions import (
     CheckpointBusyException,
+    CheckpointBytesLimitException,
     CheckpointChainBrokenException,
     CheckpointDiskFullException,
     CheckpointException,
@@ -27,6 +28,7 @@ _CHECKPOINT_REASON_MAP: Dict[str, Type[CheckpointException]] = {
     "sandbox_restored": CheckpointInterruptedException,
     "disk_full": CheckpointDiskFullException,
     "too_many_checkpoints": CheckpointTooManyException,
+    "checkpoint_bytes_limit": CheckpointBytesLimitException,
 }
 
 # Fallback for a server that predates `reason`, and for the reasons that are
@@ -42,11 +44,11 @@ _CHECKPOINT_CODE_MAP: Dict[Code, Type[CheckpointException]] = {
     Code.failed_precondition: CheckpointChainBrokenException,
     Code.aborted: CheckpointInterruptedException,
     Code.internal: CheckpointException,
-    # Both reasons that arrive under this code refuse the call before
+    # Every reason that arrives under this code refuses the call before
     # anything is touched, and the sandbox survives either way - but a
-    # full host disk and a sandbox over its own limit are cleared up by
-    # different people, and without the reason there is nothing to pick
-    # between them with, so the base class is raised.
+    # full host disk and a sandbox over one of its own limits are cleared
+    # up by different people, and without the reason there is nothing to
+    # pick between them with, so the base class is raised.
     Code.resource_exhausted: CheckpointException,
 }
 

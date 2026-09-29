@@ -146,7 +146,10 @@ if ConnectionConfig(traffic_access_token="tok").checkpointd_headers.get(
 ) != "tok":
     problems.append("给了 traffic token，checkpointd_headers 却没带 e2b-traffic-access-token")
 
-# 异常族：八个子类都挂在 CheckpointException 下，服务端的八个 reason 各有归属
+# 异常族：最初的八个子类都挂在 CheckpointException 下，并且都在 reason 映射表里。
+# 映射表可以比这八个多（服务端加了新的 reason，比如字节配额的
+# checkpoint_bytes_limit -> CheckpointBytesLimitException），只要多出来的也是
+# CheckpointException 的子类；所以这里只要求"至少包含"，不要求恰好相等。
 subclasses = (
     CheckpointTornException, CheckpointChainBrokenException,
     CheckpointRootfsPoisonedException, CheckpointGuestUnresponsiveException,
@@ -158,8 +161,13 @@ if not issubclass(CheckpointException, SandboxException):
 for c in subclasses:
     if not issubclass(c, CheckpointException):
         problems.append("%s 不是 CheckpointException 的子类" % c.__name__)
-if set(_CHECKPOINT_REASON_MAP.values()) != set(subclasses):
-    problems.append("reason 映射表和八个异常子类对不上：%s" % sorted(_CHECKPOINT_REASON_MAP))
+mapped = set(_CHECKPOINT_REASON_MAP.values())
+lost = [c.__name__ for c in subclasses if c not in mapped]
+if lost:
+    problems.append("reason 映射表缺了原有的异常子类：%s" % ", ".join(sorted(lost)))
+for reason, c in sorted(_CHECKPOINT_REASON_MAP.items()):
+    if not (isinstance(c, type) and issubclass(c, CheckpointException)):
+        problems.append("reason %r 映射到的 %r 不是 CheckpointException 的子类" % (reason, c))
 
 # 传输层：重试次数可配、错误体的 reason / Retry-After 读得出来（e2b_connect/client.py 铺上了）
 if "retries" not in inspect.signature(Client.__init__).parameters:
@@ -224,7 +232,8 @@ def verify(sp):
         die("装完自检不过：\n    " + (r.stdout.strip() or r.stderr.strip()).replace("\n", "\n    "))
     print("  自检通过（干净子进程）：Sandbox.checkpoint / CheckpointInfo.mem_mode / "
           "proto mem_mode / 六个方法 / 端口 49984 / 无死 Authorization 头 / "
-          "给了 token 才带头 / 异常族 9 个类 / Client(retries=) 且四个 RPC 不重放 / "
+          "给了 token 才带头 / 异常族（原 8 个子类都在且映射表全是子类） / "
+          "Client(retries=) 且四个 RPC 不重放 / "
           "create·restore 默认超时 ≥ 300 s")
     return
 

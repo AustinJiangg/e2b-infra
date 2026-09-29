@@ -311,6 +311,36 @@ class CheckpointTooManyException(CheckpointException):
     the sandbox keeps running and its existing checkpoints are intact. Unlike
     a full disk this is the caller's own to fix: list the sandbox's
     checkpoints, delete the ones no longer needed, and create again.
+
+    Raised as this class, the limit is on how many checkpoints the sandbox
+    holds, and deleting any one of them makes room. Its subclass
+    :class:`CheckpointBytesLimitException` is the limit on how much disk they
+    occupy, where it matters which ones are deleted: deleting the most recent
+    checkpoint frees almost nothing, while deleting the oldest does.
     """
 
     _default_reason = "too_many_checkpoints"
+
+
+class CheckpointBytesLimitException(CheckpointTooManyException):
+    """
+    Raised when the sandbox's checkpoints already occupy as much disk as the
+    server allows one sandbox's checkpoints to occupy.
+
+    The byte limit sits next to the count limit and is cleared the same way,
+    which is why this is a :class:`CheckpointTooManyException`: code that
+    deletes checkpoints and retries on that exception keeps working. It is a
+    subclass rather than the same class because the two limits are raised by
+    different settings on the server, and knowing which one refused is what
+    tells an operator which to look at. The check runs before anything is
+    written, so the sandbox keeps running and its checkpoints are intact.
+
+    Delete the oldest checkpoints first (or restore to an earlier one and
+    delete those after it); deleting the most recent checkpoint — the point
+    the sandbox is running from — does not free its memory. Restoring is
+    never refused by this limit. The server's message, passed through as the
+    exception's text, names that checkpoint and the least the sandbox's
+    checkpoints can occupy.
+    """
+
+    _default_reason = "checkpoint_bytes_limit"
