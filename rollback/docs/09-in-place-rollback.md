@@ -408,12 +408,12 @@ vmm.mmio_device_manager.for_each_virtio_device(|_, _, _, dev| {
 
 orchestrator 侧（`internal/sandbox/checkpoint.go` — `RollbackInPlace`）对应地：
 
-- `RollbackFaultedError`（按响应体的 `fault` 字段判定）→ `RollbackTornError`（`checkpoint.go:622`）；
-- rollback 调用在 `CHECKPOINT_FC_CALL_TIMEOUT` 内没应答 → 同样按撕裂处理（`checkpoint.go:631`）：无法判断 Firecracker 停在提交点哪一侧，
+- `RollbackFaultedError`（按响应体的 `fault` 字段判定）→ `RollbackTornError`（`checkpoint.go:624`）；
+- rollback 调用在 `CHECKPOINT_FC_CALL_TIMEOUT` 内没应答 → 同样按撕裂处理（`checkpoint.go:633`）：无法判断 Firecracker 停在提交点哪一侧，
   恢复运行一个可能半新半旧的 guest 会让它把说不清的状态写进磁盘；
 - 其余错误 → join conntrack 清理后恢复虚机，按普通失败返回，沙箱在原状态继续运行。
 
-**磁盘那一半也在提交点之后**：`ResetView` 失败时内存已经在目标时刻、磁盘还不是，同样返回 `RollbackTornError`（`checkpoint.go:685`）。
+**磁盘那一半也在提交点之后**：`ResetView` 失败时内存已经在目标时刻、磁盘还不是，同样返回 `RollbackTornError`（`checkpoint.go:687`）。
 磁盘视图的**装配**（`AssembleView`）则在暂停之前完成，装配失败只是一次普通的失败 restore（[11](11-end-to-end.md) §3.1）。
 
 提交点之后的失败在真实环境里极难碰到，但它恰恰是整套 `Faulted` 机制存在的理由，所以两侧都留了只用于测试的触发点：

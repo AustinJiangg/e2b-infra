@@ -131,7 +131,7 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -5
 |---|---|---|
 | `disk_view_read`、`assemble_view_pre` | 当前代码下应一直在毫秒以内 | guest 里 ext4 每次重写小文件都分配新块，视图里"guest 写过的块"只增不减，上限约为 guest 能写到的块数（设备的六成多）；装配视图已改为按块号位图，每块代价很小。若 `assemble_view_pre` 随块数明显增长，或日志里根本没有 `disk_view_read` 这个键，说明跑的是老版本 |
 | `materialize_read_mb`、`revert_mem_write`、`fc_memory` | 回滚量变大 | guest 后台写让每次要回滚的页真实变多，是工作量，不是缺陷 |
-| `conntrack_bg`、`conntrack_host_entries_count` | 宿主连接表变大 | 见 §10 |
+| `conntrack_bg`、`conntrack_host_entries_count` | 宿主连接表变大 | 见 §10、§14 |
 
 **怎么处置**：确认版本；必要时让业务定期重建长寿沙箱。原理：[07 §6](07-disk-layering.md#6-读路径与视图装配)。
 
@@ -195,7 +195,7 @@ bash /opt/e2b-infra/build.sh --recycle-netns
 
 | 哪部分大 | 原因 | 处置 |
 |---|---|---|
-| `conntrack_host_sweep` 随 `conntrack_host_entries_count` 涨 | 宿主连接表大（同机其他负载的连接也在里面），整表扫描约每条 1 µs | 减少宿主上的无关连接；这是已知的下一个优化点，没有开关 |
+| `conntrack_host_sweep` 随 `conntrack_host_entries_count` 涨 | 宿主连接表大（同机其他负载的连接也在里面），整表扫描约每条 1 µs | 减少宿主上的无关连接；这是已知的下一个优化点，没有开关。先看表里是什么，见 §14 |
 | `conntrack_host_queue` 大 | restore 频率高，排在别人的清扫后面 | 同上 |
 | `conntrack_ns` 大 | guest 自己的连接多 | 业务侧 |
 
@@ -257,6 +257,54 @@ python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 
 ---
 
+## 14. restore 随宿主上其他流量变慢
+
+**症状**：沙箱这边的负载没变，restore 的 `total` 却跟着宿主上别的业务一起涨；同时 `conntrack_bg` 与 `conntrack_host_entries_count` 上涨，
+`conntrack_host_sweep` 占了 `conntrack_bg` 的大头，冻结窗口里等清理的 `conntrack` 从接近 0 变成几毫秒。
+
+**看哪里**：宿主表多大、里面都是什么（只读；表很大时这条 awk 本身要读一遍整表，别高频跑）：
+
+```bash
+cat /proc/sys/net/netfilter/nf_conntrack_count
+awk '{p=$3; st=(p=="tcp")?$6:"-"; s=""; d=""; dp=""
+  for(k=4;k<=NF;k++){ if(s==""&&$k~/^src=/)s=substr($k,5); else if(d==""&&$k~/^dst=/)d=substr($k,5); else if(dp==""&&$k~/^dport=/)dp=substr($k,7) }
+  sb=(s~/^10\.1[12]\./||d~/^10\.1[12]\./)?"沙箱":"非沙箱"; a=($0~/ASSURED/)?"ASSURED":"-"
+  c[sb" "p" "st" dport="dp" "a]++} END{for(x in c) print c[x], x}' /proc/net/nf_conntrack | sort -rn | head -10
+```
+
+`10.11.x.y` 是槽位地址、`10.12.x.y` 是 veth 地址（默认网段）。
+
+**原因**：宿主侧清扫每批做一次整表 dump，代价约 4.6 ms + 1 µs / 条（实测更高），与**整张宿主表**成正比，不管表里是不是沙箱的连接。
+920B 长跑里表的约 95% 与沙箱无关：宿主本机访问 lo:80 的短连接留下的 `TIME_WAIT`，和本机 DNS 查询；滚动负载跑到第二个小时，
+本机 DNS 的 `ASSURED` 条目会堆积，把表从约 1.9 万推到约 2.4 万条，restore p50 随之多约 9 ms（堆积的机制是推断）。
+
+**怎么处置**：不影响正确性。减少宿主上与沙箱无关的短连接和 DNS 查询量；当前没有开关。按 ct mark 让内核只交回沙箱条目的改法（方案 A）已设计，
+用户 09-30 决定暂不实施。原理：[10 §4.4](10-rollback-pitfalls.md#44-宿主表怎么删每批一次整表扫描按代价模型选路)；数据与根因：[22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)。
+
+---
+
+## 15. client-proxy 日志暴涨、guest 访问 hyperloop 不通
+
+**症状**：有沙箱在跑时 client-proxy 日志暴涨，满是 WARN `invalid host` 且 `"host": "192.0.2.1"`（每条带多行调用栈）；
+16 个沙箱的长跑里约每秒 900 条，两小时约 9.1 GB。guest 里访问 `http://192.0.2.1/`（hyperloop）拿不到 hyperloop 的应答。
+
+**看哪里**（只读）：
+
+```bash
+iptables -t nat -S PREROUTING | head -5
+c=$(docker ps -q --filter ancestor="$(docker ps --format '{{.Image}}' | grep -m1 '/client-proxy')")
+docker logs --since 60s "$c" 2>&1 | grep -c 'invalid host'
+```
+
+第一条命令里如果不带 `-i` 的 `--dport 80 -j REDIRECT --to-ports 3002` 排在各槽位的 `-d 192.0.2.1/32 -i veth-<n> … --to-ports 5010` 前面，就是这一条。
+
+**原因**：部署脚本装的 80 → 3002 转发不限入口网卡，排在 hyperloop 规则前面，guest 发往 hyperloop 的连接被转给了 client-proxy（[26 §5.1](26-deployment-prerequisites.md#51-80-端口的转发规则劫持-hyperloop-请求)）。
+
+**怎么处置**：checkpoint / restore 不受影响。用户 09-30 决定暂不改；要改时给该规则加 `! -i veth+` 并删掉旧规则，命令见 [26 §5.1](26-deployment-prerequisites.md#51-80-端口的转发规则劫持-hyperloop-请求)。
+日志量大时注意 client-proxy 所在盘的余量。
+
+---
+
 ## 本章要点
 
 - 先取证再处置：日志会轮转，出事后尽快用统一的只读命令取相关行；`last-restore-timings.json` 每次 restore 都覆盖，要紧接着读。
@@ -266,3 +314,5 @@ python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 - 空闲后第一次 restore 慢是已知项；restore 随运行时间缓慢变慢先确认版本，必要时定期重建长寿沙箱；GC 长停顿在当前代码的常规负载下不应再出现。
 - 每重启一次 orchestrator 会漏约一池网络槽位，按条目判断后清理；换 Firecracker 只换 `/fc-versions/v1.13.1/firecracker` 这一个文件。
 - SDK 自检失败、验收只剩 57 项，说明覆盖层没装进这个解释器或版本旧。
+- restore 随宿主上其他流量变慢：宿主 conntrack 清扫的代价跟着整张宿主表走，表里多数是与沙箱无关的条目；不影响正确性，暂无开关。
+- client-proxy 日志满是 `invalid host` 且 host 是 `192.0.2.1`：部署脚本的 80 → 3002 转发劫持了 guest 发往 hyperloop 的请求，用户 09-30 决定暂不改。

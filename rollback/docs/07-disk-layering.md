@@ -123,7 +123,7 @@ o.cache = newCache                          // 新写层上位
 ### 3.3 移入 store：改名，不是拷贝
 
 封存出的层文件先留在沙箱缓存目录，checkpoint 在 resume **之后**才调 `SealedLayer.MoveInto`（`rootfs/rootfs.go:62`；
-调用在 `internal/sandbox/checkpoint.go:238`，计时键 `seal_move`）把它移进 `layers/`。
+调用在 `internal/sandbox/checkpoint.go:240`，计时键 `seal_move`）把它移进 `layers/`。
 
 同一文件系统内这是一次 `rename`：**inode 不变**，所以那个还活着的 mmap 继续有效 —— 它映射的是 inode，不是路径。
 
@@ -224,7 +224,7 @@ restore 用 `NewCache` 重开同一个文件 —— 都读同一份 page cache�
 
 ### 6.2 restore：装配视图
 
-restore 不沿用运行中的栈，而是按目标条目自己的层清单重新叠一个（`Sandbox.AssembleView`，`internal/sandbox/checkpoint.go:339`）：
+restore 不沿用运行中的栈，而是按目标条目自己的层清单重新叠一个（`Sandbox.AssembleView`，`internal/sandbox/checkpoint.go:341`）：
 
 ```go
 stack := block.NewLayerStack(base, size)
@@ -353,7 +353,7 @@ header 里原来指向 A 的映射改指合并层，偏移不变。由于"永远
 **做法**：字节往少的一边拷（`foldLayers`，:291）—— A 有 B 无的块填进 B 的空洞，或者 B 的块覆盖到 A 的文件上（每个持有者都只在 B 没有的地方读 A）；
 接收方以新名字 `layer-<B 的 uuid>.<H-id>` 硬链接进来，写新的 `.meta`，每个列着这对层的视图改写一份新名字的 header
 （`rootfs.header.<条目-id>.<H-id>`）；活账本换成新层清单与改名后的映射。切换时在锁内再用引用计数核对持有者没变（`layerHoldersUnchangedLocked`，
-`compact.go:951`），然后 A、B 计数归零进 reclaim，合并层接过它们的计数（`switchLayersLocked`，:989）。
+`compact.go:953`），然后 A、B 计数归零进 reclaim，合并层接过它们的计数（`switchLayersLocked`，:989）。
 
 **活栈不重建。** 正在运行的沙箱继续经已建的映射读 A、B：unlink 不影响已有映射，合并写进去的字节恰好在活栈从不从该文件读的块上。
 空间在下一次 restore 替换活栈时才真正释放。

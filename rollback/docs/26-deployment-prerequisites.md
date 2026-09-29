@@ -200,6 +200,50 @@ dmesg | grep 'Enable HDBSS success' | tail -3
 
 ---
 
+## 5. 已知项
+
+### 5.1 80 端口的转发规则劫持 hyperloop 请求
+
+**现象**：guest 发往 hyperloop（`192.0.2.1:80`，orchestrator 在宿主上给每个沙箱提供的 HTTP 服务）的请求拿不到 hyperloop 的应答；
+与此同时 client-proxy 的日志里是成片的 WARN `invalid host … "host": "192.0.2.1"`，每条带多行调用栈。
+部署件的 2 h 滚动长测 long11（16 个沙箱）里这类行每秒约 900 条，两小时共 653 万条，client-proxy 日志写到约 9.1 GB。
+
+**原因**：部署时 `build.sh` 在 `deploy.sh` 之后装了一条**不限入口网卡**的 REDIRECT
+（`e2b-deploy/build.sh:662-663`；KASandbox_0904 的 `deploy/build.sh:1275` 是同一条）：
+
+```bash
+iptables -w -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002
+```
+
+它本意是把外部打到本机 80 端口的请求交给 client-proxy（3002）。orchestrator 给每个槽位装的 hyperloop 规则
+（`-d 192.0.2.1 -i veth-<n> -p tcp --dport 80 -j REDIRECT --to-ports 5010`，`packages/orchestrator/internal/sandbox/network/network.go:226-234`）
+是槽位建网时才追加的，所以永远排在上面这条后面。nat 表对一条新连接只取第一条匹配的 REDIRECT，guest 从 veth 进来、发往 80 端口的连接先匹配到
+3002，被转给了 client-proxy；client-proxy 不认识 `192.0.2.1` 这个 Host，回 `invalid host`。用只读命令可以看到这个顺序：
+
+```bash
+iptables -t nat -S PREROUTING | head -5
+# -A PREROUTING -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 3002          ← 不限网卡，排在所有槽位规则前面
+# -A PREROUTING -d 192.0.2.1/32 -i veth-2 -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 5010
+```
+
+同一个顺序也挡在每个槽位的 `-i veth-<n> --dport 80 -j REDIRECT --to-ports 5016`（出网 HTTP 的 TCP 防火墙代理）前面，
+guest 访问外部 80 端口的连接按规则顺序同样会被转到 client-proxy；这一点是从规则顺序推出来的，没有单独验证。
+
+**影响**：checkpoint / restore 不经过这条链路，本手册的功能与性能结果不受影响（长跑全部 0 不一致）。受影响的是依赖 hyperloop 的 guest 功能，
+以及 client-proxy 的日志量与宿主 conntrack 表（被劫持的连接也留下条目，见 [22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)）。
+
+**处置**：**用户 09-30 决定暂不改。** 将来要改时，给这条规则加 `! -i veth+`，只接住不是从槽位 veth 进来的流量，两个 `build.sh` 都要改：
+
+```bash
+iptables -w -t nat -C PREROUTING ! -i veth+ -p tcp --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
+|| iptables -w -t nat -A PREROUTING ! -i veth+ -p tcp --dport 80 -j REDIRECT --to-port 3002
+```
+
+已经装好的节点还要删掉旧的那条（`iptables -w -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002`）。
+`OUTPUT -o lo --dport 80` 那条只管本机发起的连接，不用动。排障条目见 [29 §15](29-troubleshooting.md#15-client-proxy-日志暴涨guest-访问-hyperloop-不通)。
+
+---
+
 ## 本章要点
 
 - 增量有两层前提：orchestrator 决定"记不记"（`FC_TRACK_DIRTY_PAGES`，950 不设即自动开，没有 HDBSS 的机器要增量就显式设 `true`），Firecracker 决定"用什么记"（HDBSS 或 KVM 写保护）。"增量退化成全量"说的是第一层关着，与 HDBSS 在不在无关。
@@ -207,4 +251,5 @@ dmesg | grep 'Enable HDBSS success' | tail -3
 - 平台前提共 12 项，`preflight-customer.sh` 一次查完；HDBSS 要内核配置与 CPU 能力同时具备。
 - orchestrator、Firecracker、SDK 覆盖层、guest 内核成套交付；FC 只认 `/fc-versions/v1.13.1/firecracker` 这一个位置，放错目录等于没换，而且不报错。
 - 新 orchestrator 配未打补丁的 FC 会明确失败，不会静默降级；SDK 覆盖层版本旧时功能可用，但验收只剩 57 项，"是不是增量"的判据失效。
+- 已知项：`build.sh` 装的 80 → 3002 转发不限入口网卡，劫持了 guest 发往 hyperloop 的请求，client-proxy 日志随之暴涨；不影响 checkpoint / restore，用户 09-30 决定暂不改，改法是加 `! -i veth+`（§5.1）。
 - 部署后六步自检：二进制 sha、SDK `--check`、能力文件或能力行（后者立刻留档）、宿主预检、netns 基线、`run.sh smoke`；最后确认除每个沙箱的第一个外，`mem_mode` 全是 `incremental`。

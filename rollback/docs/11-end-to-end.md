@@ -103,7 +103,7 @@ diff := fc.TrackDirtyPagesEnabled() && !broken && !rooting
 
 ### 2.3 冻结窗口
 
-`CheckpointToFiles`（`internal/sandbox/checkpoint.go:205`）的骨架：
+`CheckpointToFiles`（`internal/sandbox/checkpoint.go:207`）的骨架：
 
 ```go
 pausedAt := time.Now()
@@ -146,7 +146,7 @@ timings.Mark("seal", sealStart)
 全量快照的侧车是「全 1」，对「开机以来写过哪些页」毫无信息量，所以在拍之前先要一份活跃位图。这个集合服务于
 checkpoint 之后的原生 pause，见第四部分的 [16 §4](16-native-increment-fix.md#4-与-checkpoint-叠加累积位图)。
 
-**恢复虚机是无条件的**：快照失败、封存失败、调用方已经放弃，虚机都要跑起来（`checkpoint.go:247-256`）。
+**恢复虚机是无条件的**：快照失败、封存失败、调用方已经放弃，虚机都要跑起来（`checkpoint.go:249-258`）。
 一个所有人都以为在运行、实际停着的沙箱，比一个失败的快照糟得多。注意 `ResumeVM` 外面又套了一层 `WithoutCancel`：即使外层 ctx 因为别的原因被取消，
 恢复虚机这个动作也不能被跳过（[13](13-state-concurrency-durability.md) §6）。
 
@@ -209,7 +209,7 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced, layerRec
 
 ### 3.2 冻结窗口
 
-`RollbackInPlace`（`internal/sandbox/checkpoint.go:461`）：
+`RollbackInPlace`（`internal/sandbox/checkpoint.go:463`）：
 
 | # | 步骤 | 计时键 | 代价与什么成正比 |
 |---|---|---|---|

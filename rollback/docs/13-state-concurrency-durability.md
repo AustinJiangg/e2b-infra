@@ -46,7 +46,7 @@
 这条规则在代码里有几个典型的落实方式：
 
 **① 手工解锁，锁内只算路径。** `MaterializeRevert` 在锁内取目标、查断链、算祖先链与回滚路径；之后的读位图、写物化文件全在锁外
-（`store.go:1510-1548`）：
+（`store.go:1515-1553`）：
 
 ```go
 lockStart := time.Now()
@@ -82,7 +82,7 @@ live, err := readDirtyBitmap(liveBitmapPath)
 等操作锁超时的情形 —— 那时无论在锁内还是锁外删，都可能删掉进行中操作正在用的文件。
 
 **③ 用计数表代替扫描。** 「这个条目有没有子节点」若靠扫描回答，就要扫一遍该沙箱的全部条目，而删除每次调一次、剪枝每一步调一次，全在全局锁下。
-所以由子节点计数表 `children[sandbox][parentID]` 直接回答（`hasChildLocked`，`store.go:1907`），在条目进出账本处维护，O(1)。
+所以由子节点计数表 `children[sandbox][parentID]` 直接回答（`hasChildLocked`，`store.go:1912`），在条目进出账本处维护，O(1)。
 
 **④ 发布是 O(1) 的。** `Commit` 在锁内只插入条目、移动基准、登记计数，不复制、不重写整份 index（index.json 默认不写，[04](04-architecture.md)）；
 `commit_index` 计的就是这段锁内工作。合并的文件工作同样全在锁外，只在挑候选和最终切换时各短暂持锁一次（[12](12-failure-semantics.md)）。
@@ -198,7 +198,7 @@ NBD dispatcher 手里那个 `*Overlay` 指针**从头到尾没变过**，它不�
 
 ### 5.1 原子发布，刻意不 fsync
 
-一个条目必须**要么完整可见，要么完全不存在**（[12](12-failure-semantics.md) 不变量 #7）。做法是 temp + rename，**刻意不 fsync**（`commitFiles`，`store.go:1032`）：
+一个条目必须**要么完整可见，要么完全不存在**（[12](12-failure-semantics.md) 不变量 #7）。做法是 temp + rename，**刻意不 fsync**（`commitFiles`，`store.go:1037`）：
 
 ```go
 for _, f := range files {
@@ -230,7 +230,7 @@ POSIX 保证同目录内的 rename 是原子的：要么旧名要么新名，不
 ### 5.2 两态可见性
 
 条目有 `prepared` 与 `committed` 两态，但关键在于：**`prepared` 条目根本不在账本里**。`Prepare` 只建目录、写磁盘上的 manifest，不往 `bySandbox` 里放；
-条目是在 `Commit` / `CommitHidden` 里通过 `publishLocked` 才进账本的。所以 `Get` 只需检查代际归属与是否隐藏（`store.go:1854`）——「不可见」不是靠过滤条件，而是**根本不存在**。
+条目是在 `Commit` / `CommitHidden` 里通过 `publishLocked` 才进账本的。所以 `Get` 只需检查代际归属与是否隐藏（`store.go:1859`）——「不可见」不是靠过滤条件，而是**根本不存在**。
 
 ### 5.3 路径注入防护
 
@@ -297,7 +297,7 @@ defer cleanup()      // 删掉 revert_mem.tmp 与 revert_bitmap.tmp
 
 **① 全局账本锁。** §2.1 的规则就是为此：任何在 `Store.mu` 下做的慢事，都会出现在别的沙箱 restore 的 `materialize_lock_wait` 里。
 
-**② 宿主 conntrack 表。** 全节点一张，restore 越频繁、表越大，宿主侧清扫越贵；清扫器攒批与选路见 [10](10-rollback-pitfalls.md)。
+**② 宿主 conntrack 表。** 全节点一张，宿主侧清扫每批遍历整张表，表越大越贵；表有多大主要由宿主上与沙箱无关的流量决定（920B 长跑里约 95% 是非沙箱条目，[22 §4.6](22-long-run-and-concurrency.md#46-conntrack-清理占了冻结窗口)），restore 越频繁，排队越长。清扫器攒批与选路见 [10](10-rollback-pitfalls.md)。
 
 **③ memory cgroup 与 Go GC 的长暂停。** 这是最隐蔽的一条：一个沙箱的 I/O 可以把另一个沙箱 restore 的冻结窗口拉长，而两者在账本上毫无关系。
 它由三个事实串起来，缺一个都不会发生。

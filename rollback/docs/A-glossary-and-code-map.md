@@ -1,6 +1,6 @@
 # 附录 A · 术语、代码地图与文件格式
 
-> 全书的查询入口，不用从头读。术语、代码位置（以 `deltabox-dev@93ccb02` 为准）、产物文件格式、不变量速查、章目表。
+> 全书的查询入口，不用从头读。术语、代码位置（以 `deltabox-dev@57a3063` 为准）、产物文件格式、不变量速查、章目表。
 > 环境变量与开关见 [27](27-configuration-and-capacity.md)，错误码与异常见 [25](25-errors-timeouts-concurrency.md)，
 > 计时键见 [28](28-observability-reference.md)。
 
@@ -65,6 +65,7 @@
 | **envd** | guest 里执行命令、读写文件的守护进程 | [01](01-background.md) |
 | **orchestrator** | 宿主上管沙箱生命周期、网络、存储、代理的进程 | [04](04-architecture.md) |
 | **client-proxy** | 集群入口代理，把客户端请求转给所在节点的 orchestrator | [04](04-architecture.md) |
+| **hyperloop** | orchestrator 在宿主上给每个沙箱提供的 HTTP 服务，guest 经 `192.0.2.1:80` 访问（宿主侧端口 5010）；部署脚本的 80 → 3002 转发目前劫持了这条链路 | [26 §5.1](26-deployment-prerequisites.md#51-80-端口的转发规则劫持-hyperloop-请求) |
 | **SandboxID / ExecutionID / LifecycleID** | 三个不同层次的身份标识 | [02](02-e2b-native-snapshot.md) |
 
 ### 1.4 测试与测量
