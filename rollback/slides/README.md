@@ -69,8 +69,8 @@ npm run export
 
 | 要什么 | 去哪拿 |
 |---|---|
-| 完整技术文档（导读 + 28 篇） | `../docs/` |
-| 当前验收状态与口径 | `../docs/25-results-and-compliance.md`（口径定义在 `../docs/24-performance-methodology.md`） |
+| 完整技术文档（导读 + 33 篇） | `../docs/` |
+| 当前验收状态与口径 | `../docs/21-benchmarks-and-compliance.md`、`../docs/22-long-run-and-concurrency.md`（口径定义在 `../docs/20-performance-methodology.md`） |
 | 交付件与中间产物的划分、测试覆盖与缺口 | `../../../交付件清单.md` |
 | 工具箱逐脚本的验证状态、双轨 commit | `../scripts/dev/MANIFEST.md` |
 | 耗时对照与三个发现 | `../scripts/dev/耗时基准结论.md` |

@@ -2,7 +2,7 @@
 
 > 给要接手或参与这个项目的工程师看。读完能知道：代码在哪、交付物是什么形态、按任务该改哪里、
 > 哪些不变量碰不得、改完怎么验证、还有哪些已知的方向。
-> 建议先读 [19](19-end-to-end.md)、[20](20-failure-semantics.md)、[21](21-state-concurrency-durability.md)；
+> 建议先读 [11](11-end-to-end.md)、[12](12-failure-semantics.md)、[13](13-state-concurrency-durability.md)；
 > 查符号用[附录 A](A-glossary-and-code-map.md)。
 
 ---
@@ -26,7 +26,7 @@
 FC 的 vmm 单测要引导仓库里的测试内核（`src/vmm/src/test_utils/mock_resources/test_pe.bin`、`test_elf.bin`），
 并且要能访问 `/dev/kvm`；源码目录只读挂载时，部分测试会因为在当前目录写临时文件而失败，要在可写副本里跑。
 
-交付的是 **ext4 方案**（为什么见 [12](12-architecture.md)）。上游基线是 e2b infra 的 `2026.09` 加一次 ARM 适配，本方案的全部改动在那之上。
+交付的是 **ext4 方案**（为什么见 [04](04-architecture.md)）。上游基线是 e2b infra 的 `2026.09` 加一次 ARM 适配，本方案的全部改动在那之上。
 
 ### 1.2 交付形态
 
@@ -36,7 +36,7 @@ FC 的 vmm 单测要引导仓库里的测试内核（`src/vmm/src/test_utils/moc
 | **文档** | 本手册，导出为单个 HTML 文件 |
 
 目标平台是 950（带 HDBSS）；920B 是开发环境。**orchestrator 与 Firecracker 必须取自同一版本、配对部署**：
-orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirty-bitmap` 两个新端点（[15](15-firecracker-api-contract.md)）。
+orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirty-bitmap` 两个新端点（[08](08-firecracker-api-contract.md)）。
 
 ### 1.3 阅读源码的顺序
 
@@ -63,7 +63,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 |---|---|
 | 1 | `validate_topology` 里加上它，否则拓扑检查会因"设备总数不等"失败 |
 | 2 | `apply_device_states` 里写回它的状态 |
-| 3 | **查 [18](18-rollback-pitfalls.md) 的检查表**：它有没有从 guest 内存推导出来的缓存？有没有在途异步 I/O？运行期会不会自己写 guest 内存？ |
+| 3 | **查 [10](10-rollback-pitfalls.md) 的检查表**：它有没有从 guest 内存推导出来的缓存？有没有在途异步 I/O？运行期会不会自己写 guest 内存？ |
 | 4 | 有在途 I/O 的，在 `quiesce_devices` 里加排空逻辑 |
 | 5 | 运行期写 guest 内存的，回滚最后阶段之后要重新标脏那些页 |
 | 6 | 新增的系统调用加进 seccomp 白名单（`firecracker/resources/seccomp/aarch64-unknown-linux-musl.json`，按线程分组） |
@@ -106,13 +106,13 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 ### 2.5 改账本
 
-**最危险的区域。** 改之前先把 [20](20-failure-semantics.md) 的不变量清单读一遍。特别注意：
+**最危险的区域。** 改之前先把 [12](12-failure-semantics.md) 的不变量清单读一遍。特别注意：
 
 - 改 `ParentID` 的设置时机 → 破坏"`E_x` 覆盖 `(parent(x), x]`"；
 - 改可见性判断 → 半写完的快照可能变成恢复目标；
 - 改删除、剪枝或合并 → 可能打断后代的解析链。合并的正确性依赖"被并入的条目隐藏、非基准、恰有一个子节点"
-  这三个条件，任何一条放松都要重新证明回滚集不变（[14](14-memory-diff-tree.md)）；
-- 层的回收**按视图引用计数，不按树**：跟踪关闭时每个 checkpoint 都是树根，而它的视图仍含之前的全部层（[16](16-disk-layering.md)）；
+  这三个条件，任何一条放松都要重新证明回滚集不变（[06](06-memory-diff-tree.md)）；
+- 层的回收**按视图引用计数，不按树**：跟踪关闭时每个 checkpoint 都是树根，而它的视图仍含之前的全部层（[07](07-disk-layering.md)）；
 - 在全局锁里只改内存里的结构，删文件放到锁外（收进 `reclaim`，调用方放锁后删）；
 - 加新状态 → 想清楚它在 `Get` / `List` / 内容解析 / 回滚集 / 合并候选 / 字节计数里各自怎么表现；
 - 改了会影响文件增减的路径 → 同步维护层引用计数与字节计数，属性测试会从盘上重算并比对。
@@ -123,15 +123,15 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 | # | 问题 | 相关篇 |
 |---|---|---|
-| 1 | 有没有引入与虚机规格线性相关的新开销？ | [11](11-baseline-goals-and-native.md) |
-| 2 | 有没有重建某个宿主资源？ | [11](11-baseline-goals-and-native.md) |
-| 3 | 新的失败路径在提交点之前还是之后？ | [20](20-failure-semantics.md) |
-| 4 | 会不会静默降级？降级了怎么被发现？ | [07](07-observability-reference.md) |
-| 5 | 持全局锁期间有没有做文件 I/O 或 O(条目数) 的扫描？ | [21](21-state-concurrency-durability.md) |
-| 6 | 依赖"虚机已暂停"吗？调用契约写清楚了吗？ | [21](21-state-concurrency-durability.md) |
-| 7 | 会不会在冻结窗口里等别的沙箱、等 GC 或等内存回收？ | [21](21-state-concurrency-durability.md) |
-| 8 | 引入新系统调用了吗？ | [15](15-firecracker-api-contract.md) |
-| 9 | 破坏了哪一条不变量？ | [20](20-failure-semantics.md) |
+| 1 | 有没有引入与虚机规格线性相关的新开销？ | [03](03-goals-and-design-choices.md) |
+| 2 | 有没有重建某个宿主资源？ | [03](03-goals-and-design-choices.md) |
+| 3 | 新的失败路径在提交点之前还是之后？ | [12](12-failure-semantics.md) |
+| 4 | 会不会静默降级？降级了怎么被发现？ | [28](28-observability-reference.md) |
+| 5 | 持全局锁期间有没有做文件 I/O 或 O(条目数) 的扫描？ | [13](13-state-concurrency-durability.md) |
+| 6 | 依赖"虚机已暂停"吗？调用契约写清楚了吗？ | [13](13-state-concurrency-durability.md) |
+| 7 | 会不会在冻结窗口里等别的沙箱、等 GC 或等内存回收？ | [13](13-state-concurrency-durability.md) |
+| 8 | 引入新系统调用了吗？ | [08](08-firecracker-api-contract.md) |
+| 9 | 破坏了哪一条不变量？ | [12](12-failure-semantics.md) |
 
 **第 9 条最重要。** 大多数不变量被破坏后是静默的：测试会过，功能会"正常"，问题在很久以后以莫名其妙的方式出现。
 
@@ -147,27 +147,27 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 正确性与功能 | `rollback/scripts/950/run.sh smoke`、`run.sh func`；动了树语义再跑 `dev/correctness.py ext4` | 目标机 |
 | 性能 | `run.sh perf`；动了长期行为（删除、合并、回收、锁）要跑并发长测 | 目标机 |
 
-判据讲解见 [23](23-testing-and-functional-verification.md)，性能口径见 [24](24-performance-methodology.md)，
-上机步骤见 [09](09-acceptance-runbook.md)。换二进制的日常流程（编译、替换、确认跑的是新的）见
+判据讲解见 [19](19-testing-and-functional-verification.md)，性能口径见 [20](20-performance-methodology.md)，
+上机步骤见 [30](30-acceptance-runbook.md)。换二进制的日常流程（编译、替换、确认跑的是新的）见
 `e2b-infra/deploy-docs/08-源码开发与出包流程.md` 第 4 节。
 
 ### 4.2 至少要看的三个信号
 
 改完第一次跑起来，先确认：
 
-1. 启动日志的 `checkpoint capabilities` 行里 `track_dirty_pages` 为 `true` 且理由符合预期，各开关的值与来源是你想要的（[07](07-observability-reference.md)）；
+1. 启动日志的 `checkpoint capabilities` 行里 `track_dirty_pages` 为 `true` 且理由符合预期，各开关的值与来源是你想要的（[28](28-observability-reference.md)）；
 2. 第二个 checkpoint 的 `memMode` 是 `incremental`，不是 `full`；
 3. 950 上 `dmesg | grep 'Enable HDBSS success'` 有输出，且 PID 是 Firecracker 的。
 
 任何一个不对，后面的数字都不用看。第 2 条是防"增量静默退化成全量"的主力判据，而它本身也会失效
-（SDK 没透出字段时脚本会跳过，[23](23-testing-and-functional-verification.md)）。
+（SDK 没透出字段时脚本会跳过，[19](19-testing-and-functional-verification.md)）。
 
 ### 4.3 故障注入钩子（只给开发者）
 
 失败路径里最值得信任的恰恰是手工到不了的那几条，所以留了两个钩子：
 
 - orchestrator 侧 `CHECKPOINT_FAULT_INJECT`（`internal/checkpoint/faults.go`），逗号分隔的故障名，可加 `:once`，启动时读一次；
-  名字清单见 [06](06-configuration-and-capacity.md)。合并路径的 `compact_*` 注入点只在单测里用过。
+  名字清单见 [27](27-configuration-and-capacity.md)。合并路径的 `compact_*` 注入点只在单测里用过。
 - FC 侧 `FC_ROLLBACK_FAULT_INJECT`，只在用 cargo feature `rollback-fault-inject` 构建的二进制里存在，**交付二进制不含**。
 
 生产部署不设这两个变量；是否有故障被武装，看启动能力行的 `fault_inject` 字段。
@@ -176,7 +176,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 ## 5. 已知缺口与可能的方向
 
-测试与实测上的缺口只在 [25](25-results-and-compliance.md) 的"已知项与缺口"维护一份，这里不重复。下面是代码上可以做的方向：
+测试与实测上的缺口只在 [21](21-benchmarks-and-compliance.md) 的"已知项与缺口"维护一份，这里不重复。下面是代码上可以做的方向：
 
 | 方向 | 动机 | 难度 |
 |---|---|---|
@@ -184,7 +184,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | **conntrack 后台清扫再提速** | 它已贴近冻结窗口的关键路径；可先按生产数据调单地址走过滤的阈值 | 中 |
 | **层侧车改为区间编码** | `.meta` 每块 8 字节，restore 读解码所有层的侧车随块数线性增长；要改盘上格式 | 中 |
 | **可导出的 checkpoint** | 层栈压平 + 模板底座物化，做成独立的导出接口，不改 checkpoint 默认路径 | 中 |
-| **账本跨重启加载** | 现在启动时清空 store 根；要加回按事务顺序的 `fsync`、读取代码、陈旧条目回收与格式迁移（[22](22-lifecycle-reasoning.md)） | 中 |
+| **账本跨重启加载** | 现在启动时清空 store 根；要加回按事务顺序的 `fsync`、读取代码、陈旧条目回收与格式迁移（[14](14-lifecycle-reasoning.md)） | 中 |
 | **按沙箱按需武装脏页跟踪** | 现在整个 orchestrator 一个值；要在创建沙箱时就知道它会不会做 checkpoint | 中 |
 | **层文件的全零块回收** | 恒等映射不剔除全零块 | 中 |
 | **视图层列表改为引用父代** | 每个条目的视图把截止到自己的全部层完整记一份；合并之后层数有界，但仍是每条目 O(层数) 的记账 | 中 |

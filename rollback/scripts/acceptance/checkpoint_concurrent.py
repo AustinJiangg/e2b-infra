@@ -41,8 +41,8 @@
 
 依赖（与本目录其它脚本一致）:
     pip install e2b==2.20.0 python-dotenv
-    python /opt/e2b-infra/patch_e2b.py
     python /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py
+    python /opt/e2b-infra/patch_e2b.py
 
 环境变量（可放在当前目录 .env 里）:
     E2B_API_KEY / E2B_DOMAIN / E2B_API_URL / E2B_HTTP_SSL

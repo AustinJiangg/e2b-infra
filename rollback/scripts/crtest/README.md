@@ -27,7 +27,7 @@ rollback/scripts/crtest/
 ├── bench/                    性能基准（都 import 上面的 crtest 包）
 │   ├── bench_tiers.py        按改动量分档：--tier-set full（18 档）| short（小档细分 + 512 MB 极限档）
 │   ├── serial_restore.py     单沙箱串行 restore 长尾：一个调用方、同一个 checkpoint 连回 N 次
-│   ├── compliance.py         每档 p50 / p99 / 最大 + 与手册 24 篇 §1.1 达标线的对照表
+│   ├── compliance.py         每档 p50 / p99 / 最大 + 与手册 20 篇 §1.1 达标线的对照表
 │   └── analyze.py            完整分析：分段、线性拟合、反推达标改动量、离群、缓存漂移
 ├── sdktests/
 │   └── test_checkpoint_errors.py   打桩服务端 + 真实客户端，验十个 checkpoint 异常类与 .reason

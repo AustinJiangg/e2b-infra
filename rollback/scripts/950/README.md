@@ -50,7 +50,7 @@ bash run.sh perf                           # ≤ 40 分钟：性能分档、长�
 | 客户端凭据拿得到 | `grep -c E2B_API_KEY ../../../benchmark/.env` 回 1（没有就 `cd ../../../benchmark && bash sync-env.sh` 生成） | `run.sh` 开头会打 `!! E2B_API_KEY 没有值`，随后建沙箱失败 |
 | 要用的解释器装了带 checkpoint 覆盖层的 e2b | 在 `build.sh -i` 装 SDK 的那个环境里 `python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`，同一个解释器再用 `--python "$(command -v python3)"` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
 | 模板 `base` 已经建好 | `nomad job status` 里 template-manager 在跑，且建过一次模板 | 每个用例开头建沙箱就失败 |
-| 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 23 篇 §8 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第四部分（测试与证据）对比**（规格是条件标签的一部分，见手册 23 篇 §8 与 24 篇 §2） |
+| 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 19 篇 §8 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第五部分（验证与实测）对比**（规格是条件标签的一部分，见手册 19 篇 §8 与 20 篇 §2） |
 | 在**宿主机上**跑，且是 root | `id -u` 回 0 | 读不到服务端分段计时与产物目录，T32 会判失败、性能表会缺列 |
 
 `benchmark/.env` 由 `benchmark/sync-env.sh` 生成：它从 `/root/.e2b/config.json`
@@ -127,11 +127,11 @@ PASS 判据：每个用例自己三段式断言，退出码 0 = 通过、1 = 断
 | 项 | 脚本 | 输出 |
 |---|---|---|
 | 分档基准 | `crtest/bench/bench_tiers.py --tier-set short` | 小档细分（0/4/8/16/32 MB 各 n=30）+ 中档（64/128/256 MB 各 n=20）+ 512 MB 极限档 n=10 + 纯内存 16 / 纯文件 16 / 只读 192 |
-| 达标判定 | `crtest/bench/compliance.py` | 每档 p50 / p99 / 最大 + 与手册 24 篇 §1.1 达标线的对照表 |
+| 达标判定 | `crtest/bench/compliance.py` | 每档 p50 / p99 / 最大 + 与手册 20 篇 §1.1 达标线的对照表 |
 | 串行长尾 | `crtest/bench/serial_restore.py -n 100` | 单沙箱、单调用方、同一个 checkpoint 连回 100 次的 p50 / p99 / 最大 |
 | 并发 A/B | `acceptance/checkpoint_concurrent.py --stages A,B` | A = 跨沙箱扇出 N=1..16；B = 同沙箱 4 线程争用 |
 
-**达标线**（手册 24 篇 §1.1，照抄客户那组粗略指标，未限定改动量）：
+**达标线**（手册 20 篇 §1.1，照抄客户那组粗略指标，未限定改动量）：
 **checkpoint ≤ 200 ms、restore ≤ 100 ms**，量的都是**客户端墙钟**。
 全量 checkpoint（每遍开头那一次）按同一口径**单列不判定**。
 
@@ -161,7 +161,7 @@ PASS 判据：脚本退出码 0（= 没有失败的 checkpoint/restore、没有�
 | `T37` 两道配额闸 | 要服务端带 `CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` 启动 | 同上，`bash run.sh func --quota-cases` |
 | `T38` FC 侧 faulted 路径 | 要 Firecracker 带 cargo feature `rollback-fault-inject` 并设 `FC_ROLLBACK_FAULT_INJECT=post_commit`；**交付的 FC 不带这个特性** | 换一份带特性的 FC 后 `--fault-cases` |
 
-这四条的覆盖已经在 920B 上做过（见手册 25 篇 §2.3），950 上跳过不影响交付结论。
+这四条的覆盖已经在 920B 上做过（见手册 21 篇 §2.3），950 上跳过不影响交付结论。
 
 另外两类会自动判 SKIP（不是配置问题，是环境问题）：
 SDK 异常语义 pytest 在没装 pytest 时 SKIP；smoke 的 SDK 自检在找不到
@@ -303,5 +303,5 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 | `../crtest/sdktests/` | `test_checkpoint_errors.py` 原样取自 `KASandbox_0904/py-sdk/tests/`。**随本套件带一份而不是让 950 去 clone 仓库** —— 它只依赖已安装的 `e2b` 加 pytest/httpx，没有 conftest 依赖，一个文件就能跑；950 上没有 py-sdk 源码树，clone 一个几十 MB 的仓库只为跑一个文件不划算。代价是它会随 SDK 演进而过时，改 SDK 异常语义时记得同步这一份 |
 | `../crtest/portability/` `../crtest/probe950/` | 客户机器预检与「920B 结论能不能搬到 950」的探针，零外部依赖 |
 
-手册里对应的篇目：23 篇（测试体系与功能验证）、24 篇（性能口径与方法）、
-25 篇（实测结果与判定）、09 篇（上机验收）。
+手册里对应的篇目：19 篇（测试体系与功能验证）、20 篇（性能口径与方法）、
+21 篇（分档基准与判定）、22 篇（长跑与并发实测）、30 篇（上机验收）。
