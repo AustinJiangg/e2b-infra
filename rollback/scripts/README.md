@@ -84,7 +84,7 @@ python3 -m crtest T25 --out t25.json
 | `bench/` | `bench_tiers.py`（按改动量分档的基准，`--tier-set full\|short`）、`serial_restore.py`（单沙箱串行 restore 长尾）、`compliance.py`（每档 p50/p99/max 与达标线对照）、`analyze.py`（完整分析：分段、拟合、离群、漂移） |
 | `portability/` | `preflight-customer.sh` —— 客户机器预检，零外部依赖、只读、退出码 = FAIL 数 |
 | `probe950/` | 「920B 的结论能不能搬到 950」：静态 `probe-host.sh` + 动态 `probe-dynamic.py` + 逐键 `compare.py`，`results/920b/` 里是 920B 的基线 |
-| `sdktests/` | `test_checkpoint_errors.py` —— 打桩服务端 + 真实客户端，验九个 checkpoint 异常类与 `.reason` 落点，纯本地 pytest |
+| `sdktests/` | `test_checkpoint_errors.py` —— 打桩服务端 + 真实客户端，验十个 checkpoint 异常类与 `.reason` 落点，纯本地 pytest |
 | `tests/` | 171 项离线单测，不需要沙箱、不需要栈，WSL 也能跑：`python3 -m unittest discover -s tests`（约 30 秒） |
 
 详见 [`crtest/README.md`](crtest/README.md)。

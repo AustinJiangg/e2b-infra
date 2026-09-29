@@ -30,7 +30,7 @@ rollback/scripts/crtest/
 │   ├── compliance.py         每档 p50 / p99 / 最大 + 与手册 28 篇达标线的对照表
 │   └── analyze.py            完整分析：分段、线性拟合、反推达标改动量、离群、缓存漂移
 ├── sdktests/
-│   └── test_checkpoint_errors.py   打桩服务端 + 真实客户端，验九个 checkpoint 异常类与 .reason
+│   └── test_checkpoint_errors.py   打桩服务端 + 真实客户端，验十个 checkpoint 异常类与 .reason
 ├── portability/
 │   └── preflight-customer.sh 客户机器预检，零外部依赖、只读，退出码 = FAIL 数
 ├── probe950/                 「920B 的结论能不能搬到 950」：probe-host.sh / probe-dynamic.py / compare.py
