@@ -29,7 +29,7 @@ if CRTEST_PARENT not in sys.path:
 from crtest import common                                    # noqa: E402
 from crtest.common import log                                # noqa: E402
 
-# 手册 28 篇抄客户的那组粗略指标（未限定改动量）。
+# 手册 24 篇 §1.1 抄客户的那组粗略指标（未限定改动量）。
 RS_LIMIT_MS = 100.0
 
 
@@ -117,8 +117,8 @@ def run(ctx):
     log("  对照 %s ms 达标线：p50 %s，p99 %s"
         % (common.fmt_ms(RS_LIMIT_MS),
            "达标" if s["p50_within_limit"] else "未达标",
-           "达标" if s["p99_within_limit"] else "未达标（长尾，见手册 28 篇 §4.8）"))
-    # 失败与现场不一致要让退出码非 0；长尾超线只记录不判失败（口径同手册 28 篇）。
+           "达标" if s["p99_within_limit"] else "未达标（长尾，见手册 04 篇 §4）"))
+    # 失败与现场不一致要让退出码非 0；长尾超线只记录不判失败（口径同手册 24 篇 §1.1）。
     common.expect(ctx, "restore 全部成功且抽验一致", bad == 0, "0 次异常", "%d 次异常" % bad,
                   "单沙箱串行 ×%d" % s["n"])
 
