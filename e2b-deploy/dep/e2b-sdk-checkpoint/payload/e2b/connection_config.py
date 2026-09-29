@@ -14,10 +14,12 @@ CHECKPOINT_REQUEST_TIMEOUT: float = 300.0  # 5 minutes
 """
 Default timeout for creating and restoring a checkpoint.
 
-These two are not ordinary requests. The host pauses the VM, writes or reads a
-memory snapshot and then waits up to 45 seconds for envd inside the guest to
-answer again before it gives up and reports the failure - so the *error* path
-alone can take longer than the 60 second default used everywhere else, and a
+These two are not ordinary requests. A create pauses the VM, writes a memory
+snapshot and resumes the VM, and answers as soon as it is running again: it
+does not wait for envd. A restore rolls the VM back and then waits up to 45
+seconds for envd inside the guest to answer again before it gives up and
+reports the failure - so a restore's *error* path alone can take longer than
+the 60 second default used everywhere else. A create has no such wait, but a
 full snapshot of a large template can take longer still. A client timeout below
 that only abandons work the server keeps doing: it has no cancellation, and for
 a create it means the checkpoint is made but its ID never reaches the caller.
@@ -176,8 +178,8 @@ class ConnectionConfig:
 
         A per-call ``request_timeout`` still wins; what this deliberately does
         not inherit is the connection-wide default, which is tuned for envd
-        requests and is below what the host needs to even report a checkpoint
-        failure. See :data:`CHECKPOINT_REQUEST_TIMEOUT`.
+        requests and is below what the host needs to even report a failed
+        restore. See :data:`CHECKPOINT_REQUEST_TIMEOUT`.
         """
         return self._get_request_timeout(CHECKPOINT_REQUEST_TIMEOUT, request_timeout)
 

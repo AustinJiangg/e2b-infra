@@ -294,6 +294,67 @@ def test_delete_names_the_checkpoint_it_failed_on(server, checkpoint):
     assert excinfo.value.checkpoint_id == "cp-42"
 
 
+# A delete answers three ways besides success. An id that names nothing is
+# 404 not_found and stays the NotFoundException callers already catch. A
+# failure before the server changed anything is 500 internal with the reason
+# `internal`: nothing was deleted and the call may be retried, so it must not
+# read as "already gone". A delete that took effect but left files behind is
+# answered as a success and never reaches the SDK as an error.
+def test_delete_of_an_unknown_id_is_not_found(server, checkpoint):
+    server.answer(
+        404,
+        {
+            "code": "not_found",
+            "reason": "not_found",
+            "message": "checkpoint cp-42 not found",
+        },
+    )
+
+    with pytest.raises(NotFoundException) as excinfo:
+        checkpoint.delete("cp-42")
+
+    assert not isinstance(excinfo.value, CheckpointException)
+
+
+def test_delete_that_failed_inside_the_server_is_not_not_found(server, checkpoint):
+    server.answer(
+        500,
+        {
+            "code": "internal",
+            "reason": "internal",
+            "message": "failed to delete checkpoint cp-42: boom",
+        },
+    )
+
+    with pytest.raises(CheckpointException) as excinfo:
+        checkpoint.delete("cp-42")
+
+    assert type(excinfo.value) is CheckpointException
+    assert not isinstance(excinfo.value, NotFoundException)
+    assert excinfo.value.reason == "internal"
+    assert excinfo.value.checkpoint_id == "cp-42"
+
+
+async def test_delete_that_failed_inside_the_server_is_not_not_found_async(
+    server, async_checkpoint
+):
+    server.answer(
+        500,
+        {
+            "code": "internal",
+            "reason": "internal",
+            "message": "failed to delete checkpoint cp-42: boom",
+        },
+    )
+
+    with pytest.raises(CheckpointException) as excinfo:
+        await async_checkpoint.delete("cp-42")
+
+    assert type(excinfo.value) is CheckpointException
+    assert excinfo.value.reason == "internal"
+    assert excinfo.value.checkpoint_id == "cp-42"
+
+
 def test_resource_exhausted_without_a_reason_stays_the_base_class(server, checkpoint):
     # Two very different situations answer with this code, and the reason is
     # the only thing that tells them apart. With no reason the SDK says what
