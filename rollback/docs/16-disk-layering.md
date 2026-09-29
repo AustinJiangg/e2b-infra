@@ -190,7 +190,7 @@ header 写不出来、封存层没能进 store 等发生在 `AppendLayer` 之外
 - 每个已发布条目的视图（`Entry.Rootfs`），restore 从它重组磁盘；
 - 活账本（`rootfsState.layers`），下一个视图从它复制，它也描述着沙箱正在读的栈。
 
-两者都计数，每列一次一个引用（`Store.layerRefs`，`store.go:469`），**计数归零**的层连同 `.meta` 进 reclaim，锁外删除：
+两者都计数，每列一次一个引用（`Store.layerRefs`，`store.go:480`），**计数归零**的层连同 `.meta` 进 reclaim，锁外删除：
 
 | 位置 | 引用变化 |
 |---|---|

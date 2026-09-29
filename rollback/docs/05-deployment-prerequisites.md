@@ -121,7 +121,21 @@ python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 ### 4.3 orchestrator 自报的能力
 
 orchestrator 启动时打一行 `checkpoint capabilities`，说清脏页跟踪开没开、为什么，以及各项限额的生效值和来源（字段逐个解释在 [06 §3](06-configuration-and-capacity.md#3-启动能力行)）。
-日志在当前 alloc 的 `start.stdout.<n>` 里，**会轮转**（负载下几分钟就把启动行滚掉），所以部署后立刻抓一次留档：
+从 deltabox-dev `93ccb02` 起，同样的内容还写进**能力文件** `checkpoint-capabilities.json`：在 `DEFAULT_CACHE_DIR` 下（默认 `/orchestrator/build/`，即 store 根的父目录），
+另带 `pid`、`started_at`、`version`、`commit` 四个键（[06 §3.1](06-configuration-and-capacity.md#31-能力文件)）。
+日志行在当前 alloc 的 `start.stdout.<n>` 里，**会轮转**（负载下几分钟就把启动行滚掉）；能力文件不会，下次启动时整份替换。
+
+先看能力文件。文件里的 `pid` 必须是正在运行的进程，否则是以前那次启动留下的，不算：
+
+```bash
+p=$(pidof -s template-manager)
+E=$(tr '\0' '\n' < /proc/$p/environ)
+C=$(sed -n 's/^DEFAULT_CACHE_DIR=//p' <<<"$E"); B=$(sed -n 's/^ORCHESTRATOR_BASE_PATH=//p' <<<"$E")
+F=${C:-${B:-/orchestrator}/build}/checkpoint-capabilities.json
+grep -qE "^  \"pid\": $p,?\$" "$F" 2>/dev/null && cat "$F" || echo "没有 $F，或它不是当前进程写的：看下面的日志行"
+```
+
+没有能力文件（此前的版本不写）或 `pid` 对不上时，看日志行，部署后立刻抓一次留档。两条 WARN 只在日志里，能力文件里没有，所以第二条 grep 无论如何都要跑：
 
 ```bash
 p=$(pidof -s template-manager)
@@ -137,7 +151,7 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ahE 'dirty page tracking is off|is
 - 其余限额的值与 `_source`（`env` / `default`）与部署意图一致；
 - 第二条 grep 没有输出。
 
-启动行已经滚掉时，也可以直接看进程环境里设了哪些变量（只能说明"设了什么"，不能代替能力行说明"读成了什么"）：
+启动行已经滚掉、又没有能力文件时，也可以直接看进程环境里设了哪些变量（只能说明"设了什么"，不能代替能力文件或能力行说明"读成了什么"）：
 
 ```bash
 tr '\0' '\n' < /proc/$(pidof -s template-manager)/environ | grep -E '^(CHECKPOINT_|FC_|PROXY_TRACE|GODEBUG)'
@@ -180,4 +194,4 @@ dmesg | grep 'Enable HDBSS success' | tail -3
 1. 增量 checkpoint 有两层前提：orchestrator 决定"记不记"（`FC_TRACK_DIRTY_PAGES`，950 不设即开），Firecracker 决定"用什么记"（HDBSS 或 KVM 写保护）。
 2. 平台前提 12 项，`preflight-customer.sh` 一次查完；HDBSS 要内核配置和 CPU 能力同时具备。
 3. orchestrator、Firecracker、SDK 覆盖层、guest 内核成套交付；FC 只认 `/fc-versions/v1.13.1/firecracker` 这一个位置。
-4. 部署后六步自检：二进制 sha、SDK `--check`、能力行（立刻留档）、宿主预检、netns 基线、`run.sh smoke`。
+4. 部署后六步自检：二进制 sha、SDK `--check`、能力文件或能力行（后者立刻留档）、宿主预检、netns 基线、`run.sh smoke`。

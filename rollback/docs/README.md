@@ -1,8 +1,8 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.3.0**（2026-09-29，结构重排，按读者分部）· 江路路（j30059180）
+> **v0.3.1**（2026-09-29，同步到 deltabox-dev@93ccb02：delete 按结果作答、能力文件）· 江路路（j30059180）
 >
-> 代码基准：交付的 RPM（e2b-infra）里的 0001 补丁融合自 KASandbox_0904 的 deltabox-dev@8ea5322bf（orchestrator、Firecracker、Python SDK 同仓）；deltabox 交付分支待整理
+> 代码基准：交付的 RPM（e2b-infra）里的 0001 补丁融合自 KASandbox_0904 的 deltabox-dev@93ccb02（orchestrator、Firecracker、Python SDK 同仓）；deltabox 交付分支待整理
 
 **在不中断沙箱的前提下，把一台正在运行的 e2b 沙箱虚机退回到过去某一时刻** —— 这套 checkpoint / restore 的使用、部署、原理与证据。
 

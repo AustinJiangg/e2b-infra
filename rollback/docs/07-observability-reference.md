@@ -30,6 +30,7 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -3
 ## 2. 能力行与 memMode
 
 **能力行**：启动时一行 `checkpoint capabilities`，字段逐个解释在 [06 §3](06-configuration-and-capacity.md#3-启动能力行)。它回答"这台机器记不记脏页、为什么、各限额按什么值跑"。
+同样的内容还写在**能力文件** `${DEFAULT_CACHE_DIR}/checkpoint-capabilities.json`（默认 `/orchestrator/build/` 下，[06 §3.1](06-configuration-and-capacity.md#31-能力文件)），不随日志轮转丢失；其中的 `pid` 须是正在运行的进程。
 它不回答"用什么记"——`hdbss` / `kvm-wp` / `off` 是 Firecracker 自报的，由 `checkpoint_verify.py` 开头的"脏页后端"打印（[05 §4.6](05-deployment-prerequisites.md#46-增量真的生效)）。
 
 **memMode**：每次 checkpoint 的返回值（SDK `CheckpointInfo.mem_mode`）、`created checkpoint` 日志行的 `mem_mode`、metrics `orchestrator.sandbox.checkpoint.calls` 的 `mem_mode` 属性，三处是同一个值：
@@ -258,6 +259,9 @@ INFO  runtime GC pauses  {"gc_cycles": 4, "gc_cycles_cumulative": 68, "stw_stopp
 | 关键字 | 级别 | 代表什么 | 去哪看 |
 |---|---|---|---|
 | `checkpoint capabilities` | INFO | 启动能力行 | [06 §3](06-configuration-and-capacity.md#3-启动能力行) |
+| `capabilities file written` | INFO | 能力文件已写好，字段 `path` 是它的位置 | [06 §3.1](06-configuration-and-capacity.md#31-能力文件) |
+| `failed to write the capabilities file` | WARN | 能力文件没写成，只剩能力行；启动不受影响 | [06 §3.1](06-configuration-and-capacity.md#31-能力文件) |
+| `deleted checkpoint but could not remove all of its files` | WARN | delete 已生效、按成功应答，只是它的目录或 manifest 没处理完；残留随沙箱回收 | [03](03-errors-timeouts-concurrency.md#2-错误总表) |
 | `dirty page tracking is off` | WARN | 脏页跟踪关，checkpoint 全是全量 | [08 §1](08-troubleshooting.md#1-增量退化成全量) |
 | `is not a boolean and was ignored` | WARN | `FC_TRACK_DIRTY_PAGES` 值无效，按硬件决定 | [06 §2.1](06-configuration-and-capacity.md#21-脏页跟踪与-hdbss) |
 | `ignoring unusable … in the environment`、`ignoring a … setting that is not a boolean` | WARN | 某个开关写错，用了默认值；字段 `env` 说是哪个 | [06 §2](06-configuration-and-capacity.md#2-开关总表) |

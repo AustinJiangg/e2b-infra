@@ -205,7 +205,7 @@ guest 内存可能由多个 region 组成，快照文件把它们按顺序首尾
 
 | 位置 | 检查 |
 |---|---|
-| `entryBitmap`（orchestrator，`store.go:1384`） | 与当前 guest 的页数、页大小对比，不符则报错 |
+| `entryBitmap`（orchestrator，`store.go:1434`） | 与当前 guest 的页数、页大小对比，不符则报错 |
 | `merge`（orchestrator，`bitmap.go:62`） | 两个位图必须同几何才能求并 |
 | 回滚端点（Firecracker，`rollback.rs:307-323`） | 位图几何 + 内存文件长度，都要对上运行中的虚机 |
 

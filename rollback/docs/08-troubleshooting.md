@@ -20,7 +20,7 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -5
 **症状**：checkpoint 的 `mem_mode` 除第一个外也是 `full`；checkpoint 明显变慢、每次占盘约一份 guest 内存；验收脚本报 `有增量档被服务端报成 full`。
 
 **看哪里**
-- 能力行的 `track_dirty_pages` 与 `track_dirty_pages_reason`（取法见 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力)）。
+- 能力文件或能力行的 `track_dirty_pages` 与 `track_dirty_pages_reason`（取法见 [05 §4.3](05-deployment-prerequisites.md#43-orchestrator-自报的能力)）。
 - 关键字 `dirty page tracking is off`、`is not a boolean and was ignored`、`incremental chain is broken`。
 - 进程环境：`tr '\0' '\n' < /proc/$(pidof -s template-manager)/environ | grep FC_TRACK_DIRTY_PAGES`。
 
@@ -61,7 +61,7 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -5
 **看哪里**
 - ERROR `restore failed past the commit point; the sandbox is torn and must be recreated`，以及同一沙箱的 WARN `checkpoint restore failed` 里的 `timings_ms`：分段停在哪一步。
 - 分段里有 `fc_rollback` 且约等于 `CHECKPOINT_FC_CALL_TIMEOUT`：回滚调用超时，按撕裂处理；有 `fc_rollback` 而没有 `fc_total`：Firecracker 在提交点之后报错（虚机已标 faulted）；有 `fc_total` 而没有 `resume`：多半是 `reset_view` 失败（磁盘一侧，先查产物盘）。
-- 能力行 `fault_inject` 是否为空（`torn_assemble` 注入会故意造成撕裂）。
+- 能力文件或能力行的 `fault_inject` 是否为空（`torn_assemble` 注入会故意造成撕裂）。
 
 **怎么处置**：**销毁并重建这个沙箱**，没有修复手段；它的 checkpoint 随之删除。持续出现时留下上面的日志、`last-restore-timings.json`，并确认 FC 与 orchestrator 成对（[05 §3](05-deployment-prerequisites.md#3-版本配对)）、`CHECKPOINT_FC_CALL_TIMEOUT` 没被调小。
 
@@ -76,7 +76,7 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -5
 **看哪里**
 - ERROR `rollback succeeded but the guest's envd never answered`，带完整 `timings_ms`。
 - 同一行附近的 `restored checkpoint` 是否为 WARN（`fc_vcpu_mmio_drain_failed` 或 `fc_vcpu_readback_mismatch` 非零）。
-- 能力行 `fault_inject` 是否含 `envd_timeout`。
+- 能力文件或能力行的 `fault_inject` 是否含 `envd_timeout`。
 - 宿主是否过载：netns 数（§9）、`uptime`。
 
 **怎么处置**：由业务决定稍后重试命令，或销毁重建。反复出现时核对 Firecracker sha（回滚时清理串口中断线的修复在交付 FC 里），并收集上述日志。

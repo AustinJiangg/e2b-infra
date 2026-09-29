@@ -18,9 +18,9 @@
 
 | 触发 | 代码事实 |
 |---|---|
-| 沙箱从 orchestrator 的沙箱表中移除 | `Service.OnRemove` 取该沙箱的操作锁后调 `Store.RemoveSandbox`：锁内把整个沙箱目录改名为 `.trash-<uuid>` 并从账本摘掉全部状态，放锁后删除（`store.go:2085`、`:845`） |
-| 同一个 id 的新一代接管 | `admitLocked` / `AdoptSandbox` 丢弃上一代留下的全部状态，同样先改名再删（`store.go:771`、`:2134`） |
-| orchestrator 启动 | `NewStore` 先 `os.RemoveAll` 整个 store 根目录，再 `MkdirAll` 重建（`store.go:524-531`） |
+| 沙箱从 orchestrator 的沙箱表中移除 | `Service.OnRemove` 取该沙箱的操作锁后调 `Store.RemoveSandbox`：锁内把整个沙箱目录改名为 `.trash-<uuid>` 并从账本摘掉全部状态，放锁后删除（`store.go:2148`、`:894`） |
+| 同一个 id 的新一代接管 | `admitLocked` / `AdoptSandbox` 丢弃上一代留下的全部状态，同样先改名再删（`store.go:820`、`:2197`） |
+| orchestrator 启动 | `NewStore` 先 `os.RemoveAll` 整个 store 根目录，再 `MkdirAll` 重建（`store.go:535-542`） |
 
 ### 1.1 代际边界的规则
 
@@ -47,7 +47,7 @@
 
 ### 2.1 第一步：orchestrator 不认识它
 
-`NewStore` 启动时先清空 store 根目录再重建，账本的每张表都是空的，**不扫描磁盘、不读取任何 manifest**（`store.go:524`）。
+`NewStore` 启动时先清空 store 根目录再重建，账本的每张表都是空的，**不扫描磁盘、不读取任何 manifest**（`store.go:535`）。
 拷回来的目录若在启动之前放好，启动时就被删掉；启动之后再放进去，`List` 返回空，`Get` 找不到条目 —— **在 API 层面这个 checkpoint 不存在**。
 这是刻意的，包注释写明：manifest 与 index「exist so a run can be inspected after the fact」，store 从不读回，也都活不过重启。
 

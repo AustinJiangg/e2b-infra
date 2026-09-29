@@ -29,15 +29,15 @@
 这条规则在代码里有几个典型的落实方式：
 
 **① 手工解锁，锁内只算路径。** `MaterializeRevert` 在锁内取目标、查断链、算祖先链与回滚路径；之后的读位图、写物化文件全在锁外
-（`store.go:1460-1498`）。它每个 `return` 前手工解锁而不用 `defer`：写成 `defer` 会让整个物化的 I/O 都持着全局锁，阻塞这台机器上所有沙箱的账本操作
+（`store.go:1510-1548`）。它每个 `return` 前手工解锁而不用 `defer`：写成 `defer` 会让整个物化的 I/O 都持着全局锁，阻塞这台机器上所有沙箱的账本操作
 —— 包括另一个正在冻结窗口里等这把锁的 restore（等待时间记在 `materialize_lock_wait`）。
 
 **② 锁内摘账，锁外删文件。** 删除、剪枝、基准移动、沙箱移除这些操作在锁内只改 map，把要删的东西收进一个 `reclaim` 列表
-（`store.go:125-224`），由调用方**放锁之后、返回之前**删除：
+（`store.go:133-232`），由调用方**放锁之后、返回之前**删除：
 
 - 单个 checkpoint 的目录、被级联回收的祖先目录、隐藏条目的 snapfile 与 header、计数归零的层文件：放锁后直接删除；
 - **整个沙箱的目录树**（沙箱被移除，或新一代接管同一个 id 时丢弃上一代的树）：锁内先 `rename` 成 store 根下的 `.trash-<uuid>`
-  （`dropStateLocked`，`store.go:845`），放锁后再删这个 trash 目录。rename 是 O(1) 的，放锁那一刻原路径就空出来了；
+  （`dropStateLocked`，`store.go:894`），放锁后再删这个 trash 目录。rename 是 O(1) 的，放锁那一刻原路径就空出来了；
   若放锁后原地删，会与同 id 的下一代在同一路径上 `MkdirAll` 竞争。rename 本身失败时才退回锁内原地删 —— 慢总比竞争好。
 
 放锁后删为什么安全（`reclaim` 类型的注释逐条论证）：被收集的对象已经离开账本，任何查找都不会再把它交给别人；checkpoint 目录按准备时刻命名
@@ -46,7 +46,7 @@
 等操作锁超时的情形 —— 那时无论在锁内还是锁外删，都可能删掉进行中操作正在用的文件。
 
 **③ 用计数表代替扫描。** 「这个条目有没有子节点」若靠扫描回答，就要扫一遍该沙箱的全部条目，而删除每次调一次、剪枝每一步调一次，全在全局锁下。
-所以由子节点计数表 `children[sandbox][parentID]` 直接回答（`hasChildLocked`，`store.go:1857`），在条目进出账本处维护，O(1)。
+所以由子节点计数表 `children[sandbox][parentID]` 直接回答（`hasChildLocked`，`store.go:1907`），在条目进出账本处维护，O(1)。
 
 **④ 发布是 O(1) 的。** `Commit` 在锁内只插入条目、移动基准、登记计数，不复制、不重写整份 index（index.json 默认不写，[12](12-architecture.md)）；
 `commit_index` 计的就是这段锁内工作。合并的文件工作同样全在锁外，只在挑候选和最终切换时各短暂持锁一次（[20](20-failure-semantics.md)）。
@@ -114,7 +114,7 @@ NBD dispatcher 手里那个 `*Overlay` 指针**从头到尾没变过**，它不�
 
 ### 5.1 原子发布，刻意不 fsync
 
-一个条目必须**要么完整可见，要么完全不存在**。做法是 temp + rename，**刻意不 fsync**（`commitFiles`，`store.go:983`）。POSIX 保证同目录内的 rename 是原子的；
+一个条目必须**要么完整可见，要么完全不存在**。做法是 temp + rename，**刻意不 fsync**（`commitFiles`，`store.go:1032`）。POSIX 保证同目录内的 rename 是原子的；
 manifest 同理（写临时文件再 rename）。这就是原子发布的全部 —— 它不依赖落盘，因为之后的每一个读者（orchestrator 解析页、Firecracker 读回文件、层栈读封存层）
 走的都是写入方用过的同一份 page cache。
 
@@ -124,7 +124,7 @@ manifest 同理（写临时文件再 rename）。这就是原子发布的全部 
 | **承诺** | checkpoint 返回成功后，同一宿主上立即可读、内容一致 | 读侧全部是普通缓冲读，无 `O_DIRECT` |
 | **承诺** | e2b **原生 pause** 的 snapfile 仍然 fsync —— 那份文件要进持久化存储、活过本进程 | `firecracker/src/vmm/src/persist.rs` — `snapfile_must_be_durable`（判据：请求不带 `mem_file_path`） |
 | **不承诺** | checkpoint 的任何文件落盘：snapfile、内存差分、侧车、回滚集、封存层、manifest 全程不 fsync | `commitFiles` 注释；`vstate/vm.rs` 写内存与位图只 `flush()`；`rootfs/nbd.go` — `SealLayer` 不做 msync |
-| **不承诺** | checkpoint 活过 orchestrator 进程：账本只在进程内存里；`NewStore` 启动时先 `os.RemoveAll` 整个 store 根目录、再 `MkdirAll` 重建 | `store.go:524-531` |
+| **不承诺** | checkpoint 活过 orchestrator 进程：账本只在进程内存里；`NewStore` 启动时先 `os.RemoveAll` 整个 store 根目录、再 `MkdirAll` 重建 | `store.go:535-542` |
 | **不承诺** | checkpoint 活过宿主崩溃或掉电：目录里可能留下残缺文件，但没有任何东西会去读它，且下次启动即被清空 | 同上 |
 
 **为什么不做 fsync 是对的**：fsync 能买到的只有「活过宿主崩溃」，而引用这些文件的账本本来就活不过进程；一致性不欠 flush 任何东西，因为读写走同一份 page cache。
@@ -135,7 +135,7 @@ manifest 同理（写临时文件再 rename）。这就是原子发布的全部 
 ### 5.2 两态可见性
 
 条目有 `prepared` 与 `committed` 两态，但关键在于：**`prepared` 条目根本不在账本里**。`Prepare` 只建目录、写磁盘上的 manifest，不往 `bySandbox` 里放；
-条目是在 `Commit` / `CommitHidden` 里通过 `publishLocked` 才进账本的。所以 `Get` 只需检查代际归属与是否隐藏（`store.go:1804`）——「不可见」不是靠过滤条件，而是**根本不存在**。
+条目是在 `Commit` / `CommitHidden` 里通过 `publishLocked` 才进账本的。所以 `Get` 只需检查代际归属与是否隐藏（`store.go:1854`）——「不可见」不是靠过滤条件，而是**根本不存在**。
 
 ### 5.3 路径注入防护
 

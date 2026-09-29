@@ -41,7 +41,7 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
 | `disk_full` | 507 / `resource_exhausted` | `CheckpointDiskFullException` | checkpoint / restore | 无影响：服务端在动手之前查产物盘余量，不足就拒绝；沙箱照常运行，已有 checkpoint 完好 | 这是**宿主**的问题：删本沙箱的 checkpoint 通常腾不出足够空间，要请运维清理产物盘（[08](08-troubleshooting.md)）。清理之后可重试；紧循环重试只会重复同一个拒绝 |
 | `too_many_checkpoints` | 429 / `resource_exhausted` | `CheckpointTooManyException` | checkpoint | 无影响：本沙箱可见的 checkpoint 个数到了每沙箱上限，检查在写任何东西之前 | 调用方自己能解决：`list()` → `delete()` 掉任意一个不再需要的 → 再 checkpoint |
 | `checkpoint_bytes_limit` | 429 / `resource_exhausted` | `CheckpointBytesLimitException`（`CheckpointTooManyException` 的子类） | checkpoint | 无影响：本沙箱全部 checkpoint 的占盘到了每沙箱字节上限，检查在写任何东西之前。**restore 从不被这个上限拒绝** | 删**最旧**的 checkpoint（或 restore 到较早的点再删掉之后那一支）；删最新的那个几乎不释放空间（[02](02-semantics-and-limits.md) §4.4）。异常文本里写明了当前占用、上限、删了没用的那个 checkpoint ID 和下限 |
-| `internal` | 500 / `internal` | `CheckpointException`（基类） | checkpoint / restore | 服务端没有更具体的说法；checkpoint 失败时虚机已恢复运行，restore 在提交点之前失败时沙箱保持原状态（错误文本会写明） | 可以稍后重试或换一个目标；持续出现时记录 `str(e)` 与 `e.reason`，请运维查 orchestrator 日志 |
+| `internal` | 500 / `internal` | `CheckpointException`（基类） | checkpoint / restore / delete | 服务端没有更具体的说法；checkpoint 失败时虚机已恢复运行，restore 在提交点之前失败时沙箱保持原状态（错误文本会写明），delete 回它时什么都没删（下面的补充） | 可以稍后重试或换一个目标；持续出现时记录 `str(e)` 与 `e.reason`，请运维查 orchestrator 日志 |
 | `not_found` | 404 / `not_found` | `NotFoundException`（SDK 既有异常） | 全部四个 | 沙箱或 checkpoint 不存在。也包括：排队期间沙箱被删除、沙箱经原生 pause / resume 换了一代（旧 checkpoint 作废，[02](02-semantics-and-limits.md) §3.1）、拿别的沙箱的 checkpoint ID 来用 | 核对 ID 与沙箱；换代之后要重新 checkpoint |
 | `unauthenticated` | 401 / `unauthenticated` | `AuthenticationException`（SDK 既有异常） | 全部四个 | —— | checkpoint 接口用沙箱自己的 traffic access token 鉴权；用 `Sandbox.create` / `Sandbox.connect` 拿到的对象会自动带上。确认覆盖层是当前版本（[01](01-quickstart.md) §1.3） |
 | `invalid_argument` | 400 / `invalid_argument` | `InvalidArgumentException`（SDK 既有异常） | checkpoint / restore / delete | —— | 修正请求（例如请求体解析不了，或 `checkpoint_id` 为空、格式不对） |
@@ -49,10 +49,14 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
 补充：
 
 - 未知的接口路径回 404，`code` 是 `unimplemented`，SDK 把它报成通用的 `SandboxException`；只有覆盖层与服务端版本不配时才会遇到。
-- `delete` 时服务端 `Store.Delete` 返回的**任何**错误都回 404 `not_found`（`service.go:1451`），SDK 抛 `NotFoundException`。
-  除了"checkpoint 不存在"，还包括账本已经删除或隐藏了这个条目之后、删它的目录失败或重写它的 manifest 失败的情形
-  （`store.go:1961-1965`）：这时它已经从 `list()` 里消失，只是盘上的文件没处理完；错误文本里带着原始原因
-  （例如 `failed to remove checkpoint dir: …`）。这是现有行为，调用方把它当作"已删除"处理即可；盘上可能留下的残留随沙箱删除时整棵目录一起回收。
+- `delete` 按实际发生了什么作答（`service.go:1451` 调 `deleteFailure`，`:1482`）：
+  - **checkpoint 不存在** → 404 `not_found`，SDK 抛 `NotFoundException`。包括没有这个 ID、已经删过（重发的 delete 就落在这里）、已被隐藏、
+    是上一代沙箱的 ID；错误文本仍是 `checkpoint <id> not found`。服务端按 `ErrCheckpointNotFound` 判定，不靠匹配字符串。
+  - **删除已生效、只是清理文件失败** → 按**成功**返回（`delete()` 返回 `True`）。账本已经移除或隐藏了这个条目，它已从 `list()` 里消失、不能再作 restore 目标、
+    也不再计入配额，只是之后删它的目录或重写它的 manifest 失败了（`store.go:2022-2028`，`*DeleteCleanupError`）。服务端打一条 WARN
+    `deleted checkpoint but could not remove all of its files; the leftovers are reclaimed when the sandbox is removed`；
+    残留在该沙箱目录下，随沙箱删除时整棵目录一起回收；同一沙箱 ID 的新一代接管、orchestrator 下次启动清空 store 根时也会回收。
+  - **其他错误** → 500 `internal`（`reason` 为 `internal`），SDK 抛基类 `CheckpointException`。这类失败发生在账本改动之前，什么都没删，可以重试。
 - `AuthenticationException` 不是 `SandboxException` 的子类（SDK 原有设计），`except SandboxException` 接不住它。
 - `disk_full`、`too_many_checkpoints`、`checkpoint_bytes_limit` 三种拒绝会在服务端各打一条 WARN
   `refused a checkpoint operation`，带 `reason` 和判定用的数字，运维据此区分是哪一个限额。

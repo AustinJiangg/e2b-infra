@@ -1,6 +1,6 @@
 # 附录 A · 术语、代码地图与文件格式
 
-> 全书的查询入口，不用从头读。术语、代码位置（以 `deltabox-dev@8ea5322bf` 为准）、产物文件格式、不变量速查、篇目表。
+> 全书的查询入口，不用从头读。术语、代码位置（以 `deltabox-dev@93ccb02` 为准）、产物文件格式、不变量速查、篇目表。
 > 环境变量与开关见 [06](06-configuration-and-capacity.md)，错误码与异常见 [03](03-errors-timeouts-concurrency.md)，
 > 计时键见 [07](07-observability-reference.md)。
 
@@ -99,8 +99,8 @@
 
 | 关注点 | 文件 | 关键符号 |
 |---|---|---|
-| 服务入口、编排、失败分级、配额拒绝 | `internal/checkpoint/service.go` | `Port`（49984）、`Handles`、`ServeCheckpoint`、`create`、`restore`、`failCreate`、`fullRootEnabled`、`envdRestoreTimeout`、`refuseCheckpointBytesLimit`、`warnIfByteLimitTooSmall` |
-| 树账本、回滚集、内容解析、删除、锁外回收 | `internal/checkpoint/store.go` | `Entry`、`Store`、`LockSandbox`、`Prepare`、`Commit`、`CommitHidden`、`InvalidateBase`、`revertPathLocked`、`entryBitmap`、`MaterializeRevert`、`writeRevertMem`、`Delete`、`pruneLocked`、`RemoveSandbox`、`reclaim`、`children`（子节点计数表）、`runIndexWriter`（`CHECKPOINT_DEBUG_INDEX`） |
+| 服务入口、编排、失败分级、配额拒绝 | `internal/checkpoint/service.go` | `Port`（49984）、`Handles`、`ServeCheckpoint`、`create`、`restore`、`failCreate`、`fullRootEnabled`、`envdRestoreTimeout`、`refuseCheckpointBytesLimit`、`warnIfByteLimitTooSmall`、`deleteFailure`（delete 的 404 / 成功 + WARN / 500 分流） |
+| 树账本、回滚集、内容解析、删除、锁外回收 | `internal/checkpoint/store.go` | `Entry`、`Store`、`LockSandbox`、`Prepare`、`Commit`、`CommitHidden`、`InvalidateBase`、`revertPathLocked`、`entryBitmap`、`MaterializeRevert`、`writeRevertMem`、`Delete`、`ErrCheckpointNotFound`、`DeleteCleanupError`、`pruneLocked`、`RemoveSandbox`、`reclaim`、`children`（子节点计数表）、`runIndexWriter`（`CHECKPOINT_DEBUG_INDEX`） |
 | 合并（内存） | `internal/checkpoint/compact.go` | `Compaction`、`CompactMaxPerOp`、`queueCompactLocked`、`compactCandidateLocked`、`nextCompactLocked`、`runCompaction`、`fold`、`foldMemory`、`switchFoldLocked`、`layerHoldersUnchangedLocked`、`switchLayersLocked` |
 | 合并（rootfs 层） | `internal/checkpoint/compact_layers.go` | `planLayerFold`、`foldLayers`、`rewriteHeader`、`copyBlocks` |
 | 层引用计数 | `internal/checkpoint/layer_refs.go` | `refLayersLocked`、`unrefLayersLocked`、`checkLayerRefs` |
@@ -192,6 +192,7 @@
 | `last-restore-timings.json` | 沙箱目录下，每次 restore 覆写 | orchestrator | 基准脚本 | [07](07-observability-reference.md) |
 | `revert_mem.tmp`、`revert_bitmap.tmp` | 物化结果：稀疏内存文件与 FCDB，写在目标 checkpoint 目录下，只存在于一次 restore 期间 | orchestrator | FC | [14](14-memory-diff-tree.md) |
 | `<store>/.trash-<uuid>` | 被丢弃的整个沙箱目录，锁内改名、锁外删除；启动时清空 store 根会顺带删掉残留 | orchestrator | —— | [21](21-state-concurrency-durability.md) |
+| `<DEFAULT_CACHE_DIR>/checkpoint-capabilities.json` | 启动能力的 JSON（能力行的键 + `pid`、`started_at`、`version`、`commit`），在 store 根的父目录，每次启动整份替换 | orchestrator | 运维、`run.sh smoke` | [06](06-configuration-and-capacity.md#31-能力文件) |
 
 ### 3.1 FCDB 逐字节
 
