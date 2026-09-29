@@ -234,19 +234,33 @@ smoke)
 	CAPLOG="$OUT/capabilities.log"
 	{
 		echo "# orchestrator / template-manager 启动时的 checkpoint capabilities 行"
+		# 只读**正在运行**的那个 orchestrator 所在 alloc 的日志：/data/nomad/alloc 下还留着
+		# 以前各次部署、切栈留下的旧 alloc，它们的启动行（可能带故障注入、配额 env）
+		# 不代表现在这台机器的状态。alloc 目录取自该进程的 NOMAD_ALLOC_DIR。
 		found=0
-		for d in "${NOMAD_DATA_DIR:-/data/nomad}"/alloc/*/alloc/logs; do
-			[ -d "$d" ] || continue
-			for f in "$d"/start.stdout.*; do
-				[ -r "$f" ] || continue
+		cur_alloc=""
+		for p in /proc/[0-9]*; do
+			exe=$(readlink "$p/exe" 2>/dev/null) || continue
+			case ${exe##*/} in orchestrator* | template-manager*) ;; *) continue ;; esac
+			cur_alloc=$(tr '\0' '\n' <"$p/environ" 2>/dev/null | sed -n 's/^NOMAD_ALLOC_DIR=//p' | head -1)
+			[ -n "$cur_alloc" ] && { echo "# 运行中的进程 ${p#/proc/}：$exe"; break; }
+		done
+		if [ -n "$cur_alloc" ] && [ -d "$cur_alloc/logs" ]; then
+			# 日志会轮转（start.stdout.0、.1、…），从序号大的（新的）往回找最后一次启动行
+			for f in $(ls -1 "$cur_alloc/logs" 2>/dev/null | grep '^start\.stdout\.[0-9]*$' | sort -t. -k3,3nr); do
+				f="$cur_alloc/logs/$f"
 				if line=$(timeout 60 grep -a 'checkpoint capabilities' "$f" 2>/dev/null | tail -1) &&
 					[ -n "$line" ]; then
 					echo "## $f"
 					echo "$line"
 					found=1
+					break
 				fi
 			done
-		done
+			[ "$found" = 1 ] || echo "## 当前 alloc $cur_alloc 的日志里没有（启动行可能已被轮转掉）"
+		else
+			echo "## 没找到运行中的 orchestrator / template-manager 进程或它的 alloc 目录"
+		fi
 		if [ "$found" = 0 ]; then
 			echo "## journald"
 			timeout 60 journalctl -u orchestrator --no-pager 2>/dev/null |
@@ -261,7 +275,7 @@ smoke)
 		row "checkpoint capabilities 日志行" "PASS" "-" "$(key_cap "$CAPLOG")" "capabilities.log"
 	else
 		N_SKIP=$((N_SKIP + 1))
-		say "  SKIP  checkpoint capabilities 日志行 —— 在 alloc 日志与 journald 里都没抓到"
+		say "  SKIP  checkpoint capabilities 日志行 —— 在当前 alloc 日志与 journald 里都没抓到"
 		row "checkpoint capabilities 日志行" "SKIP" "-" "日志里没抓到（换个日志源手工搜）" "capabilities.log"
 	fi
 
