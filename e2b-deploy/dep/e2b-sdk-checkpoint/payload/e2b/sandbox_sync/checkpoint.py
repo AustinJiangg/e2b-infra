@@ -103,10 +103,12 @@ class Checkpoint:
         :param name: Optional name for the checkpoint
         :param request_timeout: Timeout for the request in **seconds**,
             defaults to 300 seconds. The host pauses the VM, writes the memory
-            snapshot and then waits up to 45 seconds for envd in the guest to
-            answer again before reporting a failure, so a lower timeout can
-            expire while the checkpoint is still being made - and it is the
-            server that names it, so its ID would be lost.
+            snapshot and resumes the VM, and answers once it is running again
+            without waiting for envd in the guest (only a restore waits for
+            that). Writing a full snapshot of a large sandbox can still take
+            longer than an ordinary request, so a lower timeout can expire
+            while the checkpoint is still being made - and it is the server
+            that names it, so its ID would be lost.
 
         :return: CheckpointInfo with the checkpoint ID and metadata
         """
