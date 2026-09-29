@@ -38,7 +38,7 @@ SOURCES 目录，所以下面所有文件直接放在仓库根即可。
 ### 2.2 补丁体系
 
 ```
-Patch1: 0001-adapted-for-arm-architecture.patch   （738827 字节，169 个文件，唯一的下游补丁）
+Patch1: 0001-adapted-for-arm-architecture.patch   （886868 字节，177 个文件，唯一的下游补丁）
 ```
 
 `%autosetup -p1` 会在解包后应用它（`-p1` 去掉路径前缀 `a/`、`b/`）。
@@ -77,9 +77,9 @@ Patch1: 0001-adapted-for-arm-architecture.patch   （738827 字节，169 个文�
 
 **改动域三：沙箱级 checkpoint / restore**（补丁里其余的文件，集中在 `packages/orchestrator/internal/{checkpoint,sandbox}/`
 与 `packages/shared/pkg/{proxy,storage/header,fc}`，外加这些 shared 文件在各模块 `vendor/` 里的副本共 19 个）。
-代码来源是 openEuler 交付仓库的 `deltabox-dev` 分支（当前融合到 `4af2872c6`），不是在源码工作树里手写的；
+代码来源是 openEuler 交付仓库的 `deltabox-dev` 分支（当前融合到 `8ea5322bf`），不是在源码工作树里手写的；
 怎么移植、怎么校验、vendor 副本怎么同步，见 [`08-源码开发与出包流程.md`](08-源码开发与出包流程.md) §11。
-我们新增的单测（40 个 `_test.go`）不在补丁里——`%build` 从不 `go test`。
+我们新增的单测（59 个 `_test.go`）不在补丁里——`%build` 从不 `go test`。
 
 > 这三个改动域只是**叙述上的分组**，在补丁文件里是连续的一份 diff，没有物理边界。
 > 其中 `packages/orchestrator/Makefile`、`internal/sandbox/fc/process.go`、
