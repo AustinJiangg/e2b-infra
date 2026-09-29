@@ -204,7 +204,9 @@ def checkpoint_store():
                 continue
             mnt = f[1]
             if (store == mnt or store.startswith(mnt.rstrip("/") + "/")) and len(mnt) > len(best):
-                best, fstype, dev = mnt, f[2], os.path.basename(f[0])
+                # /proc/mounts 里 LVM 卷写作 /dev/mapper/<vg>-<lv>（符号链接），/proc/diskstats
+                # 里叫 dm-N：按 realpath 解析到实际的块设备名，否则 HostMeter 永远对不上
+                best, fstype, dev = mnt, f[2], os.path.basename(os.path.realpath(f[0]))
     except OSError:
         pass
     return store, fstype, dev
@@ -317,9 +319,45 @@ class Box:
         self.id = sbx.sandbox_id
         self.scenes = {}         # checkpoint_id -> 拍那一刻的现场
         self.names = {}          # checkpoint_id -> 代名
+        # 失败取证：同沙箱上一次 API 操作（create/restore/delete）的类型与结束墙钟，
+        # 以及当前 / 上一条 guest 命令的起止墙钟，失败时一并记进记录，供和 PROXY_TRACE 对时。
+        self.last_op = None
+        self.last_op_end = None
+        self.cmd_start = None
+        self.last_cmd_end = None
 
     def run(self, cmd, timeout=600):
-        return self.sbx.commands.run(cmd, user="root", timeout=timeout).stdout
+        self.cmd_start = time.time()
+        out = self.sbx.commands.run(cmd, user="root", timeout=timeout).stdout
+        self.last_cmd_end = time.time()
+        return out
+
+    # ---- 失败取证辅助
+
+    def fail(self, rec, stage, e):
+        """把一次异常记成该操作失败：异常类型、阶段、客户端墙钟（毫秒）、沙箱 id、
+        同沙箱上一次操作及其结束时刻、出错那条 guest 命令的开始时刻。"""
+        now = time.time()
+        rec["ok"] = False
+        rec["err"] = "[%s] %s: %s" % (stage, type(e).__name__, e)
+        rec["err_type"] = type(e).__name__
+        rec["err_stage"] = stage
+        rec["sandbox"] = self.id
+        rec["t_err_wall"] = round(now, 3)
+        rec["t_err_iso"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)) + ".%03d" % int((now % 1) * 1000)
+        rec["cmd_start_wall"] = round(self.cmd_start, 3) if self.cmd_start else None
+        rec["prev_op"] = self.last_op
+        rec["prev_op_end_wall"] = round(self.last_op_end, 3) if self.last_op_end else None
+        rec["since_prev_op_s"] = round(now - self.last_op_end, 3) if self.last_op_end else None
+        return rec
+
+    def done(self, rec):
+        """API 操作收尾：记结束墙钟，更新"上一次操作"。"""
+        now = time.time()
+        rec["t_end_wall"] = round(now, 3)
+        self.last_op = rec["op"] + ("" if rec.get("ok") else "(failed)")
+        self.last_op_end = now
+        return rec
 
     def kv(self, out):
         d = {}
@@ -393,9 +431,17 @@ class Box:
 
     def create(self, gen, record_scene=True, timeout=None):
         rec = {"op": "create", "box": self.label, "sandbox": self.id, "gen": gen}
-        if record_scene:
-            rec["scene"] = self.scene()
         t0 = time.monotonic()
+        if record_scene:
+            # 拍之前取现场的 guest 命令也可能失败（被截断、超时），记成本次 create 失败、线程继续
+            try:
+                rec["scene"] = self.scene()
+            except Exception as e:      # noqa: BLE001
+                rec["wall_s"] = time.monotonic() - t0
+                self.fail(rec, "scene_before_checkpoint", e)
+                return self.done(rec)
+        t0 = time.monotonic()
+        rec["t_start_wall"] = round(time.time(), 3)
         try:
             ck = self.sbx.checkpoint.create(name=gen, request_timeout=timeout)
             rec["wall_s"] = time.monotonic() - t0
@@ -408,14 +454,14 @@ class Box:
             self.names[ck.checkpoint_id] = gen
         except Exception as e:      # noqa: BLE001 —— 记下来就是目的
             rec["wall_s"] = time.monotonic() - t0
-            rec["ok"] = False
-            rec["err"] = "%s: %s" % (type(e).__name__, e)
-        return rec
+            self.fail(rec, "checkpoint_rpc", e)
+        return self.done(rec)
 
     def restore(self, ck_id, verify=True, timeout=None):
         rec = {"op": "restore", "box": self.label, "sandbox": self.id, "id": ck_id,
                "gen": self.names.get(ck_id, "?")}
         t0 = time.monotonic()
+        rec["t_start_wall"] = round(time.time(), 3)
         try:
             ok = self.sbx.checkpoint.restore(ck_id, request_timeout=timeout)
             rec["wall_s"] = time.monotonic() - t0
@@ -423,11 +469,18 @@ class Box:
             rec["ok"] = bool(ok)
         except Exception as e:      # noqa: BLE001
             rec["wall_s"] = time.monotonic() - t0
-            rec["ok"] = False
-            rec["err"] = "%s: %s" % (type(e).__name__, e)
-            return rec
+            self.fail(rec, "restore_rpc", e)
+            return self.done(rec)
+        self.done(rec)                                # restore 本身的结束时刻
         if verify and ck_id in self.scenes:
-            now = self.scene()
+            # 验证现场的 guest 命令失败时，记成本次 restore 失败（restore RPC
+            # 本身成功，restore_rpc_ok=True 注明），线程继续
+            try:
+                now = self.scene()
+            except Exception as e:      # noqa: BLE001
+                rec["restore_rpc_ok"] = rec.get("ok")
+                self.fail(rec, "scene_after_restore", e)
+                return rec
             want = self.scenes[ck_id]
             bad = {k: (want.get(k), now.get(k)) for k in want if now.get(k) != want.get(k)}
             rec["verified"] = not bad
@@ -441,15 +494,15 @@ class Box:
     def delete(self, ck_id):
         rec = {"op": "delete", "box": self.label, "sandbox": self.id, "id": ck_id}
         t0 = time.monotonic()
+        rec["t_start_wall"] = round(time.time(), 3)
         try:
             rec["ok"] = bool(self.sbx.checkpoint.delete(ck_id))
         except Exception as e:      # noqa: BLE001
-            rec["ok"] = False
-            rec["err"] = "%s: %s" % (type(e).__name__, e)
+            self.fail(rec, "delete_rpc", e)
         rec["wall_s"] = time.monotonic() - t0
         self.scenes.pop(ck_id, None)
         self.names.pop(ck_id, None)
-        return rec
+        return self.done(rec)
 
     def kill(self):
         try:
@@ -831,25 +884,35 @@ def stage_d(args, store, meter, results):
         while time.monotonic() < stop:
             ids = list(b.scenes.keys())
             x = rng.random()
-            if x < 0.5 or len(ids) < 2:
-                gen += 1
-                g = "g%d" % gen
-                try:
-                    b.dirty(g, mem_mb=8, file_mb=4)
-                except Exception as e:      # noqa: BLE001
-                    with lock:
-                        recs.append({"stage": "D", "op": "dirty", "box": b.label, "ok": False, "err": str(e)})
-                    continue
-                r = b.create(g)
-            elif x < 0.85:
-                r = b.restore(rng.choice(ids))
-            else:
-                r = b.delete(rng.choice(ids))
+            try:
+                if x < 0.5 or len(ids) < 2:
+                    gen += 1
+                    g = "g%d" % gen
+                    try:
+                        b.dirty(g, mem_mb=8, file_mb=4)
+                    except Exception as e:      # noqa: BLE001
+                        rec = b.fail({"stage": "D", "op": "dirty", "box": b.label, "gen": g,
+                                      "depth": len(b.scenes)}, "dirty", e)
+                        with lock:
+                            recs.append(rec)
+                        continue
+                    r = b.create(g)
+                elif x < 0.85:
+                    r = b.restore(rng.choice(ids))
+                else:
+                    r = b.delete(rng.choice(ids))
+            except Exception as e:      # noqa: BLE001 —— 兜底：任何漏网异常都不许带走线程
+                rec = b.fail({"stage": "D", "op": "loop", "box": b.label, "depth": len(b.scenes),
+                              "trace": traceback.format_exc()[-2000:]}, "loop", e)
+                with lock:
+                    recs.append(rec)
+                time.sleep(0.5)
+                continue
             r["stage"] = "D"
             r["depth"] = len(b.scenes)
             with lock:
                 recs.append(r)
-            if r["op"] == "restore" and not r.get("ok"):
+            if r["op"] == "restore" and not r.get("ok") and r.get("err_stage", "restore_rpc") == "restore_rpc":
                 # 第一次 restore 失败就停手：之后每一次调用都只会往死沙箱上叠一条
                 # "sandbox not found"，几分钟就把 orchestrator 的日志轮转冲光，现场没了。
                 b.failed_at = time.time()
@@ -869,7 +932,8 @@ def stage_d(args, store, meter, results):
         try:
             worker(b)
         finally:
-            last = [o for o in recs if o.get("box") == b.label and o["op"] == "restore" and not o.get("ok")]
+            last = [o for o in recs if o.get("box") == b.label and o["op"] == "restore" and not o.get("ok")
+                    and o.get("err_stage", "restore_rpc") == "restore_rpc"]
             if last and args.keep_on_failure:
                 b.keep = True
                 diag = {"stage": "D", "op": "diag", "box": b.label, "sandbox": b.id,
@@ -935,10 +999,22 @@ def stage_d(args, store, meter, results):
         "sandboxes": S, "seconds": T, "creates": len(creates),
         "creates_ok": sum(1 for r in creates if r.get("ok")),
         "restores": len(restores), "restores_ok": sum(1 for r in restores if r.get("ok")),
+        "restores_rpc_ok": sum(1 for r in restores if r.get("ok") or r.get("restore_rpc_ok")),
+        "failures_by_stage": {k: sum(1 for r in recs if r.get("err_stage") == k)
+                              for k in sorted({r.get("err_stage") for r in recs if r.get("err_stage")})},
         "verified": "%d/%d" % (sum(1 for r in ver if r["verified"]), len(ver)),
         "alive": "%d/%d" % (sum(1 for r in alive if r.get("ok")), len(alive)),
     }
     print_errors(recs)
+    fails = [r for r in recs if r.get("err_stage")]
+    if fails:
+        log("")
+        log("  失败明细（客户端墙钟 / 阶段 / 同沙箱上一次操作与间隔）：")
+        for r in sorted(fails, key=lambda r: r.get("t_err_wall") or 0):
+            log("    %s %s %s %-24s prev=%s +%ss cmd_start=%s  %s" % (
+                r.get("t_err_iso"), r.get("box"), r.get("sandbox"), r.get("err_stage"),
+                r.get("prev_op"), r.get("since_prev_op_s"), r.get("cmd_start_wall"),
+                (r.get("err") or "")[:120]))
     kept = [b for b in boxes if getattr(b, "keep", False)]
     for b in boxes:
         if b not in kept:
@@ -1062,13 +1138,21 @@ def main():
     out = args.out or "concurrent-%s.json" % now_tag()
 
     t0 = time.monotonic()
-    try:
-        for s in stages:
+    # 一段抛出异常（比如取现场的 guest 命令失败冒了上来）只记下这一段，后面的段照跑，
+    # 最后汇总报告；不再让一段的异常带走整轮。
+    stage_errors = []
+    for s in stages:
+        try:
             {"A": stage_a, "B": stage_b, "C": stage_c, "D": stage_d}[s](args, store, meter, results)
-    except KeyboardInterrupt:
-        log("\n中断。已有数据照写。")
-    except Exception:       # noqa: BLE001
-        log("\n脚本异常：\n" + traceback.format_exc())
+        except KeyboardInterrupt:
+            log("\n中断。已有数据照写。")
+            break
+        except Exception as e:       # noqa: BLE001
+            tb = traceback.format_exc()
+            log("\n%s 段异常，记下后继续跑后面的段：\n%s" % (s, tb))
+            stage_errors.append({"stage": s, "err": "%s: %s" % (type(e).__name__, e),
+                                 "trace": tb[-4000:]})
+    results["stage_errors"] = stage_errors
     results["meta"]["elapsed_s"] = time.monotonic() - t0
     with open(out, "w") as f:
         json.dump(results, f, ensure_ascii=False, indent=1)
@@ -1077,7 +1161,11 @@ def main():
     bad = [r for r in results["ops"] if r.get("stage") in ("A", "D") and
            (not r.get("ok") or r.get("verified") is False)]
     log("A/D 段失败或不一致：%d 条" % len(bad))
-    return 1 if bad else 0
+    if stage_errors:
+        log("中途抛异常的段：%d 个（其余段照跑完）" % len(stage_errors))
+        for e in stage_errors:
+            log("  %s 段：%s" % (e["stage"], e["err"]))
+    return 1 if bad or stage_errors else 0
 
 
 if __name__ == "__main__":
