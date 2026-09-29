@@ -7983,6 +7983,135 @@ index 000000000..4d4b958ee
 +		zap.Strings("fault_inject", c.FaultInject),
 +	}
 +}
+diff --git a/packages/orchestrator/internal/checkpoint/capabilities_file.go b/packages/orchestrator/internal/checkpoint/capabilities_file.go
+new file mode 100644
+index 000000000..67d534a33
+--- /dev/null
++++ b/packages/orchestrator/internal/checkpoint/capabilities_file.go
+@@ -0,0 +1,123 @@
++package checkpoint
++
++import (
++	"encoding/json"
++	"fmt"
++	"os"
++	"path/filepath"
++	"time"
++
++	"go.uber.org/zap/zapcore"
++
++	"github.com/e2b-dev/infra/packages/shared/pkg/logger"
++)
++
++// CapabilitiesFileName is the file the startup capabilities are also
++// written to, next to the store root rather than in it: NewStore clears the
++// root on every start.
++//
++// The log line says the same thing, once, at startup, and on a busy node the
++// alloc's log rotation drops it within minutes -- which is exactly when an
++// operator or a smoke run goes looking for it. The file stays until the next
++// start overwrites it.
++const CapabilitiesFileName = "checkpoint-capabilities.json"
++
++// CapabilitiesProcess is what the file carries besides the capabilities:
++// which process wrote it, when that process started, and what it was built
++// from, so a reader can tell a file left by an earlier run from the running
++// node's.
++type CapabilitiesProcess struct {
++	PID       int
++	StartedAt time.Time
++	Version   string
++	Commit    string
++}
++
++// capabilitiesJSON renders the capabilities' log fields with the encoder
++// settings of the log line itself, so each key carries the value the log line
++// shows (a duration as "1m0s", not nanoseconds), and adds the process keys.
++func capabilitiesJSON(c Capabilities, p CapabilitiesProcess) ([]byte, error) {
++	cfg := logger.GetConsoleEncoderConfig()
++	cfg.TimeKey = zapcore.OmitKey
++	cfg.LevelKey = zapcore.OmitKey
++	cfg.NameKey = zapcore.OmitKey
++	cfg.CallerKey = zapcore.OmitKey
++	cfg.FunctionKey = zapcore.OmitKey
++	cfg.MessageKey = zapcore.OmitKey
++	cfg.StacktraceKey = zapcore.OmitKey
++
++	buf, err := zapcore.NewJSONEncoder(cfg).EncodeEntry(zapcore.Entry{}, c.Fields())
++	if err != nil {
++		return nil, fmt.Errorf("failed to encode capabilities: %w", err)
++	}
++	defer buf.Free()
++
++	var doc map[string]any
++	if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
++		return nil, fmt.Errorf("failed to decode capabilities: %w", err)
++	}
++
++	doc["pid"] = p.PID
++	doc["started_at"] = p.StartedAt.Format(time.RFC3339)
++	doc["version"] = p.Version
++	doc["commit"] = p.Commit
++
++	out, err := json.MarshalIndent(doc, "", "  ")
++	if err != nil {
++		return nil, fmt.Errorf("failed to encode capabilities file: %w", err)
++	}
++
++	return append(out, '\n'), nil
++}
++
++// WriteCapabilitiesFile writes the capabilities to dir/CapabilitiesFileName
++// and returns the path. The file is replaced atomically -- written under a
++// temporary name in the same directory and renamed over the old one -- so a
++// reader sees either the previous start's file or this one, never half of
++// either.
++func WriteCapabilitiesFile(dir string, c Capabilities, p CapabilitiesProcess) (string, error) {
++	data, err := capabilitiesJSON(c, p)
++	if err != nil {
++		return "", err
++	}
++
++	path := filepath.Join(dir, CapabilitiesFileName)
++
++	tmp, err := os.CreateTemp(dir, CapabilitiesFileName+".tmp-*")
++	if err != nil {
++		return "", fmt.Errorf("failed to create %s: %w", path, err)
++	}
++
++	tmpPath := tmp.Name()
++	committed := false
++
++	defer func() {
++		if !committed {
++			_ = os.Remove(tmpPath)
++		}
++	}()
++
++	if _, err := tmp.Write(data); err != nil {
++		_ = tmp.Close()
++
++		return "", fmt.Errorf("failed to write %s: %w", tmpPath, err)
++	}
++
++	if err := tmp.Close(); err != nil {
++		return "", fmt.Errorf("failed to write %s: %w", tmpPath, err)
++	}
++
++	// CreateTemp makes the file 0600; the file is for whoever operates the
++	// node, not only root.
++	if err := os.Chmod(tmpPath, 0o644); err != nil {
++		return "", fmt.Errorf("failed to chmod %s: %w", tmpPath, err)
++	}
++
++	if err := os.Rename(tmpPath, path); err != nil {
++		return "", fmt.Errorf("failed to replace %s: %w", path, err)
++	}
++
++	committed = true
++
++	return path, nil
++}
 diff --git a/packages/orchestrator/internal/checkpoint/compact.go b/packages/orchestrator/internal/checkpoint/compact.go
 new file mode 100644
 index 000000000..c103226c8
@@ -10981,10 +11110,10 @@ index 000000000..d252064cc
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/service.go b/packages/orchestrator/internal/checkpoint/service.go
 new file mode 100644
-index 000000000..7265a3b43
+index 000000000..07e45a66f
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/service.go
-@@ -0,0 +1,1577 @@
+@@ -0,0 +1,1612 @@
 +package checkpoint
 +
 +import (
@@ -12435,8 +12564,8 @@ index 000000000..7265a3b43
 +	// is not: that is what the folds wrote.
 +	usedBefore := s.store.UsedBytes(sandboxID)
 +
-+	if err := s.store.Delete(sandboxID, sbx.LifecycleID, id, timings); err != nil {
-+		return writeError(w, http.StatusNotFound, "not_found", reasonNotFound, err.Error())
++	if err := deleteFailure(r.Context(), w, sandboxID, id, s.store.Delete(sandboxID, sbx.LifecycleID, id, timings)); err != nil {
++		return err
 +	}
 +
 +	timings.Mark("total", opStart)
@@ -12453,6 +12582,41 @@ index 000000000..7265a3b43
 +	writeJSON(w, map[string]any{"success": true})
 +
 +	return nil
++}
++
++// deleteFailure answers a Store.Delete that did not simply succeed, and
++// returns nil when the delete is to be reported as done.
++//
++// An id that names nothing is the caller's 404. A delete that took effect
++// and only failed to remove its files is done as far as the caller is
++// concerned -- the checkpoint is gone from the API and a retry would only
++// be told it is not found -- so it is answered as a success and the
++// leftovers are logged; they are reclaimed with the sandbox (see
++// DeleteCleanupError). Anything else failed before the bookkeeping changed,
++// and nothing was deleted: a 500 the caller may retry, not a 404 that tells
++// it the checkpoint is already gone.
++func deleteFailure(ctx context.Context, w http.ResponseWriter, sandboxID string, id string, err error) error {
++	if err == nil {
++		return nil
++	}
++
++	if errors.Is(err, ErrCheckpointNotFound) {
++		return writeError(w, http.StatusNotFound, "not_found", reasonNotFound, err.Error())
++	}
++
++	var cleanup *DeleteCleanupError
++	if errors.As(err, &cleanup) {
++		logger.L().Warn(ctx, "deleted checkpoint but could not remove all of its files; "+
++			"the leftovers are reclaimed when the sandbox is removed",
++			logger.WithSandboxID(sandboxID),
++			zap.String("checkpoint_id", id),
++			zap.Error(cleanup.Err))
++
++		return nil
++	}
++
++	return writeError(w, http.StatusInternalServerError, "internal", reasonInternal,
++		fmt.Sprintf("failed to delete checkpoint %s: %s", id, err))
 +}
 +
 +func checkpointIDFrom(r *http.Request) (string, error) {
@@ -12564,20 +12728,28 @@ index 000000000..7265a3b43
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/store.go b/packages/orchestrator/internal/checkpoint/store.go
 new file mode 100644
-index 000000000..a19ca1f19
+index 000000000..b747d5ac4
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/store.go
-@@ -0,0 +1,2314 @@
+@@ -0,0 +1,2377 @@
 +// Package checkpoint implements the host side of sandbox checkpoint/rollback:
 +// a per-sandbox tree of diff checkpoints and the service that answers the
 +// in-sandbox checkpoint port (49984) on the host.
 +//
 +// Each checkpoint stores only the pages its epoch dirtied (a sparse diff
-+// file plus a bitmap sidecar); the tree roots at the sandbox's start memory
-+// source. A restore never re-materializes a full image on disk — the revert
-+// set is resolved page-by-page through the target's ancestor chain. This is
-+// what makes checkpoints O(dirty pages) on any filesystem: nothing here
-+// depends on reflink.
++// file plus a bitmap sidecar), except the one that roots a tree. By default
++// (CHECKPOINT_FULL_ROOT unset or true, see fullRootEnabled) a sandbox's first
++// checkpoint captures full guest memory and is that root: content resolution
++// ends at it, and restores never read the sandbox's start memory source.
++// With CHECKPOINT_FULL_ROOT=false the first checkpoint is a diff like the
++// rest and the tree roots at the start memory source (the template
++// memfile), which resolution falls through to for pages no checkpoint holds.
++// Either way a checkpoint taken without dirty tracking or on a broken chain
++// is a full capture that roots a fresh subtree. A restore never
++// re-materializes a full image on disk — the revert set is resolved
++// page-by-page through the target's ancestor chain. This is what makes
++// checkpoints O(dirty pages) on any filesystem: nothing here depends on
++// reflink.
 +//
 +// Restoring rolls the live Firecracker process back in place; there is no
 +// rebuild route. Rolling back does not prune: checkpoints newer than the
@@ -12865,9 +13037,10 @@ index 000000000..a19ca1f19
 +const (
 +	// MemModeFull: Firecracker wrote the complete guest memory. A full
 +	// checkpoint is a self-sufficient tree root: content resolution
-+	// terminates at it and never consults anything older. Taken when the
-+	// incremental chain is unavailable (dirty tracking off) or broken (an
-+	// epoch was lost).
++	// terminates at it and never consults anything older. Taken for a
++	// sandbox's first checkpoint unless CHECKPOINT_FULL_ROOT=false, and
++	// whenever the incremental chain is unavailable (dirty tracking off) or
++	// broken (an epoch was lost).
 +	MemModeFull = "full"
 +	// MemModeIncremental: the file holds only the pages dirtied since the
 +	// parent checkpoint (or since the sandbox started, for a first
@@ -12894,7 +13067,9 @@ index 000000000..a19ca1f19
 +
 +// Entry is one checkpoint of one sandbox — one node of the sandbox's
 +// checkpoint tree. ParentID names the checkpoint its diff is relative to;
-+// "" means the tree root, the sandbox's start memory source. The tree shape
++// "" means the entry roots a tree: a full capture (the default for a
++// sandbox's first checkpoint), or with CHECKPOINT_FULL_ROOT=false a diff
++// against the sandbox's start memory source. The tree shape
 +// follows use: checkpoints chain linearly until a restore, after which the
 +// next checkpoint's parent is the restore target and the newer checkpoints
 +// remain as a branch.
@@ -13243,6 +13418,44 @@ index 000000000..a19ca1f19
 +// it is a fact about the request rather than a failure of the store: the
 +// caller deletes a checkpoint and the next create works.
 +var ErrTooManyCheckpoints = errors.New("the sandbox is at its checkpoint limit")
++
++// ErrCheckpointNotFound marks a Delete of an id that names nothing the
++// caller may delete: no such entry, an entry that is already hidden (it is
++// no API object any more), or a sandbox id whose tree belongs to another
++// generation. A fact about the request, answered 404, like
++// ErrSandboxRemoved.
++var ErrCheckpointNotFound = errors.New("checkpoint not found")
++
++// checkpointNotFoundError is ErrCheckpointNotFound under the message the
++// API has always answered with ("checkpoint <id> not found"), which callers
++// and test suites match on.
++type checkpointNotFoundError struct {
++	msg string
++}
++
++func notFound(format string, args ...any) error {
++	return &checkpointNotFoundError{msg: fmt.Sprintf(format, args...)}
++}
++
++func (e *checkpointNotFoundError) Error() string { return e.msg }
++
++func (e *checkpointNotFoundError) Is(target error) bool { return target == ErrCheckpointNotFound }
++
++// DeleteCleanupError is a Delete that took effect but did not finish with
++// its files: the entry is already out of the bookkeeping -- gone from List,
++// no longer a restore target, its bytes no longer charged -- when removing
++// its directory or rewriting the manifest of the entry it hid failed. What
++// is left sits under the sandbox's directory in the store root and goes
++// with it: RemoveSandbox when the sandbox is removed, a new generation
++// taking the id over, or the next orchestrator start (NewStore clears the
++// root). So the delete is answered as done; the error is for the log.
++type DeleteCleanupError struct {
++	Err error
++}
++
++func (e *DeleteCleanupError) Error() string { return e.Err.Error() }
++
++func (e *DeleteCleanupError) Unwrap() error { return e.Err }
 +
 +// TooManyCheckpointsError carries the two numbers the limit was decided on.
 +// The sentence alone is enough for the caller, who only has to delete a
@@ -13900,8 +14113,9 @@ index 000000000..a19ca1f19
 +	return path, nil
 +}
 +
-+// StartMemSource is the sandbox's start memory device — the root of the
-+// checkpoint tree. It mirrors the relevant part of block.ReadonlyDevice
++// StartMemSource is the sandbox's start memory device — what resolution
++// falls through to below a tree that is not rooted by a full capture
++// (CHECKPOINT_FULL_ROOT=false). It mirrors the relevant part of block.ReadonlyDevice
 +// without this package importing the sandbox packages. ReadAt only accepts
 +// BlockSize()-aligned ranges (the template memfile is served by a chunker
 +// with that contract), so the materializer reads aligned windows and slices.
@@ -14515,6 +14729,17 @@ index 000000000..a19ca1f19
 +// Last, hidden entries left with a single child are folded into it, a few
 +// per call (compact.go). The caller holds the sandbox's gate, which the
 +// folding relies on.
++//
++// The errors fall on either side of the bookkeeping change:
++//
++//   - ErrCheckpointNotFound (errors.Is): nothing was changed, the id names
++//     nothing this caller may delete.
++//   - *DeleteCleanupError (errors.As): the delete took effect and only the
++//     file work after it failed; see DeleteCleanupError.
++//
++// Anything else would be a failure before the bookkeeping changed. There
++// is none today -- deleteLocked only ever refuses an id -- and a caller
++// treats one as an internal error.
 +func (s *Store) Delete(sandboxID string, lifecycleID string, id string, timings sandbox.PhaseTimings) error {
 +	var rc reclaim
 +
@@ -14529,9 +14754,11 @@ index 000000000..a19ca1f19
 +	rc.runLogged(sandboxID)
 +
 +	if hidden != nil {
-+		err = writeManifest(hidden)
++		if mfErr := writeManifest(hidden); mfErr != nil {
++			err = &DeleteCleanupError{Err: mfErr}
++		}
 +	} else if rmErr := removeAll(removed); rmErr != nil {
-+		err = fmt.Errorf("failed to remove checkpoint dir: %w", rmErr)
++		err = &DeleteCleanupError{Err: fmt.Errorf("failed to remove checkpoint dir: %w", rmErr)}
 +	}
 +
 +	// Folding is the store's own housekeeping: it never fails the delete
@@ -14560,17 +14787,17 @@ index 000000000..a19ca1f19
 +	// caller's to delete from, and it is about to be dropped wholesale
 +	// anyway.
 +	if !s.ownsLocked(sandboxID, lifecycleID) {
-+		return "", nil, fmt.Errorf("checkpoint %s not found", id)
++		return "", nil, notFound("checkpoint %s not found", id)
 +	}
 +
 +	entries, ok := s.bySandbox[sandboxID]
 +	if !ok {
-+		return "", nil, fmt.Errorf("sandbox %s has no checkpoints", sandboxID)
++		return "", nil, notFound("checkpoint %s not found: sandbox %s has no checkpoints", id, sandboxID)
 +	}
 +
 +	e, ok := entries[id]
 +	if !ok || e.Hidden {
-+		return "", nil, fmt.Errorf("checkpoint %s not found", id)
++		return "", nil, notFound("checkpoint %s not found", id)
 +	}
 +
 +	base := s.bases[sandboxID]
@@ -17630,10 +17857,10 @@ index 05cf03853..8e88f1e8d 100644
  type Checks struct {
 diff --git a/packages/orchestrator/internal/sandbox/conntrack_flush.go b/packages/orchestrator/internal/sandbox/conntrack_flush.go
 new file mode 100644
-index 000000000..fde7d832e
+index 000000000..260be7d4d
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/conntrack_flush.go
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,172 @@
 +package sandbox
 +
 +import (
@@ -17647,11 +17874,23 @@ index 000000000..fde7d832e
 +// conntrackFlush is a rollback's connection-tracking flush, running beside
 +// the rest of the freeze instead of in the middle of it.
 +//
-+// The flush costs a fixed few milliseconds plus about 4.4us per entry in the
-+// host's table, because the host half of it dumps the whole table into user
-+// space to find this slot's handful of entries. Measured on a Kunpeng 920
-+// host (kernel 6.6) that was 7.4ms of a 15.6ms freeze with a quiet table of
-+// ~340 entries, and 140ms with 30k.
++// The flush has two halves that run side by side (network.Slot.FlushConntrack):
++// the sandbox's own table, flushed in its namespace, and the host's table,
++// where this slot's handful of entries sit among everyone else's. The host
++// half is the one that grows with the node. It goes through the sweeper
++// (network/conntrack_sweeper.go), which serves every slot waiting at once
++// with one pass, so a flush waits for the sweep in flight when it asked and
++// then for its own. A sweep is normally one raw dump of the whole table
++// (network/conntrack_scan.go) that reads each entry's two addresses in the
++// kernel's wire form: on a Kunpeng 920 host (kernel 6.6) about 4.6ms for
++// walking the 262144 buckets plus about 1us per entry in the table -- 5.3ms
++// at 1000 entries, 25ms at 20000, 44ms at 40000. sweepUsesFilter prices
++// that against the kernel's filtered dumps, two per address, which only
++// win for a lone address in a table of more than about 7000 entries (two
++// addresses cross at about 43000). The namespace half is a few
++// milliseconds under the kernel's conntrack mutex. The conntrack_* keys
++// (recordConntrackReport) say which half and which part a flush spent its
++// time in.
 +//
 +// None of that work depends on the rollback: it needs the VM to be
 +// down, which it is from the pause onwards, and it needs the slot, which
@@ -21900,7 +22139,7 @@ index 76202a81a..516185a6d 100644
  echo "Finished configuration script"
 +
 diff --git a/packages/orchestrator/main.go b/packages/orchestrator/main.go
-index 049067509..04e577d36 100644
+index 049067509..356d7321e 100644
 --- a/packages/orchestrator/main.go
 +++ b/packages/orchestrator/main.go
 @@ -9,6 +9,7 @@ import (
@@ -21939,7 +22178,18 @@ index 049067509..04e577d36 100644
  	"github.com/e2b-dev/infra/packages/shared/pkg/storage"
  	"github.com/e2b-dev/infra/packages/shared/pkg/telemetry"
  	"github.com/e2b-dev/infra/packages/shared/pkg/utils"
-@@ -386,11 +391,33 @@ func run(config cfg.Config) (success bool) {
+@@ -72,6 +77,10 @@ const version = "0.1.0"
+ 
+ var commitSHA string
+ 
++// processStart is when this process started, as reported in the checkpoint
++// capabilities file.
++var processStart = time.Now()
++
+ func main() {
+ 	config, err := cfg.Parse()
+ 	if err != nil {
+@@ -386,11 +395,33 @@ func run(config cfg.Config) (success bool) {
  	}
  	closers = append(closers, closer{"sandbox observer", sandboxObserver.Close})
  
@@ -21974,18 +22224,38 @@ index 049067509..04e577d36 100644
  	startService("sandbox proxy", func() error {
  		err := sandboxProxy.Start(ctx)
  		if errors.Is(err, http.ErrServerClosed) {
-@@ -715,3 +742,33 @@ func newStorage(ctx context.Context, nodeID string, config network.Config) (netw
+@@ -715,3 +746,53 @@ func newStorage(ctx context.Context, nodeID string, config network.Config) (netw
  
  	return network.NewStorageKV(nodeID, config)
  }
 +
 +// reportCheckpointCapabilities logs, once at startup, whether this host can
 +// take incremental checkpoints at all.
++//
++// The same content also goes to checkpoint-capabilities.json in the store
++// root's parent (DEFAULT_CACHE_DIR): the log line is printed once and log
++// rotation drops it within minutes on a busy node. Not in the store root
++// itself, which NewStore clears on every start. Failing to write the file
++// is only worth a warning.
 +func reportCheckpointCapabilities(ctx context.Context, storeDir string) {
 +	capabilities := checkpoint.DescribeCapabilities(storeDir)
 +	fields := capabilities.Fields()
 +
 +	logger.L().Info(ctx, "checkpoint capabilities", fields...)
++
++	if path, err := checkpoint.WriteCapabilitiesFile(filepath.Dir(storeDir), capabilities, checkpoint.CapabilitiesProcess{
++		PID:       os.Getpid(),
++		StartedAt: processStart,
++		Version:   version,
++		Commit:    commitSHA,
++	}); err != nil {
++		// Worded so that it does not match "checkpoint capabilities": that is
++		// what readers grep the log for, and they take the last match.
++		logger.L().Warn(ctx, "failed to write the capabilities file; the log line above is the only copy",
++			zap.Error(err))
++	} else {
++		logger.L().Info(ctx, "capabilities file written", zap.String("path", path))
++	}
 +
 +	// Next to the capabilities because it is read for the same reason: what
 +	// this node will and will not tell you after something goes wrong.
