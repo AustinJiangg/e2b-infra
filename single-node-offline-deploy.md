@@ -380,8 +380,13 @@ sha256sum /opt/e2b-infra/bin/firecracker /fc-versions/v1.13.1/firecracker
 python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 
 # ③ orchestrator 启动时自报的能力：脏页跟踪开/关及原因、各项界限
-grep -h -m1 'checkpoint capabilities' /data/nomad/alloc/*/alloc/logs/start.stdout.*
-grep -h 'dirty page tracking is off\|is not a boolean and was ignored' /data/nomad/alloc/*/alloc/logs/start.stdout.*
+#    只读正在运行的那个进程所在 alloc 的日志：/data/nomad/alloc 下还留着以前各次部署的旧 alloc，
+#    它们的启动行不代表现状。alloc 目录取自该进程的 NOMAD_ALLOC_DIR（做法同 rollback/scripts/950/run.sh）。
+pid=$(pidof -s template-manager)
+alloc=$(tr '\0' '\n' < /proc/$pid/environ | sed -n 's/^NOMAD_ALLOC_DIR=//p')
+grep -h 'checkpoint capabilities' $(ls -v "$alloc"/logs/start.stdout.*) | tail -1
+grep -h 'dirty page tracking is off\|is not a boolean and was ignored' $(ls -v "$alloc"/logs/start.stdout.*)
+#    日志会轮转；进程跑久了启动行可能已被挤掉，这时两条 grep 都没有输出，重启该 job 后再看
 ```
 
 **checkpoint 是增量还是全量，由脏页跟踪开没开决定；本部署不设开关，跟着硬件走。**
@@ -391,10 +396,10 @@ grep -h 'dirty page tracking is off\|is not a boolean and was ignored' /data/nom
 `e2b-deploy/dep/deploy.sh` 的 `envsubst` 白名单（`deploy.sh:131` 起）里也没有——这是有意的默认。
 
 `FC_TRACK_DIRTY_PAGES` 是 orchestrator 进程的环境变量，用来覆盖探测结果
-（deltabox-dev `4af2872c6`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
+（deltabox-dev `8ea5322bf`，`packages/orchestrator/internal/sandbox/fc/dirtytracking.go:59-103`）：
 按 Go 的 `strconv.ParseBool` 读，`1/t/T/TRUE/true/True` 强制开，`0/f/F/FALSE/false/False` 强制关；
 没设、或值解析不了（`yes`、`on`、空串、拼错），都按硬件探测结果决定，后一种情况启动日志另打一条 WARN
-（`packages/orchestrator/main.go:765-770`）。按平台：
+（`packages/orchestrator/main.go:771-776`）。按平台：
 
 | 宿主 | 不设变量（本部署的默认） | 显式 `FC_TRACK_DIRTY_PAGES=true` |
 |---|---|---|
@@ -411,7 +416,7 @@ cd /opt/e2b-infra
 grep -q 'FC_TRACK_DIRTY_PAGES' nomad/template-manager.hcl || \
   sed -i '/ORCHESTRATOR_SERVICES/a\        FC_TRACK_DIRTY_PAGES          = "true"' nomad/template-manager.hcl
 bash build.sh -r template-manager
-pid=$(pgrep -f /usr/bin/template-manager | head -1)
+pid=$(pidof -s template-manager)
 tr '\0' '\n' < /proc/$pid/environ | grep FC_TRACK_DIRTY_PAGES      # 进程里真有才算生效
 ```
 
@@ -444,7 +449,7 @@ python rollback/scripts/acceptance/checkpoint_verify.py                 # 末尾
 | # | 你改了什么 | 最小操作 | 用重启 nomad 吗 |
 |---|-----------|---------|:--------------:|
 | 场景一 | **彻底重来 / 换 ACL / 清状态** | `build.sh -d` → `-i` → `-s`（最慢） | 是 |
-| 场景二 | **Go 源码**（orchestrator / api / template-manager 等，通过 patch） | 重建 RPM → 重放 dep overlay（5.0）→ `cp` 二进制到 /usr/bin → `nomad job stop`+`run` 强制重启 | 否 |
+| 场景二 | **Go 源码**（orchestrator / api / template-manager 等，通过 patch） | 重建 RPM → 重放 dep overlay（5.0）→ `cp` 二进制到 /usr/bin → `nomad job stop`+`run` 强制重启；波及 api / client-proxy 时另要重建推送镜像再 stop+run 这两个 job | 否 |
 | 场景三 | **单个 job 的 env**（如 `E2B_FC_NETNS_EXEC_HELPER`、`MAX_STARTING_INSTANCES_PER_NODE`） | 改 `nomad/<job>.hcl` → `bash build.sh -r <job>` → 四层验证（`-r` 细节见第 11 节） | 否 |
 | 场景四 | **`.env` 部署变量** | `bash build.sh -f`（重新 render + 提交全部 job） | 否 |
 | 场景五 | **nomad / consul 配置**（如 `network_speed`、`network_interface`） | 改 `/etc/nomad.d/default.hcl` → `systemctl restart nomad` | 是（仅 nomad，不动别的） |
@@ -481,7 +486,7 @@ python rollback/scripts/acceptance/checkpoint_verify.py                 # 末尾
 # ===== rpm -Uvh 之后的必做动作：重放 dep overlay =====
 cd /opt/e2b-infra
 for f in deploy.sh start-client.sh start-server.sh init-client.sh run-nomad.sh run-consul.sh \
-         install-nomad.sh install-consul.sh uninstall-nomad.sh template-manager.hcl; do
+         install-nomad.sh install-consul.sh uninstall-nomad.sh uninstall-consul.sh template-manager.hcl; do
   [ -f "dep/$f" ] || continue
   case "$f" in
     *.hcl) cp -f "dep/$f" "nomad/$f" ;;   # render 模板放 nomad/ 下
@@ -530,12 +535,28 @@ cp -f /opt/e2b-infra/bin/orchestrator /usr/bin/template-manager
 cd /opt/e2b-infra && source .env
 nomad job stop --token "$NOMAD_ACL_TOKEN" template-manager-system
 nomad job run  --token "$NOMAD_ACL_TOKEN" rendered/template-manager.hcl
-# 改动波及 api 时才需要（job 名以 nomad job status 为准）：
-# nomad job stop --token "$NOMAD_ACL_TOKEN" api && nomad job run --token "$NOMAD_ACL_TOKEN" rendered/api.hcl
+
+# 4b) 改动波及 api 或 client-proxy（包括它们 vendor 里的 shared 包）时才需要：
+#     这两个跑在 docker 容器里，镜像由 /opt/e2b-infra/bin 下的 api.Dockerfile / client-proxy.Dockerfile
+#     把同目录的二进制装进去。rpm 只换了 bin/ 下的二进制，镜像不会自己变——要按 deploy.sh 的做法重建并推送。
+#     镜像 tag 固定是 latest（rendered/api.hcl、rendered/edge.hcl 里的 image 不带 tag），hcl 内容没变，
+#     所以同样只有 stop+run 才会换成新容器。client-proxy 这个 job 定义在 rendered/edge.hcl 里。
+#     run 报 reserved port collision 时是旧 alloc 还没退干净，见 6.6。
+cd /opt/e2b-infra/bin && source ../.env
+export DOCKER_BUILDKIT=0                     # 同 deploy.sh：本机 buildx 与 docker daemon 不兼容，走传统构建
+for name in api client-proxy; do
+  docker build -t "${REGISTRY_URL}/${name}" -f "${name}.Dockerfile" .
+  docker push "${REGISTRY_URL}/${name}"
+done
+cd /opt/e2b-infra
+nomad job stop --token "$NOMAD_ACL_TOKEN" api
+nomad job run  --token "$NOMAD_ACL_TOKEN" rendered/api.hcl
+nomad job stop --token "$NOMAD_ACL_TOKEN" client-proxy
+nomad job run  --token "$NOMAD_ACL_TOKEN" rendered/edge.hcl
 
 # 5) 验证新二进制真的在跑（三个检查都过才算部署成功；特征串换成你本次改动新增的字符串）
 strings /usr/bin/template-manager | grep -c "acquire wait cost"    # ≥1 = 磁盘上的二进制是新的
-pid=$(pgrep -f /usr/bin/template-manager | head -1)
+pid=$(pidof -s template-manager)
 strings /proc/$pid/exe | grep -c "acquire wait cost"               # ≥1 = 运行中的进程也是新的（0=还在跑旧进程）
 ps -o pid,lstart,cmd -p $pid                                       # lstart 应晚于本次 stop/run 的时间
 ```
@@ -578,7 +599,7 @@ source .env
 grep 目标变量 nomad/template-manager.hcl                # ① 模板层：第 1 步改的
 grep 目标变量 rendered/template-manager.hcl             # ② 渲染层：第 2 步生成的
 nomad job inspect -token "$NOMAD_ACL_TOKEN" template-manager-system | grep 目标变量   # ③ nomad 收到的 spec
-pid=$(pgrep -f /usr/bin/template-manager | head -1)
+pid=$(pidof -s template-manager)
 tr '\0' '\n' < /proc/$pid/environ | grep 目标变量        # ④ 运行进程的真实 env（最终裁决）
 ps -o pid,lstart,cmd -p $pid                            # lstart 应晚于本次 -r（证明 alloc 换过了）
 ```
