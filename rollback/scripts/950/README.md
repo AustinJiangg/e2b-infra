@@ -33,11 +33,9 @@ bash run.sh perf                           # ≤ 40 分钟：性能分档、长�
   `/data/nomad/acl.token` 取值）。要用别处的凭据就 `--env-file` 指过去。
 - **解释器**：默认 `python3`，但**要用装了 SDK 覆盖层的那一个**。`build.sh -i` 在哪个
   环境里跑，`e2b==2.20.0` / `e2b_code_interpreter==2.4.1` / `python-dotenv` 和
-  `dep/e2b-sdk-checkpoint/install.py` 的覆盖层就装在哪里。**推荐 conda 环境 `jll-e2b`**：
-  `build.sh -i` 要在 `conda activate jll-e2b` 之后的 shell 里跑，SDK 和覆盖层才会装进
-  这个环境；跑测试时同样先 `conda activate jll-e2b`，再用
-  `--python "$(command -v python)"` 把这个环境的 python 传给 `run.sh`。
-  系统 `python3` 里不一定有。
+  `dep/e2b-sdk-checkpoint/install.py` 的覆盖层就装在哪里。跑测试时在同一个环境里用
+  `--python "$(command -v python3)"` 把那个解释器传给 `run.sh`；`build.sh -i` 若是在某个
+  虚拟环境里跑的，就先进入那个环境再执行这条命令。别的解释器里不一定有覆盖层。
 - 结果落在 `950/results/<时间戳>-<档>/`。
 
 只要这三条的 `SUMMARY.md` 里 `FAIL 0`，这台机器的 checkpoint / restore 就是好的。
@@ -50,9 +48,9 @@ bash run.sh perf                           # ≤ 40 分钟：性能分档、长�
 | 事 | 怎么确认 | 不满足会怎样 |
 |---|---|---|
 | 客户端凭据拿得到 | `grep -c E2B_API_KEY ../../../benchmark/.env` 回 1（没有就 `cd ../../../benchmark && bash sync-env.sh` 生成） | `run.sh` 开头会打 `!! E2B_API_KEY 没有值`，随后建沙箱失败 |
-| 要用的解释器装了带 checkpoint 覆盖层的 e2b | 先 `conda activate jll-e2b`，再 `python /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`，同一个解释器再用 `--python "$(command -v python)"` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
+| 要用的解释器装了带 checkpoint 覆盖层的 e2b | 在 `build.sh -i` 装 SDK 的那个环境里 `python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`，同一个解释器再用 `--python "$(command -v python3)"` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
 | 模板 `base` 已经建好 | `nomad job status` 里 template-manager 在跑，且建过一次模板 | 每个用例开头建沙箱就失败 |
-| 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 24 篇 §5.0 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第五部分对比**（规格是条件标签的一部分，见手册 24 篇 §5.0 与 §4.2） |
+| 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 23 篇 §8 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第四部分（测试与证据）对比**（规格是条件标签的一部分，见手册 23 篇 §8 与 24 篇 §2） |
 | 在**宿主机上**跑，且是 root | `id -u` 回 0 | 读不到服务端分段计时与产物目录，T32 会判失败、性能表会缺列 |
 
 `benchmark/.env` 由 `benchmark/sync-env.sh` 生成：它从 `/root/.e2b/config.json`
@@ -64,8 +62,7 @@ cd ../../../benchmark
 bash sync-env.sh
 grep -E '^E2B_(API_KEY|ACCESS_TOKEN|API_URL)=' .env      # 三行都要有值
 cd ../rollback/scripts/950
-conda activate jll-e2b
-bash run.sh smoke --python "$(command -v python)"
+bash run.sh smoke --python "$(command -v python3)"   # 在 build.sh -i 装 SDK 的那个环境里执行
 ```
 
 ---
@@ -130,11 +127,11 @@ PASS 判据：每个用例自己三段式断言，退出码 0 = 通过、1 = 断
 | 项 | 脚本 | 输出 |
 |---|---|---|
 | 分档基准 | `crtest/bench/bench_tiers.py --tier-set short` | 小档细分（0/4/8/16/32 MB 各 n=30）+ 中档（64/128/256 MB 各 n=20）+ 512 MB 极限档 n=10 + 纯内存 16 / 纯文件 16 / 只读 192 |
-| 达标判定 | `crtest/bench/compliance.py` | 每档 p50 / p99 / 最大 + 与手册 28 篇达标线的对照表 |
+| 达标判定 | `crtest/bench/compliance.py` | 每档 p50 / p99 / 最大 + 与手册 24 篇 §1.1 达标线的对照表 |
 | 串行长尾 | `crtest/bench/serial_restore.py -n 100` | 单沙箱、单调用方、同一个 checkpoint 连回 100 次的 p50 / p99 / 最大 |
 | 并发 A/B | `acceptance/checkpoint_concurrent.py --stages A,B` | A = 跨沙箱扇出 N=1..16；B = 同沙箱 4 线程争用 |
 
-**达标线**（手册 28 篇，照抄客户那组粗略指标，未限定改动量）：
+**达标线**（手册 24 篇 §1.1，照抄客户那组粗略指标，未限定改动量）：
 **checkpoint ≤ 200 ms、restore ≤ 100 ms**，量的都是**客户端墙钟**。
 全量 checkpoint（每遍开头那一次）按同一口径**单列不判定**。
 
@@ -164,7 +161,7 @@ PASS 判据：脚本退出码 0（= 没有失败的 checkpoint/restore、没有�
 | `T37` 两道配额闸 | 要服务端带 `CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` 启动 | 同上，`bash run.sh func --quota-cases` |
 | `T38` FC 侧 faulted 路径 | 要 Firecracker 带 cargo feature `rollback-fault-inject` 并设 `FC_ROLLBACK_FAULT_INJECT=post_commit`；**交付的 FC 不带这个特性** | 换一份带特性的 FC 后 `--fault-cases` |
 
-这四条的覆盖已经在 920B 上做过（见手册 25 篇），950 上跳过不影响交付结论。
+这四条的覆盖已经在 920B 上做过（见手册 25 篇 §2.3），950 上跳过不影响交付结论。
 
 另外两类会自动判 SKIP（不是配置问题，是环境问题）：
 SDK 异常语义 pytest 在没装 pytest 时 SKIP；smoke 的 SDK 自检在找不到
@@ -239,8 +236,9 @@ cp results/*-perf/compliance.log results/*-perf/analyze.log results/*-perf/seria
 
 ```bash
 cd rollback/scripts/950            # 在 clone 下来的 e2b-infra 目录里
-# 解释器：装了 SDK 覆盖层的那一个（同 run.sh 的 --python，见 §1）
-PY=/root/miniforge3/envs/jll-e2b/bin/python
+# 解释器：装了 SDK 覆盖层的那一个，与 run.sh 的 --python 用同一个（见 §1）。
+# 这里取当前 shell 的 python3，所以要在 build.sh -i 装 SDK 的那个环境里执行本清单。
+PY=$(command -v python3)
 # 客户端凭据：仓库里的 benchmark/.env（同 run.sh 的默认值）。/opt/e2b-infra/.env 是服务端配置，
 # 不带 E2B_API_KEY。checkpoint_concurrent.py 用不带路径的 load_dotenv()，所以还要 export 一遍。
 ENVF=$(cd ../../../benchmark && pwd)/.env
@@ -276,32 +274,22 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 
 ## 7. 950 与 920B 的差别
 
-两台机器跑的是**同一份代码**，差别只有脏页跟踪的硬件后端一处：
+两台机器跑的是**同一份代码、同一种部署**（RPM 装到 `/opt/e2b-infra`，产物盘是根盘上的 ext4，
+见仓库根的 `single-node-offline-deploy.md`），差别只有脏页跟踪的硬件后端一处：
 
-| | 950（交付目标） | 920B（开发机） |
+| | 950（交付目标） | 920B |
 |---|---|---|
 | CPU | 鲲鹏 950 | 鲲鹏 920B |
 | 脏页后端（FC 自报的 `dirty_tracking`） | `hdbss` —— CPU 自己标脏，开销接近零 | `kvm-wp` —— 内核写保护每一个干净页，第一次写陷出一次 |
 | KVM cap 502 | 有 | 无 |
-| `FC_TRACK_DIRTY_PAGES` | 不设也会自己打开（跟随硬件） | 必须显式设 `true`，否则默认关（陷出对不拍快照的沙箱是净亏） |
-| 产物盘 | 根盘 ext4 | `/mnt/ext4dev`（loop 卷） |
-| 部署方式 | RPM → `/opt/e2b-infra` | 源码树 + nomad job |
+| `FC_TRACK_DIRTY_PAGES` | 不设也会自己打开（跟随硬件） | 必须显式设 `true`，否则默认关（陷出对不拍快照的沙箱是净亏）；设法见 `single-node-offline-deploy.md` §4.1 |
 
 **对结果的影响**：功能与正确性结论两台机器等价（代码路径完全相同），
 所以 `smoke` / `func` 在 920B 上验过即成立；**性能数字不等价** ——
 920B 的 checkpoint 耗时里含 VM exit 开销，950 应当明显更快。
 `perf` 的数字必须在 950 上取，920B 的只能当量级参考。
 
-在 920B 上跑本入口的命令（给开发自己用）：
-
-```bash
-cd /home/j30059180/projects/e2b-repo/e2b-infra/rollback/scripts/950
-bash run.sh smoke --python /root/miniforge3/envs/jll-e2b/bin/python
-```
-
-（`--env-file` 不用给：默认就取仓库里的 `benchmark/.env`。解释器是 920B 上 conda 环境
-`jll-e2b` 的 python，SDK 覆盖层装在里面；先 `conda activate jll-e2b` 再用
-`--python "$(command -v python)"` 也一样。）
+在 920B 上跑本入口的命令与 950 完全相同（§1），不需要另外的参数。
 
 ---
 
@@ -310,10 +298,10 @@ bash run.sh smoke --python /root/miniforge3/envs/jll-e2b/bin/python
 | 目录 | 来历 |
 |---|---|
 | `../acceptance/` | 交付态验收，单文件零共享依赖，一直在本仓库里 |
-| `../crtest/` | 沙箱级补充测试套件（20 个用例），2026-09-22 从工作区 `e2b-repo/rollback-tests/` 迁入本仓库，迁入时去掉了全部 920B 硬编码 |
-| `../crtest/bench/` | `bench_tiers.py` / `analyze.py` 来自 `tmp/bench-tiers-20260921/` 的一次性采数脚本，`serial_restore.py` 来自 `tmp/conntrack-20260920/ctloop.py`，都在迁入时参数化了；`compliance.py` 是 09-22 新写的达标判定 |
+| `../crtest/` | 沙箱级补充测试套件（20 个用例），2026-09-22 从开发工作区迁入本仓库，迁入时去掉了全部 920B 硬编码 |
+| `../crtest/bench/` | `bench_tiers.py` / `analyze.py` / `serial_restore.py` 由开发期的一次性采数脚本整理而来，迁入时参数化了；`compliance.py` 是 09-22 新写的达标判定 |
 | `../crtest/sdktests/` | `test_checkpoint_errors.py` 原样取自 `KASandbox_0904/py-sdk/tests/`。**随本套件带一份而不是让 950 去 clone 仓库** —— 它只依赖已安装的 `e2b` 加 pytest/httpx，没有 conftest 依赖，一个文件就能跑；950 上没有 py-sdk 源码树，clone 一个几十 MB 的仓库只为跑一个文件不划算。代价是它会随 SDK 演进而过时，改 SDK 异常语义时记得同步这一份 |
 | `../crtest/portability/` `../crtest/probe950/` | 客户机器预检与「920B 结论能不能搬到 950」的探针，零外部依赖 |
 
-手册里对应的篇目：24 篇（测试总览）、25 篇（功能测试）、26 篇（性能方法）、
-28 篇（实测结果与达标判定）、29 篇（验收操作手册）。
+手册里对应的篇目：23 篇（测试体系与功能验证）、24 篇（性能口径与方法）、
+25 篇（实测结果与判定）、09 篇（上机验收）。
