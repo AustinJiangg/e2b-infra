@@ -19,7 +19,8 @@
 #   --results-dir D   结果根目录，默认 <本目录>/results
 #   --template T      模板 id，默认 base
 #   --sdk-install P   SDK 覆盖层 install.py 的路径，默认 $DEPLOY/dep/e2b-sdk-checkpoint/install.py
-#   --store S         checkpoint 产物目录（预检用），默认从 orchestrator 环境自动取
+#   --store S         checkpoint 产物目录（预检用；smoke 也在它的父目录找能力文件），
+#                     默认从 orchestrator 环境自动取
 #   --keep-going      有 FAIL 也把剩下的项跑完（默认也是跑完，这里保留给将来改默认）
 #   --allow-restart   func 档把 T18 也跑了（会重启 orchestrator，全机沙箱都会没）
 #                     必须同时给 --restart-cmd 或设 CRTEST_RESTART_CMD
@@ -187,6 +188,17 @@ key_crtest() {
 }
 key_pytest() { grep -aE '[0-9]+ (passed|failed|error)' "$1" | tail -1 | sed 's/^=*//;s/=*$//' | cut -c1-160; }
 key_cap() { grep -a 'track_dirty_pages' "$1" | tail -1 | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-200; }
+# 能力文件（与日志行同一套键，另加 pid、started_at、version、commit）里挑出和
+# key_cap 同样要紧的几项。先压成一行，数组（fault_inject）也就成了一段
+key_capfile() {
+	local k v one out=""
+	one=$(tr -d '\n' <"$1" | sed 's/[[:space:]][[:space:]]*/ /g')
+	for k in track_dirty_pages track_dirty_pages_reason fault_inject pid version commit; do
+		v=$(sed -nE "s/.*\"$k\": (\[[^]]*\]|\"[^\"]*\"|[^,}]*).*/\1/p" <<<"$one" | sed 's/^"//; s/"$//; s/ *$//')
+		[ -n "$v" ] && out="$out$k=$v "
+	done
+	echo "${out% }" | cut -c1-200
+}
 key_serial() { grep -a '客户端墙钟' "$1" | tail -1 | cut -c1-160; }
 key_compliance() { grep -a '^\*\*' "$1" | tail -1 | cut -c1-160; }
 
@@ -228,38 +240,80 @@ smoke)
 		skip "SDK 覆盖层自检 install.py --check" "找不到 $SDK_INSTALL（--sdk-install 指定）"
 	fi
 
-	# checkpoint capabilities：orchestrator 启动时打的那一行，说明这台机器的
-	# 脏页跟踪开没开、为什么开。hdbss / kvm-wp 这个更细的后端名来自 Firecracker
-	# 自己（FC API 的 dirty_tracking 字段），由下面的 checkpoint_verify.py 打印。
+	# checkpoint capabilities：这台机器的脏页跟踪开没开、为什么开，各项超时、上限与
+	# 故障注入。hdbss / kvm-wp 这个更细的后端名来自 Firecracker 自己（FC API 的
+	# dirty_tracking 字段），由下面的 checkpoint_verify.py 打印。
+	#
+	# 先读能力文件：orchestrator（deltabox-dev 93ccb02 起）启动时把同样的内容写进
+	# DEFAULT_CACHE_DIR/checkpoint-capabilities.json（store 根的父目录），不怕日志轮转。
+	# 目录按进程 environ 取：DEFAULT_CACHE_DIR → $ORCHESTRATOR_BASE_PATH/build →
+	# /orchestrator/build；给了 --store 就取它的父目录。文件里的 pid 必须是正在运行的
+	# orchestrator / template-manager，否则是以前那次启动留下的，不算。
+	# 没有有效的文件（此前的版本不写）就退回读启动日志行。
 	CAPLOG="$OUT/capabilities.log"
+	CAPFILE=""
 	{
-		echo "# orchestrator / template-manager 启动时的 checkpoint capabilities 行"
-		# 只读**正在运行**的那个 orchestrator 所在 alloc 的日志：/data/nomad/alloc 下还留着
-		# 以前各次部署、切栈留下的旧 alloc，它们的启动行（可能带故障注入、配额 env）
-		# 不代表现在这台机器的状态。alloc 目录取自该进程的 NOMAD_ALLOC_DIR。
+		echo "# orchestrator / template-manager 的 checkpoint capabilities（能力文件，或启动时打的那一行）"
 		found=0
 		cur_alloc=""
+		stale=""
 		for p in /proc/[0-9]*; do
 			exe=$(readlink "$p/exe" 2>/dev/null) || continue
 			case ${exe##*/} in orchestrator* | template-manager*) ;; *) continue ;; esac
-			cur_alloc=$(tr '\0' '\n' <"$p/environ" 2>/dev/null | sed -n 's/^NOMAD_ALLOC_DIR=//p' | head -1)
-			[ -n "$cur_alloc" ] && { echo "# 运行中的进程 ${p#/proc/}：$exe"; break; }
-		done
-		if [ -n "$cur_alloc" ] && [ -d "$cur_alloc/logs" ]; then
-			# 日志会轮转（start.stdout.0、.1、…），从序号大的（新的）往回找最后一次启动行
-			for f in $(ls -1 "$cur_alloc/logs" 2>/dev/null | grep '^start\.stdout\.[0-9]*$' | sort -t. -k3,3nr); do
-				f="$cur_alloc/logs/$f"
-				if line=$(timeout 60 grep -a 'checkpoint capabilities' "$f" 2>/dev/null | tail -1) &&
-					[ -n "$line" ]; then
-					echo "## $f"
-					echo "$line"
+			pid=${p#/proc/}
+			penv=$(tr '\0' '\n' <"$p/environ" 2>/dev/null)
+			if [ -n "$STORE" ]; then
+				capdir=$(dirname "$STORE")
+			else
+				base=$(sed -n 's/^ORCHESTRATOR_BASE_PATH=//p' <<<"$penv" | head -1)
+				base=${base:-/orchestrator}
+				capdir=$(sed -n 's/^DEFAULT_CACHE_DIR=//p' <<<"$penv" | head -1)
+				capdir=${capdir//\$\{ORCHESTRATOR_BASE_PATH\}/$base}
+				capdir=${capdir:-$base/build}
+			fi
+			cf="$capdir/checkpoint-capabilities.json"
+			if [ -r "$cf" ]; then
+				fpid=$(grep -aE '^  "pid": [0-9]+,?$' "$cf" | head -1 | tr -dc '0-9')
+				if [ "$fpid" = "$pid" ]; then
+					echo "# 运行中的进程 $pid：$exe"
+					echo "## $cf"
+					cat "$cf"
+					CAPFILE=$cf
 					found=1
 					break
 				fi
-			done
-			[ "$found" = 1 ] || echo "## 当前 alloc $cur_alloc 的日志里没有（启动行可能已被轮转掉）"
-		else
-			echo "## 没找到运行中的 orchestrator / template-manager 进程或它的 alloc 目录"
+				stale="$stale$cf 的 pid ${fpid:-?} 不是运行中的进程 $pid；"
+			fi
+			# 日志回退只读**正在运行**的那个进程所在 alloc 的日志：/data/nomad/alloc 下
+			# 还留着以前各次部署、切栈留下的旧 alloc，它们的启动行（可能带故障注入、
+			# 配额 env）不代表现在这台机器的状态。alloc 目录取自该进程的 NOMAD_ALLOC_DIR。
+			if [ -z "$cur_alloc" ]; then
+				cur_alloc=$(sed -n 's/^NOMAD_ALLOC_DIR=//p' <<<"$penv" | head -1)
+				[ -n "$cur_alloc" ] && echo "# 运行中的进程 $pid：$exe"
+			fi
+		done
+		if [ "$found" = 0 ]; then
+			if [ -n "$stale" ]; then
+				echo "## 能力文件是以前的启动留下的，不用：$stale"
+			else
+				echo "## 没有能力文件（此前的版本不写），读启动日志行"
+			fi
+			if [ -n "$cur_alloc" ] && [ -d "$cur_alloc/logs" ]; then
+				# 日志会轮转（start.stdout.0、.1、…），从序号大的（新的）往回找最后一次启动行
+				for f in $(ls -1 "$cur_alloc/logs" 2>/dev/null | grep '^start\.stdout\.[0-9]*$' | sort -t. -k3,3nr); do
+					f="$cur_alloc/logs/$f"
+					if line=$(timeout 60 grep -a 'checkpoint capabilities' "$f" 2>/dev/null | tail -1) &&
+						[ -n "$line" ]; then
+						echo "## $f"
+						echo "$line"
+						found=1
+						break
+					fi
+				done
+				[ "$found" = 1 ] || echo "## 当前 alloc $cur_alloc 的日志里没有（启动行可能已被轮转掉）"
+			else
+				echo "## 没找到运行中的 orchestrator / template-manager 进程或它的 alloc 目录"
+			fi
 		fi
 		if [ "$found" = 0 ]; then
 			echo "## journald"
@@ -267,7 +321,13 @@ smoke)
 				grep -a 'checkpoint capabilities' | tail -1
 		fi
 	} >"$CAPLOG" 2>&1
-	if grep -aq 'track_dirty_pages' "$CAPLOG"; then
+	if [ -n "$CAPFILE" ]; then
+		N_PASS=$((N_PASS + 1))
+		say ""
+		say "== checkpoint capabilities（能力文件） =="
+		sed 's/^/   /' "$CAPLOG" | tee -a "$RUNLOG" >&3
+		row "checkpoint capabilities 能力文件" "PASS" "-" "$(key_capfile "$CAPFILE")" "capabilities.log"
+	elif grep -aq 'track_dirty_pages' "$CAPLOG"; then
 		N_PASS=$((N_PASS + 1))
 		say ""
 		say "== checkpoint capabilities =="
@@ -275,8 +335,8 @@ smoke)
 		row "checkpoint capabilities 日志行" "PASS" "-" "$(key_cap "$CAPLOG")" "capabilities.log"
 	else
 		N_SKIP=$((N_SKIP + 1))
-		say "  SKIP  checkpoint capabilities 日志行 —— 在当前 alloc 日志与 journald 里都没抓到"
-		row "checkpoint capabilities 日志行" "SKIP" "-" "日志里没抓到（换个日志源手工搜）" "capabilities.log"
+		say "  SKIP  checkpoint capabilities 日志行 —— 没有有效的能力文件，当前 alloc 日志与 journald 里也没抓到"
+		row "checkpoint capabilities 日志行" "SKIP" "-" "能力文件与日志里都没有（换个日志源手工搜）" "capabilities.log"
 	fi
 
 	FCLOG="$OUT/fc-sha256.log"
