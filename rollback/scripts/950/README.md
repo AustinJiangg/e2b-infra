@@ -25,7 +25,7 @@
 | docker 镜像 `postgres:latest`、`redis:7.4.4-alpine`、`debian:bookworm-slim` 已经 `docker load`（§1.2） | `-i` 检查 `postgres:latest`，没有就报 `docker 镜像 postgres:latest 不存在，请先 docker load 离线镜像` 并退出；另外两个在 `-s` 的 `deploy.sh` 里用到 |
 | `/opt/e2b-infra/dep/minio`（§1.1） | `-i` 报 `MinIO 依赖文件缺失，请检查 /opt/e2b-infra/dep 目录` 并退出 |
 | `/opt/e2b-infra/dep/harbor-offline-installer-aarch64-v2.13.0.tgz`（§1.1） | `-i` 报 `Harbor 安装包不存在：…` 并退出 |
-| `/opt/e2b-infra/dep/consul_1.21.4_linux_arm64.zip`、`/opt/e2b-infra/dep/nomad_1.10.4_linux_arm64.zip`（§1.1） | `-i` 只是把它们拷到 `/tmp`，缺了不报错；到 `-s` 装 consul / nomad 时找不到本地包会转去下载，离线机器上在那里失败 |
+| `/opt/e2b-infra/dep/consul_1.21.4_linux_arm64.zip`、`/opt/e2b-infra/dep/nomad_1.11.2_linux_arm64.zip`（§1.1） | `-i` 只是把它们拷到 `/tmp`，缺了不报错；到 `-s` 装 consul / nomad 时找不到本地包会转去下载，离线机器上在那里失败 |
 | nbd 内核模块、`net.ipv4.ip_forward=1`（§0.2、§0.3） | 见部署指南 |
 
 这些文件 `rpm -Uvh` 不会删，所以重新部署同一台机器时不用再拷；第一次装要在第 ③ 步装完 RPM（`dep/` 目录这时才有）之后、第 ④ 步之前放进去。

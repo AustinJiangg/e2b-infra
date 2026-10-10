@@ -26,7 +26,7 @@ start()
  ②  Harbor 正式安装（harbor/install.sh + 权限修复 + 重启 registry/proxy）
  ③  start-server.sh $HOST_IP
       ├─ install-consul.sh --version 1.21.4     （离线缓存安装）
-      ├─ install-nomad.sh  --version 1.10.4
+      ├─ install-nomad.sh  --version 1.11.2
       ├─ run-consul.sh --server ...             （配置+systemd+启动+ACL bootstrap→写回 .env）
       └─ run-nomad.sh  --server ...             （配置+systemd+启动+ACL bootstrap+node pools→写回 .env）
  ④  append_nomad_client_config                  （给 default.hcl 追加 client 块）
@@ -70,7 +70,7 @@ bash start-server.sh "$HOST_IP"
 set -a; source .env; set +a          # 读顶层 .env（此时 token 还是占位符，没关系）
 ulimit -n 65536
 ./install-consul.sh --version 1.21.4
-./install-nomad.sh  --version 1.10.4
+./install-nomad.sh  --version 1.11.2
 ./run-consul.sh --server --server-ips "$SERVER_IPS" --instance-ip-address "$IP"
 set -a; source .env; set +a          # ★ 重新 source：拿到 run-consul 刚写回的真 CONSUL_ACL_TOKEN
 ./run-nomad.sh --server --num-servers 1 --consul-token "$CONSUL_ACL_TOKEN" --instance-ip-address "$IP"
@@ -79,7 +79,7 @@ set -a; source .env; set +a          # ★ 重新 source：拿到 run-consul 刚
 ### 3.1 `install-consul.sh` / `install-nomad.sh`：离线优先的安装器
 
 - 先打印 "Downloading ..."，**随后检查 `/tmp` 里是否已有对应 zip**（`-i` 已拷好
-  `/tmp/consul.zip`、`/tmp/nomad_1.10.4_linux_arm64.zip`），有则 `skipping download`
+  `/tmp/consul.zip`、`/tmp/nomad_1.11.2_linux_arm64.zip`），有则 `skipping download`
   ——所以日志里的 "Downloading" 并不代表联网（runbook §6.4）；
 - 创建 `consul`/`nomad` 系统用户与目录（`/opt/consul`、`/opt/nomad` 的 bin/config/data/log）；
 - 解压二进制装入 `/opt/{consul,nomad}/bin/`，并 symlink 到 `/usr/local/bin/`；

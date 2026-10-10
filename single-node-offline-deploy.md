@@ -188,7 +188,7 @@ done
 ```bash
 # 在有网机器上下载（aarch64）
 wget https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_arm64.zip
-wget https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_arm64.zip
+wget https://releases.hashicorp.com/nomad/1.11.2/nomad_1.11.2_linux_arm64.zip   # 至少 1.11.2，见 §6.8
 
 # Harbor：aarch64 离线包不在 goharbor 官方，用社区构建（见下方说明）
 wget https://github.com/wise2c-devops/build-harbor-aarch64/releases/download/v2.13.0/harbor-offline-installer-aarch64-v2.13.0.tgz
@@ -225,7 +225,7 @@ chmod +x ./minio && ./minio --version
 
 ```bash
 cp consul_1.21.4_linux_arm64.zip harbor-offline-installer-aarch64-v2.13.0.tgz \
-   nomad_1.10.4_linux_arm64.zip  minio  /opt/e2b-infra/dep/
+   nomad_1.11.2_linux_arm64.zip  minio  /opt/e2b-infra/dep/
 ```
 
 > firecracker 不用下载：RPM 自带仓库定制版（基于 v1.12.1，`/opt/e2b-infra/bin/firecracker`），
@@ -701,7 +701,18 @@ Consul 还没起来，连接被拒属预期，脚本随后会自行 bootstrap（
 ### 6.5 卡在「等待 tcp 端口 4646 启动 …… 端口未启动，继续等待」
 
 `start()` 最后 `wait_for_port 4646 tcp 1 0`（超时 0 = 永不超时）用 `ss` 等 Nomad 的 HTTP
-端口。它**不是卡死，是很慢**：Nomad 把 server+client 跑在同一个 agent 里，**HTTP 4646 要等
+端口。它只看端口、不看 nomad 进程死活，所以先分清两种情况：
+
+```bash
+systemctl status nomad --no-pager | head -12
+ss -tlnp | grep -E ':4646|:4647'
+```
+
+- nomad 是 `failed`（`Start request repeated too quickly`）→ 不是慢，是 client 一启动就崩了，
+  看 `journalctl -u nomad -n 200 --no-pager`；`panic: ... numalib ... index out of range` 见 **§6.8**；
+- nomad `active(running)`、只有 4647 没有 4646 → 下面这种「很慢但不是卡死」。
+
+Nomad 把 server+client 跑在同一个 agent 里，**HTTP 4646 要等
 client 那半边启动完才开**，而 client 启动要「枚举本机每一个网络接口并逐个探测链路速率」。
 
 **根因：宿主机网络接口太多**。诊断：
@@ -784,6 +795,47 @@ curl -s -X DELETE -H "Authorization: Bearer $AT" "http://127.0.0.1:3000/template
 curl -s -H "Authorization: Bearer $AT" http://127.0.0.1:3000/templates \
   | jq -r '.[] | select(any(.aliases[]?; . == "base")) | .templateID'
 ```
+
+### 6.8 nomad 一加 client 就崩：`panic: runtime error: index out of range [10] with length 6`
+
+**现象**：`build.sh -s` 卡在等 4646（§6.5），`systemctl status nomad` 是 `failed`、
+`Start request repeated too quickly`；`journalctl -u nomad` 里：
+
+```
+panic: runtime error: index out of range [10] with length 6
+github.com/hashicorp/nomad/client/lib/numalib.(*Sysfs).discoverCosts.func1(...)
+        github.com/hashicorp/nomad/client/lib/numalib/detect_linux.go:118
+```
+
+`start-server.sh` 那步能过（只开 server），加上 client 配置 `systemctl restart nomad` 之后才崩。
+
+**原因**：Nomad **1.10.x** 的 client 在 CPU 指纹阶段读 `/sys/devices/system/node/node<N>/distance`
+建 NUMA 距离表，直接拿**节点编号**当数组下标，默认编号是连续的 0…N-1。编号不连续时越界 panic。
+典型场景是开了 openEuler 远端内存的鲲鹏机器：启动参数带 `numa_remote=…,preonline`，开机会上线
+没有 CPU 的纯内存节点，编号跳着分配：
+
+```bash
+ls -d /sys/devices/system/node/node*      # 例：node0 node1 node2 node3 node10 node19
+numactl -H | head -3                      # available: 6 nodes (0-3,10,19)
+grep -o 'numa_remote=[^ ]*' /proc/cmdline
+```
+
+上游在 **v1.11.2** 改成按序号作下标（1.10.5、1.11.0、1.11.1 都还没修）。用 slot6 的拓扑
+（0-3 各 96 核 + 10/19 纯内存）模拟验证过：1.10.4 复现同样的 panic，1.11.2 正常识别 6 个节点、384 核。
+
+**处置**：仓库已把 `NOMAD_VERSION` 升到 1.11.2（`dep/.env`；`build.sh -i` 按它拷包）。
+旧安装就地换二进制即可，`/data/nomad` 的状态 1.11 直接接着用：
+
+```bash
+unzip -o nomad_1.11.2_linux_arm64.zip -d /tmp/nomad-1.11.2
+cp -f /tmp/nomad-1.11.2/nomad /opt/nomad/bin/nomad
+systemctl reset-failed nomad && systemctl restart nomad
+ss -tlnp | grep -E ':464[67]'           # 4646 一开，卡着的 build.sh -s 自己往下走
+```
+
+同时把 zip 放进 `/opt/e2b-infra/dep/`、改 `/opt/e2b-infra/.env` 和 `dep/.env` 里的
+`NOMAD_VERSION=1.11.2`，否则下次 `-i`/`-s` 会把 1.10.4 装回来再崩。去掉 `numa_remote`
+也能绕开，但那是机器级启动参数，别人可能在用，先问机器负责人。
 
 ---
 

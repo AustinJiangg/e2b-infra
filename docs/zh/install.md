@@ -135,7 +135,7 @@ export NUM_SERVERS=1
 export CONSUL_VERSION=1.21.4
 
 # Nomad 编排器版本号
-export NOMAD_VERSION=1.10.4
+export NOMAD_VERSION=1.11.2
 
 # 沙箱存储后端: redis | memory
 export SANDBOX_STORAGE_BACKEND=redis

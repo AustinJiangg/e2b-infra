@@ -268,7 +268,7 @@ docker build -t code-interpreter:v1 .
 
 ```
 wget https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_arm64.zip
-wget https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_arm64.zip
+wget https://releases.hashicorp.com/nomad/1.11.2/nomad_1.11.2_linux_arm64.zip
 wget https://github.com/firecracker-microvm/firecracker/releases/download/v1.13.1/firecracker-v1.13.1-aarch64.tgz
 ```
 

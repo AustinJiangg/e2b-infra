@@ -4496,7 +4496,7 @@ index 000000000..480fb48c5
 +export SERVER_IPS="<your_ip>"
 +export NUM_SERVERS=1
 +export CONSUL_VERSION=1.21.4
-+export NOMAD_VERSION=1.10.4
++export NOMAD_VERSION=1.11.2
 +export SANDBOX_STORAGE_BACKEND=redis
 +
 +# --- Database / Redis / Harbor ---
