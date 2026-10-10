@@ -197,8 +197,12 @@ python /opt/e2b-infra/patch_e2b.py     # 再统一做 https→http 替换 + 清 
 
 ```bash
 echo "address=/.e2b.app/127.0.0.1" >> /etc/dnsmasq.conf   # 幂等：已有则跳过
+echo "local=/e2b.app/"             >> /etc/dnsmasq.conf   # AAAA 本地答空，不转发上游
 systemctl restart dnsmasq
 ```
+
+第二行不能省：`address=` 只给了 IPv4，AAAA 查询仍会被转发给上游；上游不通时客户端
+要等满 15 秒超时，表现为沙箱第一条命令慢 15 秒（runbook §6.9）。
 
 `*.e2b.app`（沙箱访问域名，SDK 的 `E2B_DOMAIN`）全部解析到本机，配合 `-s` 末尾的
 iptables 80→3002，沙箱 URL 在部署机上开箱即用。

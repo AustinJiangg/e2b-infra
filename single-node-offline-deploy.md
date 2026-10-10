@@ -837,6 +837,38 @@ ss -tlnp | grep -E ':464[67]'           # 4646 一开，卡着的 build.sh -s �
 `NOMAD_VERSION=1.11.2`，否则下次 `-i`/`-s` 会把 1.10.4 装回来再崩。去掉 `numa_remote`
 也能绕开，但那是机器级启动参数，别人可能在用，先问机器负责人。
 
+
+### 6.9 沙箱第一条命令慢 15 秒（`*.e2b.app` 的 AAAA 查询超时）
+
+**现象**：`Sandbox.create` 很快（零点几秒），但第一条 `commands.run` 要 15 秒左右，之后的
+命令毫秒级；`sandbox.py` 这种同步、异步各建一个沙箱的脚本合计能卡近一分钟。对比：
+
+```bash
+curl -s -o /dev/null -w '%{time_total}s\n' --noproxy '*' http://49983-test.e2b.app/health        # ≈15s
+curl -s -o /dev/null -w '%{time_total}s\n' -H 'Host: 49983-test.e2b.app' http://127.0.0.1:3002/health  # 毫秒
+time dig +short A    test.e2b.app @127.0.0.1   # 立即 127.0.0.1
+time dig +short AAAA test.e2b.app @127.0.0.1   # 3 次 timed out，15s
+```
+
+**原因**：`address=/.e2b.app/127.0.0.1` 只给了 IPv4。dnsmasq（2.90/2.91 实测）收到 AAAA 查询时
+不在本地作答，照常转发给上游；上游不通或不回（无外网、`/etc/resolv.conf` 只剩 127.0.0.1、
+公司 DoH 网桥挂了等）时它不回包，客户端 5 秒 ×3 次超时。SDK（httpx）和 curl 解析主机名时
+A、AAAA 一起查，所以每个新连接都要等满 15 秒；连接建好后复用，后面的命令就快了。
+orchestrator 日志里 `lookup events.launchdarkly.com: i/o timeout` 是同一个问题（如果也给
+`launchdarkly.com` 配了 `address=`）。
+
+**处置**：给该域加 `local=`，只用本地数据作答，AAAA 立即返回空结果（NOERROR、无记录）。
+新版 `build.sh -i` 已自动加；旧环境手动：
+
+```bash
+grep -qxF 'local=/e2b.app/' /etc/dnsmasq.conf || echo 'local=/e2b.app/' >> /etc/dnsmasq.conf
+# 若也有 address=/launchdarkly.com/127.0.0.1，同理补 local=/launchdarkly.com/
+systemctl restart dnsmasq
+time dig +short AAAA test.e2b.app @127.0.0.1   # 应立即返回（空）
+```
+
+不要用 `filter-AAAA` 代替：实测它对 `address=` 覆盖的域不起作用，AAAA 照样超时。
+
 ---
 
 ## 7. 清理多次重跑累积的脏数据
