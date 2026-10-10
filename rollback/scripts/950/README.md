@@ -2,7 +2,7 @@
 
 这台机器：鲲鹏 950（有 HDBSS）+ openEuler，e2b-infra 由 RPM 部署到 `/opt/e2b-infra`。
 本目录只有一个入口脚本 `run.sh`，把散在 `acceptance/`、`crtest/`、`crtest/bench/`
-里的脚本按「冒烟 / 功能 / 性能 / 长测」四档串起来，每次跑完写一份 `SUMMARY.md`。
+里的脚本按「冒烟 / 功能 / 性能 / HDBSS 专项 / 长测」五档串起来，每次跑完写一份 `SUMMARY.md`。
 
 脚本本身不区分机器 —— 同一份 `run.sh` 在 920B 上也跑得动（`--env-file` 与 `--python`
 指过去就行），950 与 920B 的差别只有一处，见 [§7](#7-950-与-920b-的差别)。
@@ -10,6 +10,57 @@
 ---
 
 ## 1. 部署完先跑这三条
+
+### 1.0 从 clone 到能跑沙箱
+
+950 上的实际流程是下面这一串；每一步的细节与排障在仓库根的 `single-node-offline-deploy.md`（§2 构建安装、§4 启动）。
+
+```bash
+# ① 取代码与大源码包
+git clone https://github.com/AustinJiangg/e2b-infra.git
+cd e2b-infra
+git lfs pull
+ls -l e2b-infra-2026.09.tar.gz        # 应为 143753275 字节；134 字节说明还是 LFS 指针
+
+# ② 把本机 IP 写进部署配置，重建打进 RPM 的部署包（多网卡时先核对 hostname -I 的第一个地址是不是要用的）
+sed -i "s/^SERVER_IP=.*/SERVER_IP=$(hostname -I | awk '{print $1}')/" e2b-deploy/dep/.env
+REPO=$PWD
+rm -rf /tmp/e2b-deploy-repack && mkdir -p /tmp/e2b-deploy-repack && cd /tmp/e2b-deploy-repack
+tar -xzf "$REPO/e2b-deploy.tar.gz"
+rsync -a --exclude .git "$REPO/e2b-deploy/" e2b-deploy/
+tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy
+cd "$REPO"
+
+# ③ 出 RPM，装到 /opt/e2b-infra
+rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
+rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm     # 已装过旧版时换成 rpm -Uvh --force
+
+# ④ 停 → 装 → 起
+cd /opt/e2b-infra
+bash build.sh -d
+bash build.sh -i
+bash build.sh -s
+
+# ⑤ 确认模板能建、沙箱能跑（回到 clone 下来的仓库里）
+cd "$REPO/benchmark"
+bash sync-env.sh
+python3 build_template.py
+python3 sandbox.py
+```
+
+`build.sh` 三个开关各做什么（`/opt/e2b-infra/build.sh`，仓库里是 `e2b-deploy/build.sh`）：
+
+| 开关 | 做什么 |
+|---|---|
+| `-d`（`--stop`） | 先让 `template-manager-system` 优雅退出，再停 consul / nomad，结束 redis、client-proxy、api、orchestrator 与残留的 firecracker 进程，清掉沙箱留下的 netns / veth / iptables 规则，检查端口是否放干净。全新机器上它只是空跑一遍 |
+| `-i`（`--install`） | 装 postgres / minio / harbor / nginx；用**当前环境的 pip** 装 `e2b==2.20.0`、`e2b_code_interpreter==2.4.1`、`python-dotenv`，再铺 checkpoint 的 SDK 覆盖层（先 `install.py` 后 `patch_e2b.py`）；把 `dep/` 里的部署脚本、`.env`、`template-manager.hcl` 盖到 `/opt/e2b-infra` |
+| `-s`（`--start`） | 起 harbor、nomad 服务端与客户端并初始化（首次会 bootstrap ACL），登录 harbor 建项目，最后跑 `deploy.sh` 提交各个 nomad job |
+
+第 ⑤ 步：`sync-env.sh` 生成 `benchmark/.env`（客户端凭据）；`build_template.py` 建别名 `base` 的模板，规格 **2 vCPU / 2048 MB** 就写在这个文件里（`cpu_count=2`、`memory_mb=2048`），本目录的测试一律用它；`sandbox.py` 起一个沙箱跑几条命令再关掉。
+**⑤ 这三条要在 `build.sh -i` 装 SDK 的那个环境里执行**（`-i` 在哪个 Python 环境里跑，SDK 与覆盖层就装在哪；装在虚拟环境或 conda 环境里的，先激活它，让 `python3` 指向它）。
+这两条都过了，再进下面的 `run.sh`，解释器同样用这一个（见下）。
+
+### 1.1 三条命令
 
 **测试套件不在 RPM 里**（`e2b-infra.spec` 只把部署件装到 `/opt/e2b-infra`），它跟着仓库走：
 出 RPM 时 clone 下来的那个 e2b-infra 目录里就有 `rollback/scripts/`，直接进去用，不需要再拷、不需要装任何东西。
@@ -67,13 +118,14 @@ bash run.sh smoke --python "$(command -v python3)"   # 在 build.sh -i 装 SDK �
 
 ---
 
-## 2. 四档各是什么
+## 2. 五档各是什么
 
 | 档 | 目标耗时 | 跑什么 | 判据 |
 |---|---|---|---|
 | `smoke` | ≤ 3 分钟 | 宿主预检、SDK 覆盖层自检、`checkpoint capabilities`（能力文件或日志行）、firecracker sha256、59 项功能正确性 | 5 项全 PASS |
 | `func` | ≤ 40 分钟 | crtest 里 16 个不需要重启服务端的用例 + SDK 异常语义 pytest | 17 项里 PASS + SKIP = 17，FAIL = 0 |
 | `perf` | ≤ 40 分钟 | 分档基准（短表）+ 达标判定、单沙箱串行 restore 长尾 n=100、并发 A/B 段 | 4 项无 FAIL，且达标表里各档 p50 在线内 |
+| `hdbss` | 约 4 分钟（每个 order；扫描时每个 order 另加约 1 分钟重启） | HDBSS 证据（L1 / L2 / L3 + order 核实）、写密集基准、汇总表；`--orders` 扫 buffer 大小（见 [§2.4](#24-hdbss)） | 无 FAIL：checkpoint / restore 没失败、md5 一致、order 核实生效；性能数字不判。后端不是 `hdbss` 时整档 SKIP |
 | `long` | 不自动跑 | 只打印清单与命令（见 [§6](#6-长测清单)） | — |
 
 ### 2.1 `smoke`
@@ -147,6 +199,67 @@ PASS 判据：脚本退出码 0（= 没有失败的 checkpoint/restore、没有�
 两个档各 n=5、长尾 n=10、并发只 A 段两个 N，10 分钟内跑完，`SUMMARY.md` 里会
 标成「**--quick 短试跑**」，数字不能当结论。
 
+### 2.4 `hdbss`
+
+**只量 HDBSS 自己。**不测软件写保护，也不做 HDBSS 与写保护的对照；重点是每 vCPU 的 HDBSS buffer 大小
+（`FC_HDBSS_ORDER`，`n` → 4 KiB × 2^n，默认 1 = 8 KiB）在写密集负载下的影响。
+
+```bash
+bash run.sh hdbss                                          # 当前 order，不改配置、不重启；约 4 分钟，基准有 14 分钟总时限
+bash run.sh hdbss --orders 1,2,4,6,9 --allow-restart       # 扫 5 个 order，每个约 5 分钟，会重启 orchestrator 6 次
+bash run.sh hdbss --quick                                  # 短试跑：只验证脚本跑得通，约 20 秒
+```
+
+| 项 | 脚本 | 看什么 | PASS 判据 |
+|---|---|---|---|
+| HDBSS 证据 | `crtest/bench/hdbss_bench.py --evidence` | L1：宿主 KVM 认不认 cap 502；L2：Firecracker 为这个沙箱报的 `dirty_tracking`；L3：顺序写 256 MB 的冷写 / 热写耗时与每页 KVM 退出数；order 核实：orchestrator 与 Firecracker 两个进程环境里的 `FC_HDBSS_ORDER`、`dmesg` 的 `Enable HDBSS success, HDBSS buffer size:`、FC 日志的 `HDBSS enabled (buffer order N)` | 后端是 `hdbss`；两个进程的环境变量一致；`dmesg` / FC 日志里抓到的 order 与期望相同；checkpoint / restore 没失败、md5 一致。后端不是 `hdbss` 时退出码 3，**整档 SKIP** |
+| 写密集基准 | `crtest/bench/hdbss_bench.py` | 脏页量 16 / 64 / 256 / 512 / 1024 MB（guest 装不下的大档自动去掉并写明）× 写法 `seq`（连续）/ `rand`（随机散开）× 1 / 2 线程，每个组合 3 遍，另加一行不写任何页的基底 | checkpoint / restore 全部成功、每次 restore 后 md5 一致、order 核实生效 |
+| 汇总表 | `hdbss_bench.py --summarize` | order × 脏页量 × 写法 × 线程一张表 | 生成成功 |
+
+**每个组合量什么**（各列取 p50）：
+
+| 列 | 含义 |
+|---|---|
+| 冷写 ms | 这批页自上次 checkpoint / restore 以来**第一次**被写的耗时，在 guest 里量。脏页跟踪的开销全在这里 |
+| 热写 ms | 同一批页原样再写一遍。页已经是脏的，只剩写者自己的循环开销 |
+| 跟踪 ns/页 | （冷写 − 热写）÷ 页数，即脏页跟踪摊到每页的代价 |
+| kvm_exit/页 | 冷写期间这台虚机的 KVM 退出数 ÷ 页数。取自 debugfs `/sys/kernel/debug/kvm/<FC pid>-*/exits`，没有 debugfs 时退回 `perf stat -e kvm:kvm_exit`，都没有就是 `-` |
+| checkpoint 墙钟 / 服务端 frozen ms | 增量 checkpoint 的客户端墙钟与服务端冻结窗口 |
+| 差分 MB / 应有 MB | 这一代内存差分实占多少，对照「页数 × 4 KiB」。脏页量 0 那一行是基底 |
+| restore 墙钟 ms | restore 回刚拍的那个 checkpoint |
+| md5 一致 | 写完记 md5 → checkpoint → 把这批页改写掉 → restore → md5 必须回到原值 |
+
+写者是 guest 里的常驻进程：每个 vCPU 一个绑核的工作进程，在基线 checkpoint 之前就把整块内存写过一遍，
+所以之后每次写都没有 guest 自己的缺页，冷写与热写的差只剩脏页跟踪。两种写法每页都只写 1 个字节、
+走同一个循环；1 线程只用 vCPU0，2 线程两个 vCPU 各写一半（HDBSS 的 buffer 是每个 vCPU 一个）。
+
+**耗时**（2026-10-09 在 920B 上带 `--force-non-hdbss` 跑的流程耗时，后端是 `kvm-wp`，不是 HDBSS 的性能）：完整一轮 239 秒（证据 17 秒、基准 21 个组合 × 3 遍共 222 秒，1024 MB 档在 2 vCPU / 2048 MB 模板里放得下）；`--quick` 一轮 17 秒；`--quick --orders 1,2 --allow-restart` 共 217 秒，其中每次改 env 重启到就绪 45–53 秒。基准自带 14 分钟总时限，到点即停并标注未跑完。
+
+**怎么读结果**：先看 `SUMMARY.md` 里「证据与 order 核实」那张表 —— 后端应为 `hdbss`，各 order 的环境变量与
+`dmesg` / FC 日志对得上；HDBSS 下 L3 的 kvm_exit/页应远小于 1、冷/热接近 1。再看对比表：同一行脏页量与写法下，
+比不同 order 的「跟踪 ns/页」「kvm_exit/页」「checkpoint 墙钟」。差分 MB 应约等于应有 MB 加基底。
+**性能数字不判 PASS / FAIL**，PASS 只表示正确性与流程没问题。
+
+**order 扫描的影响与恢复**。`FC_HDBSS_ORDER` 是 Firecracker 构建每台虚机时从环境变量读的，而它的环境继承自
+orchestrator，所以换 order 必须改 nomad job 的 env 并重启：
+
+- 每个 order 重启一次、扫完恢复再重启一次。**每次重启，这台机器上所有沙箱与 checkpoint 都作废**，
+  所以 `--orders` 必须同时带 `--allow-restart`，不带直接报错退出。
+- 机器上还有活着的 firecracker（= 还有沙箱在跑，可能是别人的）时，扫描**默认拒绝**：报出有几个、当前 orchestrator
+  是哪个二进制，退出码 2，不建结果目录、不碰 job。确认这几个沙箱可以消失，才加 `--kill-sandboxes-ok`。
+- 改法是取运行中的 job 定义（`nomad job inspect`，留底为结果目录下的 `job-before.json`），只在 task 的 Env 里
+  加 `FC_HDBSS_ORDER`，用 `nomad job run -json` 提交；**不改 `/opt/e2b-infra` 下任何文件**。
+- 每次重启后等新进程起来、`/health` 回 200、进程环境里的值对得上，再由基准在 300 秒内重试建沙箱（API 节点刚重启要一两分钟才接单）。
+- 扫完、中途某一步失败、或者 Ctrl-C，都会把留底的定义原样提交回去，并在 `SUMMARY.md` 的「order 扫描与 job 恢复」
+  一节写明：测完了哪些 order、启动命令与 Env 和扫描前是否完全相同、现在进程环境里的 `FC_HDBSS_ORDER`。
+  恢复失败时那一节会给出手工恢复的命令。
+- 每重启一次会多漏一池网络槽位（手册 29 篇 §9），扫完按那一节判断要不要清。
+- 内核不接受的 order 会让 HDBSS 启用失败、Firecracker 静默退回写保护；这时基准看到后端不是 `hdbss`，那个 order 判 SKIP。
+
+**在没有 HDBSS 的机器上**（例如 920B，后端是 `kvm-wp`）：默认整档 SKIP，不建沙箱、不重启。
+要验证流程加 `--force-non-hdbss`，`SUMMARY.md` 顶部会标「非 HDBSS，仅流程验证，数字无意义」；
+order 在那里不生效，核实降级为只核对两个进程的环境变量。
+
 ---
 
 ## 3. 跳过的用例及原因
@@ -196,6 +309,17 @@ rollback/scripts/950/results/20260922-102353-smoke/
 ├── analyze.log             完整分析
 ├── serial-restore.log / .json / serial-restore-*.jsonl
 └── concurrent-ab.log / .json
+
+950/results/20260922-120000-hdbss/
+├── SUMMARY.md              ← 对比表、证据与 order 核实、job 恢复状态都在里面
+├── run.log
+├── hdbss-evidence.log / .json
+├── hdbss-order-current.log / .json      不扫描时；扫描时是 hdbss-order1.log / .json …
+├── hdbss-raw-*.jsonl                    每次迭代的原始记录
+├── hdbss-table.md / hdbss-summary.json  ← 对比表（Markdown 与机器可读版）
+├── hdbss-job.log / job-state.md         只在扫描时：每次提交与等待的记录、恢复后的状态
+└── job-before.json / job-order*.json / job-restore.json / job-after.json
+                                         只在扫描时：job 定义留底，含密钥，不要交回
 ```
 
 `results/` 整个不入库（`.gitignore` 里只留 `results/.gitkeep`）：原始日志体积大，
@@ -219,6 +343,9 @@ cp results/20260922-102634-func/crtest-T25.log results/20260922-102634-func/T25.
 
 # perf 档另外带这三份（数字都在里面）
 cp results/*-perf/compliance.log results/*-perf/analyze.log results/*-perf/serial-restore.json /tmp/交回/
+
+# hdbss 档另外带汇总的机器可读版（job-*.json 含密钥，不要带）
+cp results/*-hdbss/hdbss-summary.json /tmp/交回/
 ```
 
 交回时一并说明：跑的是哪个日期的 RPM、`smoke` 里 firecracker 的 sha256、
@@ -288,6 +415,7 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 所以 `smoke` / `func` 在 920B 上验过即成立；**性能数字不等价** ——
 920B 的 checkpoint 耗时里含 VM exit 开销，950 应当明显更快。
 `perf` 的数字必须在 950 上取，920B 的只能当量级参考。
+`hdbss` 档在 920B 上默认整档 SKIP（见 [§2.4](#24-hdbss)）。
 
 在 920B 上跑本入口的命令与 950 完全相同（§1），不需要另外的参数。
 
@@ -299,7 +427,7 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 |---|---|
 | `../acceptance/` | 交付态验收，单文件零共享依赖，一直在本仓库里 |
 | `../crtest/` | 沙箱级补充测试套件（20 个用例），2026-09-22 从开发工作区迁入本仓库，迁入时去掉了全部 920B 硬编码 |
-| `../crtest/bench/` | `bench_tiers.py` / `analyze.py` / `serial_restore.py` 由开发期的一次性采数脚本整理而来，迁入时参数化了；`compliance.py` 是 09-22 新写的达标判定 |
+| `../crtest/bench/` | `bench_tiers.py` / `analyze.py` / `serial_restore.py` 由开发期的一次性采数脚本整理而来，迁入时参数化了；`compliance.py` 是 09-22 新写的达标判定；`hdbss_bench.py` 是 10-08 新写的 HDBSS 专项（三级证据的思路来自 `../dev/hdbss_evidence.py`，不依赖 `dev/lib.py`） |
 | `../crtest/sdktests/` | `test_checkpoint_errors.py` 原样取自 `KASandbox_0904/py-sdk/tests/`。**随本套件带一份而不是让 950 去 clone 仓库** —— 它只依赖已安装的 `e2b` 加 pytest/httpx，没有 conftest 依赖，一个文件就能跑；950 上没有 py-sdk 源码树，clone 一个几十 MB 的仓库只为跑一个文件不划算。代价是它会随 SDK 演进而过时，改 SDK 异常语义时记得同步这一份 |
 | `../crtest/portability/` `../crtest/probe950/` | 客户机器预检与「920B 结论能不能搬到 950」的探针，零外部依赖 |
 

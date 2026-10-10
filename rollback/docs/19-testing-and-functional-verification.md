@@ -180,7 +180,7 @@ guest 碰过的页全部导出，与改了多少无关。
 | 树语义：线性 / 前滚 / 分叉跨 LCA / 删除与合并（compact / fold） / 失败 | `dev/correctness.py ext4` | 末行 `ALL PASS` | 已跑（RPM 部署版） | 待测 |
 | checkpoint 之后原生 pause，磁盘与内存完好 | `dev/pause_verify.py`（磁盘）；crtest T39（内存与盘上标记） | `O_DIRECT` 读回一致；内存 md5 一致 | T39 已跑，`pause_verify.py` 未跑 | 待测 |
 | 不弄坏原生生命周期 | `dev/compat_matrix.py`；crtest T41 | 无 `BROKEN` | T41 已跑 | 待测 |
-| HDBSS 三级证据 | `dev/hdbss_evidence.py` 等 | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 待测 |
+| HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 待测 |
 | 稳定性：数百次交替回滚 | `dev/loop.py ext4` | `failures: 0` | 未跑；由长测覆盖（见下） | 待测 |
 | 盲区、边界、故障注入 | crtest T11–T41 | 各用例三段式断言 | 已跑（重启类单独跑） | 待测 |
 | 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | 待测 |
@@ -343,6 +343,8 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 
 920B 没有 HDBSS，是这条判据的**负样本**：有了它，950 上的判定才有参照。如果 950 上 `dirty_tracking=hdbss` 而冷/热仍明显大于 1，
 说明能力启用了但数据面没生效。原理见 [05](05-dirty-page-tracking-and-hdbss.md)。
+
+同样的三层证据也在上机验收入口里：`run.sh hdbss`（脚本 `crtest/bench/hdbss_bench.py`，[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)）。它的 L1 直接用 `KVM_CHECK_EXTENSION` 查询，L3 的冷写 / 热写由 guest 里的常驻写者来量，KVM 退出数取自 debugfs，并且多核对一项 `FC_HDBSS_ORDER` 是否生效。
 
 ### 4.7 `loop.py`：稳定性
 

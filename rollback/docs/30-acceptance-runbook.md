@@ -5,7 +5,7 @@
 读完本章，你应该能：
 
 1. 在宿主机上用正确的解释器、凭据与模板准备好验收环境；
-2. 说出 `run.sh` 四档各跑什么、要多久、怎么判过，并按顺序跑完 smoke、func、perf；
+2. 说出 `run.sh` 五档各跑什么、要多久、怎么判过，并按顺序跑完 smoke、func、perf，需要时再跑 hdbss；
 3. 知道哪几条用例不在交付态机器上跑、为什么，`long` 档的清单该怎么安排；
 4. 把结果连同 `00-context.md` 留档并回传，写清这份数不能拿来干什么。
 
@@ -51,12 +51,13 @@ grep -E '^E2B_(API_KEY|ACCESS_TOKEN|API_URL)=' benchmark/.env
 
 ---
 
-## 2. 四档一览
+## 2. 各档一览
 
 ```bash
 bash rollback/scripts/950/run.sh smoke --python "$PY"
 bash rollback/scripts/950/run.sh func  --python "$PY"
 bash rollback/scripts/950/run.sh perf  --python "$PY"
+bash rollback/scripts/950/run.sh hdbss --python "$PY"
 bash rollback/scripts/950/run.sh long
 ```
 
@@ -65,6 +66,7 @@ bash rollback/scripts/950/run.sh long
 | `smoke` | ≤ 3 分钟 | 这台机器的 checkpoint 能不能用、是不是增量 | 5 项全 PASS |
 | `func` | ≤ 40 分钟 | 功能与健壮性 | FAIL = 0 |
 | `perf` | ≤ 40 分钟（`--quick` ≤ 10 分钟，只验证脚本跑得通） | 分档耗时、达标判定、长尾、并发 | FAIL = 0；超达标线**不**判 FAIL |
+| `hdbss` | 约 4 分钟（每个 order；扫描时每个 order 另加约 1 分钟重启；`--quick` 约 20 秒） | 这个沙箱是否真在用 HDBSS、`FC_HDBSS_ORDER` 是否生效、写密集负载下的代价（[§5.1](#51-hdbss-档hdbss-专项)） | FAIL = 0；性能数字不判；后端不是 `hdbss` 时整档 SKIP |
 | `long` | 小时级，不自动跑 | 长跑与大样本 | 只打印命令清单 |
 
 每档在 `rollback/scripts/950/results/<时间戳>-<档>/` 下写一份 `SUMMARY.md`（表头"项 / 结果 / 耗时 / 关键数字或原因 / 产物"，上方是主机、内核、env 文件、解释器、模板与 PASS/FAIL/SKIP 计数）、
@@ -128,6 +130,38 @@ bash rollback/scripts/950/run.sh long
 
 判读时还要看：`analyze.log` 里各档 `mem_mode` 应全为 `incremental`；数字所在平台（920B 为 `kvm-wp`、950 为 `hdbss`）写进留档。
 920B 上的结果与判定在 [21](21-benchmarks-and-compliance.md)；**950 的性能数字待补**，在 950 上跑出的这一档就是它的来源。
+
+### 5.1 hdbss 档：HDBSS 专项
+
+```bash
+bash rollback/scripts/950/run.sh hdbss --python "$PY"
+bash rollback/scripts/950/run.sh hdbss --python "$PY" --orders 1,2,4,6,9 --allow-restart
+```
+
+这一档只量 HDBSS 自己的性能，不测软件写保护，也不做两者的对照；重点是每 vCPU 的 HDBSS buffer 大小（`FC_HDBSS_ORDER`，[05 §4.5](05-dirty-page-tracking-and-hdbss.md#45-buffer-大小)）在写密集负载下的影响。脚本是 `crtest/bench/hdbss_bench.py`。
+
+| 项 | 做什么 | PASS 判据 | 看哪个文件 |
+|---|---|---|---|
+| HDBSS 证据 | L1：宿主 KVM 认不认能力 502；L2：Firecracker 为这个沙箱报的 `dirty_tracking`；L3：顺序写 256 MB 的冷写 / 热写耗时与每页 KVM 退出数；order 核实：orchestrator 与 Firecracker 两个进程环境里的 `FC_HDBSS_ORDER`、`dmesg` 的 `Enable HDBSS success, HDBSS buffer size:`、FC 日志的 `HDBSS enabled (buffer order N)` | 后端为 `hdbss`，两个进程的环境变量一致，抓到的 order 与期望相同，checkpoint / restore 成功且 md5 一致；后端不是 `hdbss` 时退出码 3，整档 SKIP | `hdbss-evidence.log` |
+| 写密集基准 | 脏页量 16 / 64 / 256 / 512 / 1024 MB（guest 装不下的大档自动去掉）× 连续写 / 随机散开写 × 1 / 2 线程，每个组合 3 遍，另有一行不写任何页的基底 | checkpoint / restore 全部成功、每次 restore 后 md5 一致、order 核实生效 | `hdbss-order-current.log`（扫描时每个 order 一份，如 `hdbss-order1.log`） |
+| 汇总表 | order × 脏页量 × 写法 × 线程 | 生成成功 | `SUMMARY.md`、`hdbss-summary.json` |
+
+每个组合记录（p50）：**冷写**耗时（这批页自上次 checkpoint / restore 以来第一次被写，在 guest 里量）、**热写**耗时（原样再写一遍）、
+两者之差摊到每页的纳秒数、冷写期间每页的 KVM 退出数（取自 debugfs 里这台虚机的 `exits` 计数器，没有时退回 `perf`）、
+增量 checkpoint 的客户端墙钟与服务端冻结窗口、内存差分的实占字节（对照"页数 × 4 KiB"）、restore 墙钟、restore 之后 md5 是否回到原值。
+**性能数字只记录，不判 PASS / FAIL。**
+
+**order 扫描要重启。** `FC_HDBSS_ORDER` 由 Firecracker 在构建每台虚机时读，环境继承自 orchestrator，换一个值就要改 nomad job 的 env 并重启 `template-manager-system`：
+这台机器上的全部沙箱与 checkpoint 随之作废（[27 §5](27-configuration-and-capacity.md#5-改一个开关操作步骤)）。所以 `--orders` 必须同时带 `--allow-restart`，不带则报错退出；机器上还有活着的 firecracker 时默认也拒绝扫描（退出码 2，不建结果目录、不碰 job），确认这些沙箱可以消失才加 `--kill-sandboxes-ok`。
+`run.sh` 取运行中的 job 定义留底（结果目录下的 `job-before.json`），只在 task 的 Env 里加这一个变量再提交，不改 `/opt/e2b-infra` 下的文件；
+每个 order 重启后等 `/health` 回 200、进程环境里的值对得上，基准再在 300 秒内重试建沙箱。扫完、中途失败或被中断，都把留底的定义提交回去，
+并在 `SUMMARY.md` 的"order 扫描与 job 恢复"一节写明测完了哪些 order、启动命令与 Env 和扫描前是否完全相同、现在进程环境里的 `FC_HDBSS_ORDER`；恢复失败时给出手工恢复的命令。
+`job-*.json` 含 job 的全部环境变量（包括密钥），不回传。
+
+**没有 HDBSS 的机器**（后端为 `kvm-wp`）上默认整档 SKIP，不建沙箱、不重启。`--force-non-hdbss` 可以照跑以验证流程，
+`SUMMARY.md` 顶部标"非 HDBSS，仅流程验证，数字无意义"，order 核实降级为只核对进程环境变量。
+
+基准有 14 分钟的总时限，到点即停并在结果里标注未跑完。流程已在无 HDBSS 的 920B 上带 `--force-non-hdbss` 跑通（后端 `kvm-wp`）：完整一轮 239 秒，1024 MB 档在 2 vCPU / 2048 MB 模板里放得下；`--orders 1,2` 的短试跑 217 秒，每次改 env 重启到就绪 45–53 秒，扫描后 job 的启动命令与 Env 和扫描前完全相同。这些是流程耗时，不是 HDBSS 的性能。**本档在 950 上的数据待补。**
 
 ---
 
@@ -203,6 +237,7 @@ cat "$OUT/00-context.md"
 
 - 在跑 orchestrator 的宿主机上、以 root、用装了覆盖层的那个解释器、从仓库根目录跑；凭据用 `benchmark/sync-env.sh` 生成。
 - `smoke`（≤ 3 分钟，5 项全过，其中验收脚本 59 项）→ `func`（≤ 40 分钟，FAIL 为 0）→ `perf`（≤ 40 分钟，超达标线不判 FAIL）；`long` 只打印清单，要单独安排、单独授权。
+- `hdbss` 档只量 HDBSS 自己：三级证据加 order 核实、写密集基准、order 对比表；PASS 只看正确性与流程。`--orders` 扫描每个 order 重启一次 orchestrator，必须带 `--allow-restart`，扫完自动恢复 job 并在 `SUMMARY.md` 写明最后状态；后端不是 `hdbss` 的机器上整档 SKIP。
 - `run.sh` 的退出码等于 FAIL 项数；每档写一份 `SUMMARY.md`、整轮的 `run.log` 和每项的日志与 JSON。
 - 交付态机器上不跑要重启、改 env 或换 FC 的四条用例，它们已在开发机上覆盖。
 - perf 档判读先看各档 `mem_mode` 全为 `incremental`，并写明平台（920B 为 `kvm-wp`、950 为 `hdbss`）；950 上跑出的这一档就是 950 性能数字的来源。
