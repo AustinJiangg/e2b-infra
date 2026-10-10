@@ -79,7 +79,7 @@ HTML 版把全部跨篇链接改写成了页内锚点，mermaid 图内联渲染�
 改完 `docs/` 之后重新生成（在 WSL 工作区 `e2b-repo/` 下跑）：
 
 ```bash
-python3 tmp/build_docs_html.py e2b-infra/rollback/docs e2b-infra/rollback/diagrams e2b-infra/rollback/slides/node_modules/mermaid/dist/mermaid.min.js e2b-infra/rollback/dist/checkpoint-restore-docs.html
+python3 tmp/build_docs_html.py e2b-infra/rollback/docs e2b-infra/rollback/diagrams e2b-infra/rollback/slides/node_modules/mermaid/dist/mermaid.min.js e2b-infra/rollback/dist/checkpoint-restore-docs.html --config tmp/books/rollback.json
 ```
 
 打包与两个校验脚本（`mdlinks.py` 查链接与中文锚点、`mdmermaid.mjs` 查 mermaid 语法）
