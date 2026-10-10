@@ -190,3 +190,18 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | **视图层列表改为引用父代** | 每个条目的视图把截止到自己的全部层完整记一份；合并之后层数有界，但仍是每条目 O(层数) 的记账 | 中 |
 | **跨树回滚与 HDBSS 武装时序的端到端 / 断言** | 前者只有单元测试，后者只靠调用点位置保证 | 低 |
 | **跟上游合并** | 分叉小是有意的，但上游会动；每次同步后按 `deploy-docs/08` 第 11 节重新生成 0001 补丁 | 持续 |
+
+### 5.1 待验证项
+
+读代码时发现、还没有量过也没有动过的点。每一项写明现状、依据、要先量什么；量过之后要么改代码，要么把结论写回对应章节并从这里删掉。
+
+| # | 项 | 现状与依据 | 先量什么 | 状态 |
+|---|---|---|---|---|
+| V1 | **checkpoint 封层的刷屏障去掉 `BLKFLSBUF`，只留 `fsync`** | `SealLayer` 第一步调 `sync`，先 `ioctl(BLKFLSBUF)` 再 `fsync`（`rootfs/nbd.go` 的 `sync`）。`BLKFLSBUF` 除了把缓冲的写推下去，还会丢弃宿主为这个块设备缓存的已读内容。封层前后设备内容不变，这份缓存本来仍然有效；丢掉之后客户机再读这些块，要重新经 NBD 向 orchestrator 取。restore 的视图切换内容确实变了，那里必须丢，不在本项范围 | ① 在运行内核上确认 `BLKFLSBUF` 是否丢弃读缓存；② 同一沙箱 checkpoint 前后重复读同一批文件，对比读耗时与 NBD 读请求数；③ 改成只 `fsync` 后重跑，并跑一遍正确性用例 | 未验证 |
+| V2 | **`flush` 里对同一个描述符连做两次 `fsync`** | `rootfs/rootfs.go` 的 `flush` 先 `syscall.Fsync(fd)` 再 `file.Sync()`，后者也是 `fsync`，第二次面对的是已经刷空的缓存。上游原有代码，原生 pause 也走这里 | `seal` 段里这一次调用的耗时；预期是固定的系统调用开销，量级很小，不值得单独改，随 V1 一起处理 | 未验证 |
+| V3 | **一次 checkpoint 对 NBD 设备刷两遍** | 先是 Firecracker 保存块设备状态前的 `prepare_save`（同步引擎下是对设备文件 `sync_all`，`devices/virtio/block/virtio/io/mod.rs` 的 `drain_and_flush`），后是 orchestrator 的 `SealLayer`。两次之间 vCPU 停着、同步引擎没有在途请求、设备只有 Firecracker 一个写入方，所以第二遍没有数据可刷，正确性上一遍就够 | 第二遍的耗时。**结论倾向保留**：Firecracker 那一遍失败只打一行日志（`device.rs` 的 `drain_and_flush`：`Failed to drain ops and flush block data`），快照照常继续；orchestrator 这一遍失败会让 checkpoint 报错返回，是唯一带错误检查的一遍，也不依赖 Firecracker 用哪种读写引擎 | 未验证 |
+
+与这三项有关的两个事实，查代码时一并确认过，记在这里备查：
+
+- **沙箱的根盘用同步读写引擎。** 模板构建时显式指定 `Sync`（`template/build/layer/create_sandbox.go` 的 `DefaultIoEngine`，以及默认值为 `Sync` 的开关 `build-io-engine`）；引擎类型存在快照里（`devices/virtio/block/virtio/persist.rs` 的 `file_engine_type`），从模板恢复出来的沙箱沿用它。同步引擎一次只处理一个请求，写调用返回后才取下一个，所以 Firecracker 自己不积压在途的写。
+- **NBD 设备没有声明支持刷盘命令。** 接入内核时只带 `FlagHasFlags | FlagCanMulticonn`（`sandbox/nbd/path_direct.go`），dispatcher 收到 `NBD_CMD_FLUSH` 会报错断开（`sandbox/nbd/dispatch.go`）。所以对设备的 `fsync` 只表现为"把缓冲的写作为 NBD 写请求全部发下去并等应答"；dispatcher 是 `WriteAt` 成功之后才应答（`dispatch.go` 的 `cmdWrite`），内核认为写完成即数据已在写层里。"未声明该能力的设备内核不下发刷盘命令"这一点没有对着运行内核的源码核对，旁证是每次 checkpoint 都对设备 `fsync`、连接从未因此断开。
