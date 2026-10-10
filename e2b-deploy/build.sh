@@ -300,12 +300,22 @@ function install_e2b() {
 
     "$PY" /opt/e2b-infra/patch_e2b.py
 
-    if ! grep -q "address=/.e2b.app/127.0.0.1" /etc/dnsmasq.conf; then
-        echo "address=/.e2b.app/127.0.0.1" >> /etc/dnsmasq.conf
-        echo "配置已添加"
+    # address= 只给了 IPv4，AAAA 查询 dnsmasq 仍会转发给上游；上游不通或不回（无外网、
+    # 公司 DoH 网桥等）时客户端要等满 3×5s 超时。SDK/curl 解析 *.e2b.app 时 A 和 AAAA 一起查，
+    # 于是每个新连接（沙箱第一条命令）都多出 15 秒。local= 让该域只用本地数据作答，
+    # AAAA 立即返回空结果（NOERROR、无记录）。见 runbook §6.9。
+    local dnsmasq_changed=0 line
+    for line in "address=/.e2b.app/127.0.0.1" "local=/e2b.app/"; do
+        if ! grep -qxF "$line" /etc/dnsmasq.conf; then
+            echo "$line" >> /etc/dnsmasq.conf
+            dnsmasq_changed=1
+        fi
+    done
+    if [ "$dnsmasq_changed" = 1 ]; then
+        echo "dnsmasq 配置已添加"
         systemctl restart dnsmasq
     else
-        echo "配置已存在，无需重复添加"
+        echo "dnsmasq 配置已存在，无需重复添加"
     fi
 }
 
