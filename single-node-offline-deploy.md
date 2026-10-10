@@ -321,7 +321,12 @@ echo "59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9  e2b-infr
 #    ⚠️ 不能直接 `tar -czf e2b-deploy.tar.gz e2b-deploy`：约 70MB 的 dep/ubuntu-22.04-custom.tar.gz
 #    只存在于压缩包里（e2b-deploy/ 目录不含它），直接打目录会把它弄丢。按下面三步重建
 #    （与 deploy-docs/03 篇 §4 一致）：解开旧包 → 用目录覆盖文本内容 → 重新打包。
-sed -i 's/^SERVER_IP=.*/SERVER_IP=<本机IP>/' e2b-deploy/dep/.env
+#    本机 IP 取默认路由的源地址（只查路由表、不发包）。别用 hostname -I 的第一个地址：机器上有残留的
+#    沙箱网卡时它可能是 10.x 的沙箱地址，而 build.sh 的 check_host_ip 拦不住。没有默认路由时这里没有
+#    输出、sed 不执行，做法见 rollback/scripts/950/README.md §1.0。
+IP=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+[ -n "$IP" ] && sed -i "s/^SERVER_IP=.*/SERVER_IP=$IP/" e2b-deploy/dep/.env
+grep '^SERVER_IP' e2b-deploy/dep/.env      # 人工核对
 REPO=$PWD
 rm -rf /tmp/e2b-deploy-repack && mkdir -p /tmp/e2b-deploy-repack && cd /tmp/e2b-deploy-repack
 tar -xzf "$REPO/e2b-deploy.tar.gz"                          # 拿到 ubuntu-22.04-custom.tar.gz
