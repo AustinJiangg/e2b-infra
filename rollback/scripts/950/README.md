@@ -14,16 +14,35 @@
 ### 1.0 从 clone 到能跑沙箱
 
 950 上的实际流程是下面这一串；每一步的细节与排障在仓库根的 `single-node-offline-deploy.md`（§2 构建安装、§4 启动）。
+这一串命令 2026-10-10 在一台已部署过的鲲鹏 920B 上照着走过一遍，注释里的耗时是那次实测的。
+
+**先备齐不在仓库和 RPM 里的东西**（部署指南 §0、§1）。RPM 装到 `/opt/e2b-infra/dep/` 的只有部署脚本、配置和
+`ubuntu-22.04-custom.tar.gz`；下面这些要另外拷进去或事先装好，`build.sh` 按这些名字找：
+
+| 要有什么 | 谁检查、缺了会怎样 |
+|---|---|
+| Docker 本身（部署指南 §0.1） | `build.sh` 不装 Docker |
+| docker 镜像 `postgres:latest`、`redis:7.4.4-alpine`、`debian:bookworm-slim` 已经 `docker load`（§1.2） | `-i` 检查 `postgres:latest`，没有就报 `docker 镜像 postgres:latest 不存在，请先 docker load 离线镜像` 并退出；另外两个在 `-s` 的 `deploy.sh` 里用到 |
+| `/opt/e2b-infra/dep/minio`（§1.1） | `-i` 报 `MinIO 依赖文件缺失，请检查 /opt/e2b-infra/dep 目录` 并退出 |
+| `/opt/e2b-infra/dep/harbor-offline-installer-aarch64-v2.13.0.tgz`（§1.1） | `-i` 报 `Harbor 安装包不存在：…` 并退出 |
+| `/opt/e2b-infra/dep/consul_1.21.4_linux_arm64.zip`、`/opt/e2b-infra/dep/nomad_1.10.4_linux_arm64.zip`（§1.1） | `-i` 只是把它们拷到 `/tmp`，缺了不报错；到 `-s` 装 consul / nomad 时找不到本地包会转去下载，离线机器上在那里失败 |
+| nbd 内核模块、`net.ipv4.ip_forward=1`（§0.2、§0.3） | 见部署指南 |
+
+这些文件 `rpm -Uvh` 不会删，所以重新部署同一台机器时不用再拷；第一次装要在第 ③ 步装完 RPM（`dep/` 目录这时才有）之后、第 ④ 步之前放进去。
 
 ```bash
-# ① 取代码与大源码包
+# ① 取代码与大源码包。源码包是 LFS 对象，放在 .lfsconfig 指的那台内部 LFS 服务器上，950 上能直接拉
 git clone https://github.com/AustinJiangg/e2b-infra.git
 cd e2b-infra
 git lfs pull
 ls -l e2b-infra-2026.09.tar.gz        # 应为 143753275 字节；134 字节说明还是 LFS 指针
+echo "59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9  e2b-infra-2026.09.tar.gz" | sha256sum -c   # 必须输出 OK
 
-# ② 把本机 IP 写进部署配置，重建打进 RPM 的部署包（多网卡时先核对 hostname -I 的第一个地址是不是要用的）
-sed -i "s/^SERVER_IP=.*/SERVER_IP=$(hostname -I | awk '{print $1}')/" e2b-deploy/dep/.env
+# ② 把本机 IP 写进部署配置，重建打进 RPM 的部署包
+IP=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+echo "本机 IP: ${IP:-（没取到，看下面的说明，先别往下走）}"
+[ -n "$IP" ] && sed -i "s/^SERVER_IP=.*/SERVER_IP=$IP/" e2b-deploy/dep/.env
+grep '^SERVER_IP' e2b-deploy/dep/.env       # 人工核对：必须是对外提供服务的那个地址
 REPO=$PWD
 rm -rf /tmp/e2b-deploy-repack && mkdir -p /tmp/e2b-deploy-repack && cd /tmp/e2b-deploy-repack
 tar -xzf "$REPO/e2b-deploy.tar.gz"
@@ -31,30 +50,67 @@ rsync -a --exclude .git "$REPO/e2b-deploy/" e2b-deploy/
 tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy
 cd "$REPO"
 
-# ③ 出 RPM，装到 /opt/e2b-infra
+# ③ 出 RPM，装到 /opt/e2b-infra（920B 上 rpmbuild 135 秒，安装 7 秒）
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
-rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm     # 已装过旧版时换成 rpm -Uvh --force
+rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm     # 已装过同版本或旧版时换成 rpm -Uvh --force
 
-# ④ 停 → 装 → 起
+# ④ 停 → 装 → 起（920B 上：-d 约 2 分钟，-i 约 20 秒，-s 约 2 分钟）
+#    -i 要在准备用来跑 SDK 的那个 Python 环境里执行；已有部署的机器先读下面「重新部署会丢什么」
 cd /opt/e2b-infra
 bash build.sh -d
 bash build.sh -i
 bash build.sh -s
 
-# ⑤ 确认模板能建、沙箱能跑（回到 clone 下来的仓库里）
+# ⑤ 确认模板能建、沙箱能跑（回到 clone 下来的仓库里；920B 上建模板有缓存时 8 秒，sandbox.py 3 秒）
 cd "$REPO/benchmark"
 bash sync-env.sh
 python3 build_template.py
 python3 sandbox.py
 ```
 
+**① 拉不到源码包的机器**（访问不了那台 LFS 服务器）：从已有这个文件的地方把 `e2b-infra-2026.09.tar.gz` 拷到仓库根目录，
+再执行上面那条 `sha256sum -c`，输出 `OK` 才能往下走（同部署指南 §2 第 1b 步）。不能拿上游的 GitHub 标签归档顶替，那个归档不带 `vendor/`。
+
+**② 为什么不用 `hostname -I` 的第一个地址**：机器上有残留的沙箱网卡时，它排在最前面的可能是沙箱那一段的地址
+（920B 上实测回的是 `10.12.17.54`，真正的地址排在第 28 个）；这种地址确实配在本机网卡上，`build.sh` 里
+"`SERVER_IP` 是不是本机地址"的检查（`check_host_ip`）拦不住它。上面取的是默认路由的源地址，只查路由表、不发包，
+`1.1.1.1` 不需要真能通，有默认路由就行。**没有默认路由时这条命令没有输出**（`ip` 报 `Network is unreachable`），
+`IP` 为空，`sed` 那一行不会执行。这时改用下面两条：先看网卡，再取第一个不是沙箱 / 容器网卡的全局地址，然后同样用 `grep` 核对：
+
+```bash
+ip -4 -br addr | grep -vE '^(lo|veth|docker|br-|cni|flannel|virbr)'
+IP=$(ip -4 -o addr show scope global | awk '$2 !~ /^(veth|docker|br-|cni|flannel|virbr)/ {sub("/.*","",$4); print $4; exit}')
+[ -n "$IP" ] && sed -i "s/^SERVER_IP=.*/SERVER_IP=$IP/" e2b-deploy/dep/.env
+grep '^SERVER_IP' e2b-deploy/dep/.env
+```
+
+机器有多块业务网卡时，第二条取到的不一定是你要的那个；以 `grep` 打出来的值为准，不对就用编辑器改 `e2b-deploy/dep/.env` 的 `SERVER_IP=` 那一行，再接着做重打包。
+
+**④ 没有 HDBSS 的机器（例如 920B）**要在 `-i` 之后、`-s` 之前给 orchestrator 加上 `FC_TRACK_DIRTY_PAGES`，
+否则脏页跟踪默认关、每次 checkpoint 都是全量；做法是部署指南 §4.1 的那条 `sed`（`-i` 每次都会把模板盖回不带这一行的版本，所以每次重新部署都要再加）。950 不需要。
+
+**⑤ 全新机器建第一个模板之前**还要做部署指南 §1.3 的两件事（让 `harbor` 这个主机名能解析、把 `ubuntu:22.04-custom` 推进 harbor），`build.sh` 不做这两件事。
+
+#### 重新部署会丢什么
+
+在已经部署过的机器上再走一遍 ④（`-d` → `-i` → `-s`），下面这些**每次都会丢**：
+
+- 全部沙箱与 checkpoint（`-d`）。
+- **postgres 整库**：`-i` 把 `postgres` 容器删掉重建，数据卷不保留。团队、API key、access token、模板与构建记录都没了；`-s` 会重新 seed 出一个新团队并重写 `/root/.e2b/config.json`。
+- nomad 与 consul 的全部状态和 ACL token（`-d` 删 `/data/nomad`、`/data/consul`、`/etc/nomad.d`、`/etc/consul.d`、`/opt/consul/acl.token`），连同 nomad 的 alloc 日志；`-s` 重新 bootstrap，新 token 写回 `/opt/e2b-infra/.env`。
+- nginx / harbor 用的自签证书（`-i` 重新生成）。
+
+不会丢：harbor 里的镜像（宿主机 `/data` 下）、minio 的数据（`/root/data/minio`）、`/orchestrator`、`/tmp/templates` 下的模板文件、大页池。
+
+所以每次重新部署之后**必须**重做第 ⑤ 步：`sync-env.sh` 把新的 API key 同步进 `benchmark/.env`，`build_template.py` 重建模板 `base`。旧的 API key 和旧模板 id 都不能再用。
+
 `build.sh` 三个开关各做什么（`/opt/e2b-infra/build.sh`，仓库里是 `e2b-deploy/build.sh`）：
 
 | 开关 | 做什么 |
 |---|---|
 | `-d`（`--stop`） | 先让 `template-manager-system` 优雅退出，再停 consul / nomad，结束 redis、client-proxy、api、orchestrator 与残留的 firecracker 进程，清掉沙箱留下的 netns / veth / iptables 规则，检查端口是否放干净。全新机器上它只是空跑一遍 |
-| `-i`（`--install`） | 装 postgres / minio / harbor / nginx；用**当前环境的 pip** 装 `e2b==2.20.0`、`e2b_code_interpreter==2.4.1`、`python-dotenv`，再铺 checkpoint 的 SDK 覆盖层（先 `install.py` 后 `patch_e2b.py`）；把 `dep/` 里的部署脚本、`.env`、`template-manager.hcl` 盖到 `/opt/e2b-infra` |
-| `-s`（`--start`） | 起 harbor、nomad 服务端与客户端并初始化（首次会 bootstrap ACL），登录 harbor 建项目，最后跑 `deploy.sh` 提交各个 nomad job |
+| `-i`（`--install`） | 装 postgres / minio / harbor / nginx；用**当前环境的 pip** 装 `e2b==2.20.0`、`e2b_code_interpreter==2.4.1`、`python-dotenv`，再铺 checkpoint 的 SDK 覆盖层（先 `install.py` 后 `patch_e2b.py`）；把 `dep/` 里的部署脚本、`.env`、`template-manager.hcl` 盖到 `/opt/e2b-infra`。其中 `postgres` 容器是删掉重建的，库里的数据不保留 |
+| `-s`（`--start`） | 起 harbor、nomad 服务端与客户端并初始化（首次会 bootstrap ACL），登录 harbor 建项目，最后跑 `deploy.sh` 提交各个 nomad job。**会写内核参数与大页数**：`sysctl -w` 设 `net.core.somaxconn` 等几项并往 `/etc/sysctl.conf` 追加、把 `net.ipv4.ip_forward` 设成 1、按内存重算并写 `nr_hugepages` / `nr_overcommit_hugepages`（`start-client.sh`、`init-client.sh`）；还会把 RPM 里的 orchestrator 拷到 `/usr/bin/orchestrator` 与 `/usr/bin/template-manager` |
 
 第 ⑤ 步：`sync-env.sh` 生成 `benchmark/.env`（客户端凭据）；`build_template.py` 建别名 `base` 的模板，规格 **2 vCPU / 2048 MB** 就写在这个文件里（`cpu_count=2`、`memory_mb=2048`），本目录的测试一律用它；`sandbox.py` 起一个沙箱跑几条命令再关掉。
 **⑤ 这三条要在 `build.sh -i` 装 SDK 的那个环境里执行**（`-i` 在哪个 Python 环境里跑，SDK 与覆盖层就装在哪；装在虚拟环境或 conda 环境里的，先激活它，让 `python3` 指向它）。
