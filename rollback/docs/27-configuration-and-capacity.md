@@ -33,7 +33,7 @@
 | 变量 | 读取方 | 默认 | 取值与解析 | 作用 | 能力行 |
 |---|---|---|---|---|---|
 | `FC_TRACK_DIRTY_PAGES` | orchestrator，启动时一次 | 未设 = 跟随硬件：探到 KVM 能力 502（HDBSS）则开，否则关 | Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关。其他值（`yes`、`on`、空串、拼错）**忽略**，按未设处理，并打 WARN `FC_TRACK_DIRTY_PAGES="…" is not a boolean and was ignored` | 第 ① 层：虚机启动时是否武装脏页跟踪。关着时每次 checkpoint 都是全量。950 不设；无 HDBSS 而要增量的机器设 `true`（走 KVM 写保护，[26 §1](26-deployment-prerequisites.md#1-先分清两层要不要记脏页用什么方式记)） | `track_dirty_pages`、`track_dirty_pages_reason` |
-| `FC_HDBSS_ORDER` | Firecracker，每台虚机构建时 | `1`（每 vCPU 8 KiB） | 按无符号整数解析，解析不了或未设都取 `1`；值原样交给内核，内核不接受则 HDBSS 启用失败 | 每 vCPU HDBSS 缓冲区大小的编码（`n` → 4 KiB × 2^n）。写密集负载下的取值收益未实测，先别动 | 无；FC 日志 `HDBSS enabled (buffer order …)`，950 上 `dmesg` 的 `Enable HDBSS success, HDBSS buffer size: …` |
+| `FC_HDBSS_ORDER` | Firecracker，每台虚机构建时 | `1`（每 vCPU 8 KiB） | 按无符号整数解析，解析不了或未设都取 `1`；值原样交给内核，内核不接受则 HDBSS 启用失败 | 每 vCPU HDBSS 缓冲区大小的编码（`n` → 4 KiB × 2^n）。写密集负载下的取值收益未实测，先别动；测它的入口是 `run.sh hdbss --orders …`（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)） | 无；FC 日志 `HDBSS enabled (buffer order …)`，950 上 `dmesg` 的 `Enable HDBSS success, HDBSS buffer size: …` |
 | `FC_HDBSS_REQUIRED` | Firecracker，每台虚机构建时 | 关 | **只认 `true` 和 `1`**，其余（含 `TRUE`）一律为关 | 开：HDBSS 启用失败时虚机构建失败（沙箱起不来）；关：静默退回 KVM 写保护。交付件不设 | 无；看 `checkpoint_verify.py` 打印的"脏页后端" |
 
 ### 2.2 限额与超时

@@ -413,6 +413,7 @@ for page_idx in 0..nr_pages {
 
 HDBSS 把"每页一次 VM-Exit"换成了"CPU 顺手记一笔 + 定期汇总"，代价转移到 buffer 溢出处理（§4.5）。
 `FC_HDBSS_ORDER` 就是为这件事准备的。各档在写密集负载下的对比**尚未实测**，是明确列出的缺口之一（[21](21-benchmarks-and-compliance.md)）；目前用默认值 1。
+测它的入口已经备好：`run.sh hdbss --orders 1,2,4,6,9 --allow-restart` 逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)），数据待在 950 上取。
 
 ### 6.3 什么时候不该开
 

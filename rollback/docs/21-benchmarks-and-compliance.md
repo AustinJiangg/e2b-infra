@@ -322,9 +322,9 @@ FC 单测那次跑的源码早于 `8ea5322bf`；此后 FC 目录只多了测试�
 | 12 | SDK 覆盖层自检判据已改 | 已在两次 RPM 部署件上重跑 smoke，都是 5 / 5（§2.4） |
 | 13 | 开发态工具 | `correctness.py`（已按合并语义更新）已在两次 RPM 部署件上跑过，都是 ALL PASS（§2.4）；`pause_verify.py`、`compat_matrix.py`、`loop.py`、`timing.py` 未在本期代码上跑 |
 | 14 | 950 上的全部性能数据 | 分档基准、串行长尾、空闲后 restore、并发长跑都待补；长跑的重测清单见 [22 §6.3](22-long-run-and-concurrency.md#63-到-950-上要重测什么) |
-| 15 | HDBSS 与软件写保护的收益对照 | 要在同一台 950 上各跑一遍，其余条件不动；跨机相减得不到它 |
-| 16 | 950 上的 HDBSS L3 证据落盘 | `hdbss_evidence.py` 的冷/热比待在 950 上留档 |
-| 17 | `FC_HDBSS_ORDER` 取值对比 | 写密集负载下 HDBSS buffer 溢出会吃掉多少收益，未测 |
+| 15 | HDBSS 与软件写保护的收益对照 | 用户决定不做：客户只要 HDBSS 自身的性能，950 上不测写保护 |
+| 16 | 950 上的 HDBSS L3 证据落盘 | 脚本已备（`run.sh hdbss`，[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)），950 数据待补 |
+| 17 | `FC_HDBSS_ORDER` 取值对比 | 脚本已备（`run.sh hdbss --orders 1,2,4,6,9 --allow-restart`，[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)），950 数据待补 |
 | 18 | 跨树回滚 | 有单元测试（丢失 epoch 后跨树 restore 三种 sidecar 形态），无端到端用例 |
 | 19 | HDBSS 在 vCPU 创建之后武装 | 只靠调用点位置保证，没有断言 |
 | 20 | 条件标签留档 | 每轮必须记全机型、脏页后端、产物盘、模板、二进制 sha、脚本参数；漏记的数据事后补不上 |

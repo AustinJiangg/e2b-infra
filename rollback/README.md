@@ -63,7 +63,7 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.1**（2026-09-30，江路路 j30059180；在 v0.4.0 教材版上写入两个已知项：宿主 conntrack 表上涨的根因与暂不实施的方案 A、部署脚本 80 端口转发劫持 hyperloop 请求；代码基准 deltabox-dev@57a3063）；每份产物的封面与侧栏都印着版本号，
+当前文档版本 **v0.4.2**（2026-10-08，江路路 j30059180；在 v0.4.1 上给上机验收加 hdbss 档：HDBSS 三级证据、写密集基准与 `FC_HDBSS_ORDER` 扫描的入口，950 数据待补；代码基准 deltabox-dev@57a3063）；每份产物的封面与侧栏都印着版本号，
 Release tag 与之一致，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准。
 
 | 附件 | 大小 | 给谁 |

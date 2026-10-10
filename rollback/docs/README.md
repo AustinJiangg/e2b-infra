@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.1**（2026-09-30，写入两个已知项：宿主 conntrack 表的根因、80 端口转发劫持 hyperloop）· 江路路（j30059180）
+> **v0.4.2**（2026-10-08，上机验收加 hdbss 档：HDBSS 三级证据、写密集基准与 `FC_HDBSS_ORDER` 扫描的入口，950 数据待补；缺口表第 15–17 项随之更新）· 江路路（j30059180）
 >
 > 代码基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理
 
@@ -110,7 +110,7 @@
 | 27 | [配置参考与容量规划](27-configuration-and-capacity.md) | 开关总表（全书唯一）、启动能力行、产物盘容量规划、改开关的步骤 |
 | 28 | [可观测性参考](28-observability-reference.md) | 能力行与 `memMode`、timings 全字段与计时键（全书唯一）、metrics 与取证开关、日志关键字 |
 | 29 | [排障](29-troubleshooting.md) | 按症状：看哪里、怎么处置、原理在哪一章 |
-| 30 | [上机验收](30-acceptance-runbook.md) | 交付态验收 `run.sh` 的 smoke / func / perf / long 四档与结果回传 |
+| 30 | [上机验收](30-acceptance-runbook.md) | 交付态验收 `run.sh` 的 smoke / func / perf / hdbss / long 五档与结果回传 |
 
 ### 附录
 
@@ -128,7 +128,7 @@
 | [`../../deploy-docs/`](../../deploy-docs/README.md) | 部署文档：整体架构、RPM 构建、`build.sh` 安装与启动、日常运维、存储位置、资源调优 |
 | [`../../single-node-offline-deploy.md`](../../single-node-offline-deploy.md) | 单机离线部署步骤，含部署后 checkpoint 能力的核对 |
 | [`../../e2b-deploy/dep/e2b-sdk-checkpoint/`](../../e2b-deploy/dep/e2b-sdk-checkpoint/使用说明.md) | Python SDK 覆盖层（`install.py` 与使用说明） |
-| [`../scripts/950/`](../scripts/950/README.md) | 上机验收入口 `run.sh`（smoke / func / perf / long） |
+| [`../scripts/950/`](../scripts/950/README.md) | 上机验收入口 `run.sh`（smoke / func / perf / hdbss / long） |
 | [`../scripts/crtest/`](../scripts/crtest/README.md) | 功能与性能测试套件（定向用例、分档基准） |
 | [`../scripts/acceptance/`](../scripts/acceptance/README.md) | 交付态验收脚本：`checkpoint_verify.py`（正确性）、`checkpoint_bench.py`（性能）、`checkpoint_concurrent.py`（并发四段）、`rolling_keep10.py`（滚动保留长跑，复用同目录的 `checkpoint_concurrent.py`）等 |
 | [`../scripts/dev/`](../scripts/dev/) | 开发态验证工具箱 |
