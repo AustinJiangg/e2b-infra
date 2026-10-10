@@ -263,7 +263,10 @@ function install_e2b() {
     cp -fv $DEP_DIR/uninstall-consul.sh /opt/e2b-infra
 
     cp -fv $DEP_DIR/consul_1.21.4_linux_arm64.zip /tmp/consul.zip
-    cp -fv $DEP_DIR/nomad_1.10.4_linux_arm64.zip /tmp
+    # 版本跟 .env 的 NOMAD_VERSION 走（start-server.sh 按它去 /tmp 找包）。至少 1.11.2：
+    # 1.10.x 的 client 在 NUMA 节点编号不连续的机器上（如开了 numa_remote 的鲲鹏，节点
+    # 0-3,10,19）一启动就 panic: index out of range，-s 卡在等 4646。见 runbook §6.8。
+    cp -fv "$DEP_DIR/nomad_${NOMAD_VERSION}_linux_arm64.zip" /tmp
 
     cp -fv "$DEP_DIR/.env" "$E2B_DIR/.env"
     cp -fv "$DEP_DIR/template-manager.hcl" "$E2B_DIR/nomad/template-manager.hcl"
@@ -424,13 +427,13 @@ download_packages() {
         echo "开始下载 x86_64 架构软件包..."
         wget -q --show-progress https://download.docker.com/linux/static/stable/x86_64/docker-24.0.5.tgz -O "$pkg_dir/docker-24.0.5.tgz" || { echo "docker下载失败"; return 1; }
         wget -q --show-progress https://github.com/docker/compose/releases/download/v2.40.2/docker-compose-linux-x86_64 -O "$pkg_dir/docker-compose-linux-x86_64" || { echo "docker-compose下载失败"; return 1; }
-        wget -q --show-progress https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_amd64.zip -O "$pkg_dir/nomad_1.10.4_linux_amd64.zip" || { echo "nomad下载失败"; return 1; }
+        wget -q --show-progress https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip -O "$pkg_dir/nomad_${NOMAD_VERSION}_linux_amd64.zip" || { echo "nomad下载失败"; return 1; }
         wget -q --show-progress https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_amd64.zip -O "$pkg_dir/consul_1.21.4_linux_amd64.zip" || { echo "consul下载失败"; return 1; }
     elif [ "$arch" == "arm64" ]; then  # 明确标注arm64，更易读
         echo "开始下载 aarch64/arm64 架构软件包..."
         wget -q --show-progress https://download.docker.com/linux/static/stable/aarch64/docker-24.0.5.tgz -O "$pkg_dir/docker-24.0.5.tgz" || { echo "docker下载失败"; return 1; }
         wget -q --show-progress https://github.com/docker/compose/releases/download/v2.40.2/docker-compose-linux-aarch64 -O "$pkg_dir/docker-compose-linux-aarch64" || { echo "docker-compose下载失败"; return 1; }
-        wget -q --show-progress https://releases.hashicorp.com/nomad/1.10.4/nomad_1.10.4_linux_arm64.zip -O "$pkg_dir/nomad_1.10.4_linux_arm64.zip" || { echo "nomad下载失败"; return 1; }
+        wget -q --show-progress https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_arm64.zip -O "$pkg_dir/nomad_${NOMAD_VERSION}_linux_arm64.zip" || { echo "nomad下载失败"; return 1; }
         wget -q --show-progress https://releases.hashicorp.com/consul/1.21.4/consul_1.21.4_linux_arm64.zip -O "$pkg_dir/consul_1.21.4_linux_arm64.zip" || { echo "consul下载失败"; return 1; }
     else
         echo "错误：不支持的架构 $arch，仅支持 x86/arm64"
