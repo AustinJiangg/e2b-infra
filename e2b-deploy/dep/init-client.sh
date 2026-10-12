@@ -128,8 +128,14 @@ cat <<EOH >/etc/udev/rules.d/97-nbd-device.rules
 ACTION=="add|change", KERNEL=="nbd*", OPTIONS:="nowatch"
 EOH
 
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+# 这条规则只管 nbd，所以只对 nbd 设备触发。不带参数的 `udevadm trigger` 会给全机每个设备
+# 发 change 事件；大机器上（几百个 CPU、上千个内存块、512 个 nbd，再加别人的容器网卡）
+# udevd 和 systemd 要被这波事件占住好几分钟，期间 udevadm control / systemctl 超时，
+# 本脚本在 set -e 下就整个退出了（"启动 Nomad 客户端失败"）。见 runbook §6.10。
+# reload 超时也不致命：规则文件已经写好，udevd 处理下一个事件前会发现文件变了并重新加载。
+sudo udevadm control --reload-rules \
+  || echo "⚠️ udevadm control --reload-rules 未及时响应（udevd 正忙），跳过；规则稍后自动生效"
+sudo udevadm trigger --action=change --subsystem-match=block --sysname-match='nbd*' || true
 
 # 自定义 nbd 模块（nbds_max=512）不在此处加载：按 single-node-offline-deploy.md 0.2
 # 一次性固化到系统模块目录（modules-load.d + modprobe.d）后开机自动加载
