@@ -869,6 +869,32 @@ time dig +short AAAA test.e2b.app @127.0.0.1   # 应立即返回（空）
 
 不要用 `filter-AAAA` 代替：实测它对 `address=` 覆盖的域不起作用，AAAA 照样超时。
 
+
+### 6.10 `-s` 中途报 `udevadm ... Connection timed out` / `systemctl ... Transport endpoint is not connected`
+
+**现象**：`start-client.sh` 或 `init-client.sh` 中途退出，打印「❌ 启动 Nomad 客户端失败」，前一行是
+`udevadm control --reload-rules` 的 `Failed to wait for daemon to reply: Connection timed out`，
+或 `systemctl restart dnsmasq` 的 `Transport endpoint is not connected`。过一阵子再敲 `systemctl`
+又正常了。
+
+**原因**：旧脚本里的 `udevadm trigger` 不带任何过滤，会给全机**每个**设备发 change 事件，而
+`-s` 里 `start-client.sh` 和 `init-client.sh` 各跑一次。大机器（几百个 CPU、上千个内存块、
+512 个 nbd，再加同机别人的容器网卡）上，udevd 和 systemd 要被这波事件占住好几分钟，
+期间 `udevadm control`、`systemctl` 都等不到回复；脚本开着 `set -e`，于是整个退出。
+
+**处置**：新版脚本只对 `nbd*` 触发（那条 udev 规则只管 nbd），reload 超时也只告警不退出。
+旧环境先等事件处理完再重跑：
+
+```bash
+udevadm settle --timeout=600; echo "settle rc=$?"   # 0 = 队列已空
+systemctl is-system-running                          # running / degraded 即可
+bash build.sh -s
+```
+
+同时把 `/opt/e2b-infra/start-client.sh`、`init-client.sh` 里的 `sudo udevadm trigger` 改成
+`sudo udevadm trigger --action=change --subsystem-match=block --sysname-match='nbd*' || true`，
+否则每次 `-s` 都会再掀一次。
+
 ---
 
 ## 7. 清理多次重跑累积的脏数据
