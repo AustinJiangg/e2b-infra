@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.7**（2026-10-15，归档 950 smoke 五项全部通过的验收结果，覆盖 19 项宿主预检、59 项正确性与 SDK / 能力 / FC 身份证据；汇总四档实测与覆盖边界）· 江路路（j30059180）
+> **v0.4.8**（2026-10-15，修复第 21 章验收说明误入目录的排版问题，增加全册标题回归检查；保留 950 smoke 五项全部通过的验收结果、四档实测与覆盖边界）· 江路路（j30059180）
 >
 > 代码讲解基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理。950 smoke 有能力文件自报 `commit=4853232`、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator 的完整 sha256；源码 / RPM 对应、perf / func 当轮身份尚待核对，不能从讲解基准或相邻轮次直接推定。
 

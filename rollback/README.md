@@ -68,14 +68,14 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.7**（2026-10-15，江路路 j30059180；归档 950 smoke 五项全部通过及宿主、SDK、能力、FC 与正确性证据，汇总四档实测；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；已发布 [docs-v0.4.7](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.7)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
+当前文档版本 **v0.4.8**（2026-10-15，江路路 j30059180；修复第 21 章验收说明误入目录的排版问题，增加全册标题回归检查，保留四档实测与覆盖边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；已发布 [docs-v0.4.8](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.8)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
 每份新产物的封面与侧栏都印着版本号，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准；Releases 中的历史附件不会随本地重建自动更新。
 
 | 附件 | 大小 | 给谁 |
 |---|---|---|
 | `checkpoint-restore-docs.html` | 约 4.7 MiB | 唯一上传附件。单文件，双击用浏览器打开，不联网、不装任何东西 |
 
-新版不再上传 ZIP、tar.gz、PDF 或校验文件；历史 Release 原样保留。GitHub 自动提供的源码压缩包入口不属于我们上传的交付附件。
+新版只上传一个 HTML，不上传 ZIP、tar.gz、PDF 或校验文件；存在目录排版问题的 `docs-v0.4.7` 发布由本版替代并删除，其他历史 Release 保留。GitHub 自动提供的 `Source code (zip)`、`Source code (tar.gz)` 入口不属于上传的交付附件，无法通过删除附件移除；分发手册请使用 HTML 的直接下载链接。
 
 HTML 版把全部跨篇链接改写成了页内锚点，mermaid 图内联渲染、
 三张 SVG 内嵌在附录，所以怎么传都不会断；浏览器 Ctrl+P 可直接存 PDF。

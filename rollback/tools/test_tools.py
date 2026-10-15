@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+from markdown_it import MarkdownIt
+
 TOOLS = Path(__file__).resolve().parent
 
 
@@ -53,6 +55,20 @@ class ToolsTests(unittest.TestCase):
 
     def test_empty_input_fails(self):
         self.assertNotEqual(self.links(self.root).returncode, 0)
+
+    def test_handbook_has_no_accidental_setext_headings(self):
+        # 手册标题统一用 #；正文与 --- 之间漏空行会把整段正文提升为标题并污染目录。
+        parser = MarkdownIt("commonmark").enable(["table", "strikethrough"])
+        docs = sorted((TOOLS.parent / "docs").glob("*.md"))
+        self.assertTrue(docs, "没有找到待检查的手册")
+        for path in docs:
+            for token in parser.parse(path.read_text(encoding="utf-8")):
+                if token.type == "heading_open":
+                    with self.subTest(path=path.name, line=token.map[0] + 1):
+                        self.assertNotIn(
+                            token.markup, ("-", "="),
+                            f"{path.name}:{token.map[0] + 1}：正文后分隔线前可能缺少空行",
+                        )
 
     def test_generator_is_deterministic(self):
         docs = self.root / "docs"

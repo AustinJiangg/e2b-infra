@@ -1,10 +1,10 @@
 {
   "title": "Checkpoint / Restore 技术手册",
-  "version": "v0.4.7",
+  "version": "v0.4.8",
   "date": "2026-10-15",
   "byline": "江路路（j30059180）",
   "gh_repo": "https://github.com/AustinJiangg/e2b-infra",
-  "git_ref": "b0cb807",
+  "git_ref": "e7f76f1",
   "repo_docs_path": "rollback/docs",
   "svgs": [
     ["01-architecture.svg", "总体结构（优化点标注在对应层）"],

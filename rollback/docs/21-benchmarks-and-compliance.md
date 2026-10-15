@@ -327,9 +327,10 @@ KVM / userfaultfd、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参
 `lock_wait_timeout=1m0s`、`fc_call_timeout=2m0s`。`FC_TRACK_DIRTY_PAGES` 与 `FC_HDBSS_ORDER` 均未显式设置；
 能力文件说明脏页跟踪由硬件能力自动开启，不能误写为显式设了 `FC_TRACK_DIRTY_PAGES=true`。
 
-**验收范围：**本轮 smoke 的宿主预检、SDK 自检、能力信息、FC 配套检查及正确性均通过；不替代重启 / 故障注入专项、小时级长稳或所有模板的覆盖。
+**验收范围：** 本轮 smoke 的宿主预检、SDK 自检、能力信息、FC 配套检查及正确性均通过；不替代重启 / 故障注入专项、小时级长稳或所有模板的覆盖。
 `commit=4853232` 是程序自报标签，源码 / RPM 对应仍需核实；身份记录仅证明本轮采集状态。
 本轮只有 2 次增量与 10 次恢复，不并入 perf 的正式分档、p99 或长期统计，性能数字仍以 §6 与 [22](22-long-run-and-concurrency.md) 为准。
+
 ---
 
 ## 3. 分档基准与判定
