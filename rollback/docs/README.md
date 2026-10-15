@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.11**（2026-10-15，代码量附录补充 phz 的 SDK 基础与本方 MR 前适配、MR 后完善的分段统计；保留 MR 后演进总览及实测边界）· 江路路（j30059180）
+> **v0.4.12**（2026-10-15，新增能力现状与后续方向章节，集中维护能力边界、已知问题、验证缺口与候选开发方向）· 江路路（j30059180）
 >
 > 代码讲解基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；已合入 openEuler 的 MR 基线为 deltabox@0f9b58f，后续开发改动合入交付分支待整理。交付的 RPM（e2b-infra）里的 0001 补丁由开发版融合而来。950 smoke 有能力文件自报 `commit=4853232`、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator 的完整 sha256；源码 / RPM 对应、perf / func 当轮身份尚待核对，不能从讲解基准或相邻轮次直接推定。
 
@@ -11,6 +11,8 @@
 只想完成某件具体事情的读者，按下面的捷径跳读。
 
 **先了解 MR 后的工作**：[MR 合入后的演进](00a-post-mr-evolution.md)说明 MR 版已在单沙箱场景下满足客户性能要求，后续为何面向并发与持续运行继续开发，以及各类修改对应的 commit、客户收益与验证证据。代码量统计统一见 [附录 C](C-code-size-and-methodology.md)。
+
+**先看当前限制与后续方向**：[00b · 能力现状与后续方向](00b-status-and-roadmap.md)集中列出当前能力与设计边界、已知问题与验证缺口、候选开发方向及状态；每项链接到详细契约、分析和证据。
 
 **先看 950 实测**：单沙箱每步改动量、保存与回滚延迟、达标范围和连续恢复见 [21 §6](21-benchmarks-and-compliance.md#6-950)；
 最多 16 沙箱同时操作、同沙箱四调用方争用及跨回滚连接的行为见 [22 §7](22-long-run-and-concurrency.md#7-950-短时并发2026-10-13-ab)。
@@ -25,7 +27,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 
 ### 教材读者：按顺序读
 
-[00](00-overview.md) → [00a MR 合入后的演进](00a-post-mr-evolution.md) → 第一部分 [01](01-background.md)–[03](03-goals-and-design-choices.md)
+[00](00-overview.md) → [00a MR 合入后的演进](00a-post-mr-evolution.md) → [00b 能力现状与后续方向](00b-status-and-roadmap.md) → 第一部分 [01](01-background.md)–[03](03-goals-and-design-choices.md)
 → 第二部分 [04](04-architecture.md)–[11](11-end-to-end.md)
 → 第三部分 [12](12-failure-semantics.md)–[14](14-lifecycle-reasoning.md)
 → 第四部分 [15](15-native-increment-diagnosis.md)–[18](18-native-and-checkpoint-together.md)
@@ -40,6 +42,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 
 | 你是 | 建议路径 |
 |---|---|
+| **了解现状 / 规划开发**：支持什么、有哪些限制、接下来可以做什么 | [00b 能力现状与后续方向](00b-status-and-roadmap.md) → 按表内链接查契约、证据与开发方法 |
 | **客户 / 评审**：想知道合入上游后又做了什么 | [00a 演进总览](00a-post-mr-evolution.md) → [C 代码规模](C-code-size-and-methodology.md) → [22 并发与长跑证据](22-long-run-and-concurrency.md)；按总览中的链接查具体机制 |
 | **客户开发者**：要在代码里调用 checkpoint / restore | [00](00-overview.md) → [23](23-quickstart.md) → [24](24-semantics-and-limits.md) → [25](25-errors-timeouts-concurrency.md) → [21](21-benchmarks-and-compliance.md)（只看判定结论）；要和原生 pause / resume 配合时再读 [18](18-native-and-checkpoint-together.md) |
 | **运维**：部署、配置、监控、排障、上机验收 | [00](00-overview.md) → [26](26-deployment-prerequisites.md) → [27](27-configuration-and-capacity.md) → [28](28-observability-reference.md) → [29](29-troubleshooting.md) → [30](30-acceptance-runbook.md)；错误含义查 [25](25-errors-timeouts-concurrency.md)；想知道长期运行会怎样读 [22](22-long-run-and-concurrency.md) |
@@ -56,6 +59,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 |---|---|---|
 | 00 | [导读](00-overview.md) | 这本书讲什么、六个部分怎么衔接、与原生快照的关系，以及一次 checkpoint 和一次 restore 各经过哪几章 |
 | 00a | [MR 合入后的演进：从单沙箱达标到并发快照回滚优化](00a-post-mr-evolution.md) | 已达标的 MR 基线、后续并发与持续运行问题、修改与代表 commit、客户收益及验证边界 |
+| 00b | [能力现状与后续方向](00b-status-and-roadmap.md) | 当前能力与设计边界、已知问题与验证缺口、候选开发方向及状态的统一入口 |
 
 ### 第一部分　基础
 
@@ -128,7 +132,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 | # | 文档 | 一句话 |
 |---|---|---|
 | A | [术语、代码地图与文件格式](A-glossary-and-code-map.md) | 术语表、代码索引、文件格式、接口与不变量速查 |
-| B | [继续开发](B-extending.md) | 按任务的改动指引、不能破坏的不变量、一次改动怎么验证、已知缺口 |
+| B | [继续开发](B-extending.md) | 按任务的改动指引、不能破坏的不变量、一次改动怎么验证、待验证项的源码依据与测法 |
 | C | [代码规模、版本增量与统计口径](C-code-size-and-methodology.md) | 有效代码与物理行、MR 版及 MR 后改动、当前测试分类、去重规则与固定提交复算 |
 
 ---

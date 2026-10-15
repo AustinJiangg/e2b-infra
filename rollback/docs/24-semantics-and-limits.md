@@ -12,6 +12,7 @@
 
 上一章（[23](23-quickstart.md)）跑通了接口。本章讲用它写业务之前必须知道的语义：restore 带回什么、带不回什么，checkpoint 什么时候失效，删除之后空间怎么回收，
 以及它和原生 snapshot 怎么分工。接口与示例见 [23](23-quickstart.md)，错误与并发在下一章（[25](25-errors-timeouts-concurrency.md)）。
+当前能力、已知问题与候选方向的总览见 [00b](00b-status-and-roadmap.md)；本章维护使用契约的详细规则。
 
 ---
 

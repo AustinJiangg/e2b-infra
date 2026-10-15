@@ -223,7 +223,7 @@ func hardwareDirtyTracking() bool {
 `KVM_CHECK_EXTENSION` **只查询**：不建 VM、不启用任何东西；没有 `/dev/kvm` 的机器上安全地返回 false。
 判定逻辑在 `decideTrackDirtyPages`（:68）：变量未设置时跟硬件走；能被 `strconv.ParseBool` 解析就照办；解析不了则忽略并跟硬件走。
 这个决策是**整个 orchestrator 一个值**（包级变量，启动时算一次），不是每沙箱一个。做成"按沙箱按需武装"需要在创建沙箱时就知道它会不会打
-checkpoint，而目前的 API 里没有这个信息；这是一个明确的可扩展点（[B](B-extending.md)）。
+checkpoint，而目前的 API 里没有这个信息；这是一个明确的可扩展点（[00b §3](00b-status-and-roadmap.md#3-候选开发方向)）。
 
 **Firecracker** 在 `Vm::setup_dirty_tracking()`（`vstate/vm.rs:206`）里真正武装：region 没有 bitmap 就是 `off`；
 aarch64 上调 `enable_hdbss(order)`（`arch/aarch64/vm.rs:66`，对 VM fd 做 `KVM_ENABLE_CAP`，cap 502）。成功记为 `hdbss`；

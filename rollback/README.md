@@ -7,7 +7,7 @@ MR 版已在当时验证的单沙箱快照、回滚场景下满足客户性能�
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
-| [`docs/`](docs/) | **技术手册**（教材版），导读 + 35 篇（含 MR 后演进总览及附录 A、B、C），按教学顺序分六部分：基础 → 设计与实现 → 工程保障 → 原生快照的精确增量 → 验证与实测 → 使用与运维 | 首要入口 |
+| [`docs/`](docs/) | **技术手册**（教材版），导读 + 36 篇（含 MR 后演进总览、能力现状与后续方向及附录 A、B、C），按教学顺序分六部分：基础 → 设计与实现 → 工程保障 → 原生快照的精确增量 → 验证与实测 → 使用与运维 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
 | [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
 | [`tools/`](tools/) 与 [`book.json`](book.json) | 本手册的 HTML 生成、校验工具及版本配置 | 维护与发布手册的人 |
@@ -22,9 +22,10 @@ MR 版已在当时验证的单沙箱快照、回滚场景下满足客户性能�
 
 | 你是 | 建议路径 |
 |---|---|
+| 想了解当前限制、已知问题和后续开发方向 | [`00b 能力现状与后续方向`](docs/00b-status-and-roadmap.md) |
 | 想先看个全貌 | [`docs/00-overview.md`](docs/00-overview.md) |
 | 想了解 MR 合入后为何继续开发、具体改了什么 | [`00a 演进总览`](docs/00a-post-mr-evolution.md) → [`C 代码规模`](docs/C-code-size-and-methodology.md) → [`22 并发与长跑证据`](docs/22-long-run-and-concurrency.md) |
-| 当教材从头学 | 按顺序读：[`00`](docs/00-overview.md) → 第一部分 [`01`](docs/01-background.md)–[`03`](docs/03-goals-and-design-choices.md) → 第二部分 [`04`](docs/04-architecture.md)–[`11`](docs/11-end-to-end.md) → 第三部分 [`12`](docs/12-failure-semantics.md)–[`14`](docs/14-lifecycle-reasoning.md) → 第四部分 [`15`](docs/15-native-increment-diagnosis.md)–[`18`](docs/18-native-and-checkpoint-together.md) → 第五部分 [`19`](docs/19-testing-and-functional-verification.md)–[`22`](docs/22-long-run-and-concurrency.md) → 第六部分 [`23`](docs/23-quickstart.md)–[`30`](docs/30-acceptance-runbook.md) |
+| 当教材从头学 | 按顺序读：[`00`](docs/00-overview.md) → [`00a`](docs/00a-post-mr-evolution.md) → [`00b`](docs/00b-status-and-roadmap.md) → 第一部分 [`01`](docs/01-background.md)–[`03`](docs/03-goals-and-design-choices.md) → 第二部分 [`04`](docs/04-architecture.md)–[`11`](docs/11-end-to-end.md) → 第三部分 [`12`](docs/12-failure-semantics.md)–[`14`](docs/14-lifecycle-reasoning.md) → 第四部分 [`15`](docs/15-native-increment-diagnosis.md)–[`18`](docs/18-native-and-checkpoint-together.md) → 第五部分 [`19`](docs/19-testing-and-functional-verification.md)–[`22`](docs/22-long-run-and-concurrency.md) → 第六部分 [`23`](docs/23-quickstart.md)–[`30`](docs/30-acceptance-runbook.md) |
 | 不写这类代码，但想搞懂它在干什么 | [`01 背景`](docs/01-background.md) → [`24 语义与使用边界`](docs/24-semantics-and-limits.md) |
 | 工程师，要接手或参与 | 第一到第三部分；机制最短路径 [`04`](docs/04-architecture.md) → [`05`](docs/05-dirty-page-tracking-and-hdbss.md) → [`06`](docs/06-memory-diff-tree.md) → [`07`](docs/07-disk-layering.md) → [`09`](docs/09-in-place-rollback.md) → [`11`](docs/11-end-to-end.md)；动原生 pause 路径前读第四部分 [`15`](docs/15-native-increment-diagnosis.md)–[`18`](docs/18-native-and-checkpoint-together.md) |
 | 系统工程师 / 运维 | [`26 部署前提`](docs/26-deployment-prerequisites.md) → [`27 配置与容量`](docs/27-configuration-and-capacity.md) → [`28 可观测性`](docs/28-observability-reference.md) → [`29 排障`](docs/29-troubleshooting.md) → [`30 上机验收`](docs/30-acceptance-runbook.md) |
@@ -70,7 +71,7 @@ MR 版已在当时验证的单沙箱快照、回滚场景下满足客户性能�
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.11**（2026-10-15，江路路 j30059180；代码量附录补充 phz 的 SDK 基础与本方 MR 前适配、MR 后完善的分段统计，保留 MR 后演进总览及实测边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；发布入口为 [docs-v0.4.11](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.11)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
+当前文档版本 **v0.4.12**（2026-10-15，江路路 j30059180；新增能力现状与后续方向章节，集中维护能力边界、已知问题、验证缺口与候选开发方向；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）。发布入口为 [docs-v0.4.12](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.12)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
 每份新产物的封面与侧栏都印着版本号，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准；Releases 中的历史附件不会随本地重建自动更新。
 
 | 附件 | 大小 | 给谁 |
