@@ -1,0 +1,16 @@
+{
+  "title": "Checkpoint / Restore 技术手册",
+  "version": "v0.4.7",
+  "date": "2026-10-15",
+  "byline": "江路路（j30059180）",
+  "gh_repo": "https://github.com/AustinJiangg/e2b-infra",
+  "git_ref": "b0cb807",
+  "repo_docs_path": "rollback/docs",
+  "svgs": [
+    ["01-architecture.svg", "总体结构（优化点标注在对应层）"],
+    ["02-diff-tree.svg", "内存差分树，以及一次回滚在宿主侧怎么算出来"],
+    ["03-vs-native.svg", "与 e2b 原生 snapshot / resume 的路径对比"]
+  ],
+  "appendix_title": "附录 · 汇报配图",
+  "appendix_intro": "三张矢量图，可直接插进 PowerPoint / WPS 保持清晰度。图源（mermaid）在完整仓库的 <code>rollback/diagrams/</code>。"
+}
