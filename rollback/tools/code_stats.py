@@ -200,6 +200,47 @@ def compare(repo, before, after, entries):
     return result
 
 
+def measure_sdk_provenance(kas, scope, periods):
+    """在同一条交付历史内分段复算 SDK 来源，不以提交者代替作者。"""
+    config, refs = scope["sdk_provenance"], scope["refs"]
+    foundation, adaptation = config["foundation"], config["adaptation"]
+    commits = {}
+    for role, ref in (("foundation", foundation), ("adaptation", adaptation)):
+        assert re.fullmatch(r"[0-9a-f]{40}", ref), "SDK 来源必须固定完整 SHA"
+        fields = git(kas, "show", "-s", "--format=%H%n%an%n%ae%n%cn%n%ce%n%s", ref).decode().splitlines()
+        commits[role] = dict(zip(("sha", "author", "author_email", "committer", "committer_email", "subject"), fields))
+        assert commits[role]["sha"] == ref
+    assert commits["foundation"]["author_email"] == config["foundation_author_email"], "SDK 原始作者与来源记录不符"
+    for before, after in ((refs["baseline"], foundation), (foundation, adaptation),
+                          (adaptation, refs["mr"]), (refs["mr"], refs["current"])):
+        assert git(kas, "merge-base", before, after).decode().strip() == before, "SDK 来源不在指定交付分支历史内"
+    parent = git(kas, "rev-parse", f"{foundation}^").decode().strip()
+    entries = dict(scope["kas_files"])
+    for old, new in config["path_aliases"].items():
+        assert old not in entries, f"旧 SDK 路径与主范围冲突：{old}"
+        entries[old] = entries[new]
+    result = {"commits": commits, "stages": {}}
+    for name, before, after in (("foundation", parent, foundation),
+                                ("mr_adaptation", foundation, refs["mr"]),
+                                ("after_mr", refs["mr"], refs["current"]),
+                                ("own_current", foundation, refs["current"])):
+        rows = [r for r in compare(kas, before, after, entries) if r["kind"] == "production"
+                and (r["component"] == "sdk" or (r["component"] == "support" and r["path"].startswith(("py-sdk/", "spec/"))))]
+        result["stages"][name] = {"before": before, "after": after,
+                                  "runtime": total([r for r in rows if r["component"] == "sdk"]),
+                                  "support": total([r for r in rows if r["component"] == "support"]), "details": rows}
+    stages = result["stages"]
+    for unit in ("sloc", "physical"):
+        nets = {name: stage["runtime"][unit]["net"] for name, stage in stages.items()}
+        for period, value in (("mr", nets["foundation"] + nets["mr_adaptation"]),
+                              ("after_mr", nets["after_mr"]),
+                              ("current", nets["foundation"] + nets["own_current"])):
+            assert value == periods[period]["by_component"]["sdk"][unit]["net"], "SDK 来源分段与生产主表不一致"
+        for component in ("runtime", "support"):
+            assert stages["mr_adaptation"][component][unit]["net"] + stages["after_mr"][component][unit]["net"] == stages["own_current"][component][unit]["net"], "SDK 本方两阶段净增不一致"
+    return result
+
+
 def measure(kas, infra, scope):
     for name in ("kas_files", "infra_files"):
         for path, info in scope[name].items():
@@ -251,6 +292,8 @@ def measure(kas, infra, scope):
     report["infra_details"] = infra_rows
     for unit in ("sloc", "physical"):
         assert report["periods"]["mr"]["production"][unit]["net"] + report["periods"]["after_mr"]["production"][unit]["net"] == report["periods"]["current"]["production"][unit]["net"], f"{unit} 两阶段净增不一致，需审查分类或词法边界"
+    if "sdk_provenance" in scope:
+        report["sdk_provenance"] = measure_sdk_provenance(kas, scope, report["periods"])
     return report
 
 
@@ -281,6 +324,18 @@ def render_blocks(report):
         values = [number(periods[p]["by_scope"].get(scope, empty_metrics())["sloc"]["net"]) for p in PERIODS]
         lines.append(f"| {label} | {' | '.join(values)} |")
     blocks["scope"] = "\n".join(lines)
+    lines = []
+    if "sdk_provenance" in report:
+        source = report["sdk_provenance"]
+        lines = ["| 来源阶段（同一交付历史） | SDK 运行时有效行：新增 / 删除 / 净增 | SDK 运行时物理行净增 | SDK 协议 / 构建支撑有效行净增 |", "|---|---:|---:|---:|"]
+        for key, label in (("foundation", "phz 原始 SDK 引入"), ("mr_adaptation", "本方 MR 前适配"),
+                           ("after_mr", "本方 MR 后完善"), ("own_current", "本方后续合计（后两阶段的端点复算，不重复相加）")):
+            stage = source["stages"][key]
+            lines.append(f"| {label} | {delta(stage['runtime'])} | {number(stage['runtime']['physical']['net'])} | {number(stage['support']['sloc']['net'])} |")
+        stages = source["stages"]
+        values = [number(stages[key]["runtime"]["sloc"]["net"]) for key in ("foundation", "mr_adaptation", "after_mr")]
+        lines.extend(["", f"与生产主表的 Python SDK 行复核：MR 版 **{values[0]} + {values[1]} = {number(periods['mr']['by_component']['sdk']['sloc']['net'])}**；当前版再加 MR 后 **{values[2]}**，合计 **{number(periods['current']['by_component']['sdk']['sloc']['net'])}** 行有效净增。SDK 协议 / 构建支撑已计入主表的“手写协议、配置与构建支撑”，不重复加到 Python SDK 行。"])
+    blocks["sdk-provenance"] = "\n".join(lines)
     lines = ["| 当前测试与验证类别 | 有效代码：新增 / 删除 / 净增 |", "|---|---:|"]
     for key, label in TESTS.items():
         lines.append(f"| {label} | {delta(tests['by_kind'].get(key, empty_metrics()))} |")
@@ -317,7 +372,7 @@ def render_blocks(report):
 def sync_docs(report, root=ROOT, check=False):
     blocks = render_blocks(report)
     for path, names in ((root / "docs/00-overview.md", ("summary",)),
-                        (root / "docs/C-code-size-and-methodology.md", ("versions", "production", "scope", "tests", "physical", "exclusions"))):
+                        (root / "docs/C-code-size-and-methodology.md", ("versions", "production", "scope", "sdk-provenance", "tests", "physical", "exclusions"))):
         source = path.read_text(encoding="utf-8")
         updated = source
         for name in names:

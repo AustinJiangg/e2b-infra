@@ -12,6 +12,22 @@
     "infra": "https://github.com/AustinJiangg/e2b-infra.git"
   },
   "classification": "按文件主用途分类；混合改动整文件列共用；Rust 按 cfg(test) 与测试 feature 行范围拆分；共用只计一次。",
+  "sdk_provenance": {
+    "foundation": "60f8c35101b67c95cfcc680455b32024054d935d",
+    "foundation_author_email": "penghaozhou@huawei.com",
+    "adaptation": "5c42b396892cb12ed0125c2b288c1beaeaad6bda",
+    "path_aliases": {
+      "py-sdk/e2b/gsd/README.md": "py-sdk/e2b/checkpointd/README.md",
+      "py-sdk/e2b/gsd/api.py": "py-sdk/e2b/checkpointd/api.py",
+      "py-sdk/e2b/gsd/checkpoint/__init__.py": "py-sdk/e2b/checkpointd/checkpoint/__init__.py",
+      "py-sdk/e2b/gsd/checkpoint/checkpoint_connect.py": "py-sdk/e2b/checkpointd/checkpoint/checkpoint_connect.py",
+      "py-sdk/e2b/gsd/checkpoint/checkpoint_pb2.py": "py-sdk/e2b/checkpointd/checkpoint/checkpoint_pb2.py",
+      "py-sdk/e2b/gsd/checkpoint/checkpoint_pb2.pyi": "py-sdk/e2b/checkpointd/checkpoint/checkpoint_pb2.pyi",
+      "py-sdk/scripts/fix-python-pb-gsd.sh": "py-sdk/scripts/fix-python-pb-checkpointd.sh",
+      "spec/gsd/buf-python.gen.yaml": "spec/checkpointd/buf-python.gen.yaml",
+      "spec/gsd/checkpoint/checkpoint.proto": "spec/checkpointd/checkpoint/checkpoint.proto"
+    }
+  },
   "kas_files": {
     "deploy/.env": {
       "kind": "production",

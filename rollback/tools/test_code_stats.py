@@ -118,7 +118,7 @@ class FixedGitStatsTests(unittest.TestCase):
     def test_generated_blocks_reject_manual_drift(self):
         result = stats.measure(self.kas, self.infra, self.scope)
         self.write(self.root, "docs/00-overview.md", "<!-- code-stats:summary:start -->\n<!-- code-stats:summary:end -->\n")
-        markers = ("versions", "production", "scope", "tests", "physical", "exclusions")
+        markers = ("versions", "production", "scope", "sdk-provenance", "tests", "physical", "exclusions")
         self.write(self.root, "docs/C-code-size-and-methodology.md", "\n".join(
             f"<!-- code-stats:{name}:start -->\n<!-- code-stats:{name}:end -->" for name in markers))
         stats.sync_docs(result, root=self.root)
@@ -140,6 +140,41 @@ class FixedGitStatsTests(unittest.TestCase):
         scope = copy.deepcopy(self.scope)
         scope["refs"]["infra_current"] = self.commit(self.infra)
         with self.assertRaisesRegex(AssertionError, "脚本范围已变化"):
+            stats.measure(self.kas, self.infra, scope)
+
+    def test_sdk_source_uses_author_and_reconciles_across_rename(self):
+        scope = copy.deepcopy(self.scope)
+        old, new = "py-sdk/e2b/gsd/api.py", "py-sdk/e2b/checkpointd/api.py"
+        self.write(self.kas, old, "def checkpoint():\n    return 1\n")
+        self.write(self.kas, "spec/checkpoint.proto", 'syntax = "proto3";\n')
+        self.write(self.kas, "py-sdk/generated.py", "generated = 1\n")
+        self.git(self.kas, "add", ".")
+        self.git(self.kas, "commit", "-qm", "SDK foundation", "--author", "penghaozhou <phz@example.invalid>")
+        foundation = self.git(self.kas, "rev-parse", "HEAD")
+        (self.kas / new).parent.mkdir(parents=True)
+        self.git(self.kas, "mv", old, new)
+        self.write(self.kas, new, "def checkpoint():\n    return 1\nTIMEOUT = 300\n")
+        scope["refs"]["mr"] = self.commit(self.kas)
+        self.write(self.kas, new, "def checkpoint():\n    return 2\nTIMEOUT = 300\n")
+        scope["refs"]["current"] = self.commit(self.kas)
+        scope["kas_files"][new] = {"kind": "production", "component": "sdk", "scope": "rollback"}
+        scope["kas_files"]["spec/checkpoint.proto"] = {"kind": "production", "component": "support", "scope": "shared"}
+        scope["kas_files"]["py-sdk/generated.py"] = {"kind": "generated"}
+        scope["sdk_provenance"] = {"foundation": foundation, "foundation_author_email": "phz@example.invalid",
+                                   "adaptation": scope["refs"]["mr"], "path_aliases": {old: new}}
+        report = stats.measure(self.kas, self.infra, scope)
+        result = report["sdk_provenance"]
+        self.assertEqual(result["commits"]["foundation"]["author"], "penghaozhou")
+        self.assertEqual(result["commits"]["foundation"]["committer"], "stats-test")
+        stages = result["stages"]
+        self.assertEqual(stages["foundation"]["runtime"]["sloc"]["net"], 2)
+        self.assertEqual(stages["foundation"]["support"]["sloc"]["net"], 1)
+        self.assertEqual(stages["mr_adaptation"]["runtime"]["sloc"]["net"], 1)
+        self.assertEqual(stages["after_mr"]["runtime"]["sloc"], {"added": 1, "deleted": 1, "net": 0})
+        self.assertEqual(stages["own_current"]["runtime"]["sloc"]["net"], 1)
+        self.assertEqual(report["periods"]["current"]["by_component"]["sdk"]["sloc"]["net"], 3)
+        scope["sdk_provenance"]["foundation_author_email"] = "stats-test@example.invalid"
+        with self.assertRaisesRegex(AssertionError, "原始作者"):
             stats.measure(self.kas, self.infra, scope)
 
 
