@@ -173,7 +173,7 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 源码、部署补丁和被测二进制的身份边界见 [README](README.md)、[26](26-deployment-prerequisites.md)；能力核对方法见 [27 §3](27-configuration-and-capacity.md#3-启动能力行)。
 
 后续优化已有并发和长跑验证，也保留明确边界：同沙箱修改操作串行；跨回滚连接需要重连；checkpoint 随当前生命周期失效；空间收敛依赖删除与合并条件；并发尾延迟和宿主 conntrack 表规模仍需按实际负载评估。
-已知长尾、未实施的改进及 950 后续验证方向见 [22 §6](22-long-run-and-concurrency.md#6-结论与剩余长尾)，使用契约见 [24](24-semantics-and-limits.md)、[25](25-errors-timeouts-concurrency.md)。
+当前限制、已知问题、验证缺口与候选开发方向统一从 [00b](00b-status-and-roadmap.md) 查阅；长尾分析及 950 后续验证安排仍见 [22 §6](22-long-run-and-concurrency.md#6-结论与剩余长尾)，使用契约见 [24](24-semantics-and-limits.md)、[25](25-errors-timeouts-concurrency.md)。
 
 ## 本章要点
 
