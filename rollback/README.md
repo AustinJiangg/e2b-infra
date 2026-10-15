@@ -1,12 +1,13 @@
 # rollback —— checkpoint / restore 的文档、配图与验证工具箱
 
 沙箱活着时的高频快速回退。本目录是这套功能的**文档与验证材料**；
-实现代码交付在 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入）；
+MR 版已在当时验证的单沙箱快照、回滚场景下满足客户性能要求，交付在 openEuler [KASandbox `deltabox` 分支](https://gitcode.com/openeuler/KASandbox/tree/deltabox)（[MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)，2026-09-09 合入）；
+此后面向并发与持续运行的修改在 `deltabox-dev` 开发，本手册讲解 `57a30632c`，与 MR 基线的区别见 [演进总览](docs/00a-post-mr-evolution.md)。
 本仓库根的 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm` 只用于我们在 950 测试环境上的 rpm 部署。
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
-| [`docs/`](docs/) | **技术手册**（教材版），导读 + 34 篇（含附录 A、B、C），按教学顺序分六部分：基础 → 设计与实现 → 工程保障 → 原生快照的精确增量 → 验证与实测 → 使用与运维 | 首要入口 |
+| [`docs/`](docs/) | **技术手册**（教材版），导读 + 35 篇（含 MR 后演进总览及附录 A、B、C），按教学顺序分六部分：基础 → 设计与实现 → 工程保障 → 原生快照的精确增量 → 验证与实测 → 使用与运维 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
 | [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
 | [`tools/`](tools/) 与 [`book.json`](book.json) | 本手册的 HTML 生成、校验工具及版本配置 | 维护与发布手册的人 |
@@ -22,6 +23,7 @@
 | 你是 | 建议路径 |
 |---|---|
 | 想先看个全貌 | [`docs/00-overview.md`](docs/00-overview.md) |
+| 想了解 MR 合入后为何继续开发、具体改了什么 | [`00a 演进总览`](docs/00a-post-mr-evolution.md) → [`C 代码规模`](docs/C-code-size-and-methodology.md) → [`22 并发与长跑证据`](docs/22-long-run-and-concurrency.md) |
 | 当教材从头学 | 按顺序读：[`00`](docs/00-overview.md) → 第一部分 [`01`](docs/01-background.md)–[`03`](docs/03-goals-and-design-choices.md) → 第二部分 [`04`](docs/04-architecture.md)–[`11`](docs/11-end-to-end.md) → 第三部分 [`12`](docs/12-failure-semantics.md)–[`14`](docs/14-lifecycle-reasoning.md) → 第四部分 [`15`](docs/15-native-increment-diagnosis.md)–[`18`](docs/18-native-and-checkpoint-together.md) → 第五部分 [`19`](docs/19-testing-and-functional-verification.md)–[`22`](docs/22-long-run-and-concurrency.md) → 第六部分 [`23`](docs/23-quickstart.md)–[`30`](docs/30-acceptance-runbook.md) |
 | 不写这类代码，但想搞懂它在干什么 | [`01 背景`](docs/01-background.md) → [`24 语义与使用边界`](docs/24-semantics-and-limits.md) |
 | 工程师，要接手或参与 | 第一到第三部分；机制最短路径 [`04`](docs/04-architecture.md) → [`05`](docs/05-dirty-page-tracking-and-hdbss.md) → [`06`](docs/06-memory-diff-tree.md) → [`07`](docs/07-disk-layering.md) → [`09`](docs/09-in-place-rollback.md) → [`11`](docs/11-end-to-end.md)；动原生 pause 路径前读第四部分 [`15`](docs/15-native-increment-diagnosis.md)–[`18`](docs/18-native-and-checkpoint-together.md) |
@@ -68,14 +70,14 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.9**（2026-10-15，江路路 j30059180；新增代码规模、版本增量与统计口径附录，区分手写生产、生成代码和当前测试，保留四档实测与覆盖边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；已发布 [docs-v0.4.9](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.9)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
+当前文档版本 **v0.4.10**（2026-10-15，江路路 j30059180；新增 MR 合入后演进总览，区分单沙箱达标与后续并发优化，关联代表提交、机制与验证，保留代码规模统计及实测边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；发布入口为 [docs-v0.4.10](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.10)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
 每份新产物的封面与侧栏都印着版本号，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准；Releases 中的历史附件不会随本地重建自动更新。
 
 | 附件 | 大小 | 给谁 |
 |---|---|---|
 | `checkpoint-restore-docs.html` | 约 4.7 MiB | 唯一上传附件。单文件，双击用浏览器打开，不联网、不装任何东西 |
 
-新版只上传一个 HTML，不上传 ZIP、tar.gz、PDF 或校验文件；存在目录排版问题的 `docs-v0.4.7` 发布由本版替代并删除，其他历史 Release 保留。GitHub 自动提供的 `Source code (zip)`、`Source code (tar.gz)` 入口不属于上传的交付附件，无法通过删除附件移除；分发手册请使用 HTML 的直接下载链接。
+新版只上传一个 HTML，不上传 ZIP、tar.gz、PDF 或校验文件；存在目录排版问题的 `docs-v0.4.7` 发布已由 v0.4.8 替代并删除，其他历史 Release 保留。GitHub 自动提供的 `Source code (zip)`、`Source code (tar.gz)` 入口不属于上传的交付附件，无法通过删除附件移除；分发手册请使用 HTML 的直接下载链接。
 
 HTML 版把全部跨篇链接改写成了页内锚点，mermaid 图内联渲染、
 三张 SVG 内嵌在附录，所以怎么传都不会断；浏览器 Ctrl+P 可直接存 PDF。
@@ -98,4 +100,4 @@ DOCS_PYTHON="$PWD/rollback/tools/.venv/bin/python" bash rollback/tools/build.sh
 ## 不在这里的东西
 
 方案设计稿、原理调研、过程日志与一次性探针仍在 WSL 工作区 `e2b-repo/`，尚未同步到本仓库。
-源码在 openEuler 交付仓库 `KASandbox_0904`（交付分支 `deltabox`），不在这里重复存放。
+源码在 openEuler 交付仓库 `KASandbox_0904`（MR 交付基线在 `deltabox`，后续开发在 `deltabox-dev`），不在这里重复存放。

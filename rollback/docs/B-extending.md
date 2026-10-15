@@ -32,7 +32,7 @@ FC 的 vmm 单测要引导仓库里的测试内核（`src/vmm/src/test_utils/moc
 
 | 交付物 | 是什么 |
 |---|---|
-| **代码** | 当前是 `KASandbox_0904` 的 `deltabox-dev`（版本见 [README](README.md)），`deltabox` 交付分支待整理；`firecracker/`、`packages/`、`py-sdk/` 三个组件同仓 |
+| **代码** | 手册讲解 `KASandbox_0904` 的 `deltabox-dev`（版本见 [README](README.md)）；`deltabox` 已包含首次 MR 交付，后续开发改动合入交付分支待整理。两阶段关系见 [00a](00a-post-mr-evolution.md)；`firecracker/`、`packages/`、`py-sdk/` 三个组件同仓 |
 | **文档** | 本手册，导出为单个 HTML 文件 |
 
 目标平台是 950（带 HDBSS）；920B 是开发环境。**orchestrator 与 Firecracker 必须取自同一版本、配对部署**：
