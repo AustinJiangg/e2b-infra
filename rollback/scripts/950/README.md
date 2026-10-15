@@ -188,13 +188,20 @@ bash run.sh smoke --python "$(command -v python3)"   # 在 build.sh -i 装 SDK �
 
 | 项 | 脚本 | 看什么 | PASS 判据 |
 |---|---|---|---|
-| 宿主预检 | `crtest/portability/preflight-customer.sh` | CPU / KVM / GIC / 大页 / 产物盘 / 二进制身份，共约 19 项 | 退出码 = 0，即 `FAIL 0`（`WARN` 不算 FAIL） |
+| 宿主预检 | `crtest/portability/preflight-customer.sh` | CPU / KVM / GIC / 大页 / 产物盘 / 二进制身份，共约 19 项。Firecracker 只校验**在用的**那个版本目录（见表下说明） | 退出码 = 0，即 `FAIL 0`（`WARN` 不算 FAIL） |
 | SDK 覆盖层自检 | `/opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check` | 覆盖层 21 个文件在不在位、异常族（原 8 个子类都在且映射表全是子类）、端口 49984、四个 RPC 不重放 | 打出「自检通过（干净子进程）」，退出码 0 |
 | capabilities 能力文件 / 日志行 | 先读 `DEFAULT_CACHE_DIR/checkpoint-capabilities.json`（默认 `/orchestrator/build/`；给了 `--store` 就是它的父目录），文件里的 `pid` 须是正在运行的 orchestrator / template-manager；没有这个文件（deltabox-dev `93ccb02` 之前的版本不写）或是以前的启动留下的，就退回从**正在运行**的那个进程所在 alloc 的 `start.stdout.*` 里抓最后一次启动行，再退到 journald | `track_dirty_pages` 是不是 `true`、为什么 | 读到有效的能力文件，或抓到带 `track_dirty_pages` 的日志行；都没有判 SKIP |
-| firecracker sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 跑的到底是哪个二进制 | 至少找到一个 |
+| firecracker sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 跑的到底是哪个二进制。`SUMMARY.md` 里显示在用的那一个（路径 + sha256），全部的在 `fc-sha256.log` | 至少找到一个 |
 | 功能正确性 | `acceptance/checkpoint_verify.py` | 三代现场、内存/根文件系统/删除/权限位共 59 项，心跳进程 pid 证明是内存回来了 | 打出「✓ 59 项校验全部通过。」 |
 
 看哪个文件：`SUMMARY.md` 一眼看完；要细节看 `preflight.log`、`checkpoint_verify.log`。
+
+**`/fc-versions` 下有不止一个版本目录时**（例如以前的部署留下了 `v1.12.1`，本次装的是 `v1.13.1`）：预检只对在用的那个判 PASS / FAIL，
+其余目录各列一行 `INFO … 未使用，不校验`，不计 FAIL 也不计 WARN。沙箱执行的是 `$FIRECRACKER_VERSIONS_DIR/<版本>/firecracker`，
+"在用的版本"按这个顺序取第一个判得出来的，并在 `preflight.log` 的 `在用的 FC 版本` 那一行写明依据：
+① 活着的 firecracker 进程的 `/proc/<pid>/exe`；② api 进程环境里的 `DEFAULT_FIRECRACKER_VERSION`；
+③ 部署脚本 `/opt/e2b-infra/init-client.sh` 里的 `FIRECRACKER_VERSION`（本部署是 `1.13.1`，即目录 `v1.13.1`）；④ 目录下只有一个版本。
+四条都判不出来时，退回"至少有一个目录带回滚接口就 PASS"，并用 INFO 说明无法判定在用版本。
 
 **59 还是 57？** 打出 57 项说明这个 SDK 没有 `mem_mode` 字段，增量判据失效 ——
 回去重跑 `install.py`（顺序：先 `install.py`，后 `patch_e2b.py`，不能反）。

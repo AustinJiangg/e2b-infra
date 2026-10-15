@@ -626,7 +626,19 @@ smoke)
 		say ""
 		say "== firecracker sha256 =="
 		sed 's/^/   /' "$FCLOG" | tee -a "$RUNLOG" >&3
-		row "firecracker 二进制 sha256" "PASS" "-" "$(head -1 "$FCLOG")" "fc-sha256.log"
+		# 关键数字显示「在用的」那个版本目录，不是列表第一行（/fc-versions 下可能还留着以前
+		# 部署的旧版本目录）。在用版本取自上面预检第 8 节的判定；预检没判出来就退回第一行。
+		FC_INUSE=$(sed 's/\x1b\[[0-9;]*m//g' "$OUT/preflight.log" 2>/dev/null |
+			sed -n 's/^ *INFO *在用的 FC 版本 *\(v[^ （]*\).*/\1/p' | head -1)
+		FC_KEY=""
+		[ -n "$FC_INUSE" ] && FC_KEY=$(grep -a "/$FC_INUSE/firecracker\$" "$FCLOG" | head -1)
+		if [ -n "$FC_KEY" ]; then
+			FC_KEY="在用 $FC_INUSE：$FC_KEY"
+		else
+			FC_KEY="$(head -1 "$FCLOG")（预检没判出在用版本，这是列表第一行）"
+		fi
+		[ "$(wc -l <"$FCLOG")" -gt 1 ] && FC_KEY="$FC_KEY；共 $(wc -l <"$FCLOG") 个，全部见日志"
+		row "firecracker 二进制 sha256" "PASS" "-" "$FC_KEY" "fc-sha256.log"
 	else
 		N_FAIL=$((N_FAIL + 1))
 		say "  FAIL  firecracker 二进制 sha256 —— 一个都没找到"
