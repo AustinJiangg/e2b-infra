@@ -79,16 +79,22 @@ bash rollback/scripts/950/run.sh long
 
 | 项 | 做什么 | PASS 判据 | 看哪个文件 |
 |---|---|---|---|
-| 宿主预检 | `crtest/portability/preflight-customer.sh`：CPU、KVM、GIC、HDBSS 能力、内核特性、模块、大页、产物盘、FC 二进制身份、SDK | 退出码 0（`WARN` 不算 FAIL） | `preflight.log` |
+| 宿主预检 | `crtest/portability/preflight-customer.sh`：CPU、KVM、GIC、HDBSS 能力、内核特性、模块、大页、产物盘、FC 二进制身份、SDK；FC 只判定选定的在用版本，其余版本目录记 INFO | 退出码 0（`WARN` 不算 FAIL） | `preflight.log` |
 | SDK 覆盖层自检 | `install.py --check` | 打出 `自检通过（干净子进程）` | `sdk-check.log` |
 | 能力文件 / 能力行 | 先读能力文件 `checkpoint-capabilities.json`（目录取正在运行的进程环境里的 `DEFAULT_CACHE_DIR`，没有就 `$ORCHESTRATOR_BASE_PATH/build`，再没有就 `/orchestrator/build`；给了 `--store` 就取它的父目录），其中 `pid` 须是该进程；没有有效的文件（此前的版本不写）就从**正在运行**的 orchestrator 所在 alloc 的日志里找最后一次 `checkpoint capabilities`，再退到 journald | 读到有效的能力文件，或抓到带 `track_dirty_pages` 的能力行；两样都没有时判 SKIP，按 §1 手工留档 | `capabilities.log` |
-| FC sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker` | 至少找到一个；值应是 `18f3faa7…`（[26 §3](26-deployment-prerequisites.md#3-版本配对)） | `fc-sha256.log` |
+| FC sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker`；摘要优先显示预检选定的在用版本 | 脚本 PASS 表示采集到非空身份文本；另须核对选定 FC 与交付件预期 hash（本期 `18f3faa7…`，[26 §3](26-deployment-prerequisites.md#3-版本配对)）；未判定在用版本而退回第一行时，摘要会注明 | `fc-sha256.log` |
 | 功能正确性 | `acceptance/checkpoint_verify.py`：三代现场，内存 / 根文件系统 / 删除 / 权限位，心跳进程 pid 证明内存真的回来了 | 打出 `✓ 59 项校验全部通过。` | `checkpoint_verify.log` |
+
+**在用版本怎么判。** 预检按以下优先级取可判定的依据，并在 `在用的 FC 版本` 行注明：运行中 FC 的 `/proc/<pid>/exe`（可有多个版本）→ api 显式设置的 `DEFAULT_FIRECRACKER_VERSION` → 部署脚本 `init-client.sh` 的 `FIRECRACKER_VERSION` → 版本目录中仅有一个 FC。
+其余版本仅列 INFO。若全部无法判定，脚本会说明这一点，并在至少有一个目录带回滚接口时 PASS；这种情况仍需人工核对模板和实际执行路径，不能把“存在兼容 FC”当作“已证明实际使用该 FC”。`vhost_net` 只记 INFO，当前 Firecracker 网卡直接使用 tap，不依赖该模块。
 
 两件要顺手确认的事：
 
 - **59 还是 57。** 57 说明 SDK 没有 `mem_mode` 字段，"是不是增量"那两条断言被跳过——这轮仍是有效的正确性验收，但**不能证明用的是增量**。重装覆盖层（先 `install.py`，后 `patch_e2b.py`）。
 - **脏页后端。** `checkpoint_verify.log` 开头 `脏页后端 : …` 是 Firecracker 自己报的：950 应为 HDBSS（硬件标脏），显式开跟踪的无 HDBSS 机器为 KVM 写保护。能力行只回答"开没开"，回答不了这一项。
+
+**950 smoke 已有五项全部通过的实测归档。** `20261015-121331-smoke` 为 PASS 5 / FAIL 0 / SKIP 0，宿主预检 19 / 0 / 0、正确性 59 / 59。
+本轮根据部署脚本选定 `v1.13.1`，接口检查、SDK、能力信息与 FC hash 核对通过；完整条件与证据见 [21 §2.6](21-benchmarks-and-compliance.md#26-950-smoke部署预检与正确性验收)。
 
 ---
 
@@ -111,6 +117,10 @@ bash rollback/scripts/950/run.sh long
 **交付态的机器上不建议跑这四条**（要改线上配置、重启或换 FC）；它们在 920B 上已覆盖（[21 §2.3](21-benchmarks-and-compliance.md#23-重启与注入类)），不影响交付结论。
 解释器里没装 pytest 时那一项也判 SKIP，装上后重跑：`python3 -m pip install "pytest>=7.4,<8" "pytest-asyncio>=0.23,<0.24"`。
 
+**950 默认 func 已有实测归档**：2026-10-13 的 `20261013-163056-func`，16 个默认 crtest 用例与 SDK pytest 通过，四类重启 / 注入 / 配额项按计划跳过。
+逐项与 warning 的解释见 [21 §2.5](21-benchmarks-and-compliance.md#25-950-默认功能回归2026-10-13)，混合短稳态与恢复后立即命令见 [22 §8](22-long-run-and-concurrency.md#8-950-func-中的短稳态与恢复后请求)。
+判读时既看 PASS，也核对 T36 / T40 的失败记录项；不能将默认短测的通过写成小时级长稳，或写成所有负载的 restore 均满足 100 ms。
+
 **PASS 判据**：每个用例退出码 0 = 通过，1 = 断言不过，3 = 前置不满足（记 SKIP）。整档 FAIL = 0。
 某项 FAIL 时看 `crtest-T??.log` 的最后几段（"断言失败 / 期望 / 实际 / 依据"）和同目录 `T??.json`（`meta.failure` 是原文，`ops` 是每一步的原始记录）。
 
@@ -129,7 +139,8 @@ bash rollback/scripts/950/run.sh long
 **超线不判 FAIL**——超线是结论不是故障，看 `compliance.log` 末尾"按 p50 超线的档"。PASS 只表示没有失败的操作、没有现场不一致。
 
 判读时还要看：`analyze.log` 里各档 `mem_mode` 应全为 `incremental`；数字所在平台（920B 为 `kvm-wp`、950 为 `hdbss`）写进留档。
-920B 上的结果与判定在 [21](21-benchmarks-and-compliance.md)；**950 的性能数字待补**，在 950 上跑出的这一档就是它的来源。
+920B 上的结果与判定在 [21](21-benchmarks-and-compliance.md)；2026-10-13 的 **950 perf 文本结果已归档**：分档与串行结果见 [21 §6](21-benchmarks-and-compliance.md#6-950)，短时 A/B 并发见 [22 §7](22-long-run-and-concurrency.md#7-950-短时并发2026-10-13-ab)。
+本轮 `SUMMARY.md` 四项 PASS 与性能超线同时成立；并发 B 还记录了跨 restore 的 guest 命令异常，需读其明细，不能只据退出码写“整轮无异常”。后续验收仍按本章流程留档。
 
 ### 5.1 hdbss 档：HDBSS 专项
 
@@ -161,7 +172,11 @@ bash rollback/scripts/950/run.sh hdbss --python "$PY" --orders 1,2,4,6,9 --allow
 **没有 HDBSS 的机器**（后端为 `kvm-wp`）上默认整档 SKIP，不建沙箱、不重启。`--force-non-hdbss` 可以照跑以验证流程，
 `SUMMARY.md` 顶部标"非 HDBSS，仅流程验证，数字无意义"，order 核实降级为只核对进程环境变量。
 
-基准有 14 分钟的总时限，到点即停并在结果里标注未跑完。流程已在无 HDBSS 的 920B 上带 `--force-non-hdbss` 跑通（后端 `kvm-wp`）：完整一轮 239 秒，1024 MB 档在 2 vCPU / 2048 MB 模板里放得下；`--orders 1,2` 的短试跑 217 秒，每次改 env 重启到就绪 45–53 秒，扫描后 job 的启动命令与 Env 和扫描前完全相同。这些是流程耗时，不是 HDBSS 的性能。**本档在 950 上的数据待补。**
+基准有 14 分钟的总时限，到点即停并在结果里标注未跑完。流程已在无 HDBSS 的 920B 上带 `--force-non-hdbss` 跑通（后端 `kvm-wp`）：完整一轮 239 秒，1024 MB 档在 2 vCPU / 2048 MB 模板里放得下；`--orders 1,2` 的短试跑 217 秒，每次改 env 重启到就绪 45–53 秒，扫描后 job 的启动命令与 Env 和扫描前完全相同。这些是流程耗时，不是 HDBSS 的性能。
+
+**950 默认 order 1 的完整专项已有文本归档**，来源为 `20261013-165204-hdbss`：启用证据、写密集实测及统计边界见
+[21 §6.7](21-benchmarks-and-compliance.md#67-hdbss-专项默认-order-1-的启用证据与写密集实测)。本轮无 `--quick`、无 order 扫描、无重启；
+其他 order 的性能和扫描恢复流程不能由它推定。L3 的冷/热比需与退出数及启用日志一起读，不能只因比值大于 1 就判定 HDBSS 失效。
 
 ---
 

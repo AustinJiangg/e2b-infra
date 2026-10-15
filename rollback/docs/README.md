@@ -1,14 +1,21 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.2**（2026-10-08，上机验收加 hdbss 档：HDBSS 三级证据、写密集基准与 `FC_HDBSS_ORDER` 扫描的入口，950 数据待补；缺口表第 15–17 项随之更新）· 江路路（j30059180）
+> **v0.4.7**（2026-10-15，归档 950 smoke 五项全部通过的验收结果，覆盖 19 项宿主预检、59 项正确性与 SDK / 能力 / FC 身份证据；汇总四档实测与覆盖边界）· 江路路（j30059180）
 >
-> 代码基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理
+> 代码讲解基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理。950 smoke 有能力文件自报 `commit=4853232`、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator 的完整 sha256；源码 / RPM 对应、perf / func 当轮身份尚待核对，不能从讲解基准或相邻轮次直接推定。
 
 **在不中断沙箱的前提下，把一台正在运行的 e2b 沙箱虚机退回到过去某一时刻** —— 这套 checkpoint / restore 的原理、实现、工程保障、证据与使用运维。
 
 这是一本按教学顺序写的书：从"为什么要回退、虚机快照是什么"讲起，到每个机制怎么实现、为什么这样实现、
 怎么保证不出错，再到怎么证明它对、它快，最后是怎么用、怎么部署运维。读者按顺序读能从零读懂；
 只想完成某件具体事情的读者，按下面的捷径跳读。
+
+**先看 950 实测**：单沙箱每步改动量、保存与回滚延迟、达标范围和连续恢复见 [21 §6](21-benchmarks-and-compliance.md#6-950)；
+最多 16 沙箱同时操作、同沙箱四调用方争用及跨回滚连接的行为见 [22 §7](22-long-run-and-concurrency.md#7-950-短时并发2026-10-13-ab)。
+HDBSS 默认 order 1 的启用证据、写密集负载与页分布影响见 [21 §6.7](21-benchmarks-and-compliance.md#67-hdbss-专项默认-order-1-的启用证据与写密集实测)。
+默认 func 的功能覆盖、逐项通过与跳过范围见 [21 §2.5](21-benchmarks-and-compliance.md#25-950-默认功能回归2026-10-13)，混合短稳态与恢复后立即请求见 [22 §8](22-long-run-and-concurrency.md#8-950-func-中的短稳态与恢复后请求)。
+2026-10-15 smoke 的部署预检与正确性见 [21 §2.6](21-benchmarks-and-compliance.md#26-950-smoke部署预检与正确性验收)：**五项全部通过**，宿主预检 19 PASS / 0 WARN / 0 FAIL，正确性 59 / 59。
+smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能验收已有通过证据；func 的专项 SKIP、perf 的超线档与并发命令边界仍单列，其他 order、小时级稳定性与资源收敛仍缺证据。
 
 ---
 

@@ -52,8 +52,12 @@
 
 ## 当前状态
 
-- 950：2026-08-29 用当时的开发版本通过正确性验收，**脏页后端为 HDBSS（硬件标脏）**，59 项校验全过。
-  当前代码基准（见 [`docs/README.md`](docs/README.md)）尚未在 950 上验证，性能分档基准、长跑与并发、原生精确增量修复后的数据也都还没在 950 上跑过。
+- 950：已归档 **2026-10-13 的完整 perf 档文本结果**：非并发分档、同一快照连续恢复、跨沙箱 A 段与同沙箱 B 段争用；日志确认 FC 自报 `hdbss`、产物文件系统为 ext4。
+  分档判定与串行结果见 [`docs/21 §6`](docs/21-benchmarks-and-compliance.md#6-950)，并发延迟与命令异常见 [`docs/22 §7`](docs/22-long-run-and-concurrency.md#7-950-短时并发2026-10-13-ab)。原始 JSON / JSONL、被测二进制身份与部分环境标签尚未回传，不能将本轮文本归档视为确定提交的完整验收。
+  同日 16:52 的 **HDBSS 默认 order 1 专项**也已归档：能力、自报、启用日志、冷 / 热写、KVM 退出与 MD5，详见 [`docs/21 §6.7`](docs/21-benchmarks-and-compliance.md#67-hdbss-专项默认-order-1-的启用证据与写密集实测)。该轮已记录二进制 sha256；源码 / RPM 对应与较早 perf 轮身份仍待补。
+  同日 16:30 的 **func 默认功能回归**已归档：PASS 17 / FAIL 0 / SKIP 4，16 个 crtest 用例共 863 条硬断言通过、SDK 67 项通过；四类重启 / 注入 / 配额专项未跑，详见 [`docs/21 §2.5`](docs/21-benchmarks-and-compliance.md#25-950-默认功能回归2026-10-13)。混合短稳态与恢复后立即请求见 [`docs/22 §8`](docs/22-long-run-and-concurrency.md#8-950-func-中的短稳态与恢复后请求)。
+  **2026-10-15 12:13 的 smoke 五项全部通过**：PASS 5 / FAIL 0 / SKIP 0，宿主预检 19 / 0 / 0、正确性 **59 / 59**；SDK 2.20.0 自检、能力文件自报 `commit=4853232`、预检选定的 `v1.13.1` FC 接口与交付件 hash 核对通过（[`docs/21 §2.6`](docs/21-benchmarks-and-compliance.md#26-950-smoke部署预检与正确性验收)）。本轮身份不直接追认 10 月 13 日 perf / func。
+  四档均有文本归档，默认部署与功能验收已有通过证据；func 的专项跳过、perf 超线档与并发命令边界仍单列。其他 order 比较、小时级长跑、滚动保留与原生精确增量专项仍缺本期归档证据。2026-08-29 的 HDBSS 正确性 59 项全过保留为历史开发版记录。
 - 920B：2026-09-28/29 在当前代码基准上做了除 HDBSS 外的全面测试：功能回归、按改动量分档的基准、两天两夜的长跑与并发（15 组长跑与串口段合计 731877 次 restore 逐项一致、0 不一致；另有部署件 2 h 滚动长测 147557 次，同样 0 不一致），并用 RPM 重新部署回归通过。
   这里的数字来自软件写保护路径，与 950 口径不同，不能相减。
 
@@ -63,15 +67,15 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.2**（2026-10-08，江路路 j30059180；在 v0.4.1 上给上机验收加 hdbss 档：HDBSS 三级证据、写密集基准与 `FC_HDBSS_ORDER` 扫描的入口，950 数据待补；代码基准 deltabox-dev@57a3063）；每份产物的封面与侧栏都印着版本号，
-Release tag 与之一致，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准。
+当前文档版本 **v0.4.7**（2026-10-15，江路路 j30059180；归档 950 smoke 五项全部通过及宿主、SDK、能力、FC 与正确性证据，汇总四档实测；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；本轮本地 HTML 在 `rollback/dist/checkpoint-restore-docs.html`，尚未发布 Release。
+每份新产物的封面与侧栏都印着版本号，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准；Releases 中的历史附件不会随本地重建自动更新。
 
 | 附件 | 大小 | 给谁 |
 |---|---|---|
-| `checkpoint-restore-docs.html` | 4.1 MB | **推荐**。单文件，双击用浏览器打开，不联网、不装任何东西 |
-| `checkpoint-restore-docs.zip` | 1.4 MB | 要 Markdown 原文的人（Windows 友好） |
-| `checkpoint-restore-docs.tar.gz` | 1.4 MB | 同上，Linux 习惯 |
-| `checkpoint-restore-slides.pdf` | 1.4 MB | 汇报稿 |
+| `checkpoint-restore-docs.html` | 本地新版约 4.7 MiB | **推荐**。单文件，双击用浏览器打开，不联网、不装任何东西 |
+| `checkpoint-restore-docs.zip` | 历史附件 | Markdown 原文包，本轮尚未重建 |
+| `checkpoint-restore-docs.tar.gz` | 历史附件 | 同上，Linux 习惯 |
+| `checkpoint-restore-slides.pdf` | 历史附件 | 汇报稿，本轮尚未重建 |
 
 HTML 版把全部跨篇链接改写成了页内锚点，mermaid 图内联渲染、
 三张 SVG 内嵌在附录，所以怎么传都不会断；浏览器 Ctrl+P 可直接存 PDF。

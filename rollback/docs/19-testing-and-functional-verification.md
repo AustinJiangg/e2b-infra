@@ -172,23 +172,28 @@ guest 碰过的页全部导出，与改了多少无关。
 
 ## 3. 测试矩阵
 
-全书唯一一张。只记状态，数字见 [21](21-benchmarks-and-compliance.md)。"本期"指 [README](README.md) 所列的代码基准。
+全书唯一一张。只记状态，数字见 [21](21-benchmarks-and-compliance.md)、[22](22-long-run-and-concurrency.md)。"本期"的代码讲解基准见 [README](README.md)；950 的 2026-10-15 smoke，以及 2026-10-13 perf、func 与 HDBSS 专项均已回传文本。smoke 有能力文件、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator hash；源码 / RPM 对应与 perf / func 当轮身份尚待补，不能自动等同于该基准的完整验收。
 
 | 要证的性质 | 脚本 / 用例 | 判据 | 本期 · 920B | 本期 · 950 |
 |---|---|---|---|---|
-| 快照 / 恢复后照常干活；内存、文件、删除、权限位、进程都回到那一刻 | `acceptance/checkpoint_verify.py` | 末行 `✓ 59 项校验全部通过。` | 已跑 | 待测 |
+| 快照 / 恢复后照常干活；内存、文件、删除、权限位、进程都回到那一刻 | `acceptance/checkpoint_verify.py` | 末行 `✓ 59 项校验全部通过。` | 已跑 | 2026-10-15 smoke 中通过并归档（21 §2.6） |
+| 部署前提与二进制配套 | `run.sh smoke` 的预检、SDK、能力与 FC 身份采集 | 预检无 FAIL；选定 FC 接口与交付件 hash 核对 | RPM 回归已通过 | smoke 五项全部通过并归档（21 §2.6）；FC 版本判定依据为部署脚本 |
 | 树语义：线性 / 前滚 / 分叉跨 LCA / 删除与合并（compact / fold） / 失败 | `dev/correctness.py ext4` | 末行 `ALL PASS` | 已跑（RPM 部署版） | 待测 |
-| checkpoint 之后原生 pause，磁盘与内存完好 | `dev/pause_verify.py`（磁盘）；crtest T39（内存与盘上标记） | `O_DIRECT` 读回一致；内存 md5 一致 | T39 已跑，`pause_verify.py` 未跑 | 待测 |
-| 不弄坏原生生命周期 | `dev/compat_matrix.py`；crtest T41 | 无 `BROKEN` | T41 已跑 | 待测 |
-| HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 待测 |
+| checkpoint 之后原生 pause，磁盘与内存完好 | `dev/pause_verify.py`（磁盘）；crtest T39（内存与盘上标记） | `O_DIRECT` 读回一致；内存 md5 一致 | T39 已跑，`pause_verify.py` 未跑 | T39 通过并归档；`pause_verify.py` 仍无本期证据 |
+| 不弄坏原生生命周期 | `dev/compat_matrix.py`；crtest T41 | 无 `BROKEN` | T41 已跑 | T41 通过并归档（外部出网未测）；`compat_matrix.py` 仍无本期证据 |
+| HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 默认 order 1 的能力、自报、启用日志、数据面与 MD5 文本证据已归档（21 §6.7）；未扫描其他 order |
 | 稳定性：数百次交替回滚 | `dev/loop.py ext4` | `failures: 0` | 未跑；由长测覆盖（见下） | 待测 |
-| 盲区、边界、故障注入 | crtest T11–T41 | 各用例三段式断言 | 已跑（重启类单独跑） | 待测 |
-| 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | 待测 |
-| SDK 异常语义 | `crtest/sdktests/test_checkpoint_errors.py` | pytest 全过 | 已跑 | 待测 |
-| 分档性能、串行长尾、空闲后 restore | 见 [20](20-performance-methodology.md) | —— | 已跑 | **待测** |
+| 盲区、边界、故障注入 | crtest T11–T41 | 各用例三段式断言 | 已跑（重启类单独跑） | 默认 16 个用例通过并归档（21 §2.5）；T18 / T21 / T37 / T38 跳过，重启 / 注入 / 配额专项未测 |
+| 短时并发：跨沙箱扩展性与同沙箱争用 | `acceptance/checkpoint_concurrent.py` A/B 段 | A 逐项校验；B 结合 RPC、命令错误与操作后状态 | 已跑 | 2026-10-13 文本已归档，见 22 §7；B 的命令异常单列 |
+| 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（22 §8）；全规模、D 段与小时级长稳仍缺结果 |
+| 恢复返回后立即请求 | crtest T40 | 线程完成、账本与活体硬判；另核对请求失败计数 | 已跑 | 默认非 overlap 场景通过并归档（22 §8）；不外推为在途命令可跨 restore |
+| SDK 异常语义 | `crtest/sdktests/test_checkpoint_errors.py` | pytest 全过 | 已跑 | func 中通过并归档（21 §2.5），不是 SKIP |
+| 分档性能、串行长尾、空闲后 restore | 见 [20](20-performance-methodology.md) | —— | 已跑 | 12 档与串行 100 次文本已归档（21 §6）；空闲后专项仍缺结果 |
 
-"待测"占了整整一列，这是当前状态的如实记录。要点在于：**正确性结论可以从 920B 搬到 950**——两种脏页后端喂给上层的是同一张位图，
-语义相同，只差性能；**性能数字不能搬**（[20 §2](20-performance-methodology.md#2-条件标签)）。
+950 的 smoke、perf、默认 func 与默认 order 1 的 HDBSS 专项文本结果均已归档；2026-10-15 smoke 的五项全部通过，默认 func 通过，未覆盖专项仍按上表注明。
+默认功能回归通过不意味着未运行的重启 / 注入项也通过；perf 与两分钟混合操作都不能替代小时级稳定性。
+两种脏页后端向上层提供同一种位图，可以沿用上层正确性论证与用例设计；目标机实际启用、部署版本与现场通过情况仍要核实，
+**性能数字不能跨机搬**（[20 §2](20-performance-methodology.md#2-条件标签)）。
 
 ---
 
@@ -337,12 +342,13 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 | L2 自报 | FC 给**这个沙箱**选了哪个后端 | FC API `GET /` 的 `dirty_tracking`：`hdbss` / `kvm-wp` / `off` |
 | L3 数据面 | 硬件是否真在记 | 写密集负载：先把文件整份分配出来，再计时覆写两遍（`conv=notrunc`），比"冷/热"耗时；有 `perf` 时另数 `kvm_exit` |
 
-为什么要三层：前两层都只说明"能力打开了"，不说明"硬件真的在记脏页"。L3 的物理含义是：软件写保护下，checkpoint 会把所有页重新写保护，
-之后每个干净页的第一次写都要陷出一次，所以刚做完 checkpoint 的第一遍写明显慢于第二遍；HDBSS 下由 CPU 自己记录，两遍接近，冷/热接近 1。
-先把文件整份分配出来，是为了让两遍都不用付 guest 侧的页分配成本，剩下的差别只有 stage-2 写故障。
+为什么要三层：前两层说明能力与后端选择，L3 再用实际写入、退出计数和恢复校验检验数据面。
+软件写保护下，清图重新武装后每个干净页第一次写会多一次写保护退出；HDBSS 由硬件记录，预期不出现这种逐页首写陷出。
+预分配、预映射工作集可以排除首次分配成本，但 cache、TLB、调度和虚机后台活动仍可能使冷写比热写慢，不能把所有差值都归为 stage-2 写故障。
 
-920B 没有 HDBSS，是这条判据的**负样本**：有了它，950 上的判定才有参照。如果 950 上 `dirty_tracking=hdbss` 而冷/热仍明显大于 1，
-说明能力启用了但数据面没生效。原理见 [05](05-dirty-page-tracking-and-hdbss.md)。
+**不以“冷/热是否接近 1”单独判失效。** 应综合 L1、FC 自报、实际启用日志、每页退出数和内容一致性；
+本轮 950 的启用与数据面证据已归档在 [21 §6.7](21-benchmarks-and-compliance.md#67-hdbss-专项默认-order-1-的启用证据与写密集实测)。
+920B 可作无 HDBSS 的负样本，但不同机器结果不能直接相减；本轮只量 HDBSS 自身，没有软件写保护对照。
 
 同样的三层证据也在上机验收入口里：`run.sh hdbss`（脚本 `crtest/bench/hdbss_bench.py`，[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)）。它的 L1 直接用 `KVM_CHECK_EXTENSION` 查询，L3 的冷写 / 热写由 guest 里的常驻写者来量，KVM 退出数取自 debugfs，并且多核对一项 `FC_HDBSS_ORDER` 是否生效。
 
