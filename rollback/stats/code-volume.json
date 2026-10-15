@@ -7,7 +7,7 @@
     "current": "57a30632cb9cb8eb67a35dd226d9ef4b40458af4",
     "infra_current": "e212049d3165e571a0cdc760ba503b96ea559193"
   },
-  "scope_sha256": "9fd0b5654d8070d81a9a7161791cdc21a57ff3faa087e85162a864f18892159f",
+  "scope_sha256": "b5ecf3b6c2fccd892ebc3665e377d6afacb9187b7e44f5f1d3dc9cea0a260e52",
   "counter": {
     "name": "code_stats.py",
     "pygments": "2.17.2",
@@ -14108,5 +14108,1325 @@
       },
       "sha256": "68177ade62487232eb17c5403ebb511e8002f14cf58ba383a9ecbfcfbcad5411"
     }
-  ]
+  ],
+  "sdk_provenance": {
+    "commits": {
+      "foundation": {
+        "sha": "60f8c35101b67c95cfcc680455b32024054d935d",
+        "author": "penghaozhou",
+        "author_email": "penghaozhou@huawei.com",
+        "committer": "j30059180",
+        "committer_email": "jianglulu13@h-partners.com",
+        "subject": "feat(py-sdk): add checkpoint/restore SDK via GSD (Connect-RPC)"
+      },
+      "adaptation": {
+        "sha": "5c42b396892cb12ed0125c2b288c1beaeaad6bda",
+        "author": "j30059180",
+        "author_email": "jianglulu13@h-partners.com",
+        "committer": "j30059180",
+        "committer_email": "jianglulu13@h-partners.com",
+        "subject": "refactor(py-sdk): rename gsd to checkpointd, drop dead auth header, report mem_mode"
+      }
+    },
+    "stages": {
+      "foundation": {
+        "before": "a0630365c94310c7cdea20b811abff836434e643",
+        "after": "60f8c35101b67c95cfcc680455b32024054d935d",
+        "runtime": {
+          "sloc": {
+            "added": 356,
+            "deleted": 1,
+            "net": 355
+          },
+          "physical": {
+            "added": 526,
+            "deleted": 1,
+            "net": 525
+          }
+        },
+        "support": {
+          "sloc": {
+            "added": 60,
+            "deleted": 1,
+            "net": 59
+          },
+          "physical": {
+            "added": 82,
+            "deleted": 1,
+            "net": 81
+          }
+        },
+        "details": [
+          {
+            "repository": "kas",
+            "path": "py-sdk/Makefile",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 8,
+                "deleted": 1,
+                "net": 7
+              },
+              "physical": {
+                "added": 11,
+                "deleted": 1,
+                "net": 10
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/__init__.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 2,
+                "deleted": 0,
+                "net": 2
+              },
+              "physical": {
+                "added": 4,
+                "deleted": 0,
+                "net": 4
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/connection_config.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 22,
+                "deleted": 1,
+                "net": 21
+              },
+              "physical": {
+                "added": 28,
+                "deleted": 1,
+                "net": 27
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/gsd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 49,
+                "deleted": 0,
+                "net": 49
+              },
+              "physical": {
+                "added": 83,
+                "deleted": 0,
+                "net": 83
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox/checkpoint/types.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 13,
+                "deleted": 0,
+                "net": 13
+              },
+              "physical": {
+                "added": 16,
+                "deleted": 0,
+                "net": 16
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 6,
+                "deleted": 0,
+                "net": 6
+              },
+              "physical": {
+                "added": 7,
+                "deleted": 0,
+                "net": 7
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 121,
+                "deleted": 0,
+                "net": 121
+              },
+              "physical": {
+                "added": 179,
+                "deleted": 0,
+                "net": 179
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 11,
+                "deleted": 0,
+                "net": 11
+              },
+              "physical": {
+                "added": 15,
+                "deleted": 0,
+                "net": 15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 121,
+                "deleted": 0,
+                "net": 121
+              },
+              "physical": {
+                "added": 179,
+                "deleted": 0,
+                "net": 179
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 11,
+                "deleted": 0,
+                "net": 11
+              },
+              "physical": {
+                "added": 15,
+                "deleted": 0,
+                "net": 15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/fix-python-pb-gsd.sh",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 0,
+                "net": 4
+              },
+              "physical": {
+                "added": 8,
+                "deleted": 0,
+                "net": 8
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/gsd/buf-python.gen.yaml",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 12,
+                "deleted": 0,
+                "net": 12
+              },
+              "physical": {
+                "added": 15,
+                "deleted": 0,
+                "net": 15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/gsd/checkpoint/checkpoint.proto",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 36,
+                "deleted": 0,
+                "net": 36
+              },
+              "physical": {
+                "added": 48,
+                "deleted": 0,
+                "net": 48
+              }
+            }
+          }
+        ]
+      },
+      "mr_adaptation": {
+        "before": "60f8c35101b67c95cfcc680455b32024054d935d",
+        "after": "0f9b58f9281ad9e20411333e9a619b691808fc5a",
+        "runtime": {
+          "sloc": {
+            "added": 85,
+            "deleted": 63,
+            "net": 22
+          },
+          "physical": {
+            "added": 180,
+            "deleted": 103,
+            "net": 77
+          }
+        },
+        "support": {
+          "sloc": {
+            "added": 136,
+            "deleted": 56,
+            "net": 80
+          },
+          "physical": {
+            "added": 203,
+            "deleted": 75,
+            "net": 128
+          }
+        },
+        "details": [
+          {
+            "repository": "kas",
+            "path": "py-sdk/Makefile",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 4,
+                "net": 0
+              },
+              "physical": {
+                "added": 4,
+                "deleted": 4,
+                "net": 0
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/checkpointd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 49,
+                "deleted": 0,
+                "net": 49
+              },
+              "physical": {
+                "added": 85,
+                "deleted": 0,
+                "net": 85
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/connection_config.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 1,
+                "net": -1
+              },
+              "physical": {
+                "added": 3,
+                "deleted": 1,
+                "net": 2
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/gsd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 49,
+                "net": -49
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 83,
+                "net": -83
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox/checkpoint/types.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 12,
+                "deleted": 1,
+                "net": 11
+              },
+              "physical": {
+                "added": 14,
+                "deleted": 1,
+                "net": 13
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 10,
+                "deleted": 6,
+                "net": 4
+              },
+              "physical": {
+                "added": 33,
+                "deleted": 9,
+                "net": 24
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 2,
+                "deleted": 0,
+                "net": 2
+              },
+              "physical": {
+                "added": 6,
+                "deleted": 0,
+                "net": 6
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 10,
+                "deleted": 6,
+                "net": 4
+              },
+              "physical": {
+                "added": 33,
+                "deleted": 9,
+                "net": 24
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 2,
+                "deleted": 0,
+                "net": 2
+              },
+              "physical": {
+                "added": 6,
+                "deleted": 0,
+                "net": 6
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/fix-python-pb-checkpointd.sh",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 0,
+                "net": 4
+              },
+              "physical": {
+                "added": 8,
+                "deleted": 0,
+                "net": 8
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/fix-python-pb-gsd.sh",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 4,
+                "net": -4
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 8,
+                "net": -8
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/regen-checkpoint-pb.py",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 78,
+                "deleted": 0,
+                "net": 78
+              },
+              "physical": {
+                "added": 118,
+                "deleted": 0,
+                "net": 118
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/checkpointd/buf-python.gen.yaml",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 12,
+                "deleted": 0,
+                "net": 12
+              },
+              "physical": {
+                "added": 15,
+                "deleted": 0,
+                "net": 15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/checkpointd/checkpoint/checkpoint.proto",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 38,
+                "deleted": 0,
+                "net": 38
+              },
+              "physical": {
+                "added": 58,
+                "deleted": 0,
+                "net": 58
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/gsd/buf-python.gen.yaml",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 12,
+                "net": -12
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 15,
+                "net": -15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/gsd/checkpoint/checkpoint.proto",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 36,
+                "net": -36
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 48,
+                "net": -48
+              }
+            }
+          }
+        ]
+      },
+      "after_mr": {
+        "before": "0f9b58f9281ad9e20411333e9a619b691808fc5a",
+        "after": "57a30632cb9cb8eb67a35dd226d9ef4b40458af4",
+        "runtime": {
+          "sloc": {
+            "added": 302,
+            "deleted": 58,
+            "net": 244
+          },
+          "physical": {
+            "added": 690,
+            "deleted": 77,
+            "net": 613
+          }
+        },
+        "support": {
+          "sloc": {
+            "added": 0,
+            "deleted": 0,
+            "net": 0
+          },
+          "physical": {
+            "added": 0,
+            "deleted": 0,
+            "net": 0
+          }
+        },
+        "details": [
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/__init__.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 20,
+                "deleted": 0,
+                "net": 20
+              },
+              "physical": {
+                "added": 20,
+                "deleted": 0,
+                "net": 20
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/connection_config.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 27,
+                "deleted": 1,
+                "net": 26
+              },
+              "physical": {
+                "added": 46,
+                "deleted": 4,
+                "net": 42
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/envd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 26,
+                "deleted": 9,
+                "net": 17
+              },
+              "physical": {
+                "added": 47,
+                "deleted": 9,
+                "net": 38
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/envd/rpc.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 0,
+                "net": 4
+              },
+              "physical": {
+                "added": 19,
+                "deleted": 0,
+                "net": 19
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/exceptions.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 56,
+                "deleted": 0,
+                "net": 56
+              },
+              "physical": {
+                "added": 207,
+                "deleted": 0,
+                "net": 207
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox/checkpoint/errors.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 56,
+                "deleted": 0,
+                "net": 56
+              },
+              "physical": {
+                "added": 100,
+                "deleted": 0,
+                "net": 100
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 24,
+                "deleted": 20,
+                "net": 4
+              },
+              "physical": {
+                "added": 68,
+                "deleted": 28,
+                "net": 40
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 8,
+                "deleted": 0,
+                "net": 8
+              },
+              "physical": {
+                "added": 13,
+                "deleted": 0,
+                "net": 13
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 24,
+                "deleted": 20,
+                "net": 4
+              },
+              "physical": {
+                "added": 68,
+                "deleted": 28,
+                "net": 40
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 8,
+                "deleted": 0,
+                "net": 8
+              },
+              "physical": {
+                "added": 13,
+                "deleted": 0,
+                "net": 13
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b_connect/client.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 49,
+                "deleted": 8,
+                "net": 41
+              },
+              "physical": {
+                "added": 89,
+                "deleted": 8,
+                "net": 81
+              }
+            }
+          }
+        ]
+      },
+      "own_current": {
+        "before": "60f8c35101b67c95cfcc680455b32024054d935d",
+        "after": "57a30632cb9cb8eb67a35dd226d9ef4b40458af4",
+        "runtime": {
+          "sloc": {
+            "added": 381,
+            "deleted": 115,
+            "net": 266
+          },
+          "physical": {
+            "added": 861,
+            "deleted": 171,
+            "net": 690
+          }
+        },
+        "support": {
+          "sloc": {
+            "added": 136,
+            "deleted": 56,
+            "net": 80
+          },
+          "physical": {
+            "added": 203,
+            "deleted": 75,
+            "net": 128
+          }
+        },
+        "details": [
+          {
+            "repository": "kas",
+            "path": "py-sdk/Makefile",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 4,
+                "net": 0
+              },
+              "physical": {
+                "added": 4,
+                "deleted": 4,
+                "net": 0
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/__init__.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 20,
+                "deleted": 0,
+                "net": 20
+              },
+              "physical": {
+                "added": 20,
+                "deleted": 0,
+                "net": 20
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/checkpointd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 49,
+                "deleted": 0,
+                "net": 49
+              },
+              "physical": {
+                "added": 85,
+                "deleted": 0,
+                "net": 85
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/connection_config.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 27,
+                "deleted": 2,
+                "net": 25
+              },
+              "physical": {
+                "added": 46,
+                "deleted": 2,
+                "net": 44
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/envd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 26,
+                "deleted": 9,
+                "net": 17
+              },
+              "physical": {
+                "added": 47,
+                "deleted": 9,
+                "net": 38
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/envd/rpc.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 0,
+                "net": 4
+              },
+              "physical": {
+                "added": 19,
+                "deleted": 0,
+                "net": 19
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/exceptions.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 56,
+                "deleted": 0,
+                "net": 56
+              },
+              "physical": {
+                "added": 207,
+                "deleted": 0,
+                "net": 207
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/gsd/api.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 49,
+                "net": -49
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 83,
+                "net": -83
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox/checkpoint/errors.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 56,
+                "deleted": 0,
+                "net": 56
+              },
+              "physical": {
+                "added": 100,
+                "deleted": 0,
+                "net": 100
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox/checkpoint/types.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 12,
+                "deleted": 1,
+                "net": 11
+              },
+              "physical": {
+                "added": 14,
+                "deleted": 1,
+                "net": 13
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 31,
+                "deleted": 23,
+                "net": 8
+              },
+              "physical": {
+                "added": 98,
+                "deleted": 34,
+                "net": 64
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_async/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 10,
+                "deleted": 0,
+                "net": 10
+              },
+              "physical": {
+                "added": 19,
+                "deleted": 0,
+                "net": 19
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/checkpoint.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 31,
+                "deleted": 23,
+                "net": 8
+              },
+              "physical": {
+                "added": 98,
+                "deleted": 34,
+                "net": 64
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b/sandbox_sync/main.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 10,
+                "deleted": 0,
+                "net": 10
+              },
+              "physical": {
+                "added": 19,
+                "deleted": 0,
+                "net": 19
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/e2b_connect/client.py",
+            "kind": "production",
+            "component": "sdk",
+            "scope": "rollback",
+            "metrics": {
+              "sloc": {
+                "added": 49,
+                "deleted": 8,
+                "net": 41
+              },
+              "physical": {
+                "added": 89,
+                "deleted": 8,
+                "net": 81
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/fix-python-pb-checkpointd.sh",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 4,
+                "deleted": 0,
+                "net": 4
+              },
+              "physical": {
+                "added": 8,
+                "deleted": 0,
+                "net": 8
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/fix-python-pb-gsd.sh",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 4,
+                "net": -4
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 8,
+                "net": -8
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "py-sdk/scripts/regen-checkpoint-pb.py",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 78,
+                "deleted": 0,
+                "net": 78
+              },
+              "physical": {
+                "added": 118,
+                "deleted": 0,
+                "net": 118
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/checkpointd/buf-python.gen.yaml",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 12,
+                "deleted": 0,
+                "net": 12
+              },
+              "physical": {
+                "added": 15,
+                "deleted": 0,
+                "net": 15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/checkpointd/checkpoint/checkpoint.proto",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 38,
+                "deleted": 0,
+                "net": 38
+              },
+              "physical": {
+                "added": 58,
+                "deleted": 0,
+                "net": 58
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/gsd/buf-python.gen.yaml",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 12,
+                "net": -12
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 15,
+                "net": -15
+              }
+            }
+          },
+          {
+            "repository": "kas",
+            "path": "spec/gsd/checkpoint/checkpoint.proto",
+            "kind": "production",
+            "component": "support",
+            "scope": "shared",
+            "metrics": {
+              "sloc": {
+                "added": 0,
+                "deleted": 36,
+                "net": -36
+              },
+              "physical": {
+                "added": 0,
+                "deleted": 48,
+                "net": -48
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
 }
