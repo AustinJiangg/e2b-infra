@@ -1,14 +1,16 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.9**（2026-10-15，新增代码规模与统计口径附录，按固定版本区分手写生产、生成代码、MR 后修改优化及当前测试；保留验收、实测与覆盖边界）· 江路路（j30059180）
+> **v0.4.10**（2026-10-15，新增 MR 合入后演进总览，区分单沙箱达标与后续并发优化，关联代表提交、机制与验证；保留代码规模统计及实测边界）· 江路路（j30059180）
 >
-> 代码讲解基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；交付的 RPM（e2b-infra）里的 0001 补丁由它融合而来；deltabox 交付分支待整理。950 smoke 有能力文件自报 `commit=4853232`、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator 的完整 sha256；源码 / RPM 对应、perf / func 当轮身份尚待核对，不能从讲解基准或相邻轮次直接推定。
+> 代码讲解基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；已合入 openEuler 的 MR 基线为 deltabox@0f9b58f，后续开发改动合入交付分支待整理。交付的 RPM（e2b-infra）里的 0001 补丁由开发版融合而来。950 smoke 有能力文件自报 `commit=4853232`、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator 的完整 sha256；源码 / RPM 对应、perf / func 当轮身份尚待核对，不能从讲解基准或相邻轮次直接推定。
 
 **在不中断沙箱的前提下，把一台正在运行的 e2b 沙箱虚机退回到过去某一时刻** —— 这套 checkpoint / restore 的原理、实现、工程保障、证据与使用运维。
 
 这是一本按教学顺序写的书：从"为什么要回退、虚机快照是什么"讲起，到每个机制怎么实现、为什么这样实现、
 怎么保证不出错，再到怎么证明它对、它快，最后是怎么用、怎么部署运维。读者按顺序读能从零读懂；
 只想完成某件具体事情的读者，按下面的捷径跳读。
+
+**先了解 MR 后的工作**：[MR 合入后的演进](00a-post-mr-evolution.md)说明 MR 版已在单沙箱场景下满足客户性能要求，后续为何面向并发与持续运行继续开发，以及各类修改对应的 commit、客户收益与验证证据。代码量统计统一见 [附录 C](C-code-size-and-methodology.md)。
 
 **先看 950 实测**：单沙箱每步改动量、保存与回滚延迟、达标范围和连续恢复见 [21 §6](21-benchmarks-and-compliance.md#6-950)；
 最多 16 沙箱同时操作、同沙箱四调用方争用及跨回滚连接的行为见 [22 §7](22-long-run-and-concurrency.md#7-950-短时并发2026-10-13-ab)。
@@ -23,7 +25,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 
 ### 教材读者：按顺序读
 
-[00](00-overview.md) → 第一部分 [01](01-background.md)–[03](03-goals-and-design-choices.md)
+[00](00-overview.md) → [00a MR 合入后的演进](00a-post-mr-evolution.md) → 第一部分 [01](01-background.md)–[03](03-goals-and-design-choices.md)
 → 第二部分 [04](04-architecture.md)–[11](11-end-to-end.md)
 → 第三部分 [12](12-failure-semantics.md)–[14](14-lifecycle-reasoning.md)
 → 第四部分 [15](15-native-increment-diagnosis.md)–[18](18-native-and-checkpoint-together.md)
@@ -38,6 +40,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 
 | 你是 | 建议路径 |
 |---|---|
+| **客户 / 评审**：想知道合入上游后又做了什么 | [00a 演进总览](00a-post-mr-evolution.md) → [C 代码规模](C-code-size-and-methodology.md) → [22 并发与长跑证据](22-long-run-and-concurrency.md)；按总览中的链接查具体机制 |
 | **客户开发者**：要在代码里调用 checkpoint / restore | [00](00-overview.md) → [23](23-quickstart.md) → [24](24-semantics-and-limits.md) → [25](25-errors-timeouts-concurrency.md) → [21](21-benchmarks-and-compliance.md)（只看判定结论）；要和原生 pause / resume 配合时再读 [18](18-native-and-checkpoint-together.md) |
 | **运维**：部署、配置、监控、排障、上机验收 | [00](00-overview.md) → [26](26-deployment-prerequisites.md) → [27](27-configuration-and-capacity.md) → [28](28-observability-reference.md) → [29](29-troubleshooting.md) → [30](30-acceptance-runbook.md)；错误含义查 [25](25-errors-timeouts-concurrency.md)；想知道长期运行会怎样读 [22](22-long-run-and-concurrency.md) |
 | **评审**：判断设计是否成立、证据是否充分 | [00](00-overview.md) → [02](02-e2b-native-snapshot.md) → [03](03-goals-and-design-choices.md) → [18](18-native-and-checkpoint-together.md) → [19](19-testing-and-functional-verification.md) → [20](20-performance-methodology.md) → [21](21-benchmarks-and-compliance.md) → [22](22-long-run-and-concurrency.md)；关心正确性论证再读 [06](06-memory-diff-tree.md) 与 [12](12-failure-semantics.md)，关心边界读 [14](14-lifecycle-reasoning.md) |
@@ -52,6 +55,7 @@ smoke、perf、func 与 HDBSS 四档均已归档文本，默认部署与功能�
 | # | 文档 | 一句话 |
 |---|---|---|
 | 00 | [导读](00-overview.md) | 这本书讲什么、六个部分怎么衔接、与原生快照的关系，以及一次 checkpoint 和一次 restore 各经过哪几章 |
+| 00a | [MR 合入后的演进：从单沙箱达标到并发快照回滚优化](00a-post-mr-evolution.md) | 已达标的 MR 基线、后续并发与持续运行问题、修改与代表 commit、客户收益及验证边界 |
 
 ### 第一部分　基础
 

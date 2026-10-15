@@ -117,11 +117,14 @@ checkpoint 30.39 / 70.79 对 32.7 / 75.1 ms。p50 差 2–3 ms，是网络往返
 
 ## 3. 轮次总表
 
+本章记录 MR 后开发过程中的并发与长跑修复。MR 版已在当时验证的单沙箱场景下满足客户性能要求并合入 openEuler；两阶段的关系与完整修改主题见 [00a · 演进总览](00a-post-mr-evolution.md)。
+下表的 `4af2872c6` 已包含 74 条 MR 后提交，称为“修复前”是指本组长跑修复之前；MR 基线为 `0f9b58f92`。各轮前后对比用于评估对应改动，不直接代表相对 MR 版的加速比。
+
 先把二进制与修复的对应关系列出来（都在 `deltabox-dev` 上，依次叠加；每项修复的原理见右列链接）：
 
 | 二进制 | 在上一个基础上新增 | 原理 |
 |---|---|---|
-| RPM 部署版 `4af2872c6` | 修复前基线 | —— |
+| RPM 部署版 `4af2872c6` | 本组长跑修复前基线，已包含 74 条 MR 后提交 | [00a §5.1](00a-post-mr-evolution.md#51-mr-基线与并发优化基线要分别阅读) |
 | `cba26f7c1` | index.json 不再每次重写（§4.2）；锁外删文件（§4.3）；GC 直方图取证开关 | [13](13-state-concurrency-durability.md) |
 | `baae30b56` | 代理开 full duplex（§4.1） | [25 §5.3](25-errors-timeouts-concurrency.md#53-两类流式截断要分清) |
 | `5319de5dc` | 拷贝前 `MADV_POPULATE`（§4.4）；restore 自计读量（§4.5） | [13 §8](13-state-concurrency-durability.md#8-节点级效应) |

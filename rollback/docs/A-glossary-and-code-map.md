@@ -284,6 +284,7 @@ Firecracker 的三处扩展：`CreateSnapshotParams.dirty_bitmap_path`（已有�
 |---|---|---|
 | 导读 | [README](README.md) | 版本、署名与阅读入口 |
 | 00 | [导读](00-overview.md) | 定位、能力边界、全书结构与阅读路径 |
+| 00a | [MR 合入后的演进](00a-post-mr-evolution.md) | 单沙箱达标后的并发优化、代表提交、收益与验证边界 |
 | **一 基础** |  |  |
 | 01 | [沙箱、microVM 与快照原理](01-background.md) | 虚机状态由什么构成、一致性、重建与原地回写 |
 | 02 | [e2b 原生 snapshot：机制与成本](02-e2b-native-snapshot.md) | 原生 pause / resume 怎么打快照、怎么恢复、成本在哪 |
