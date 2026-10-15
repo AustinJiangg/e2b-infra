@@ -6,7 +6,7 @@
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
-| [`docs/`](docs/) | **技术手册**（教材版），导读 + 33 篇（含附录 A、B），按教学顺序分六部分：基础 → 设计与实现 → 工程保障 → 原生快照的精确增量 → 验证与实测 → 使用与运维 | 首要入口 |
+| [`docs/`](docs/) | **技术手册**（教材版），导读 + 34 篇（含附录 A、B、C），按教学顺序分六部分：基础 → 设计与实现 → 工程保障 → 原生快照的精确增量 → 验证与实测 → 使用与运维 | 首要入口 |
 | [`diagrams/`](diagrams/) | 三张汇报用 SVG + Mermaid 图源 | 需要单独看图或改图的人 |
 | [`slides/`](slides/) | Slidev 汇报稿与构建脚本 | 需要浏览器演示或导出的人 |
 | [`tools/`](tools/) 与 [`book.json`](book.json) | 本手册的 HTML 生成、校验工具及版本配置 | 维护与发布手册的人 |
@@ -68,7 +68,7 @@
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.8**（2026-10-15，江路路 j30059180；修复第 21 章验收说明误入目录的排版问题，增加全册标题回归检查，保留四档实测与覆盖边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；已发布 [docs-v0.4.8](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.8)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
+当前文档版本 **v0.4.9**（2026-10-15，江路路 j30059180；新增代码规模、版本增量与统计口径附录，区分手写生产、生成代码和当前测试，保留四档实测与覆盖边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；已发布 [docs-v0.4.9](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.9)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
 每份新产物的封面与侧栏都印着版本号，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准；Releases 中的历史附件不会随本地重建自动更新。
 
 | 附件 | 大小 | 给谁 |

@@ -16,6 +16,9 @@
 | `requirements.txt` | 固定 Python 依赖版本 |
 | `package.json`、`package-lock.json` | 独立的 Mermaid / jsdom 依赖及完整锁文件 |
 | `test_tools.py` | 链接检查及生成器的回归测试 |
+| `code_stats.py`、`test_code_stats.py` | 固定提交的功能增量统计、Rust 测试拆分、有效行识别与回归检查 |
+| `../stats/code_stats_scope.json` | 固定 SHA、逐文件分类及副本排除规则 |
+| `../stats/code-volume.json` | 已复核的统计归档；导读与附录 C 表格共用的数据来源 |
 
 旧 `pack_docs.py` 不迁入：新 Release 只附一个 HTML，不再生成或发布 ZIP / tar.gz。
 
@@ -47,11 +50,34 @@ DOCS_PYTHON="$PWD/rollback/tools/.venv/bin/python" bash rollback/tools/build.sh
 
 # 工具自身的回归测试
 rollback/tools/.venv/bin/python rollback/tools/test_tools.py
+rollback/tools/.venv/bin/python rollback/tools/test_code_stats.py
 ```
 
 若现有 `python3` 已安装 `requirements.txt` 中的依赖，可以省略 `DOCS_PYTHON`。脚本按自身位置解析输入，从其他当前目录调用也不依赖工作区的目录布局。
 
 生成器仍支持单独调用，可用 `python3 rollback/tools/build_docs_html.py --help` 查看参数。
+
+## 代码规模统计
+
+HTML 构建会运行 `code_stats.py --check-docs`，核对分类清单、归档和正文统计块一致；这一步不需要 KASandbox 源码仓库。
+统计快照只引用固定 SHA，不把本轮文档制作代码或未提交的 `gsd/` 算进回滚功能。
+
+重新统计时需要两个仓库均包含清单里的 Git 对象。以下命令在 `e2b-infra` 根目录运行；仓库可以位于任意路径：
+
+```bash
+# 固定提交重算，核对归档，既不切分支也不修改统计结果
+python3 rollback/tools/code_stats.py --kasandbox ../KASandbox_0904 --infra . --verify
+
+# 审查并更新 stats/code_stats_scope.json 后，重算和同步导读、附录表格
+python3 rollback/tools/code_stats.py --kasandbox ../KASandbox_0904 --infra . --update-docs
+
+# 只检查正文与归档是否一致
+python3 rollback/tools/code_stats.py --check-docs
+```
+
+未知变更文件和未知脚本范围会导致统计失败，需要人工审查分类；不会自动将其计入生产。
+Python docstring 用 AST 识别，其他代码行用固定版本 Pygments 词法识别；字符串按宿主语言计数。
+导读与附录中 `code-stats` 标记之间的内容由脚本维护，避免手改数字；完整口径见 [附录 C](../docs/C-code-size-and-methodology.md)。
 
 ## 版本与发布
 
