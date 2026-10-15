@@ -124,7 +124,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
   | `pid` | 写这个文件的 orchestrator 进程号（RPM 部署里是 `template-manager` 进程） |
   | `started_at` | 该进程的启动时间，RFC3339 |
   | `version` | orchestrator 的版本号（`main.go` 的 `version`） |
-  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。RPM 构建目前没有注入，交付件上它是空串，核对二进制以 sha256 为准（[26 §3](26-deployment-prerequisites.md#3-版本配对)） |
+  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。早期 RPM 记录为空，950 的 2026-10-15 smoke 自报 `4853232`（21 §2.6）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[26 §3](26-deployment-prerequisites.md#3-版本配对)） |
 
 - **何时写**：每次启动写一次，先写同目录下的临时文件、再改名覆盖旧文件，读到的要么是上次启动的整份、要么是这次的整份。
   写成功打 INFO `capabilities file written`（字段 `path`）；写失败只打 WARN `failed to write the capabilities file; the log line above is the only copy`，启动照常。

@@ -77,11 +77,12 @@
 
 | 脚本 | 取法 | 注意 |
 |---|---|---|
-| `crtest/bench/analyze.py` | 最近秩 `ceil(q·n)`，不插值 | n ≤ 100 时 p99 就是最大值 |
+| `crtest/bench/analyze.py` | p50 为中间两项取平均的中位数；p90 / p99 用最近秩 `ceil(q·n)`，不插值 | n < 100 时 p99 就是最大值；本轮 950 短表各档为 10～30 个样本 |
 | `crtest/bench/compliance.py` | `s[round(q·(n−1))]`，不插值 | n = 60 时 p99 是第二大的样本，可能比 `analyze.py` 的小 |
+| `crtest/bench/serial_restore.py`、`acceptance/checkpoint_concurrent.py` | p50 为中位数；其他分位数按 `round(q·(n−1))` 选排序项 | 串行 n=100 的 p99 可小于 max；并发 A 样本少，展示 p50 / max |
 | 长跑分析脚本 | 线性插值：`k = (n−1)q`，取 `xs[f] + (xs[c]−xs[f])(k−f)` | 只统计起止标记之间的日志行（§6.5） |
 
-同一批样本，三种取法的 p99 可以差出一截，尤其在样本少的档。所以 [21](21-benchmarks-and-compliance.md) 的分档表 p99 统一取 `analyze.py` 的主表，
+同一批样本，不同取法的 p99 可以差出一截；偶数样本时，`compliance.py` 的 p50 选单个排序项，也可能与中位数略有差别。所以 [21](21-benchmarks-and-compliance.md) 的分档表 p50 / p99 统一取 `analyze.py` 的主表，
 长跑数字统一取线性插值；跨表比较 p99 之前，先确认两边是同一种取法。
 
 ### 1.4 为什么按改动量分档

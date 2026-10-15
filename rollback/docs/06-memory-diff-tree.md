@@ -387,7 +387,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 | 存储 | 全内存 | 本代脏页 |
 | 量级示例：客户端墙钟 | 0.283 s | 0.113 s（p50） |
 
-量级示例一行出自开发早期在 950 上跑的一轮 `checkpoint_verify.py`（2026-08-29，HDBSS 硬件标脏，ext4 真盘，2 GB 模板，当时的开发版本，restore 10 次）。它只用来说明"第一次比之后贵几倍"，不是当前代码的判定数字：当前代码在 920B 上的全量与增量见 [21](21-benchmarks-and-compliance.md#全量为什么单列)，950 上的当前数据待补。
+量级示例一行出自开发早期在 950 上跑的一轮 `checkpoint_verify.py`（2026-08-29，HDBSS 硬件标脏，ext4 真盘，2 GB 模板，当时的开发版本，restore 10 次）。它只用来说明"第一次比之后贵几倍"，不是当前代码的判定数字：920B 的全量与增量见 [21](21-benchmarks-and-compliance.md#全量为什么单列)，950 在 2026-10-13 的 perf 与 HDBSS 专项文本实测见 [21 §6](21-benchmarks-and-compliance.md#6-950)，各轮身份条件与负载范围在该节单列。
 
 这也是 [03](03-goals-and-design-choices.md) 所说"唯一保留的固定开销"。什么时候值得关掉 `CHECKPOINT_FULL_ROOT`：沙箱多、每个只打两三个点、存储紧张、
 且对象存储就在同机房 —— 此时第一次 checkpoint 的固定开销比偶尔一次跨网络读更值得省。这是部署决策，不是代码决策（[27](27-configuration-and-capacity.md)）。

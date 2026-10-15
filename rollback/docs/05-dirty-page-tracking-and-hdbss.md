@@ -412,15 +412,20 @@ for page_idx in 0..nr_pages {
 ### 6.2 HDBSS 的 buffer 与溢出
 
 HDBSS 把"每页一次 VM-Exit"换成了"CPU 顺手记一笔 + 定期汇总"，代价转移到 buffer 溢出处理（§4.5）。
-`FC_HDBSS_ORDER` 就是为这件事准备的。各档在写密集负载下的对比**尚未实测**，是明确列出的缺口之一（[21](21-benchmarks-and-compliance.md)）；目前用默认值 1。
-测它的入口已经备好：`run.sh hdbss --orders 1,2,4,6,9 --allow-restart` 逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)），数据待在 950 上取。
+`FC_HDBSS_ORDER` 就是为这件事准备的。950 在 2026-10-13 已完成**默认 order 1** 的启用证据与写密集实测；
+结果、条件与来源集中在 [21 §6.7](21-benchmarks-and-compliance.md#67-hdbss-专项默认-order-1-的启用证据与写密集实测)。它确认默认值实际启用，
+也记录了额外首写代价；不能把硬件标脏理解成所有写入或快照都零开销。
+
+本轮没有扫描其他 order，所以 buffer 大小之间的性能比较仍是缺口。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`，
+逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[30 §5.1](30-acceptance-runbook.md#51-hdbss-档hdbss-专项)）。
+冷/热比不是单独的开关判据：写者的 cache、TLB、调度和后台活动也影响两遍耗时，需与能力、自报、启用日志和退出计数一起判断。
 
 ### 6.3 什么时候不该开
 
 | 场景 | 建议 |
 |---|---|
 | 沙箱从不打 checkpoint，宿主无 HDBSS | 关（默认行为） |
-| 沙箱从不打 checkpoint，宿主有 HDBSS | 开着无妨，代价接近零 |
+| 沙箱从不打 checkpoint，宿主有 HDBSS | 不必为每页首次写做写保护陷出，但仍有硬件记录与 buffer 处理成本；按写入负载评估 |
 | 写密集且很少 checkpoint | 关；增量在这种负载下本来就省不下什么 |
 | 要做回滚的生产部署 | 开，并设 `FC_HDBSS_REQUIRED=true`：**宁可启动失败，也不要静默走软件路径** |
 
@@ -431,7 +436,7 @@ HDBSS 把"每页一次 VM-Exit"换成了"CPU 顺手记一笔 + 定期汇总"，�
 ## 本章要点
 
 1. 判据的精确性同时决定成本（多记 = 慢）和正确性（漏记 = 静默损坏），方向是**宁可多记，不可漏记**。
-2. 三种机制：KVM 写保护（每页首写一次 VM-Exit）、uffd 写保护（用户态故障）、**HDBSS（≈ 零成本）**。HDBSS 最终也走 `KVM_GET_DIRTY_LOG`，
+2. 三种机制：KVM 写保护（每页首写一次 VM-Exit）、uffd 写保护（用户态故障）、**HDBSS（硬件记录，省去逐页首写陷出，仍有跟踪成本）**。HDBSS 最终也走 `KVM_GET_DIRTY_LOG`，
    **接口一样、只有代价不同**，所以降级完全静默，必须靠能力上报说出来。
 3. KVM 脏页日志是**破坏性读**：取图之后先折回用户态位图，再做可能失败的事；用户态位图还记着 Firecracker 自己写 guest 内存的页，所以快照取两者的并集。
 4. 脏页分两层：**要不要记**（orchestrator 决定，`FC_TRACK_DIRTY_PAGES`）和**用什么方式记**（Firecracker 自动探测）；第一层关着时每次都是全量且不报错。

@@ -47,12 +47,12 @@
 | # | 前提 | 怎么查 | 不满足时 |
 |---|---|---|---|
 | 1 | aarch64；回滚路径（GIC 清线、vCPU 重置、HDBSS）只在 aarch64 上实现 | `uname -m` | 不能用 |
-| 2 | 宿主内核：openEuler 24.03 LTS-SP4，`6.6.0-159.4.3.154.oe2403sp4.aarch64`（950 与 920B 开发机上实测的版本），带 KVM 与 userfaultfd | `uname -r`；`grep -E 'CONFIG_KVM=\|CONFIG_USERFAULTFD=' /boot/config-$(uname -r)` | 换内核后第 6 项的 `nbd.ko` 也要重编 |
+| 2 | 宿主内核：openEuler 24.03 LTS-SP4，带 KVM 与 userfaultfd；920B 历史实测为 `6.6.0-159.4.3.154.oe2403sp4.aarch64`，950 的 2026-10-13 实测为 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | `uname -r`；`grep -E 'CONFIG_KVM=\|CONFIG_USERFAULTFD=' /boot/config-$(uname -r)` | 换内核后第 6 项的 `nbd.ko` 也要重编 |
 | 3 | `/dev/kvm` 存在且 root 可读写；KVM 跑在 VHE 模式 | `ls -l /dev/kvm`；`dmesg \| grep -Ei 'kvm.*VHE mode initialized'` | 沙箱起不来；非 VHE 时 HDBSS 启用会被内核拒绝 |
 | 4 | **HDBSS**（只对 950 要求）：内核编了 `CONFIG_ARM64_HDBSS=y`，**并且** CPU 支持（KVM 能力 502）。只有内核配置不够：920B 的内核也是 `=y`，但 CPU 没有 | `grep CONFIG_ARM64_HDBSS /boot/config-$(uname -r)`；能力以 orchestrator 能力行的 `track_dirty_pages_reason` 为准（§4.3），或跑 `preflight-customer.sh` 的第 3 节（本机有 gcc 时会编一个探针真开一次） | 950 上 Firecracker 静默退回 `kvm-wp`；想让它直接拒绝启动，见 [27](27-configuration-and-capacity.md) 的 `FC_HDBSS_REQUIRED` |
 | 5 | GICv3 | `preflight-customer.sh` 第 2 节 | v2 未实测 |
 | 6 | 自编译的 `nbd.ko`（`nbds_max=512`），vermagic 与运行内核一致，已固化为开机加载 | `lsmod \| grep -w nbd`；`cat /sys/module/nbd/parameters/nbds_max`（应为 512） | 沙箱根盘走 NBD，没有它沙箱起不来。固化步骤见部署指南 §0.2 |
-| 7 | `tun` 模块与 `/dev/net/tun` | `ls -d /sys/module/tun /dev/net/tun` | 沙箱网卡起不来。`preflight-customer.sh` 还会查 `vhost_net`，未加载时只判 WARN（920B 开发机上它就没加载，沙箱照常） |
+| 7 | `tun` 模块与 `/dev/net/tun` | `ls -d /sys/module/tun /dev/net/tun` | 沙箱网卡起不来。`preflight-customer.sh` 对 `vhost_net` 只给 INFO：当前 Firecracker 网卡在用户态实现、直接读写 tap，不依赖它 |
 | 8 | `net.ipv4.ip_forward=1`，**且在 `build.sh -s` 之前生效**（槽位 netns 在创建时继承这个值） | `sysctl -n net.ipv4.ip_forward` | 建模板在等 envd 那一步 60 s 超时。已经装完才发现要重建整池槽位，见部署指南 §0.3 |
 | 9 | 2 MiB 大页：guest 内存走 hugetlb，`init-client.sh` 启动时预留一部分，其余走 overcommit | `grep -i huge /proc/meminfo`；`cat /proc/sys/vm/nr_overcommit_hugepages` | 沙箱数被大页数卡住 |
 | 10 | **产物盘**：store 根 `/orchestrator/build/checkpoints`（由 `ORCHESTRATOR_BASE_PATH`、`DEFAULT_CACHE_DIR` 决定，目录布局见 [04 §5](04-architecture.md#5-数据面目录布局)）所在文件系统为 **ext4**，支持稀疏文件 | `df -T /orchestrator/build` | 交付方案只在 ext4 上验证过；为什么是 ext4 见 [04 §8](04-architecture.md#8-为什么交付用-ext4) |
@@ -85,7 +85,12 @@ RPM 里分别对应 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.a
 模板建时记的是 `v1.13.1`，而放在这个目录里的交付 FC 自报 `Firecracker v1.12.1`（`/fc-versions/v1.13.1/firecracker --version`）。
 这不影响功能，但**换 FC 时必须换 `v1.13.1/firecracker` 这一个文件**，放错目录等于没换，而且不报错。
 
-**核对 Firecracker 身份以 sha256 为准。** `--version` 报的 `v1.12.1` 是分叉所基于的上游版本号，目录名 `v1.13.1` 是模板记录的查找键，两者都区分不了交付的分叉与上游原版；orchestrator 能力文件里的 `commit` 目前也是空串（RPM 构建没有注入提交号，[27 §3.1](27-configuration-and-capacity.md#31-能力文件)）。所以核对二进制只看上表的 sha256。
+**核对 Firecracker 身份以 sha256 为准。** `--version` 报的 `v1.12.1` 是分叉所基于的上游版本号，目录名 `v1.13.1` 是模板记录的查找键，两者都区分不了交付的分叉与上游原版。
+orchestrator 能力文件的 `commit` 也不能代替二进制身份：早期 RPM 未注入时为空串，950 的 2026-10-15 smoke 自报 `4853232`，但仍须核对源码 / RPM 对应（[27 §3.1](27-configuration-and-capacity.md#31-能力文件)）。
+
+**预检只判定选定的 FC 版本，其余版本目录仅列 INFO。** 版本判定优先使用运行中 FC 的执行路径，没有活跃 FC 时再依次参考 api 的显式默认版本、部署脚本安装版本、唯一版本目录；日志必须注明判定依据（[30 §3](30-acceptance-runbook.md#3-smoke)）。
+950 的 2026-10-15 smoke 根据部署脚本选定 `v1.13.1`，回滚接口检查通过、该路径与部署件的 hash 一致，五项 smoke 全部通过（[21 §2.6](21-benchmarks-and-compliance.md#26-950-smoke部署预检与正确性验收)）。
+FC 自报版本不等于目录查找键；sha256 的采集 PASS 也不代替配套核对。不要未经模板依赖确认就删除或覆盖其他版本目录。
 
 配错的后果：
 
