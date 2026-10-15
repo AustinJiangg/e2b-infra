@@ -204,7 +204,14 @@ modok() {
 	fi
 }
 modok nbd   "沙箱根盘走 NBD，封层/回滚都基于它"
-modok vhost_net "沙箱网卡"
+# vhost_net 不是依赖：Firecracker 的 virtio-net 在用户态实现，直接读写 tap 设备
+# （firecracker src/vmm/src/devices/virtio/net/tap.rs 打开 /dev/net/tun），源码里没有任何
+# vhost_net / /dev/vhost-net 的引用；920B 上这个模块没加载，沙箱照常。所以只提示，不判定。
+if [ -d /sys/module/vhost_net ]; then
+	note "vhost_net" "已加载（当前部署不依赖它：Firecracker 的网卡走 tap，不经 vhost）"
+else
+	note "vhost_net" "未加载 —— 不需要处理（当前部署不依赖它：Firecracker 的网卡走 tap，不经 vhost）"
+fi
 modok tun   "沙箱网卡"
 [ -e /dev/net/tun ] && pass "/dev/net/tun" "存在" || fail "/dev/net/tun" "缺失，沙箱起不来"
 NBDMAX=$(cat /sys/module/nbd/parameters/nbds_max 2>/dev/null)
@@ -273,28 +280,117 @@ fi
 
 # ─────────────────────────────────────────── 8. Firecracker 二进制身份
 sec "8. Firecracker 二进制身份"
+# 只校验「在用的」那个版本目录。orchestrator 起沙箱时执行的是
+#   $FIRECRACKER_VERSIONS_DIR/<版本>/firecracker
+# （orchestrator internal/sandbox/fc/config.go 的 FirecrackerPath；目录默认 /fc-versions，
+# internal/cfg/model.go）。<版本> 由 api 随建沙箱请求带下来：取模板构建记录里的版本，再过一遍
+# 版本映射表（api internal/orchestrator/create_instance.go 的 getFirecrackerVersion）；建模板时
+# 记的是 api 进程环境的 DEFAULT_FIRECRACKER_VERSION，没设就是编译进去的默认值
+# （shared/pkg/feature-flags/flags.go 的 DefaultFirecrackerVersion，本部署为 v1.13.1，映射表也
+# 把 v1.10 / v1.12 两个系列都指到它）。部署脚本 init-client.sh 装的也是这一个目录。
+# 同一目录下别的版本（以前部署留下的旧二进制）不会被执行，只列出来，不判定。
 FCDIR=$(printf '%s\n' "$ORCH_ENV" | sed -n 's/^FIRECRACKER_VERSIONS_DIR=//p' | head -1)
 FCDIR_SRC="orchestrator 进程的 FIRECRACKER_VERSIONS_DIR"
-if [ -z "$FCDIR" ]; then FCDIR=/fc-versions; FCDIR_SRC="默认值（进程未起）"; fi
+if [ -z "$FCDIR" ]; then
+	FCDIR=/fc-versions
+	[ -n "$ORCH_PID" ] && FCDIR_SRC="默认值（orchestrator 进程环境里没设）" || FCDIR_SRC="默认值（orchestrator 进程未起）"
+fi
 note "Firecracker 目录" "$FCDIR（来自 $FCDIR_SRC）"
-FCFOUND=0
-for fc in "$FCDIR"/*/firecracker; do
-	[ -f "$fc" ] || continue
-	FCFOUND=$((FCFOUND+1))
-	if ! have strings; then
-		warn "FC 二进制身份" "$fc 存在但没有 strings 命令，判不了"
-		continue
-	fi
-	S=$(T 60 strings "$fc" 2>/dev/null)
-	HAS_SDB=$(printf '%s' "$S" | grep -c 'SaveDirtyBitmap')
-	HAS_RB=$(printf '%s' "$S" | grep -c 'RollbackSnapshot')
-	if [ "${HAS_SDB:-0}" -gt 0 ] && [ "${HAS_RB:-0}" -gt 0 ]; then
-		pass "FC 含回滚 API" "$fc (SaveDirtyBitmap×$HAS_SDB, RollbackSnapshot×$HAS_RB)"
-	else
-		fail "FC 含回滚 API" "$fc 不是本仓库构建的（SaveDirtyBitmap=$HAS_SDB RollbackSnapshot=$HAS_RB）；restore 会 404"
-	fi
+
+# 在用的版本：按下面的顺序取第一个判得出来的，并写明依据。
+FC_USE=""; FC_USE_SRC=""
+# ① 活着的 firecracker 进程实际执行的文件 —— 最直接；可能不止一个版本
+for pid in $(T 10 pidof firecracker); do
+	exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
+	exe=${exe% (deleted)}
+	case "$exe" in "$FCDIR"/*/firecracker) ;; *) continue ;; esac
+	v=$(basename "$(dirname "$exe")")
+	case " $FC_USE " in *" $v "*) ;; *) FC_USE="${FC_USE:+$FC_USE }$v" ;; esac
 done
-[ "$FCFOUND" = 0 ] && fail "Firecracker 二进制" "$FCDIR 下没找到 */firecracker"
+[ -n "$FC_USE" ] && FC_USE_SRC="活着的 firecracker 进程的 /proc/<pid>/exe"
+# ② api 进程环境里的 DEFAULT_FIRECRACKER_VERSION —— 新建的模板会记这个版本
+if [ -z "$FC_USE" ]; then
+	for p in /proc/[0-9]*; do
+		exe=$(readlink "$p/exe" 2>/dev/null) || continue
+		[ "${exe##*/}" = api ] || continue
+		v=$(tr '\0' '\n' <"$p/environ" 2>/dev/null | sed -n 's/^DEFAULT_FIRECRACKER_VERSION=//p' | head -1)
+		[ -n "$v" ] && { FC_USE=$v; FC_USE_SRC="api 进程（pid ${p#/proc/}）环境里的 DEFAULT_FIRECRACKER_VERSION"; break; }
+	done
+fi
+# ③ 部署脚本装的那个目录（init-client.sh 的 FIRECRACKER_VERSION，与 api 编译进去的默认值配套）
+if [ -z "$FC_USE" ]; then
+	for f in "${E2B_DEPLOY_DIR:-/opt/e2b-infra}/init-client.sh" "${E2B_DEPLOY_DIR:-/opt/e2b-infra}/dep/init-client.sh"; do
+		[ -r "$f" ] || continue
+		v=$(sed -n 's/^FIRECRACKER_VERSION=\([0-9][0-9.]*\).*/\1/p' "$f" 2>/dev/null | head -1)
+		[ -n "$v" ] && { FC_USE="v$v"; FC_USE_SRC="部署脚本 $f 里的 FIRECRACKER_VERSION=$v（没有活着的沙箱，api 也没设 DEFAULT_FIRECRACKER_VERSION）"; break; }
+	done
+fi
+# ④ 目录下只有一个版本，那就是它
+if [ -z "$FC_USE" ]; then
+	n=0; only=""
+	for fc in "$FCDIR"/*/firecracker; do [ -f "$fc" ] && { n=$((n+1)); only=$(basename "$(dirname "$fc")"); }; done
+	[ "$n" = 1 ] && { FC_USE=$only; FC_USE_SRC="$FCDIR 下只有这一个版本目录"; }
+fi
+if [ -n "$FC_USE" ]; then
+	note "在用的 FC 版本" "$FC_USE（判定依据：$FC_USE_SRC）"
+else
+	note "在用的 FC 版本" "判定不出来（没有活着的沙箱、api 没设 DEFAULT_FIRECRACKER_VERSION、找不到部署脚本、目录下不止一个版本）"
+fi
+
+fc_api() { # fc_api <二进制>：打印 "SaveDirtyBitmap 次数 RollbackSnapshot 次数"
+	local s
+	s=$(T 60 strings "$1" 2>/dev/null)
+	echo "$(printf '%s' "$s" | grep -c 'SaveDirtyBitmap') $(printf '%s' "$s" | grep -c 'RollbackSnapshot')"
+}
+fc_sha() { T 60 sha256sum "$1" 2>/dev/null | cut -c1-12; }
+
+FCFOUND=0
+for fc in "$FCDIR"/*/firecracker; do [ -f "$fc" ] && FCFOUND=$((FCFOUND+1)); done
+if [ "$FCFOUND" = 0 ]; then
+	fail "Firecracker 二进制" "$FCDIR 下没找到 */firecracker"
+elif [ -n "$FC_USE" ]; then
+	# 在用的：逐个判 PASS / FAIL
+	for v in $FC_USE; do
+		fc="$FCDIR/$v/firecracker"
+		if [ ! -f "$fc" ]; then
+			fail "在用的 FC 存在" "$fc 不存在 —— 沙箱按这个路径起，起不来"
+		elif ! have strings; then
+			warn "FC 二进制身份" "$fc 存在但没有 strings 命令，判不了（sha256 $(fc_sha "$fc")…）"
+		else
+			set -- $(fc_api "$fc")
+			if [ "${1:-0}" -gt 0 ] && [ "${2:-0}" -gt 0 ]; then
+				pass "FC 含回滚 API" "$fc (SaveDirtyBitmap×$1, RollbackSnapshot×$2，sha256 $(fc_sha "$fc")…)"
+			else
+				fail "FC 含回滚 API" "$fc 不是本仓库构建的（SaveDirtyBitmap=$1 RollbackSnapshot=$2，sha256 $(fc_sha "$fc")…）；restore 会 404"
+			fi
+		fi
+	done
+	# 其余版本目录：只列出，不判定
+	for fc in "$FCDIR"/*/firecracker; do
+		[ -f "$fc" ] || continue
+		v=$(basename "$(dirname "$fc")")
+		case " $FC_USE " in *" $v "*) continue ;; esac
+		note "其它版本目录" "$fc sha256 $(fc_sha "$fc")… —— 未使用，不校验"
+	done
+else
+	# 判不出在用的是哪个：至少有一个带回滚接口就放行，并说明没法对号
+	GOOD=""
+	if have strings; then
+		for fc in "$FCDIR"/*/firecracker; do
+			[ -f "$fc" ] || continue
+			set -- $(fc_api "$fc")
+			note "FC 版本目录" "$fc SaveDirtyBitmap=$1 RollbackSnapshot=$2 sha256 $(fc_sha "$fc")…"
+			[ "${1:-0}" -gt 0 ] && [ "${2:-0}" -gt 0 ] && GOOD="${GOOD:+$GOOD }$fc"
+		done
+		if [ -n "$GOOD" ]; then
+			pass "FC 含回滚 API" "无法判定在用版本；至少这些带回滚接口：$GOOD"
+		else
+			fail "FC 含回滚 API" "$FCDIR 下 $FCFOUND 个版本目录里没有一个带回滚接口；restore 会 404"
+		fi
+	else
+		warn "FC 二进制身份" "没有 strings 命令，且判不出在用版本，判不了"
+	fi
+fi
 # 其它位置上的 FC 只作提示：orchestrator 不从那里取，装错了才会用上
 for fc in /fc-versions/*/firecracker /opt/e2b-infra/bin/firecracker; do
 	[ -f "$fc" ] || continue
@@ -356,20 +452,46 @@ else
 	done
 	FI=$(printf '%s\n' "$ORCH_ENV" | sed -n 's/^CHECKPOINT_FAULT_INJECT=//p' | head -1)
 	[ -n "$FI" ] && fail "CHECKPOINT_FAULT_INJECT" "生产机器上绝不该设它（=$FI）：它会人为让 checkpoint 失败"
+	# capabilities 从哪读，按便宜到贵：
+	#   ① 能力文件（orchestrator 启动时写在 DEFAULT_CACHE_DIR 下，pid 对得上才算当前进程的）；
+	#   ② 这个进程所在 nomad alloc 的 stdout 日志（raw_exec 的输出不进 journald）；
+	#   ③ journald，只看这个进程启动之后的部分 —— 早先是把整个 journal 扫一遍，日志攒到 GB 级
+	#      的机器上这一步要十几秒到几十秒，而且扫到的可能是以前某次启动的行。
 	CAPLINE=""
-	if have journalctl; then
-		CAPLINE=$(T 60 journalctl --no-pager -o cat 2>/dev/null | grep -F 'checkpoint capabilities' | tail -1)
+	CAPDIR=$(printf '%s\n' "$ORCH_ENV" | sed -n 's/^DEFAULT_CACHE_DIR=//p' | head -1)
+	CAPDIR=${CAPDIR//\$\{ORCHESTRATOR_BASE_PATH\}/$BASE}
+	CAPFILE="${CAPDIR:-$BASE/build}/checkpoint-capabilities.json"
+	if [ -r "$CAPFILE" ] && grep -qE "^  \"pid\": $ORCH_PID,?\$" "$CAPFILE" 2>/dev/null; then
+		CAPLINE=$(tr -d '\n' <"$CAPFILE" | sed 's/[[:space:]][[:space:]]*/ /g; s/": /":/g')
+		note "capabilities 来源" "能力文件 $CAPFILE"
+	fi
+	if [ -z "$CAPLINE" ]; then
+		ALLOCDIR=$(printf '%s\n' "$ORCH_ENV" | sed -n 's/^NOMAD_ALLOC_DIR=//p' | head -1)
+		if [ -n "$ALLOCDIR" ] && [ -d "$ALLOCDIR/logs" ]; then
+			for f in $(ls -1 "$ALLOCDIR/logs" 2>/dev/null | grep '^start\.stdout\.[0-9]*$' | sort -t. -k3,3nr); do
+				CAPLINE=$(T 30 grep -aF 'checkpoint capabilities' "$ALLOCDIR/logs/$f" 2>/dev/null | tail -1)
+				[ -n "$CAPLINE" ] && { note "capabilities 来源" "alloc 日志 $ALLOCDIR/logs/$f"; break; }
+			done
+		fi
+	fi
+	if [ -z "$CAPLINE" ] && have journalctl; then
+		SINCE=$(T 10 date -d "$(T 10 ps -o lstart= -p "$ORCH_PID")" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
+		if [ -n "$SINCE" ]; then
+			CAPLINE=$(T 60 journalctl --no-pager -o cat --since "$SINCE" 2>/dev/null | grep -F 'checkpoint capabilities' | tail -1)
+		else
+			CAPLINE=$(T 60 journalctl --no-pager -o cat 2>/dev/null | grep -F 'checkpoint capabilities' | tail -1)
+		fi
 	fi
 	[ -z "$CAPLINE" ] && [ -r /var/log/e2b/orchestrator.log ] && \
 		CAPLINE=$(T 30 grep -F 'checkpoint capabilities' /var/log/e2b/orchestrator.log 2>/dev/null | tail -1)
 	if [ -n "$CAPLINE" ]; then
 		note "capabilities 日志" "$(printf '%s' "$CAPLINE" | tail -c 400)"
 		case "$CAPLINE" in
-		*'"track_dirty_pages":true'*|*'track_dirty_pages=true'*) pass "脏页跟踪已开" "增量 checkpoint 生效" ;;
+		*'"track_dirty_pages":true'*|*'"track_dirty_pages": true'*|*'track_dirty_pages=true'*) pass "脏页跟踪已开" "增量 checkpoint 生效" ;;
 		*) warn "脏页跟踪" "日志显示未开启 → 每次 checkpoint 全量拷贝内存" ;;
 		esac
 	else
-		note "capabilities 日志" "没抓到（日志不在 journald？）。启动日志里搜 'checkpoint capabilities'"
+		note "capabilities 日志" "没抓到（能力文件、alloc 日志、journald 里都没有）。启动日志里搜 'checkpoint capabilities'"
 	fi
 fi
 
