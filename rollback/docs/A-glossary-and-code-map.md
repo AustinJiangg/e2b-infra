@@ -323,3 +323,4 @@ Firecracker 的三处扩展：`CreateSnapshotParams.dirty_bitmap_path`（已有�
 | **附录** |  |  |
 | A | 本附录 | 查询入口 |
 | B | [继续开发](B-extending.md) | 仓库、改动指引、自查清单、已知方向 |
+| C | [代码规模、版本增量与统计口径](C-code-size-and-methodology.md) | 有效代码、MR 后改动、当前测试分类、去重与复算 |
