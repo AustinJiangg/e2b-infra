@@ -1,0 +1,1408 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-15",
+  "refs": {
+    "baseline": "40acf5b52afb836e909d19c51f22b5ab4f729466",
+    "mr": "0f9b58f9281ad9e20411333e9a619b691808fc5a",
+    "current": "57a30632cb9cb8eb67a35dd226d9ef4b40458af4",
+    "infra_current": "e212049d3165e571a0cdc760ba503b96ea559193"
+  },
+  "repositories": {
+    "kas": "https://gitcode.com/jiangluluu/KASandbox_0904.git",
+    "infra": "https://github.com/AustinJiangg/e2b-infra.git"
+  },
+  "classification": "按文件主用途分类；混合改动整文件列共用；Rust 按 cfg(test) 与测试 feature 行范围拆分；共用只计一次。",
+  "kas_files": {
+    "deploy/.env": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "deploy/CHECKPOINT.md": {
+      "kind": "excluded",
+      "reason": "文档"
+    },
+    "deploy/checkpoint_verify.py": {
+      "kind": "excluded",
+      "reason": "同源旧验收脚本；保留 e2b-infra 当前版本，不宣称全文相同"
+    },
+    "firecracker/.gitignore": {
+      "kind": "excluded",
+      "reason": "测试资源跟踪规则"
+    },
+    "firecracker/resources/seccomp/aarch64-unknown-linux-musl.json": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "firecracker/resources/seccomp/x86_64-unknown-linux-musl.json": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "firecracker/src/cpu-template-helper/src/utils/mod.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/firecracker/Cargo.toml": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "测试专用构建"
+    },
+    "firecracker/src/firecracker/src/api_server/mod.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/firecracker/src/api_server/parsed_request.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/firecracker/src/api_server/request/snapshot.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "shared"
+    },
+    "firecracker/src/firecracker/src/main.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/firecracker/swagger/firecracker.yaml": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "firecracker/src/vmm/Cargo.toml": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "测试专用构建"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/gic/gicv3/mod.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/gic/gicv3/regs/dist_regs.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/gic/gicv3/regs/mod.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/gic/gicv3/regs/redist_regs.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/gic/mod.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/gic/regs.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/vcpu.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/arch/aarch64/vm.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "shared"
+    },
+    "firecracker/src/vmm/src/arch/x86_64/vcpu.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/builder.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/acpi/vmgenid.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/legacy/serial.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/virtio/block/persist.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/virtio/block/virtio/persist.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/virtio/net/device.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/virtio/net/persist.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/virtio/persist.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/devices/virtio/rng/persist.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/lib.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/logger/metrics.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/persist.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/rollback.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/rpc_interface.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/test_utils/mock_resources/test_elf.bin": {
+      "kind": "excluded",
+      "reason": "二进制测试资源"
+    },
+    "firecracker/src/vmm/src/test_utils/mock_resources/test_pe.bin": {
+      "kind": "excluded",
+      "reason": "二进制测试资源"
+    },
+    "firecracker/src/vmm/src/vmm_config/instance_info.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/vmm_config/snapshot.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "shared"
+    },
+    "firecracker/src/vmm/src/vstate/memory.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "shared"
+    },
+    "firecracker/src/vmm/src/vstate/vcpu.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "rollback"
+    },
+    "firecracker/src/vmm/src/vstate/vm.rs": {
+      "kind": "production",
+      "component": "rust",
+      "scope": "shared"
+    },
+    "firecracker/src/vmm/tests/integration_tests.rs": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "源码测试配套"
+    },
+    "firecracker/tests/host_tools/fcmetrics.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "源码测试配套"
+    },
+    "packages/orchestrator/benchmark_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/cmd/create-build/main.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/cmd/smoketest/smoke_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/bitmap.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/bitmap_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/capabilities.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/capabilities_file.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/capabilities_file_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/capabilities_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/compact.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/compact_bench_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/compact_layers.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/compact_layers_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/compact_sim_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/compact_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/debug_index_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/faults.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/faults_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/full_root_revert_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/generation_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/header_agreement_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/layer_meta_bench_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/layer_refs.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/layer_refs_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/limits_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/materialize_reads_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/metrics.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/quota.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/quota_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/reclaim_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/revert_runs_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/rootfs.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/rootfs_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/service.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/service_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/store.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/checkpoint/store_bench_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/store_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/timings_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/checkpoint/vcpu_counters_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/proxy/proxy.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/runtimemetrics/runtimemetrics.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/runtimemetrics/runtimemetrics_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/assemble_bench_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/blockset.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/block/blockset_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/cache.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/block/cache_bench_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/cache_fault_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/chunk.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/block/device.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/block/export_layers_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/layerstack.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/block/layerstack_parity_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/move_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/overlay.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/block/page.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/block/page_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/populate.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/block/populate_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/readchain_bench_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/seal_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/sealed_view.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/block/sealed_view_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/block/streaming_chunk.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/build/build.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/build/file_slice_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/checkpoint.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/checkpoint_epoch_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/checkpoint_timeout_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/checkpoint_view_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/conntrack_flush.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/conntrack_flush_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/diskreads.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/diskreads_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/envd_wait_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/fc/client.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/fc/dirtytracking.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/fc/dirtytracking_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/fc/memory.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/fc/process.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/fc/rollback.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/fc/rollback_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_filter.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_filter_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_handles.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_handles_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_netns_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_scan.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_scan_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_sweeper.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/network/conntrack_sweeper_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/network/network.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/network/slot.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/phasetimings.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "rollback"
+    },
+    "packages/orchestrator/internal/sandbox/phasetimings_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/rootfs/nbd.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/rootfs/rootfs.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/rootfs/sealed_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/sandbox.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/sandbox/template/storage.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/diffmetadata_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/memory_backend.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/noop.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/prefetch/prefetcher.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/sinceboot.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/sinceboot_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/uffd.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/sandbox/uffd/userfaultfd/userfaultfd.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/orchestrator/internal/server/sandboxes.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/template/build/layer/layer_executor.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/internal/template/build/phases/base/provision.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/orchestrator/main.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/fc/firecracker.yml": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/fc/models/snapshot_create_params.go": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared",
+      "note": "生成模型中的手工 DirtyBitmapPath 补充，仅计端点差分，不计整个模型"
+    },
+    "packages/shared/pkg/proxy/fullduplex_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/shared/pkg/proxy/handler.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/pool/client.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/pool/context.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/pool/destination.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/pool/pool.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/pool/trace.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/pool/trace_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/shared/pkg/proxy/proxy.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "packages/shared/pkg/proxy/proxy_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/shared/pkg/proxy/trace_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/shared/pkg/storage/header/finer_diff_test.go": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "packages/shared/pkg/storage/header/metadata.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "native"
+    },
+    "packages/shared/pkg/telemetry/meters.go": {
+      "kind": "production",
+      "component": "go",
+      "scope": "shared"
+    },
+    "py-sdk/Makefile": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "py-sdk/e2b/__init__.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/checkpointd/README.md": {
+      "kind": "excluded",
+      "reason": "文档"
+    },
+    "py-sdk/e2b/checkpointd/__init__.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/checkpointd/api.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/checkpointd/checkpoint/__init__.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/checkpointd/checkpoint/checkpoint_connect.py": {
+      "kind": "generated",
+      "component": "generated",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/checkpointd/checkpoint/checkpoint_pb2.py": {
+      "kind": "generated",
+      "component": "generated",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/checkpointd/checkpoint/checkpoint_pb2.pyi": {
+      "kind": "generated",
+      "component": "generated",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/connection_config.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/envd/api.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/envd/rpc.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/exceptions.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox/checkpoint/__init__.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox/checkpoint/errors.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox/checkpoint/types.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox/main.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox_async/checkpoint.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox_async/main.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox_sync/checkpoint.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b/sandbox_sync/main.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/e2b_connect/client.py": {
+      "kind": "production",
+      "component": "sdk",
+      "scope": "rollback"
+    },
+    "py-sdk/scripts/fix-python-pb-checkpointd.sh": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "py-sdk/scripts/regen-checkpoint-pb.py": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "py-sdk/tests/e2b_connect/test_retries.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "py-sdk/tests/test_checkpoint_errors.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "py-sdk/tests/test_connection_config.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "源码单测与组件微基准"
+    },
+    "spec/checkpointd/buf-python.gen.yaml": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    },
+    "spec/checkpointd/checkpoint/checkpoint.proto": {
+      "kind": "production",
+      "component": "support",
+      "scope": "shared"
+    }
+  },
+  "infra_files": {
+    "rollback/scripts/950/run.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/acceptance/checkpoint_bench.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/acceptance/checkpoint_bench_v2.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/acceptance/checkpoint_concurrent.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/acceptance/checkpoint_verify.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/acceptance/native_snapshot_bench.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/acceptance/rolling_keep10.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/bench/analyze.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/bench/bench_tiers.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/bench/compliance.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/bench/hdbss_bench.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/bench/serial_restore.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/__init__.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/crtest/__main__.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/__init__.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/pending.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/crtest/cases/t11.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t12.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t13.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t14.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t15.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t18.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t21.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t22.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t23.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t24.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t25.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t26.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t32.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t34.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t36.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t37.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t38.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t39.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t40.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/cases/t41.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/crtest/common.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/portability/preflight-customer.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "当前统一入口涉及"
+    },
+    "rollback/scripts/crtest/probe950/compare.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/probe950/probe-dynamic.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/probe950/probe-host.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/run-r1.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/crtest/sdktests/test_checkpoint_errors.py": {
+      "kind": "excluded",
+      "reason": "与 KASandbox Python SDK 单测全文相同，仅计源码仓库",
+      "identical_to": {
+        "repository": "kas",
+        "ref": "current",
+        "path": "py-sdk/tests/test_checkpoint_errors.py"
+      }
+    },
+    "rollback/scripts/crtest/tests/__init__.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "测试框架的离线单测"
+    },
+    "rollback/scripts/crtest/tests/stub.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "测试框架的离线单测"
+    },
+    "rollback/scripts/crtest/tests/test_common.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "测试框架的离线单测"
+    },
+    "rollback/scripts/crtest/tests/test_stub_smoke.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "测试框架的离线单测"
+    },
+    "rollback/scripts/crtest/tests/test_t39.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "测试框架的离线单测"
+    },
+    "rollback/scripts/crtest/tests/test_t41.py": {
+      "kind": "test",
+      "test_kind": "unit",
+      "usage": "测试框架的离线单测"
+    },
+    "rollback/scripts/dev/00-recon-950.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/01-check-host.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/02-prepare-loop-volume.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/03-switch.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/04-verify-runtime.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/bench-ckpt.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/cap_test.c": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/compat_matrix.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/correctness.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/freeze_probe.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/hcl_env.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/hdbss_evidence.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/lib.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/loop.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/pause_verify.py": {
+      "kind": "test",
+      "test_kind": "integration",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/probe-ramp.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/run-all.sh": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/dev/timing.py": {
+      "kind": "test",
+      "test_kind": "performance",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/probes/pb2.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/probes/pb3.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/probes/pb4.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/probes/pb5.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/probes/probe_dirty.py": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    },
+    "rollback/scripts/probes/uffdwp_probe.c": {
+      "kind": "test",
+      "test_kind": "support",
+      "usage": "独立工具与手动专项"
+    }
+  }
+}

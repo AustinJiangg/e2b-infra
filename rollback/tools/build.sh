@@ -21,7 +21,7 @@ case "${1:-}" in
   *) CHECK_ONLY=0 ;;
 esac
 
-if ! "$DOCS_PYTHON" -c 'import markdown_it' 2>/dev/null; then
+if ! "$DOCS_PYTHON" -c 'import markdown_it, pygments' 2>/dev/null; then
   printf '%s\n' '缺少 Python 依赖，请按 rollback/tools/README.md 安装 requirements.txt。' >&2
   exit 2
 fi
@@ -31,6 +31,7 @@ if ! command -v node >/dev/null || [ ! -f "$TOOLS_DIR/node_modules/mermaid/dist/
 fi
 
 "$DOCS_PYTHON" "$TOOLS_DIR/mdlinks.py" "$ROLLBACK_DIR/docs"
+"$DOCS_PYTHON" "$TOOLS_DIR/code_stats.py" --check-docs
 node "$TOOLS_DIR/mdmermaid.mjs" --node-modules "$TOOLS_DIR/node_modules" "$ROLLBACK_DIR"/docs/*.md
 [ "$CHECK_ONLY" -eq 0 ] || exit 0
 

@@ -105,6 +105,8 @@
 
 ## 2. 代码地图
 
+代码规模、MR 后增量及当前测试统计见 [附录 C](C-code-size-and-methodology.md)，本节负责代码位置与符号索引。
+
 代码在 openEuler 交付仓库 `KASandbox_0904`：开发分支 `deltabox-dev`，交付分支 `deltabox`（[附录 B](B-extending.md)）。三个组件同仓：
 
 | 组件 | 目录 | 下表路径的前缀 | 单元测试 |
