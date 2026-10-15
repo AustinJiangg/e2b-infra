@@ -1,6 +1,6 @@
 # Checkpoint / Restore 技术手册
 
-> **v0.4.10**（2026-10-15，新增 MR 合入后演进总览，区分单沙箱达标与后续并发优化，关联代表提交、机制与验证；保留代码规模统计及实测边界）· 江路路（j30059180）
+> **v0.4.11**（2026-10-15，代码量附录补充 phz 的 SDK 基础与本方 MR 前适配、MR 后完善的分段统计；保留 MR 后演进总览及实测边界）· 江路路（j30059180）
 >
 > 代码讲解基准：KASandbox_0904 的 deltabox-dev@57a3063（orchestrator、Firecracker、Python SDK 同仓）；已合入 openEuler 的 MR 基线为 deltabox@0f9b58f，后续开发改动合入交付分支待整理。交付的 RPM（e2b-infra）里的 0001 补丁由开发版融合而来。950 smoke 有能力文件自报 `commit=4853232`、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator 的完整 sha256；源码 / RPM 对应、perf / func 当轮身份尚待核对，不能从讲解基准或相邻轮次直接推定。
 

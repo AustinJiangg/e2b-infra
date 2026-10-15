@@ -70,7 +70,7 @@ MR 版已在当时验证的单沙箱快照、回滚场景下满足客户性能�
 
 去 [Releases](https://github.com/AustinJiangg/e2b-infra/releases) 下载附件，然后把文件发过去就行 —— 对方不需要仓库权限。
 
-当前文档版本 **v0.4.10**（2026-10-15，江路路 j30059180；新增 MR 合入后演进总览，区分单沙箱达标与后续并发优化，关联代表提交、机制与验证，保留代码规模统计及实测边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；发布入口为 [docs-v0.4.10](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.10)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
+当前文档版本 **v0.4.11**（2026-10-15，江路路 j30059180；代码量附录补充 phz 的 SDK 基础与本方 MR 前适配、MR 后完善的分段统计，保留 MR 后演进总览及实测边界；代码讲解基准仍为 deltabox-dev@57a3063，部署与源码对应仍待补）；发布入口为 [docs-v0.4.11](https://github.com/AustinJiangg/e2b-infra/releases/tag/docs-v0.4.11)，本地产物在 `rollback/dist/checkpoint-restore-docs.html`。
 每份新产物的封面与侧栏都印着版本号，版本号以 [`docs/README.md`](docs/README.md) 开头的信息块为准；Releases 中的历史附件不会随本地重建自动更新。
 
 | 附件 | 大小 | 给谁 |
