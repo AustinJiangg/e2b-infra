@@ -56,6 +56,8 @@ for f in files:
                 print(f'MISSING-FILE {f}  ->  {path}'); missing += 1
             elif frag and full.endswith('.md') and frag not in headings(full):
                 print(f'ANCHOR-MISS  {f}  ->  {path}#{frag}'); bad += 1
+    for label in re.findall(r'\[([^\]]+)\]\(\s*\)', txt):
+        print(f'EMPTY-TARGET {f}  [{label}]'); bad += 1
 print('---')
 print(f'anchor/link errors: {bad}   not-yet-written targets: {missing}')
 sys.exit(1 if bad or missing else 0)

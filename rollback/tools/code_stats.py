@@ -309,7 +309,7 @@ def delta(metrics, unit="sloc"):
 def render_blocks(report):
     periods, tests = report["periods"], report["tests_current"]
     mr, post, current = [periods[key]["production"]["sloc"]["net"] for key in ("mr", "after_mr", "current")]
-    blocks = {"summary": f"按固定源码版本统计，MR 版净增 **{number(mr)} 行有效生产代码**，MR 后修改优化净增 **{number(post)} 行**；当前版相对开发前基线合计净增 **{number(current)} 行**。当前测试与验证代码去重后净增 **{number(tests['total']['sloc']['net'])} 行有效代码**，包含测试框架与诊断工具。以上均排除空行、纯注释与 Python docstring；生产主合计排除自动生成代码。完整口径、分类、版本与物理行复核见 [附录 C](C-code-size-and-methodology.md)。"}
+    blocks = {"summary": f"按固定源码版本统计，MR 版净增 **{number(mr)} 行有效生产代码**，MR 后修改优化净增 **{number(post)} 行**；当前版相对开发前基线合计净增 **{number(current)} 行**。当前测试与验证代码去重后净增 **{number(tests['total']['sloc']['net'])} 行有效代码**，包含测试框架与诊断工具。以上均排除空行、纯注释与 Python docstring；生产主合计排除自动生成代码。完整口径、分类、版本与物理行复核见 [附录 D](D-code-size.md)。"}
     labels = {"baseline": "功能开发前基线", "mr": "MR 版 deltabox", "current": "当前 deltabox-dev", "infra_current": "当前测试 e2b-infra"}
     blocks["versions"] = "| 对象 | 固定提交 SHA |\n|---|---|\n" + "\n".join(f"| {labels[k]} | `{v}` |" for k, v in report["refs"].items())
     lines = ["| 生产代码类别 | MR 版：新增 / 删除 / 净增 | MR 后修改优化：新增 / 删除 / 净增 |", "|---|---:|---:|"]
@@ -371,8 +371,8 @@ def render_blocks(report):
 
 def sync_docs(report, root=ROOT, check=False):
     blocks = render_blocks(report)
-    for path, names in ((root / "docs/00-overview.md", ("summary",)),
-                        (root / "docs/C-code-size-and-methodology.md", ("versions", "production", "scope", "sdk-provenance", "tests", "physical", "exclusions"))):
+    for path, names in ((root / "docs/01-delivery-and-reading.md", ("summary",)),
+                        (root / "docs/D-code-size.md", ("versions", "production", "scope", "sdk-provenance", "tests", "physical", "exclusions"))):
         source = path.read_text(encoding="utf-8")
         updated = source
         for name in names:

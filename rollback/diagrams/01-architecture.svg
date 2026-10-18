@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="970" viewBox="0 0 1640 970" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC','Segoe UI',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="1000" viewBox="0 0 1640 1000" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Source Han Sans SC','Segoe UI',sans-serif">
   <defs>
     <marker id="arrGray" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
       <path d="M0,0 L8,3.2 L0,6.4 z" fill="#7b8794"/>
@@ -18,7 +18,7 @@
     </style>
   </defs>
 
-  <rect width="1640" height="970" fill="#ffffff"/>
+  <rect width="1640" height="1000" fill="#ffffff"/>
 
   <text class="title" x="40" y="44">E2B ARM Checkpoint / Restore —— 950 ext4 执行路径与优化点</text>
   <text class="subtl" x="40" y="70">沙箱全程不重建 · 内存差分树 · 磁盘分层封存 · 硬件标脏 · 产物驻留宿主本地</text>
@@ -103,16 +103,18 @@
   <text class="optn" x="636" y="643">打快照与回滚都不停沙箱，挂载全程不卸载</text>
 
   <!-- ============ 带 4：KVM / HDBSS ============ -->
-  <rect x="40" y="688" width="1130" height="66" rx="10" fill="#f2f0fb" stroke="#b8aede"/>
+  <rect x="40" y="688" width="1130" height="96" rx="10" fill="#f2f0fb" stroke="#b8aede"/>
   <text class="lane" x="58" y="713">KVM · 鲲鹏 950</text>
   <text class="bx"   x="200" y="717">HDBSS 硬件标脏（KVM cap 502）</text>
-  <text class="sb"   x="200" y="739">启动时探测能力：有硬件跟踪则自动启用；无则安全退回软件写保护，可配置为「必须硬件否则报错」</text>
-  <rect x="760" y="698" width="390" height="46" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
-  <text class="opt"  x="776" y="717">优化 ⑥ 脏页判据取自硬件 / 内核日志</text>
-  <text class="optn" x="776" y="736">绕开 uffd，补回 ARM 适配中丢掉的精确增量</text>
+  <text id="dirty-tracking-auto" class="sb" x="200" y="737">启动时探测：有 HDBSS 能力则自动启用跟踪；</text>
+  <text id="dirty-tracking-fallback" class="sb" x="200" y="755">无硬件能力时，显式开启跟踪才走软件写保护；</text>
+  <text id="dirty-tracking-required" class="sb" x="200" y="773">已开启跟踪时，可要求「必须硬件，否则报错」。</text>
+  <rect id="dirty-tracking-optimization" x="760" y="706" width="390" height="62" rx="6" fill="#fff4e6" stroke="#f0b26b"/>
+  <text class="opt"  x="776" y="730">优化 ⑥ 脏页判据取自硬件 / 内核日志</text>
+  <text class="optn" x="776" y="752">绕开 uffd，补回 ARM 适配中丢掉的精确增量</text>
 
   <!-- ============ 右区：宿主本地存储 ============ -->
-  <rect x="1200" y="180" width="400" height="574" rx="10" fill="#f2faf3" stroke="#a8ceac"/>
+  <rect x="1200" y="180" width="400" height="604" rx="10" fill="#f2faf3" stroke="#a8ceac"/>
   <text class="lane" x="1218" y="204">宿主本地存储</text>
   <text class="mono" x="1218" y="228">checkpoints / 沙箱 / 检查点</text>
 
@@ -157,6 +159,7 @@
   <text class="flowg" x="478" y="681">脏页日志</text>
 
   <!-- ============ 底部：一次暂停窗口内做完 ============ -->
+  <g transform="translate(0 30)">
   <rect x="40" y="782" width="1560" height="160" rx="10" fill="#fbfcfe" stroke="#c9d3df"/>
   <text class="lane" x="58" y="807">优化 ⑧　内存与磁盘在同一次暂停窗口内完成 —— 两者是同一瞬间的镜像，不会半新半旧</text>
 
@@ -171,4 +174,5 @@
   <text class="sb" x="1390" y="860" text-anchor="middle">恢复</text>
   <text class="sb" x="1390" y="880" text-anchor="middle">resume</text>
   <text class="sb" x="58" y="925">优化 ⑨　封存不等待落盘（不强制刷盘），封存耗时不再随改动量增长；连接跟踪表在虚机停住时清理，此时不可能有流量重建一条刚被作废的表项。</text>
+  </g>
 </svg>

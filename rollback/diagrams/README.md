@@ -13,12 +13,13 @@
 
 ## 怎么选
 
-- **要读懂这套东西** → 看 [`../docs/`](../docs/)，从 [`00-overview.md`](../docs/00-overview.md) 开始。
+- **要读懂这套东西** → 看 [`../docs/`](../docs/)，从 [`01-delivery-and-reading.md`](../docs/01-delivery-and-reading.md) 开始。
 - **要汇报** → 用三张 SVG。纯 SVG、无外部依赖，PowerPoint / WPS 可直接插入并保持矢量清晰度，
   放大不糊；中文走系统字体栈（微软雅黑 / 苹方 / 思源黑体），Windows 与 macOS 都能正常显示。
   浏览器和 VS Code 内置图像预览也能直接打开，不需要装任何插件。
-- **要改图** → 改 `.mmd`。排版精度不如手写的 SVG（mermaid 是自动布局），正式汇报仍建议用 SVG。
-  注意 `.mmd` 文件需要支持 mermaid 语言的扩展才能预览，
+- **要修改交付 HTML 中的配图** → 直接编辑相应 `.svg`；这些 SVG 是手写矢量源文件，由手册构建工具直接内嵌。
+  `.mmd` 是另行维护的 Mermaid 逻辑示意，不会自动生成或覆盖这套手写 SVG；修改文字含义时同步两份源文件。
+  `.mmd` 文件需要支持 mermaid 语言的扩展才能预览，
   仅装「Markdown Preview Mermaid Support」是不够的 —— 它只增强 Markdown 预览里的 `mermaid` 代码块。
 
 三张图各回答一个问题，可以单独用，也可以按 01 → 02 → 03 的顺序连讲：
@@ -27,10 +28,10 @@
 ## 改图注意
 
 - **图里不含任何实测数字**，是有意为之：950 上还没有数据，920B 的数字口径不同，
-  混进架构图容易被当成 950 的性能承诺。判定性的数字集中在 [`../docs/21-benchmarks-and-compliance.md`](../docs/21-benchmarks-and-compliance.md) 与 [`../docs/22-long-run-and-concurrency.md`](../docs/22-long-run-and-concurrency.md)，并标注了口径与缺口。
+  混进架构图容易被当成 950 的性能承诺。判定性的数字集中在 [`../docs/18-950-performance.md`](../docs/18-950-performance.md) 与 [`../docs/19-950-concurrency.md`](../docs/19-950-concurrency.md)，并标注了口径与缺口。
 - **`03-vs-native.svg` 里「脏页判据的三方差异」那一块不要删。** 对比基准是我们所基于的
   **ARM 适配版**，而 x86 原生的增量本来就是精确的 —— 少了这块说明，图会被读成
-  「我们比 e2b 原生强」，那是不对的。同一段说明在 [`../docs/05-dirty-page-tracking-and-hdbss.md`](../docs/05-dirty-page-tracking-and-hdbss.md#5-判据差异读也算脏) §5。
+  「我们比 e2b 原生强」，那是不对的。同一段说明在 [`../docs/05-dirty-tracking-and-hdbss.md`](../docs/05-dirty-tracking-and-hdbss.md#5-判据差异读也算脏) §5。
 - 改完建议跑一次几何自检，防止中文变长后压框或溢出画布。脚本在 WSL 工作区
   `e2b-repo/tmp/svgcheck.py`（估算文本宽度并比对容器边界，另检查框与框的非法重叠），
   **尚未随本仓库同步**。
