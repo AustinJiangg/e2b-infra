@@ -64,6 +64,16 @@ node rollback/tools/test_reader.mjs rollback/dist/checkpoint-restore-docs.html
 
 生成器仍支持单独调用，可用 `python3 rollback/tools/build_docs_html.py --help` 查看参数。
 
+gsd 手册复用本目录的生成器、校验器和依赖，不另维护工具副本：
+
+```bash
+bash rollback/tools/build.sh --book gsd --check
+bash rollback/tools/build.sh --book gsd
+```
+
+输入为 `gsd/docs/`、`gsd/book.json`，默认输出 `gsd/dist/gsd-checkpoint-restore-docs.html`。
+gsd 不执行沙箱级代码规模统计；默认不带 `--book` 的行为保持不变。
+
 ## 代码规模统计
 
 HTML 构建会运行 `code_stats.py --check-docs`，核对分类清单、归档和正文统计块一致；这一步不需要 KASandbox 源码仓库。

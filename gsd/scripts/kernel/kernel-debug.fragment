@@ -1,0 +1,43 @@
+# gsd 调试内核的 config 片段：相对发布版 guest 内核 config（代码仓 fc-kernels/configs/arm64/6.1.158.config
+# 经 olddefconfig 后的结果）的差异。完整的调试 config 是同目录的 kernel-debug.config，以它为准。
+# 用法与每一项的理由见同目录 README.md。
+
+# ---- 显式打开 ----
+# 越界访问、释放后使用（报告以 "BUG: KASAN:" 开头）
+CONFIG_KASAN=y
+CONFIG_KASAN_GENERIC=y
+CONFIG_KASAN_INLINE=y
+CONFIG_KASAN_STACK=y
+CONFIG_KASAN_VMALLOC=y
+# lockdep：加锁顺序成环、递归加锁
+CONFIG_PROVE_LOCKING=y
+# 在不可睡眠的上下文里调用会睡眠的函数
+CONFIG_DEBUG_ATOMIC_SLEEP=y
+# 对象在仍被使用时被释放或重新初始化（报告含 "ODEBUG"）
+CONFIG_DEBUG_OBJECTS=y
+CONFIG_DEBUG_OBJECTS_RCU_HEAD=y
+CONFIG_DEBUG_OBJECTS_ENABLE_DEFAULT=1
+# 报告里的调用栈能解析出全部符号
+CONFIG_KALLSYMS_ALL=y
+# 内核日志缓冲区 128 KiB → 2 MiB，调试报告很长，不放大会被冲掉
+CONFIG_LOG_BUF_SHIFT=21
+
+# ---- 必须关掉 ----
+# 沙箱从模板快照恢复时 vmgenid 驱动在硬中断上下文里调用会睡眠的通知链，lockdep 报告一次后自关，
+# 之后整轮压测的死锁检测覆盖为零（手册 19 章"必须关掉 VMGENID"）
+# CONFIG_VMGENID is not set
+
+# ---- 由上面几项自动带出（olddefconfig 会补上，列在这里供核对）----
+CONFIG_LOCKDEP=y
+CONFIG_PROVE_RCU=y
+CONFIG_DEBUG_LOCK_ALLOC=y
+CONFIG_DEBUG_MUTEXES=y
+CONFIG_DEBUG_RT_MUTEXES=y
+CONFIG_DEBUG_RWSEMS=y
+CONFIG_DEBUG_SPINLOCK=y
+CONFIG_DEBUG_WW_MUTEX_SLOWPATH=y
+CONFIG_TRACE_IRQFLAGS=y
+CONFIG_PREEMPT_COUNT=y
+CONFIG_CONSTRUCTORS=y
+CONFIG_STACKDEPOT_ALWAYS_INIT=y
+CONFIG_UNINLINE_SPIN_UNLOCK=y

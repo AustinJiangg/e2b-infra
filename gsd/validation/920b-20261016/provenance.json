@@ -1,0 +1,72 @@
+{
+  "platform": "Kunpeng 920B",
+  "date": "2026-10-16",
+  "release_commit": "259f1a25c531ca75b82955087121a15713cc6b5b",
+  "sdk_commit": "dcca6126632c150e86445cc065b5f302550b3937",
+  "benchmark_sha256": "e0096abeec4cdde9c8f1f34df2d35609d4e92390ec860833ec495f45f3dd5e02",
+  "host_kernel": "6.6.0-159.4.3.154.oe2403sp4.aarch64",
+  "architecture": "aarch64",
+  "python": "3.12.14 (main, Sep  2 2026, 23:29:55) [GCC 15.3.0]",
+  "guest": {
+    "vcpus": 2,
+    "memory_mb": 2048,
+    "template": "base-gsd",
+    "template_id": "rdhpl4g7gl0ouexktqe9",
+    "kernel": "6.1.158+",
+    "criu": "4.2.1",
+    "thp": "never",
+    "rcu_expedited": 1
+  },
+  "artifacts_sha256": {
+    "/fc-gsd/gsd": "a38b0db90c309abe4a7e1b4ad6b9180c2f257cbe204c4a982190b2b4b04894bb",
+    "/fc-gsd/orchestrator": "818fa667640e0cbf9cbd064532d285f874def101ed9e4661b0d2c6136c4a837e",
+    "/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin": "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+  },
+  "source_archive": {
+    "local": "rollback-reports/920b-gsd-per-tier-20261016",
+    "remote": "/home/j30059180/projects/deltabox/gsd-stack/per-tier-20261016-v2/results"
+  },
+  "validation": {
+    "restores_passed": 18,
+    "script_regression_tests": 11,
+    "full_acceptance_rerun": false
+  },
+  "scope": "本轮仅部署自检、新版性能三轮与脚本回归；完整功能验收和压测沿用10-08/10-09记录。950的gsd尚未实测。",
+  "950_sandbox_reference": {
+    "date": "2026-10-13",
+    "method": "server total_ms median",
+    "rows": [
+      {
+        "nominal_total_mib": 0,
+        "create_ms": 16.0,
+        "restore_ms": 20.9
+      },
+      {
+        "nominal_total_mib": 16,
+        "create_ms": 22.4,
+        "restore_ms": 28.8
+      },
+      {
+        "nominal_total_mib": 32,
+        "create_ms": 29.0,
+        "restore_ms": 34.8
+      },
+      {
+        "nominal_total_mib": 64,
+        "create_ms": 40.0,
+        "restore_ms": 44.1
+      },
+      {
+        "nominal_total_mib": 128,
+        "create_ms": 71.5,
+        "restore_ms": 65.9
+      },
+      {
+        "nominal_total_mib": 256,
+        "create_ms": 123.8,
+        "restore_ms": 103.5
+      }
+    ],
+    "scope": "950沙箱级历史数据，不是950的gsd结果；跨机器对照不代表实现本身的净加速比。"
+  }
+}
