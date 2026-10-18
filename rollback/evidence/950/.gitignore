@@ -1,0 +1,4 @@
+# 原始日志仅保留在 scripts/950/results/，此处只提交结果摘要。
+*
+!.gitignore
+!README.md
