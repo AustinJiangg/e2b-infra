@@ -157,7 +157,7 @@ bash run.sh perf                           # ≤ 40 分钟：性能分档、长�
 | 客户端凭据拿得到 | `grep -c E2B_API_KEY ../../../benchmark/.env` 回 1（没有就 `cd ../../../benchmark && bash sync-env.sh` 生成） | `run.sh` 开头会打 `!! E2B_API_KEY 没有值`，随后建沙箱失败 |
 | 要用的解释器装了带 checkpoint 覆盖层的 e2b | 在 `build.sh -i` 装 SDK 的那个环境里 `python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check`，同一个解释器再用 `--python "$(command -v python3)"` 传给 `run.sh` | smoke 第 2 项就会 FAIL |
 | 模板 `base` 已经建好 | `nomad job status` 里 template-manager 在跑，且建过一次模板 | 每个用例开头建沙箱就失败 |
-| 模板 `base` 的规格是 **2 vCPU / 2048 MB**（磁盘约 940 MB） | 手册 19 篇 §8 那条核对命令：`GET /templates` 回的 `cpuCount` / `memoryMB` / `diskSizeMB` 应为 `2` / `2048` / `940` | 结果仍然有效，但**性能数字不能和手册第五部分（验证与实测）对比**（规格是条件标签的一部分，见手册 19 篇 §8 与 20 篇 §2） |
+| 留存模板 `base` 的实际规格 | 用 `GET /templates` 记录 `cpuCount` / `memoryMB` / `diskSizeMB`；同时记录 guest 与部署身份 | 按[测试口径](../../docs/16-test-methodology.md)与[950 分档条件](../../docs/18-950-performance.md)判读，不从 920B 默认规格推定 950 未回传字段 |
 | 在**宿主机上**跑，且是 root | `id -u` 回 0 | 读不到服务端分段计时与产物目录，T32 会判失败、性能表会缺列 |
 
 `benchmark/.env` 由 `benchmark/sync-env.sh` 生成：它从 `/root/.e2b/config.json`
@@ -242,11 +242,11 @@ PASS 判据：每个用例自己三段式断言，退出码 0 = 通过、1 = 断
 | 项 | 脚本 | 输出 |
 |---|---|---|
 | 分档基准 | `crtest/bench/bench_tiers.py --tier-set short` | 小档细分（0/4/8/16/32 MB 各 n=30）+ 中档（64/128/256 MB 各 n=20）+ 512 MB 极限档 n=10 + 纯内存 16 / 纯文件 16 / 只读 192 |
-| 达标判定 | `crtest/bench/compliance.py` | 每档 p50 / p99 / 最大 + 与手册 20 篇 §1.1 达标线的对照表 |
+| 达标判定 | `crtest/bench/compliance.py` | 每档 p50 / p99 / 最大 + 与手册第 3 章 §1.1 达标线的对照表 |
 | 串行长尾 | `crtest/bench/serial_restore.py -n 100` | 单沙箱、单调用方、同一个 checkpoint 连回 100 次的 p50 / p99 / 最大 |
 | 并发 A/B | `acceptance/checkpoint_concurrent.py --stages A,B` | A = 跨沙箱扇出 N=1..16；B = 同沙箱 4 线程争用 |
 
-**达标线**（手册 20 篇 §1.1，照抄客户那组粗略指标，未限定改动量）：
+**达标线**（手册第 3 章 §1.1，照抄客户那组粗略指标，未限定改动量）：
 **checkpoint ≤ 200 ms、restore ≤ 100 ms**，量的都是**客户端墙钟**。
 全量 checkpoint（每遍开头那一次）按同一口径**单列不判定**。
 
@@ -316,7 +316,7 @@ orchestrator，所以换 order 必须改 nomad job 的 env 并重启：
 - 扫完、中途某一步失败、或者 Ctrl-C，都会把留底的定义原样提交回去，并在 `SUMMARY.md` 的「order 扫描与 job 恢复」
   一节写明：测完了哪些 order、启动命令与 Env 和扫描前是否完全相同、现在进程环境里的 `FC_HDBSS_ORDER`。
   恢复失败时那一节会给出手工恢复的命令。
-- 每重启一次会多漏一池网络槽位（手册 29 篇 §9），扫完按那一节判断要不要清。
+- 每重启一次会多漏一池网络槽位（手册第 26 章 §9），扫完按那一节判断要不要清。
 - 内核不接受的 order 会让 HDBSS 启用失败、Firecracker 静默退回写保护；这时基准看到后端不是 `hdbss`，那个 order 判 SKIP。
 
 **在没有 HDBSS 的机器上**（例如 920B，后端是 `kvm-wp`）：默认整档 SKIP，不建沙箱、不重启。
@@ -337,7 +337,7 @@ order 在那里不生效，核实降级为只核对两个进程的环境变量�
 | `T37` 两道配额闸 | 要服务端带 `CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` 启动 | 同上，`bash run.sh func --quota-cases` |
 | `T38` FC 侧 faulted 路径 | 要 Firecracker 带 cargo feature `rollback-fault-inject` 并设 `FC_ROLLBACK_FAULT_INJECT=post_commit`；**交付的 FC 不带这个特性** | 换一份带特性的 FC 后 `--fault-cases` |
 
-这四条的覆盖已经在 920B 上做过（见手册 21 篇 §2.3），950 上跳过不影响交付结论。
+这四条的覆盖已经在 920B 上做过（见手册附录 B §4），950 上跳过不影响交付结论。
 
 另外两类会自动判 SKIP（不是配置问题，是环境问题）：
 SDK 异常语义 pytest 在没装 pytest 时 SKIP；smoke 的 SDK 自检在找不到
@@ -385,7 +385,7 @@ rollback/scripts/950/results/20260922-102353-smoke/
                                          只在扫描时：job 定义留底，含密钥，不要交回
 ```
 
-`results/` 整个不入库（`.gitignore` 里只留 `results/.gitkeep`）：原始日志体积大，
+`results/` 整个不入库（由 `.gitignore` 忽略）：原始日志体积大，
 还带着本机路径与沙箱 id。
 
 `SUMMARY.md` 的表头固定是「项 / 结果 / 耗时 / 关键数字或原因 / 产物」，
@@ -494,5 +494,9 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 | `../crtest/sdktests/` | `test_checkpoint_errors.py` 原样取自 `KASandbox_0904/py-sdk/tests/`。**随本套件带一份而不是让 950 去 clone 仓库** —— 它只依赖已安装的 `e2b` 加 pytest/httpx，没有 conftest 依赖，一个文件就能跑；950 上没有 py-sdk 源码树，clone 一个几十 MB 的仓库只为跑一个文件不划算。代价是它会随 SDK 演进而过时，改 SDK 异常语义时记得同步这一份 |
 | `../crtest/portability/` `../crtest/probe950/` | 客户机器预检与「920B 结论能不能搬到 950」的探针，零外部依赖 |
 
-手册里对应的篇目：19 篇（测试体系与功能验证）、20 篇（性能口径与方法）、
-21 篇（分档基准与判定）、22 篇（长跑与并发实测）、30 篇（上机验收）。
+手册对应第 16 章（测试方法）、第 17 章（功能正确性）、第 18 章（950 性能与 HDBSS）、
+第 19 章（并发与持续运行）、第 20 章（验收流程）。920B 历史实测单列于附录 B。
+
+## 阶段结果摘要
+
+运行目录 `results/` 整体由 Git 忽略，原始日志仅留本地，不提交、不推送或作为发布附件。2026-10-13 与 2026-10-15 五轮测试的结论见[结果摘要](../../evidence/950/README.md)，保留失败、跳过、超线与验证缺口。

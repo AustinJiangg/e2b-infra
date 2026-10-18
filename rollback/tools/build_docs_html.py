@@ -11,8 +11,8 @@
     title           (--title)            书名，用在 <title> 与侧栏标题。必填
     version         (--version)          版本号，如 v0.1.0。必填
     date            (--date)             日期，如 2026-10-09。必填
-    byline          (--byline)           作者 / 署名行，原样印在侧栏版本号之后。必填
-    stats           (--stats)            侧栏的"N 篇 · 约 X 万字"。不给就自动算：篇数 = docs 目录里参与打包的
+    byline          (--byline)           作者 / 署名行。必填（保留命令行配置兼容）
+    stats           (--stats)            构建日志的"N 篇 · 约 X 万字"。不给就自动算：篇数 = docs 目录里参与打包的
                                          文件数（不含 README.md），字数 = 这些文件里的汉字个数
     gh_repo         (--gh-repo)          手册以外的相对链接改写到的仓库地址，如 https://github.com/<组织>/<仓库>
     git_ref         (--git-ref)          上述链接钉住的提交；环境变量 DOC_GIT_REF 优先于配置、命令行又优先于环境变量。
@@ -28,7 +28,7 @@
 docs 目录里参与打包的文件及其顺序：README.md（若有）→ NN-*.md / NNx-*.md（按文件名）→ X-*.md（大写字母开头的附录）。
 
 产物特点：双击即看，无需任何工具；mermaid 内联渲染（由浏览器端的 mermaid 画，脚本只把 mermaid.min.js 打进文件；
-图的语法另用 mdmermaid.mjs 校验）；SVG 嵌进附录；手册内的跨文档链接与锚点改写成页内跳转，因此永远不会断。
+图的语法另用 mdmermaid.mjs 校验）；SVG 嵌进附录；图表支持弹窗查看、滚轮缩放和拖动；手册内的跨文档链接与锚点改写成页内跳转。
 相同的输入产出逐字节相同的文件（产物里不含时间戳）。
 """
 import argparse
@@ -38,6 +38,7 @@ import os
 import posixpath
 import re
 import sys
+from pathlib import Path
 from urllib.parse import quote, unquote
 
 from markdown_it import MarkdownIt
@@ -58,7 +59,7 @@ DOCS_DIR, DIAG_DIR, MERMAID_JS, OUT = args.docs_dir, args.diagrams_dir, args.mer
 
 CFG = json.load(open(args.config, encoding='utf-8')) if args.config else {}
 _unknown = set(CFG) - {'title', 'version', 'date', 'byline', 'stats', 'gh_repo', 'git_ref', 'repo_docs_path',
-                       'svgs', 'appendix_title', 'appendix_intro', 'unpublished'}
+                       'svgs', 'appendix_title', 'appendix_intro', 'unpublished', 'contents'}
 if _unknown:
     sys.exit(f'{args.config}: 不认识的键 {sorted(_unknown)}')
 
@@ -84,6 +85,10 @@ UNPUBLISHED = tuple(CFG.get('unpublished', []))
 SVGS = [tuple(x.split('=', 1)) for x in args.svg] if args.svg is not None else [tuple(x) for x in CFG.get('svgs', [])]
 APPENDIX_TITLE = opt('appendix_title', '附录 · 汇报配图')
 APPENDIX_INTRO = opt('appendix_intro', '')
+CONTENTS = None
+if CFG.get('contents'):
+    contents_path = Path(args.config).resolve().parent / CFG['contents']
+    CONTENTS = json.loads(contents_path.read_text(encoding='utf-8'))
 if GH_REPO and DOC_GIT_REF and not REPO_DOCS_PATH:
     sys.exit('给了 gh_repo 与 git_ref 就必须给 repo_docs_path（docs 目录在仓库里的路径）')
 
@@ -106,7 +111,16 @@ def collect():
     out = []
     if 'README.md' in files:
         out.append('README.md')
-    return out + numbered + appendix
+    if CONTENTS is None:
+        return out + numbered + appendix
+    ordered = [name for part in CONTENTS['parts'] for name in part['chapters']]
+    ordered += CONTENTS['appendices']
+    if len(ordered) != len(set(ordered)):
+        sys.exit('目录清单存在重复篇目')
+    if set(ordered) != set(numbered + appendix):
+        sys.exit(f'目录清单与正文不一致：缺少 {sorted(set(numbered + appendix) - set(ordered))}；'
+                 f'多出 {sorted(set(ordered) - set(numbered + appendix))}')
+    return out + ordered
 
 
 def doc_id(fn):
@@ -129,6 +143,12 @@ files = collect()
 known = {f for f in files}
 
 sections, toc = [], []
+part_starts = {}
+if CONTENTS:
+    for index, part in enumerate(CONTENTS['parts'], 1):
+        if not part['chapters']:
+            sys.exit('目录分篇不能为空')
+        part_starts[part['chapters'][0]] = (f'part--{index}', part['title'])
 n_cjk = 0          # 正文汉字数（不含 README.md），自动算字数用
 ext_links = []     # 指向手册以外的相对链接，结束时汇报
 
@@ -144,6 +164,8 @@ for fn in files:
     def fix_link(tk):
         """链接改写：一切都变成页内锚点，解包后不可能断。"""
         href = unquote(tk.attrGet('href') or '')
+        if not href:
+            sys.exit(f'{fn}: 存在空链接目标')
         if href.startswith(('http://', 'https://', 'mailto:')):
             tk.attrSet('target', '_blank')
             tk.attrSet('rel', 'noopener')
@@ -210,6 +232,9 @@ for fn in files:
         lambda m: '<pre class="mermaid">' + m.group(1) + '</pre>',
         body, flags=re.S)
 
+    if fn in part_starts:
+        part_id, part_title = part_starts[fn]
+        sections.append(f'<div class="part-title" id="{part_id}"><h1>{html.escape(part_title)}</h1></div>')
     sections.append(f'<section class="doc" id="{did}">\n{body}\n</section>')
     toc.append((did, title_of(fn, src), heads))
 
@@ -230,48 +255,122 @@ if SVGS:
     toc.append(('appendix-diagrams', APPENDIX_TITLE, []))
 
 # ── 目录 ──
+def nav_doc(entry):
+    did, t, heads = entry
+    label = '阅读指南' if did == doc_id('README.md') else t
+    number = ''
+    match = re.match(r'^(\d+)\s*[．.、·]\s*(.*)$', label)
+    if match:
+        number, label = match.groups()
+        number = number.zfill(2)
+    else:
+        match = re.match(r'^附录\s*([A-Z])\s*[．.·、]\s*(.*)$', label)
+        if match:
+            number, label = match.groups()
+    number_html = f'<span class="nav-number">{html.escape(number)}</span>' if number else ''
+    subheads = [(text, anchor) for lvl, text, anchor in heads if lvl == 2] if did != doc_id('README.md') else []
+    result = [f'<li class="nav-item" data-doc="{did}"><div class="nav-row">'
+              f'<a class="nav-link" href="#{did}">{number_html}<span>{html.escape(label)}</span></a>']
+    if subheads:
+        result.append(f'<button class="nav-expand" type="button" aria-expanded="false" '
+                      f'aria-controls="nav--{did}" aria-label="展开或收起{html.escape(t, quote=True)}的小节">'
+                      '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button>')
+    result.append('</div>')
+    if subheads:
+        result.append(f'<ul class="nav-sub" id="nav--{did}" hidden>')
+        for text, anchor in subheads:
+            result.append(f'<li><a href="#{anchor}">{html.escape(text)}</a></li>')
+        result.append('</ul>')
+    result.append('</li>')
+    return ''.join(result)
+
+
 nav = []
-for did, t, heads in toc:
-    nav.append(f'<li class="nav-doc"><a href="#{did}">{html.escape(t)}</a>')
-    if heads:
-        nav.append('<ul class="nav-sub">')
-        for lvl, text, anchor in heads:
-            if lvl == 2:
-                nav.append(f'<li><a href="#{anchor}">{html.escape(text)}</a></li>')
-        nav.append('</ul>')
-    nav.append('</li>')
+entries = {did: (did, title, heads) for did, title, heads in toc}
+if CONTENTS:
+    if 'README.md' in files:
+        nav.append(nav_doc(entries[doc_id('README.md')]))
+    groups = [(p['title'], [doc_id(f) for f in p['chapters']]) for p in CONTENTS['parts']]
+    groups.append(('附录与参考', [doc_id(f) for f in CONTENTS['appendices']] +
+                   (['appendix-diagrams'] if SVGS else [])))
+    for title, ids in groups:
+        nav.append('<li class="nav-group"><details open><summary>' + html.escape(title.replace('：', ' · ', 1)) + '</summary><ul>' +
+                   ''.join(nav_doc(entries[did]) for did in ids) + '</ul></details></li>')
+else:
+    nav = [nav_doc(entry) for entry in toc]
 
 mermaid_src = open(MERMAID_JS, encoding='utf-8').read()
 
 n_body = len([f for f in files if f != 'README.md'])
 n_mermaid = sum(s.count('<pre class="mermaid">') for s in sections)
-DOC_STATS = opt('stats') or f'{n_body} 篇 · 约 {n_cjk / 10000:.1f} 万字'
+if CONTENTS:
+    chapter_count = sum(len(part['chapters']) for part in CONTENTS['parts'])
+    appendix_count = len(CONTENTS['appendices']) + bool(SVGS)
+    default_stats = f'{len(CONTENTS["parts"])} 篇 · {chapter_count} 章 · {appendix_count} 个附录 · 约 {n_cjk / 10000:.1f} 万字'
+else:
+    default_stats = f'{n_body} 篇 · 约 {n_cjk / 10000:.1f} 万字'
+DOC_STATS = opt('stats') or default_stats
 
 CSS = """
-:root{--fg:#1a1d21;--muted:#5b6570;--bg:#fff;--bg2:#f7f8fa;--line:#e3e7ec;--accent:#2563eb;--code:#f3f5f8}
+:root{color-scheme:light;--fg:#1a1d21;--muted:#5b6570;--bg:#fff;--bg2:#f7f8fa;--line:#e3e7ec;--accent:#2563eb;--code:#f3f5f8;
+  --hover:#eef1f5;--active:#eaf0fd;--quote:#31394a;--quote-line:#c3cede;--mark:#fef08a}
+:root[data-theme="dark"]{color-scheme:dark;--fg:#e2e8f0;--muted:#a3afbf;--bg:#151a23;--bg2:#1c2330;--line:#354154;--accent:#8ab4ff;--code:#202938;
+  --hover:#283449;--active:#253b5e;--quote:#c5d1e2;--quote-line:#586e8c;--mark:#655019}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--fg);
   font:16px/1.75 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
   -webkit-font-smoothing:antialiased}
 #layout{display:flex;align-items:flex-start}
-#sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;flex:0 0 300px;
-  background:var(--bg2);border-right:1px solid var(--line);padding:20px 0 60px}
-#sidebar h2{margin:0 20px 4px;font-size:15px;letter-spacing:.02em}
-#sidebar .sub{margin:0 20px 14px;font-size:12px;color:var(--muted)}
-#filter{width:calc(100% - 40px);margin:0 20px 12px;padding:7px 10px;font-size:13px;
-  border:1px solid var(--line);border-radius:6px;background:#fff;font-family:inherit}
+#sidebar{position:sticky;top:0;height:100dvh;flex:0 0 320px;min-width:0;
+  background:var(--bg2);border-right:1px solid var(--line)}
+.sidebar-brand{display:block;padding:26px 24px 22px;color:var(--fg);font-size:16px;font-weight:650;
+  line-height:1.6;text-decoration:none;letter-spacing:-.02em}
+.nav-content{height:calc(100dvh - 74px);overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;padding:0 16px 32px}
+#directory-toggle{display:none}
 #sidebar ul{list-style:none;margin:0;padding:0}
-#sidebar .nav-doc>a{display:block;padding:5px 20px;color:var(--fg);text-decoration:none;
-  font-size:13.5px;font-weight:600;border-left:3px solid transparent}
-#sidebar .nav-doc>a:hover{background:#eef1f5}
-#sidebar .nav-doc>a.active{border-left-color:var(--accent);color:var(--accent);background:#eaf0fd}
-#sidebar .nav-sub{display:none;padding-bottom:6px}
-#sidebar .nav-doc.open .nav-sub{display:block}
-#sidebar .nav-sub a{display:block;padding:2px 20px 2px 34px;color:var(--muted);
-  text-decoration:none;font-size:12.5px}
-#sidebar .nav-sub a:hover{color:var(--accent)}
-main{flex:1 1 auto;min-width:0;padding:0 56px 120px;max-width:960px;margin:0 auto}
+#sidebar summary{list-style:none;cursor:pointer}
+#sidebar summary::-webkit-details-marker{display:none}
+#sidebar .nav-group>details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:16px 8px 10px;margin-top:12px;border-top:1px solid var(--line);font-size:12px;
+  line-height:1.6;font-weight:650;color:var(--muted)}
+#sidebar .nav-group>details>summary::after{content:'';flex:none;width:5px;height:5px;
+  border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin-right:7px}
+#sidebar .nav-group>details[open]>summary::after{transform:rotate(45deg)}
+.nav-row{display:flex;align-items:stretch;border-left:2px solid transparent;border-radius:5px;margin:2px 0}
+.nav-row:hover{background:var(--hover)}
+.nav-row:has(.active){background:var(--active);border-left-color:var(--accent)}
+.nav-link{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;padding:8px;color:var(--fg);
+  font-size:13px;line-height:1.6;text-decoration:none}
+.nav-link.active{color:var(--accent);font-weight:600}
+.nav-link>span:last-child{min-width:0;text-wrap:pretty}
+.nav-number{flex:0 0 20px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.nav-link.active .nav-number{color:var(--accent)}
+.nav-expand{display:grid;place-items:center;flex:0 0 30px;align-self:stretch;border:0;border-radius:4px;
+  padding:0;background:transparent;color:var(--muted);cursor:pointer}
+.nav-expand:hover{color:var(--fg);background:var(--hover)}
+.nav-expand svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.nav-expand[aria-expanded="true"] svg{transform:rotate(90deg)}
+#sidebar .nav-sub{margin:4px 0 10px 18px;padding-left:14px;border-left:1px solid var(--line)}
+.nav-sub a{display:block;padding:5px 8px;color:var(--muted);font-size:12px;line-height:1.6;text-decoration:none;border-radius:4px}
+.nav-sub a:hover{color:var(--fg);background:var(--hover)}
+#sidebar a:focus-visible,#sidebar button:focus-visible,#sidebar summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#theme-toggle{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:10;
+  display:grid;place-items:center;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:50%;
+  background:transparent;color:var(--muted);cursor:pointer;transition:background .15s ease,color .15s ease}
+#theme-toggle:hover{background:var(--hover);color:var(--fg)}
+#theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#theme-toggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#theme-toggle .theme-sun{display:none}
+:root[data-theme="dark"] #theme-toggle .theme-moon{display:none}
+:root[data-theme="dark"] #theme-toggle .theme-sun{display:block}
+.part-title{margin-top:60px;padding:18px 24px;background:var(--bg2);border-left:4px solid var(--accent)}
+.part-title h1{font-size:24px;margin:0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+[hidden]{display:none!important}
+mark{background:var(--mark);color:inherit}
+main{flex:1 1 auto;min-width:0;padding:0 64px 120px;max-width:960px;margin:0 auto}
 .doc{padding-top:44px;border-top:1px solid var(--line);margin-top:44px}
 .doc:first-of-type{border-top:0;margin-top:0}
 h1.doc-title{font-size:30px;line-height:1.35;margin:.2em 0 .6em;letter-spacing:-.01em}
@@ -279,8 +378,8 @@ h2{font-size:22px;margin:2em 0 .7em;padding-bottom:.25em;border-bottom:1px solid
 h3{font-size:17.5px;margin:1.7em 0 .5em}
 h4{font-size:15.5px;margin:1.4em 0 .4em;color:var(--muted)}
 p,li{overflow-wrap:break-word}
-blockquote{margin:1.2em 0;padding:.6em 1.1em;border-left:3px solid #c3cede;
-  background:var(--bg2);color:#31394a}
+blockquote{margin:1.2em 0;padding:.6em 1.1em;border-left:3px solid var(--quote-line);
+  background:var(--bg2);color:var(--quote)}
 blockquote p:first-child{margin-top:0}blockquote p:last-child{margin-bottom:0}
 code{background:var(--code);padding:.12em .38em;border-radius:4px;font-size:.88em;
   font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
@@ -298,17 +397,29 @@ figure{margin:1.6em 0}
 figcaption{font-size:13px;color:var(--muted);margin-bottom:.5em}
 figure svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
 #top{position:fixed;right:22px;bottom:22px;width:40px;height:40px;border-radius:50%;
-  border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;
+  border:1px solid var(--line);background:var(--bg2);color:var(--muted);cursor:pointer;
   font-size:17px;box-shadow:0 2px 10px rgba(0,0,0,.09);display:none}
 @media (max-width:1000px){
+  html{scroll-padding-top:76px}
   #layout{display:block}
-  #sidebar{position:static;height:auto;width:100%;flex:none;border-right:0;
-    border-bottom:1px solid var(--line);max-height:44vh}
+  #theme-toggle{top:max(6px,env(safe-area-inset-top))}
+  #sidebar{position:sticky;z-index:5;top:0;height:56px;width:100%;border-right:0;border-bottom:1px solid var(--line)}
+  .sidebar-brand{display:none}
+  #directory-toggle{display:flex;align-items:center;gap:10px;height:55px;padding:0 72px 0 20px;
+    color:var(--fg);font-size:13px;font-weight:600}
+  #directory-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+  .nav-content{position:absolute;top:55px;left:0;width:100%;height:auto;max-height:calc(100dvh - 72px);
+    padding:12px 16px 24px;background:var(--bg2);border-bottom:1px solid var(--line);box-shadow:0 12px 24px rgba(0,0,0,.08)}
+  .nav-link{padding-top:11px;padding-bottom:11px}
+  .nav-expand{flex-basis:44px}
   main{padding:0 20px 80px}
 }
+@media (prefers-reduced-motion:reduce){#theme-toggle{transition:none}}
 
 @media print{
-  #sidebar,#top{display:none}
+  :root,:root[data-theme="dark"]{color-scheme:light;--fg:#1a1d21;--muted:#5b6570;--bg:#fff;--bg2:#f7f8fa;--line:#e3e7ec;--accent:#2563eb;--code:#f3f5f8;
+    --quote:#31394a;--quote-line:#c3cede;--mark:#fef08a}
+  #sidebar,#top,#theme-toggle,#diagram-viewer{display:none!important}
   main{max-width:none;padding:0}
   .doc{page-break-before:always;border-top:0;margin-top:0}
   .doc:first-of-type{page-break-before:avoid}
@@ -317,10 +428,37 @@ figure svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius
 }
 """
 
+CSS += Path(__file__).with_name("diagram_viewer.css").read_text(encoding="utf-8")
+
 if any(dead for _, dead in ext_links):
     CSS += ".extref{border-bottom:1px dotted var(--muted);cursor:help}\n"
 
+THEME_INIT_JS = r"""
+// 首次绘制前恢复选择；直接打开离线文件或禁用存储时仍能切换。
+(function(){
+  try{
+    var saved=localStorage.getItem('e2b-handbook-theme');
+    if(saved==='dark'||saved==='light') document.documentElement.dataset.theme=saved;
+  }catch(e){}
+})();
+"""
+
 JS = r"""
+var themeToggle=document.getElementById('theme-toggle');
+function updateThemeToggle(){
+  var dark=document.documentElement.dataset.theme==='dark';
+  var label='切换到'+(dark?'日间':'夜间')+'模式';
+  themeToggle.title=label;
+  themeToggle.setAttribute('aria-label',label);
+  themeToggle.setAttribute('aria-pressed',String(dark));
+}
+updateThemeToggle();
+themeToggle.addEventListener('click',function(){
+  var theme=document.documentElement.dataset.theme==='dark'?'light':'dark';
+  document.documentElement.dataset.theme=theme;
+  updateThemeToggle();
+  try{localStorage.setItem('e2b-handbook-theme',theme);}catch(e){}
+});
 mermaid.initialize({startOnLoad:true,theme:'neutral',securityLevel:'loose',
   flowchart:{useMaxWidth:true},sequence:{useMaxWidth:true}});
 // 宽表格套一层横向滚动容器，正文永不横向滚动
@@ -328,52 +466,131 @@ document.querySelectorAll('main table').forEach(function(t){
   var w=document.createElement('div'); w.className='tw';
   t.parentNode.insertBefore(w,t); w.appendChild(t);
 });
-// 目录：当前章节高亮 + 展开
+// 目录：章节链接与展开按钮分开，阅读时只展开当前章的小节。
 var docs=[].slice.call(document.querySelectorAll('section.doc'));
-var links=[].slice.call(document.querySelectorAll('#sidebar .nav-doc>a'));
+var links=[].slice.call(document.querySelectorAll('#sidebar .nav-link'));
+var directory=document.getElementById('directory');
+var directoryToggle=document.getElementById('directory-toggle');
+var narrow=window.innerWidth<=1000;
+directory.open=!narrow;
+function setExpanded(button,expanded){
+  button.setAttribute('aria-expanded',String(expanded));
+  document.getElementById(button.getAttribute('aria-controls')).hidden=!expanded;
+}
+function reveal(a){
+  var parent=a.parentElement;
+  while(parent){if(parent.tagName==='DETAILS'&&parent!==directory) parent.open=true;parent=parent.parentElement;}
+  var row=a.closest('.nav-item');
+  var button=row&&row.querySelector('.nav-expand');
+  if(button) setExpanded(button,true);
+}
+document.querySelectorAll('.nav-expand').forEach(function(button){
+  button.addEventListener('click',function(){setExpanded(button,button.getAttribute('aria-expanded')!=='true');});
+});
+var currentDoc=null;
 function sync(){
   var y=window.scrollY+120,cur=0;
-  for(var i=0;i<docs.length;i++){ if(docs[i].offsetTop<=y) cur=i; }
-  links.forEach(function(a,i){
-    a.classList.toggle('active',i===cur);
-    a.parentNode.classList.toggle('open',i===cur);
-  });
+  for(var i=0;i<docs.length;i++){if(docs[i].offsetTop<=y) cur=i;}
+  if(docs[cur]&&docs[cur].id!==currentDoc){
+    currentDoc=docs[cur].id;
+    links.forEach(function(a){
+      var active=a.hash==='#'+currentDoc;
+      a.classList.toggle('active',active);
+      if(active){a.setAttribute('aria-current','location');reveal(a);}
+      else{
+        a.removeAttribute('aria-current');
+        var button=a.closest('.nav-item').querySelector('.nav-expand');
+        if(button) setExpanded(button,false);
+      }
+    });
+    if(!narrow||directory.open){
+      var activeLink=document.querySelector('.nav-link.active');
+      var content=document.querySelector('.nav-content');
+      if(activeLink){
+        var item=activeLink.getBoundingClientRect(),box=content.getBoundingClientRect();
+        if(item.top<box.top+12||item.bottom>box.bottom-12) content.scrollTop+=item.top-box.top-content.clientHeight/3;
+      }
+    }
+  }
   document.getElementById('top').style.display=window.scrollY>600?'block':'none';
 }
 window.addEventListener('scroll',sync,{passive:true});
 window.addEventListener('load',sync);
+window.addEventListener('hashchange',sync);
+window.addEventListener('resize',function(){
+  var next=window.innerWidth<=1000;
+  if(next!==narrow){narrow=next;directory.open=!narrow;}
+});
 document.getElementById('top').onclick=function(){window.scrollTo({top:0,behavior:'smooth'});};
-// 目录过滤
-document.getElementById('filter').addEventListener('input',function(e){
-  var q=e.target.value.trim().toLowerCase();
-  document.querySelectorAll('#sidebar .nav-doc').forEach(function(li){
-    li.style.display = !q || li.textContent.toLowerCase().indexOf(q)>=0 ? '' : 'none';
+document.querySelectorAll('#sidebar a').forEach(function(a){
+  a.addEventListener('click',function(){
+    reveal(a);
+    if(narrow){
+      directory.open=false;
+      var target=document.getElementById(decodeURIComponent(a.hash.slice(1)));
+      if(target){target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
+    }
   });
 });
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&narrow&&directory.open){directory.open=false;directoryToggle.focus();}
+});
+document.addEventListener('click',function(e){
+  if(narrow&&directory.open&&!document.getElementById('sidebar').contains(e.target)) directory.open=false;
+});
+sync();
+
 """
 
+JS += Path(__file__).with_name("diagram_viewer.js").read_text(encoding="utf-8")
+
 doc = f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(DOC_TITLE)} {DOC_VERSION}</title>
+<script id="theme-init">{THEME_INIT_JS}</script>
 <style>{CSS}</style>
 </head>
 <body>
+  <button id="theme-toggle" type="button" aria-label="切换到夜间模式" title="切换到夜间模式" aria-pressed="false">
+    <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg>
+    <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
+  </button>
 <div id="layout">
-<nav id="sidebar">
-  <h2>{html.escape(DOC_TITLE)}</h2>
-  <div class="sub">{DOC_VERSION} · {DOC_DATE} · {DOC_AUTHOR}<br>
-  {DOC_STATS} · 单文件离线版</div>
-  <input id="filter" type="search" placeholder="过滤篇目…" autocomplete="off">
-  <ul>{''.join(nav)}</ul>
+<nav id="sidebar" aria-label="手册目录">
+  <a class="sidebar-brand" href="#doc--README">{html.escape(DOC_TITLE)}</a>
+  <details id="directory" open>
+    <summary id="directory-toggle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>目录</summary>
+    <div class="nav-content"><ul>{''.join(nav)}</ul></div>
+  </details>
 </nav>
 <main>
 {chr(10).join(sections)}
 </main>
 </div>
 <button id="top" title="回到顶部">↑</button>
+<dialog id="diagram-viewer" tabindex="-1" aria-labelledby="diagram-title" aria-describedby="diagram-help">
+  <div id="diagram-viewport" tabindex="0" role="region" aria-label="可缩放和拖动的图表"><div id="diagram-canvas"></div></div>
+  <button id="diagram-close" class="diagram-ui" type="button" title="关闭（Esc）" aria-label="关闭图表预览">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+  </button>
+  <p id="diagram-title" class="diagram-ui">图表预览</p>
+  <div class="diagram-toolbar diagram-ui" role="group" aria-label="图表缩放工具">
+    <button id="diagram-zoom-out" type="button" title="缩小" aria-label="缩小图表">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+    </button>
+    <button id="diagram-fit" type="button" title="恢复全图（0）" aria-label="恢复完整图表">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg>
+    </button>
+    <button id="diagram-zoom-in" type="button" title="放大" aria-label="放大图表">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+    </button>
+  </div>
+  <output id="diagram-scale" aria-label="相对完整图表的缩放比例">100%</output>
+  <p id="diagram-help" class="sr-only">滚轮或双指缩放，放大后拖动查看；双击切换细节与全图。点击图外空白或按Esc关闭。加减键缩放，方向键平移，0恢复全图。</p>
+</dialog>
 <script>{mermaid_src}</script>
 <script>{JS}</script>
 </body>
@@ -382,7 +599,7 @@ doc = f"""<!doctype html>
 
 open(OUT, 'w', encoding='utf-8').write(doc)
 print(f'{OUT}  {len(doc.encode("utf-8"))/1048576:.2f} MB  ({len(files)} 个文件'
-      + (f' + 配图附录 {len(SVGS)} 张' if SVGS else '，无配图附录') + f'；侧栏：{DOC_STATS}；mermaid 图 {n_mermaid} 张)')
+      + (f' + 配图附录 {len(SVGS)} 张' if SVGS else '，无配图附录') + f'；规模：{DOC_STATS}；mermaid 图 {n_mermaid} 张)')
 if ext_links:
     print(f'手册以外的相对链接 {len(ext_links)} 条（"链接" = 改写到 {GH_REPO or "?"} @ {DOC_GIT_REF or "?"}，"文字" = 降级成不可点击的文字）：')
     for p, dead in sorted(set(ext_links)):

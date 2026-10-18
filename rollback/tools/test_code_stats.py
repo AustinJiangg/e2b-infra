@@ -117,13 +117,13 @@ class FixedGitStatsTests(unittest.TestCase):
 
     def test_generated_blocks_reject_manual_drift(self):
         result = stats.measure(self.kas, self.infra, self.scope)
-        self.write(self.root, "docs/00-overview.md", "<!-- code-stats:summary:start -->\n<!-- code-stats:summary:end -->\n")
+        self.write(self.root, "docs/01-delivery-and-reading.md", "<!-- code-stats:summary:start -->\n<!-- code-stats:summary:end -->\n")
         markers = ("versions", "production", "scope", "sdk-provenance", "tests", "physical", "exclusions")
-        self.write(self.root, "docs/C-code-size-and-methodology.md", "\n".join(
+        self.write(self.root, "docs/D-code-size.md", "\n".join(
             f"<!-- code-stats:{name}:start -->\n<!-- code-stats:{name}:end -->" for name in markers))
         stats.sync_docs(result, root=self.root)
         stats.sync_docs(result, root=self.root, check=True)
-        path = self.root / "docs/00-overview.md"
+        path = self.root / "docs/01-delivery-and-reading.md"
         path.write_text(path.read_text().replace("MR 版", "手工改动", 1))
         with self.assertRaisesRegex(ValueError, "统计摘要或表格"):
             stats.sync_docs(result, root=self.root, check=True)

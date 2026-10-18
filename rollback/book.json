@@ -1,16 +1,26 @@
 {
-  "title": "Checkpoint / Restore 技术手册",
-  "version": "v0.4.12",
-  "date": "2026-10-15",
+  "title": "E2B快照回滚技术手册",
+  "version": "v0.5.6",
+  "date": "2026-10-17",
   "byline": "江路路（j30059180）",
   "gh_repo": "https://github.com/AustinJiangg/e2b-infra",
-  "git_ref": "d114f8d817b8896110031d78e4908704130a36f4",
+  "git_ref": "docs-v0.5.6",
   "repo_docs_path": "rollback/docs",
+  "contents": "contents.json",
   "svgs": [
-    ["01-architecture.svg", "总体结构（优化点标注在对应层）"],
-    ["02-diff-tree.svg", "内存差分树，以及一次回滚在宿主侧怎么算出来"],
-    ["03-vs-native.svg", "与 e2b 原生 snapshot / resume 的路径对比"]
+    [
+      "01-architecture.svg",
+      "总体结构（优化点标注在对应层）"
+    ],
+    [
+      "02-diff-tree.svg",
+      "内存差分树，以及一次回滚在宿主侧怎么算出来"
+    ],
+    [
+      "03-vs-native.svg",
+      "与 e2b 原生 snapshot / resume 的路径对比"
+    ]
   ],
-  "appendix_title": "附录 · 汇报配图",
-  "appendix_intro": "三张矢量图，可直接插进 PowerPoint / WPS 保持清晰度。图源（mermaid）在完整仓库的 <code>rollback/diagrams/</code>。"
+  "appendix_title": "附录 F · 架构与流程配图",
+  "appendix_intro": "三张矢量图已内嵌，可离线查看和用于汇报。图源在内部辅助仓库 e2b-infra 的 <code>rollback/diagrams/</code> 维护；该辅助仓库不属于正式交付代码。"
 }

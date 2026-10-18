@@ -22,7 +22,7 @@ flowchart TB
     end
 
     subgraph HW["KVM · 鲲鹏 950"]
-        HD["HDBSS 硬件标脏（KVM cap 502）<br/>启动时探测：有硬件跟踪则自动启用<br/>无则安全退回软件写保护"]
+        HD["HDBSS 硬件标脏（KVM cap 502）<br/>启动时探测：有 HDBSS 能力则自动启用跟踪<br/>无硬件能力时，显式开启跟踪才走软件写保护<br/>已开启跟踪时，可要求必须硬件，否则报错"]
     end
 
     subgraph STO["宿主本地存储　checkpoints / 沙箱 / 检查点"]

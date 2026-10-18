@@ -1,0 +1,69 @@
+{
+  "parts": [
+    {
+      "title": "第一篇：导论与基础",
+      "chapters": [
+        "01-delivery-and-reading.md",
+        "02-background.md",
+        "03-goals-and-boundaries.md"
+      ]
+    },
+    {
+      "title": "第二篇：核心设计与实现",
+      "chapters": [
+        "04-architecture-and-flow.md",
+        "05-dirty-tracking-and-hdbss.md",
+        "06-memory-diff-tree.md",
+        "07-disk-layering.md",
+        "08-firecracker-contract.md",
+        "09-in-place-rollback.md",
+        "10-device-network-time.md",
+        "11-failures-and-invariants.md",
+        "12-state-and-lifecycle.md"
+      ]
+    },
+    {
+      "title": "第三篇：原生快照与精确增量",
+      "chapters": [
+        "13-native-snapshot.md",
+        "14-native-precise-increment.md",
+        "15-native-cooperation-and-cost.md"
+      ]
+    },
+    {
+      "title": "第四篇：验证、实测与验收",
+      "chapters": [
+        "16-test-methodology.md",
+        "17-functional-verification.md",
+        "18-950-performance.md",
+        "19-950-concurrency.md",
+        "20-acceptance.md"
+      ]
+    },
+    {
+      "title": "第五篇：使用、部署与运维",
+      "chapters": [
+        "21-sdk-quickstart.md",
+        "22-api-semantics.md",
+        "23-build-and-self-check.md",
+        "24-configuration-and-capacity.md",
+        "25-observability.md",
+        "26-troubleshooting.md"
+      ]
+    },
+    {
+      "title": "第六篇：接手开发与后续方向",
+      "chapters": [
+        "27-development.md",
+        "28-status-and-directions.md"
+      ]
+    }
+  ],
+  "appendices": [
+    "A-reference.md",
+    "B-920b-results.md",
+    "C-evolution-and-cases.md",
+    "D-code-size.md",
+    "E-environment-and-tools.md"
+  ]
+}

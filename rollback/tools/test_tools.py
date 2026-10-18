@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """手册工具回归测试；仅使用临时目录，不修改手册或发布件。"""
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -48,6 +49,12 @@ class ToolsTests(unittest.TestCase):
         result = self.links(source)
         self.assertEqual(result.returncode, 1)
         self.assertIn("ANCHOR-MISS", result.stdout)
+
+    def test_empty_link_target_fails(self):
+        source = self.write("a.md", "# 首页\n[失去目标的迁移链接]()\n")
+        result = self.links(source)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("EMPTY-TARGET", result.stdout)
 
     def test_code_example_links_are_ignored(self):
         source = self.write("a.md", "# 示例\n```md\n[示例](missing.md)\n```\n")
@@ -98,6 +105,51 @@ class ToolsTests(unittest.TestCase):
             "bash", str(TOOLS / "build.sh"), "one.html", "two.html",
         ], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
+
+    def generate(self, config):
+        self.write("docs/README.md", "# 首页\n")
+        self.write("docs/01-first.md", "# 第一章\n## 契约\n只在正文出现的关键字。\n### 细节\n```text\n</script><script>不应执行</script>\n```\n")
+        self.write("docs/02-second.md", "# 第二章\n## 配置\n其他内容。\n")
+        runtime = self.write("mermaid.js", "/* 运行库占位 */")
+        conf = self.write("book.json", json.dumps({
+            "title": "测试手册", "version": "v1", "date": "2026-10-16",
+            "byline": "测试", "svgs": [], **config,
+        }, ensure_ascii=False))
+        output = self.root / "book.html"
+        result = subprocess.run([
+            sys.executable, str(TOOLS / "build_docs_html.py"), str(self.root / "docs"),
+            "-", str(runtime), str(output), "--config", str(conf),
+        ], capture_output=True, text=True)
+        return result, output
+
+    def test_manifest_order_navigation_and_escaping(self):
+        self.write("contents.json", json.dumps({
+            "parts": [{"title": "第一篇", "chapters": ["02-second.md", "01-first.md"]}],
+            "appendices": [],
+        }, ensure_ascii=False))
+        result, output = self.generate({"contents": "contents.json"})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        html = output.read_text()
+        self.assertLess(html.index('<section class="doc" id="doc--02-second"'),
+                        html.index('<section class="doc" id="doc--01-first"'))
+        self.assertIn('class="nav-group"', html)
+        self.assertIn('aria-controls="nav--doc--01-first"', html)
+        self.assertIn('href="#doc--01-first--契约"', html)
+        self.assertIn('<h3 id="doc--01-first--细节"', html)
+        self.assertNotIn('id="search-index"', html)
+        self.assertNotIn('id="filter"', html)
+        self.assertNotIn('</script><script>不应执行', html)
+        self.assertIn('&lt;/script&gt;&lt;script&gt;不应执行', html)
+
+    def test_manifest_rejects_missing_and_duplicate_chapters(self):
+        for chapters in (["01-first.md"], ["01-first.md", "02-second.md", "01-first.md"]):
+            with self.subTest(chapters=chapters):
+                self.write("contents.json", json.dumps({
+                    "parts": [{"title": "第一篇", "chapters": chapters}], "appendices": [],
+                }))
+                result, _ = self.generate({"contents": "contents.json"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("目录清单", result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "需要 Node.js")
     def test_mermaid_missing_dependencies_fail(self):
