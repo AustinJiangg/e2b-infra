@@ -1,0 +1,8 @@
+{
+  "title": "gsd 进程级 Checkpoint / Restore 技术手册",
+  "version": "v0.1.1",
+  "date": "2026-10-17",
+  "byline": "原实现由 phz 完成，jll 整理与修复",
+  "repo_docs_path": "gsd/docs",
+  "svgs": []
+}

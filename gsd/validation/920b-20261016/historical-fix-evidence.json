@@ -1,0 +1,35 @@
+{
+  "source_host": "192.168.45.47",
+  "source_file": "/home/j30059180/projects/deltabox/e2b/docs/gsd-restore-fix-plan.md",
+  "source_sha256": "aef166b960ecf2dca29ccaf949507ee038814e2f5e24e0b7593d2d3c176f48b5",
+  "historical_platform": "旧920B，2026-09-11",
+  "excerpts": [
+    {
+      "first_line": 196,
+      "lines": [
+        "`base`（旧 gsd）vs `gsd-dev`，THP=never、每沙箱 4 次 restore、各两个沙箱：",
+        "",
+        "| | base | gsd-dev |",
+        "|---|---|---|",
+        "| `criu_restore_ms` p50 | 175 / 190 | **109** |",
+        "| `total_ms` p50 | 196 / 206 | **121**（−40%） |"
+      ]
+    },
+    {
+      "first_line": 265,
+      "lines": [
+        "### 7.2 实测（gsd-dev = 新 gsd + 新内核；base = 交接原状；THP=never）",
+        "",
+        "| | base | gsd-dev（仅 gsd 修复，§6） | gsd-dev（+ 内核修复） |",
+        "|---|---|---|---|",
+        "| cgroup 迁移等待 | 38 ms | 0.1 | 0.1 |",
+        "| 文件校验前停顿 | 18 ms | 16 | **0.5～0.8** |",
+        "| `kill_ms` | 20.5 | 11 | 11～12 |",
+        "| `criu_restore_ms` p50 | 181 | 109 | **74～76** |",
+        "| `total_ms` p50 | 200 | 121 | **85～89（−56%）** |",
+        "| 14 次连续 restore | 第 12 次 ENOSPC | 通过，但 `/` 每次 +17 MB | 通过，`/ used` **恒定 289 MB**，layers 恒定 18 MB |"
+      ]
+    }
+  ],
+  "note": "原文记录两个沙箱各恢复4次；修复前total_ms p50为196/206ms，均只保留整数毫秒。汇总表以200ms概括，未提供可重算更细精度的逐次微基准样本。"
+}

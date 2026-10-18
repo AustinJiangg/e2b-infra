@@ -1,0 +1,8 @@
+# 文档打包件是构建产物，不入库；只留 dist/README.md（怎么重新打包）
+dist/*
+!dist/README.md
+__pycache__/
+# 起草材料保留在本机，不随手册发布
+/OUTLINE.md
+# 上机产生的完整日志与结果另行归档，入库摘要见 validation/
+/scripts/results/

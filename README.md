@@ -6,6 +6,11 @@
 
 本仓库则包含了支撑整个 E2B 平台运行的底层基础设施代码。
 
+## 快照回滚手册
+
+- [沙箱级快照回滚](rollback/README.md)：宿主侧恢复整台虚拟机。
+- [gsd 进程级快照回滚](gsd/README.md)：guest 内恢复用户进程与文件；已在 920B 验证，950 待验证。
+
 ## 部署包内容快照（e2b-deploy/）
 
 `e2b-deploy.tar.gz` 是 RPM 构建真正使用的部署包（见 `e2b-infra.spec` 的 `Source9`），
