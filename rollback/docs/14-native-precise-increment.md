@@ -434,7 +434,7 @@ pause 日志会写明这次导出多少页、依据是哪一种、集合里有�
 
 累积位图只管内存。磁盘在同一场景下有对应的问题：checkpoint 会把写层封存、换上新的空写层，于是当前写层只含最近一次 checkpoint 之后的写。
 原生 pause 导出磁盘时要把全部层压平一起导出（`NBDProvider.ExportDiff`，`packages/orchestrator/internal/sandbox/rootfs/nbd.go:72`，
-`EjectLayers` 在 :84，有封存层时走 `ExportLayersToDiff`，:106-111）。机制见 [第 7 章 §2](07-disk-layering.md#2-原生怎么导出磁盘增量)。
+`EjectLayers` 在 :84，有封存层时走 `ExportLayersToDiff`，:106-111）。机制见 [第 7 章 §9](07-disk-layering.md#9-与原生-pause-的区别导出后不继续使用原-overlay)。
 两半合起来，才是"checkpoint 之后做原生 pause"的完整正确性前提，[第 15 章 §7](15-native-cooperation-and-cost.md#7-checkpoint-之后做原生-pause-的正确性前提) 会从分工的角度把它们放在一起讲。
 
 ## 10. 退路：什么时候回到驻留判据

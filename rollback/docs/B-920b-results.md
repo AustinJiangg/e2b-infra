@@ -204,10 +204,10 @@ FC 单测那次跑的源码早于 `8ea5322bf`；此后 FC 目录只多了测试�
 | `baae30b56` | 代理开 full duplex（[附录 C §8.1](C-evolution-and-cases.md#81-流式命令偶发截断)） | [第 22 章 §11.3](22-api-semantics.md#113-两类流式截断要分清) |
 | `5319de5dc` | 拷贝前 `MADV_POPULATE`（[附录 C §8.4](C-evolution-and-cases.md#84-gc-长暂停落进别的沙箱的冻结窗口)）；restore 自计读量（[附录 C §8.5](C-evolution-and-cases.md#85-restore-读盘量指标在并发时虚高)） | [第 12 章 §8](12-state-and-lifecycle.md#8-节点级效应) |
 | `1b112fbbd` | conntrack 整表扫描与选路（[附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)） | [第 10 章 §4](10-device-network-time.md#4-连接跟踪) |
-| `df4b38336` | 层按视图引用计数回收、子节点计数表（[附录 C §8.7](C-evolution-and-cases.md#87-rootfs-层文件从不回收)） | [第 7 章 §9](07-disk-layering.md#9-层回收按视图引用计数) |
-| `0c4c2c5ae` | 隐藏 checkpoint 合并（内存与层，[附录 C §8.8](C-evolution-and-cases.md#88-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）；字节配额 | [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)、[第 7 章 §10](07-disk-layering.md#10-层合并) |
+| `df4b38336` | 层按视图引用计数回收、子节点计数表（[附录 C §8.7](C-evolution-and-cases.md#87-rootfs-层文件从不回收)） | [第 7 章 §4](07-disk-layering.md#4-删除-checkpoint先判断哪些层仍被需要) |
+| `0c4c2c5ae` | 隐藏 checkpoint 合并（内存与层，[附录 C §8.8](C-evolution-and-cases.md#88-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）；字节配额 | [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)、[第 7 章 §5](07-disk-layering.md#5-层合并保留读取结果减少层文件) |
 | `3539c45df` | 全量根回滚因子恒为全 1（加固，长跑不涉及） | [第 6 章](06-memory-diff-tree.md) |
-| `8ea5322bf` | 视图装配改位图（[附录 C §8.9](C-evolution-and-cases.md#89-视图块数增长restore-随时间变慢)）；`disk_view_read` 计时 | [第 7 章 §6](07-disk-layering.md#6-读路径与视图装配) |
+| `8ea5322bf` | 视图装配改位图（[附录 C §8.9](C-evolution-and-cases.md#89-视图块数增长restore-随时间变慢)）；`disk_view_read` 计时 | [第 7 章 §7](07-disk-layering.md#7-实现细节读取索引装配成本与落盘) |
 | `93ccb02`（部署件，`/usr/bin/template-manager` sha256 `782d6a2a…`） | delete 按实际结果回错误码（id 不存在才回 404，已生效但清文件失败按成功答，其余回 500）；启动时写 checkpoint 能力文件；注释与 Python SDK 的说明文字。restore / checkpoint 热路径与 `8ea5322bf` 相同（`conntrack_flush.go` 只改了注释） | —— |
 
 然后是全部轮次。除注明外都是 16 沙箱、模板 `base`、服务端开 `gctrace`；restore / checkpoint 为服务端 `total` 的 p50 / p99（ms）。

@@ -99,7 +99,7 @@
 | `materialize_read_mb`、`revert_mem_write`、`fc_memory` | 回滚量变大 | guest 后台写让每次要回滚的页真实变多，是工作量，不是缺陷 |
 | `conntrack_bg`、`conntrack_host_entries_count` | 宿主连接表变大 | 见 [§10](#10-conntrack-占了冻结窗口)、[§14](#14-restore-随宿主上其他流量变慢) |
 
-**怎么处置**：确认版本；必要时让业务定期重建长寿沙箱。原理：[第 7 章 §6](07-disk-layering.md#6-读路径与视图装配)。
+**怎么处置**：确认版本；必要时让业务定期重建长寿沙箱。原理：[第 7 章 §7](07-disk-layering.md#7-实现细节读取索引装配成本与落盘)。
 
 ## 8. GC 长停顿与 memory cgroup 回收
 
