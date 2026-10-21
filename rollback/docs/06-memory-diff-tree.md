@@ -73,23 +73,56 @@ Firecracker 以 Diff 模式写快照时，把每一个脏页写在它自己的 *
 
 ## 3. 树，而不是链
 
-### 3.1 线性链在回滚之后就不够用了
+### 3.1 一个节点代表什么
 
-假设历史是一条链 `ck1 → ck2 → ck3`，现在回滚到 `ck1`。`ck2`、`ck3` 怎么办？
+树里的一个节点代表一个 checkpoint，也就是一次保存的沙箱状态。orchestrator 用一个 `Entry` 数据结构记录它，本章把这份记录称为**条目**。
 
-- **删掉**：那就没法"回滚之后发现走错了，再前滚回去"。对 Agent 场景这是常用操作 —— 回退一步、换个做法、发现原来那条路其实是对的。
-- **留着**：那历史就不是链了。下一个 checkpoint 的父亲是 `ck1`，`ck2` / `ck3` 挂在 `ck1` 的另一侧。
+条目记录 checkpoint 的身份、依赖关系、状态和数据文件的位置。内存内容保存在 `mem_diff` 等文件里，不直接放在条目里。一个增量条目代表一个完整的快照时刻，但它自己的内存文件只保存这一代写过的页；要得到那个时刻的其他页，还需要沿着上一级寻找。
 
-所以历史**天然是树**。这不是为了炫技加的功能，是"回滚不删除历史"这条产品要求的直接结论。
+**每个条目既有自己的 `ID`，也有 `ParentID`：**
 
-### 3.2 树是怎么长出来的
+- `ID`：这个 checkpoint 自己的标识。
+- `ParentID`：上一级 checkpoint 的 `ID`，说明本条目的内存增量相对于谁；空字符串 `""` 表示没有上一级，是树根。
 
-每个条目记一个 `ParentID`。规则只有两条：
+例如，连续创建三个 checkpoint：
 
-1. 打一个新 checkpoint，`ParentID` = **当前基准**；
-2. 回滚到 `t` 成功后，**当前基准 ← t**。
+| checkpoint | 自己的 `ID` | `ParentID` | 内存内容的关系 |
+|---|---|---|---|
+| ck1 | `"ck1"` | `""` | 默认保存全量内存，作为根 |
+| ck2 | `"ck2"` | `"ck1"` | 保存从 ck1 到 ck2 之间写过的页 |
+| ck3 | `"ck3"` | `"ck2"` | 保存从 ck2 到 ck3 之间写过的页 |
 
-于是：连续打点长出一条链；回滚一次，下一个点从回滚目标分叉。
+这里用 `ck1` 等短名称代替实际 ID，便于阅读。图中的箭头从上一级指向下一级：`ck1 → ck2 → ck3`；代码反向查找依赖时，用 ck3 的 `ParentID` 找到 ck2，再用 ck2 的 `ParentID` 找到 ck1。
+
+### 3.2 为什么回滚后会分叉
+
+假设已经有 `ck1 → ck2 → ck3`，现在 restore 到 ck1。restore 不删除 ck2、ck3，它们仍然可以恢复。
+
+沙箱从 ck1 的状态继续运行，改了一些页后创建 ck4。ck4 的增量相对于 ck1，所以 `ck4.ParentID = ck1.ID`。虽然 ck4 创建得比 ck3 晚，ck3 却不是它的上一级：ck4 没有从 ck3 的状态继续运行。
+
+再从 ck4 继续运行并创建 ck5，得到：
+
+```text
+ck1 ── ck2 ── ck3
+  └── ck4 ── ck5
+```
+
+因此，**创建时间的先后顺序不能代替内存增量的依赖关系**。保留旧 checkpoint，又允许从恢复目标继续创建新 checkpoint，就需要用树记录这些关系。
+
+orchestrator 为每个沙箱另外记录一个**当前基准**：当前内存以哪个 checkpoint 为起点继续变化。它按以下规则更新：
+
+| 操作成功后 | 当前基准 | 新条目的关系 |
+|---|---|---|
+| 创建 ck1（默认全量根） | ck1 | `ck1.ParentID = ""` |
+| 从 ck1 创建增量 ck2 | ck2 | `ck2.ParentID = ck1.ID` |
+| 从 ck2 创建增量 ck3 | ck3 | `ck3.ParentID = ck2.ID` |
+| restore 到 ck1 | ck1 | 不创建条目，也不改 ck2、ck3 的 `ParentID` |
+| 从 ck1 创建增量 ck4 | ck4 | `ck4.ParentID = ck1.ID` |
+| 从 ck4 创建增量 ck5 | ck5 | `ck5.ParentID = ck4.ID` |
+
+创建增量时，新条目的 `ParentID` 取创建前的当前基准；创建成功后，基准更新为新条目。创建全量 checkpoint 时则没有这份增量依赖，`ParentID` 为空，形成新的根。
+
+下面的实线箭头表示条目之间的父子关系，虚线和粗线表示 restore 操作；restore 操作本身不会增加树节点：
 
 ```mermaid
 flowchart TD
@@ -113,7 +146,7 @@ flowchart TD
     class CK2,CK3,CK4 inc
 ```
 
-由此支持三种线性链做不到的操作：
+保留这些依赖关系后，可以执行以下操作：
 
 | 操作 | 说明 |
 |---|---|
@@ -123,19 +156,26 @@ flowchart TD
 
 ### 3.3 条目结构
 
-条目结构（`Entry`，`store.go:342`）的要点：
+条目结构定义在 `internal/checkpoint/store.go` 的 `Entry` 中。下面列出与理解本章有关的字段，并非完整字段清单：
 
 | 字段 | 含义 |
 |---|---|
-| `State` | `prepared` / `committed`，只有 committed 可见、可恢复 |
-| `ParentID` | `""` 表示树根 |
+| `ID` | 本条目自己的 checkpoint ID，其他条目的 `ParentID` 可以引用它 |
+| `Name` | 可选名称，用于标注这个 checkpoint |
+| `SandboxID` | 这个 checkpoint 所属的沙箱 ID |
+| `CreatedAt` | 创建时间；时间顺序不决定父子关系 |
+| `State` | `prepared` / `committed`，只有提交完成且未隐藏的条目对用户可见、可恢复 |
+| `ParentID` | 上一级条目的 `ID`；`""` 表示树根 |
 | `Hidden` | 在树里、不在 API 里（[§10](#10-删除隐藏与合并)） |
-| `MemDiff`、`MemBitmap` | 本代差分文件与 `E_x` 的路径 |
+| `Snapfile` | CPU、中断控制器及设备状态文件的路径 |
+| `MemDiff`、`MemBitmap` | 本代内存内容文件与位图 `E_x` 的路径；全量条目的 `MemDiff` 保存全部内存 |
 | `MemMode` | `full` / `incremental` |
 | `ListedMemMode` | 合并改了模式时，`List` 仍报拍摄时的模式（[§10.2](#102-合并compact)） |
 | `Rootfs` | 本条目的磁盘视图；`layer` 是本条目封存的层（[第 7 章](07-disk-layering.md)） |
 
-`bases[sandbox]` 记当前基准（下一代的父亲）和"链已断"标志（[第 11 章](11-failures-and-invariants.md)）。这两样都是**每沙箱的运行时状态，不属于任何一代**。
+条目里的 `ParentID` 与沙箱的当前基准是两份不同的记录：前者记录这个 checkpoint 基于谁，后者记录沙箱现在从谁继续运行。restore 会更新当前基准，不会因此改写已有条目的父子关系。
+
+`bases[sandbox]` 记当前基准（下一次增量 checkpoint 的上一级）和"链已断"标志（[第 11 章](11-failures-and-invariants.md)）。这两样都是**每沙箱的运行时状态，不属于任何一代**。
 
 ## 4. 回滚集
 
@@ -229,7 +269,7 @@ Firecracker 对 Full 快照本来就写全 1 侧车（`firecracker/src/vmm/src/v
 
 ### 4.5 一个完整的例子
 
-沿用 [§3.2](#32-树是怎么长出来的) 的树。设 guest 有 16 页，各代的纪元位图：
+沿用 [§3.2](#32-为什么回滚后会分叉) 的树。设 guest 有 16 页，各代的纪元位图：
 
 | 条目 | 父 | `E_x` |
 |---|---|---|
