@@ -6,21 +6,40 @@
 
 ### 1.1 部件
 
-```
-        guest 看到的 /dev/vda
+```text
+guest 内部
+    ext4 文件系统驱动：把文件读写转换为磁盘读写
                  │
+    virtio-blk 驱动：设备名 /dev/vda
+                 │ 通过 virtio 队列提交请求
+─────────────────┼────────────────────────────────────
+host 上          ▼
+    Firecracker：模拟 virtio-blk 磁盘设备
+                 │ 对配置的后端设备执行读写
                  ▼
-    ┌────────────────────────────┐
-    │   NBD 设备  /dev/nbdX       │   内核块设备
-    └────────────┬───────────────┘
-                 │  dispatcher（用户态）
+    /dev/nbdX：host 内核中的 NBD 块设备
+                 │ NBD 驱动通过连接转发请求
                  ▼
-    ┌──────────── Overlay ────────────┐   读合并、写落上层
-    │  Cache（活写层）                  │   稀疏文件 + mmap + 块位图
-    │  LayerStack（封存过 checkpoint 后）│   封存层 + 块归属索引
-    │  模板 rootfs（只读）              │   chunker 从对象存储按块拉取
-    └──────────────────────────────────┘
+    orchestrator 进程中的 NBD dispatcher
+                 │ 调用 Overlay 的读写方法
+                 ▼
+    Overlay：读合并、写落上层
+      ├─ Cache（活写层）：稀疏文件 + mmap + 块位图
+      └─ 只读数据来源
+           ├─ LayerStack：封存层 + 块归属索引（封层后才有）
+           └─ 模板 rootfs：按需拉取并缓存
 ```
+
+**`/dev/vda` 和 `/dev/nbdX` 分属两个操作系统。** `/dev/vda` 是 guest 内核为 Firecracker 提供的 virtio-blk 虚拟磁盘命名的设备；
+`/dev/nbdX` 是 host 上的块设备，作为这块虚拟磁盘的数据后端。guest 不直接访问 host 的 `/dev/nbdX`。
+
+以 guest 读取一个磁盘块为例：guest 的 virtio-blk 驱动把请求提交到 virtio 队列，Firecracker 处理请求并读取后端 `/dev/nbdX`；
+host 内核的 NBD 驱动再把读请求转发给 orchestrator。orchestrator 通过 Overlay 从写层、封存层或模板取得内容，
+沿原请求路径返回；Firecracker 把数据写入 guest 的接收缓冲区并完成 virtio 请求，guest 的磁盘驱动得到读取结果。
+写请求走同样的路径，Overlay 把数据写入当前活写层。
+
+Firecracker 负责虚拟磁盘的设备行为，orchestrator 经 NBD 提供磁盘的数据内容。后面的封层和换视图发生在 Overlay 内部，
+不需要把 guest 的 `/dev/vda` 或 host 的 `/dev/nbdX` 换成另一个设备。
 
 | 部件 | 是什么 |
 |---|---|
@@ -28,7 +47,8 @@
 | Cache（写层） | 一个与设备等大的**稀疏文件**，`mmap` 进进程地址空间，外加一张记录"这一层持有哪些块"的集合 |
 | LayerStack | 打过 checkpoint 之后才有：若干封存层叠在模板之上，外加按块的归属索引（[§6.1](#61-运行中的沙箱块归属索引)） |
 | Overlay | 读：先查写层，未命中再问下面；写：全部落写层（`block/overlay.go:39`、:201） |
-| NBD | 把这个 Go 对象暴露成一个内核块设备，guest 通过 virtio-blk 访问它 |
+| Firecracker 的 virtio-blk 设备 | 向 guest 提供虚拟磁盘；guest 内核将其命名为 `/dev/vda`，Firecracker 把请求转成对后端设备的读写 |
+| NBD | 把 Overlay 暴露成 host 内核块设备 `/dev/nbdX`，供 Firecracker 作为后端访问；内核 NBD 驱动将请求转发给 orchestrator 的 dispatcher |
 
 写层是**稀疏**的：创建时 `truncate` 到设备大小，物理上一个块都不占；guest 写哪块，哪块才落盘。
 所以一个刚起来的沙箱，写层文件逻辑上与磁盘等大、物理上接近 0。
