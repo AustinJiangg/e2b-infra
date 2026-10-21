@@ -229,7 +229,7 @@ checkpoint 与 restore 会从两个方向打破这个朴素做法。
 
 - **内存**：orchestrator 为每个虚机维护"自启动以来脏页集"，在 Firecracker 每次清位图之前，把即将被忘掉的位图并进去：增量 checkpoint 的侧车、
   全量 checkpoint 拍之前的活跃脏图、restore 前的活跃脏图、restore 的回滚集位图。pause 时把这个集合并回写跟踪位图再导出（[第 14 章 §9](14-native-precise-increment.md#9-与-checkpoint-叠加累积位图)）。
-- **磁盘**：原生 pause 导出磁盘时摘出当前视图的全部层（封存层加当前写层），有封存层时把它们压平成一份差分（[第 7 章 §2](07-disk-layering.md#2-原生怎么导出磁盘增量)）。
+- **磁盘**：原生 pause 导出磁盘时摘出当前视图的全部层（封存层加当前写层），有封存层时把它们压平成一份差分（[第 7 章 §9](07-disk-layering.md#9-与原生-pause-的区别导出后不继续使用原-overlay)）。
 
 两半都满足时，原生 pause 的产物就是"这一代此刻的完整状态"，与这一代里做过多少次 checkpoint、restore 无关。
 
