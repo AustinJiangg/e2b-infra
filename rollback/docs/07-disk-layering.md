@@ -50,7 +50,7 @@ Firecracker 负责虚拟磁盘的设备行为，orchestrator 经 NBD 提供磁�
 | Firecracker 的 virtio-blk 设备 | 向 guest 提供虚拟磁盘；guest 内核将其命名为 `/dev/vda`，Firecracker 把请求转成对后端设备的读写 |
 | NBD | 把 Overlay 暴露成 host 内核块设备 `/dev/nbdX`，供 Firecracker 作为后端访问；内核 NBD 驱动将请求转发给 orchestrator 的 dispatcher |
 
-写层是**稀疏**的：创建时 `truncate` 到设备大小，物理上一个块都不占；guest 写哪块，哪块才落盘。
+活写层是**稀疏文件**：创建时，通过 `truncate` 将文件的逻辑大小设置为沙箱磁盘的总容量，也就是 host 上 `/dev/nbdX` 的容量，也是 guest 通过 `/dev/vda` 看到的容量。此时不为整个文件分配存储空间；后续写入哪些磁盘块，就为文件中的对应位置分配空间。尚未写入的块，由 Overlay 从封存层或模板读取。
 所以一个刚起来的沙箱，写层文件逻辑上与磁盘等大、物理上接近 0。
 
 ### 1.2 块集合就是这一层的"位图"
