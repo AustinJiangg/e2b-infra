@@ -48,11 +48,13 @@ job "template-manager-system" {
       # （arm64 补丁注释掉了 CLONE_INTO_CGROUP，/sys/fs/cgroup/e2b 只是空目录），
       # 但客户机内存走 hugetlb、不记 memory 控制器，所以这里不是"沙箱数 × 内存"的预算；
       # 记账的是 orchestrator 堆 + 构建/快照产生的 page cache。太小会 memcg OOM
-      # （Exit 137）并连锁到 api 恒 503、部署超时失败。256 GiB 只是"跑飞了别拖垮
-      # 整机"的护栏。怎么量峰值、怎么改、三处路径分别在哪，见
+      # （Exit 137）并连锁到 api 恒 503、部署超时失败。太大则 Nomad 调度不上
+      # （Dimension "memory" exhausted，同样表现为 api 恒 503），必须小于节点可分配内存。
+      # 32 GiB 能过 200 MB 基础镜像全量重建，128 GiB 的机器也放得下。怎么量峰值、
+      # 怎么改、三处路径分别在哪，见
       # deploy-docs/12-orchestrator资源配额调优.md
       resources {
-        memory     = 262144
+        memory     = 32768
         cpu        = 2048
       }
 

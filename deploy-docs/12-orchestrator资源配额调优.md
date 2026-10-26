@@ -19,10 +19,11 @@
    "并发几十个沙箱毫无压力"仍然不能说明这个值够用——沙箱内存根本不在账上。
 2. 撑爆它的通常不是进程堆，而是构建/快照产生的 page cache（脏页回写完才可回收）。
    所以 OOM 现场的 `anon-rss` 可能只有几十 MB，看着像"没吃内存却被杀"。
-3. 现值 **262144 MiB（256 GiB）**（8192 → 32768 → 262144，2026-09）。要改，**必须改三个地方**（§3），
+3. 现值 **32768 MiB（32 GiB）**（8192 → 32768 → 262144 → 32768，2026-09/10）。要改，**必须改三个地方**（§3），
    只改运行态会被下次 `build.sh -i` 覆盖回去。
-4. 这个上限的意义是"跑飞了别把整台机器拖垮"。1.1 TB 的机器上 256 GiB 仍是护栏；
-   换到小内存机器要按实测峰值重新取（§2）。
+4. 这个上限的意义是"跑飞了别把整台机器拖垮"。它**同时是 Nomad 的调度预留**：
+   超过节点剩余可分配内存，job 根本调度不上（§5.2），所以不能按"越大越安全"取。
+   大内存机器想放宽，按实测峰值重新取（§2）。
 
 ---
 
@@ -89,9 +90,10 @@ watch -n2 'for f in /sys/fs/cgroup/nomad.slice/share.slice/*.start.scope/memory.
   numfmt --to=iec < $f; done; df -h /mnt/snapshot-cache | tail -1'
 ```
 
-取值建议：**峰值 × 3~4**，再留出并发构建的余量。现值 256 GiB 是在 1.1 TB 机器上取的：
-hugepages 只预分配 20%（`start-client.sh`，其余 80% 走 overcommit），普通内存充裕，
-256 GiB 仍能起到"跑飞了别拖垮整机"的作用。换到小内存机器要按本机峰值重新取。
+取值建议：**峰值 × 3~4**，再留出并发构建的余量，且**必须小于节点可分配内存减去
+api（20 GiB）、client-proxy（4 GiB）、redis 已占的部分**（`nomad node status -verbose <node>`
+的 Allocated Resources 一栏）。现值 32 GiB：200 MB 基础镜像全量重建实测能过，
+128 GiB 的机器上也放得下。曾经的 256 GiB 是在 1.1 TB 机器上取的护栏值，换到 128 GiB 机器就调度不上了。
 
 注意两点：
 - Nomad 调度侧也按这个数预留，将来多节点/多任务时这个值会影响调度；
@@ -155,7 +157,11 @@ nomad alloc status "$ALLOC" | grep -A3 'Task Resources'
 cat /sys/fs/cgroup/nomad.slice/share.slice/*.start.scope/memory.max | numfmt --to=iec
 ```
 
-## 5. 配额不足时的现场特征
+## 5. 配额不合适时的现场特征
+
+两个方向的错都会落到同一个现象上：api `/health` 恒 503、`deploy.sh` 卡在 api 的 deployment。
+
+### 5.1 配额太小：memcg OOM
 
 按这个顺序对照，能快速确认是不是配额问题：
 
@@ -183,6 +189,23 @@ dmesg -T | grep -iE 'oom|killed process' | tail
          → 报错信息全在 api 上，与真正的根因（另一个 job 的内存配额）毫无字面关联
 ```
 
+### 5.2 配额太大：调度不上
+
+`resources.memory` 超过节点剩余可分配内存时，template-manager 连 alloc 都没有，orchestrator 进程从未启动：
+
+```bash
+nomad job status template-manager-system
+#   Queued = 1, Running = 0
+#   Placement Failure
+#     * Dimension "memory" exhausted on 1 nodes
+#   Allocations: No allocations placed
+
+ss -lntp | grep 5008                 # 无输出，api 连 <节点IP>:5008 得到 connection refused
+```
+
+之后的链条与 5.1 相同（`orch.NodeCount()` 恒 0 → api 503 → 部署超时）。
+实例：128 GiB 机器（Nomad 可分配 123 GiB）上配了 256 GiB。
+
 ## 6. cpu = 2048 是什么
 
 不是绑核，也不是"2 个核"。Nomad 的 `resources.cpu` 单位是 MHz，用于调度侧预留和
@@ -195,3 +218,4 @@ dmesg -T | grep -iE 'oom|killed process' | tail
 |---|---|---|
 | 2026-09 | `memory` 8192 → 32768 | 200 MB 基础镜像 + `skip_cache=True` 全量重建在 8 GiB 下必然 memcg OOM；上调后同一构建 7 秒完成 |
 | 2026-09-15 | `memory` 32768 → 262144 | 查实 FC 进程就在 task cgroup 里（arm64 补丁注释掉了 CLONE_INTO_CGROUP），guest 内存因 hugetlb 不记账；§0/§1 按代码事实改写，上限按 1.1 TB 机器取为护栏值 |
+| 2026-10-26 | `memory` 262144 → 32768 | 在 128 GiB 机器上部署（Nomad 可分配 123 GiB，api 等已占 26 GiB），256 GiB 调度不上（§5.2），api 恒 503；回到 32 GiB，与 2026-09 实测能过全量重建的值一致 |
