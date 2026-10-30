@@ -1,11 +1,14 @@
-# e2b-deploy/ 是 e2b-deploy.tar.gz 的「可读」目录。
-# 整个目录是要进仓库的，但其中两类内容刻意不跟踪：
+# e2b-deploy/ 是 RPM 部署包的源目录，spec 的 %prep 直接拷它。整个目录进仓库，但其中两类内容刻意不跟踪：
 
-# 1) 约 70MB 的二进制大文件，没必要进仓库（仍保留在 e2b-deploy.tar.gz 内供构建使用）
+# 1) 约 70MB 的 ubuntu 镜像放在仓库根（spec 的 Source9），%prep 再把它拷进 dep/。
+#    旧流程在本地留下的这份副本不要再提交
 e2b-deploy/dep/ubuntu-22.04-custom.tar.gz
 
-# 2) 压缩包内自带的 git 仓库：二进制且无法 diff，保留还会让 e2b-deploy/ 被当成子模块
+# 2) 旧压缩包里自带的 git 仓库：保留会让 e2b-deploy/ 被当成子模块、导致里面文件不被跟踪
 e2b-deploy/.git/
+
+# 不再提交 e2b-deploy.tar.gz：脚本改一个字就要整包重打，每次都是一个全新的 70MB blob
+e2b-deploy.tar.gz
 
 # 3) rollback/slides/ 是 slidev 工程，node_modules 有 560+ MB。
 # 该目录自己有一份 .gitignore，但那只在目录被跟踪时生效——目前它整个未跟踪，

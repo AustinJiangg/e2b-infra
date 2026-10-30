@@ -104,7 +104,7 @@ api（20 GiB）、client-proxy（4 GiB）、redis 已占的部分**（`nomad nod
 
 ```
 仓库 e2b-deploy/dep/template-manager.hcl
-  └─打包进 e2b-deploy.tar.gz (Source9)
+  └─spec %prep:  cp -a %{_sourcedir}/e2b-deploy %{_builddir}/e2b-deploy
      └─spec:  cp -rp %{_builddir}/e2b-deploy/* %{buildroot}/opt/e2b-infra/
         └─► /opt/e2b-infra/dep/template-manager.hcl        ① build.sh -i 的源头
              └─build.sh -i:  cp -fv "$DEP_DIR/template-manager.hcl" "$E2B_DIR/nomad/..."
@@ -134,7 +134,7 @@ bash /opt/e2b-infra/build.sh -r template-manager
 
 ### 要让它跨 RPM 升级存活
 
-改仓库里的 `e2b-deploy/dep/template-manager.hcl`，重新打 `e2b-deploy.tar.gz` 并出包
+改仓库里的 `e2b-deploy/dep/template-manager.hcl` 并重新出包
 （见 [`03-RPM包构建深度解析.md`](03-RPM包构建深度解析.md) §4）。
 `/opt/e2b-infra/dep/` 是 RPM 装的，`rpm -U` 会覆盖它。
 

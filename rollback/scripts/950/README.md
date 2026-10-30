@@ -38,17 +38,12 @@ git lfs pull
 ls -l e2b-infra-2026.09.tar.gz        # 应为 143753275 字节；134 字节说明还是 LFS 指针
 echo "59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9  e2b-infra-2026.09.tar.gz" | sha256sum -c   # 必须输出 OK
 
-# ② 把本机 IP 写进部署配置，重建打进 RPM 的部署包
+# ② 把本机 IP 写进部署配置（spec 直接拷 e2b-deploy/ 进 RPM，不用重打压缩包）
 IP=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 echo "本机 IP: ${IP:-（没取到，看下面的说明，先别往下走）}"
 [ -n "$IP" ] && sed -i "s/^SERVER_IP=.*/SERVER_IP=$IP/" e2b-deploy/dep/.env
 grep '^SERVER_IP' e2b-deploy/dep/.env       # 人工核对：必须是对外提供服务的那个地址
 REPO=$PWD
-rm -rf /tmp/e2b-deploy-repack && mkdir -p /tmp/e2b-deploy-repack && cd /tmp/e2b-deploy-repack
-tar -xzf "$REPO/e2b-deploy.tar.gz"
-rsync -a --exclude .git "$REPO/e2b-deploy/" e2b-deploy/
-tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy
-cd "$REPO"
 
 # ③ 出 RPM，装到 /opt/e2b-infra（920B 上 rpmbuild 135 秒，安装 7 秒）
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"

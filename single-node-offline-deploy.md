@@ -317,23 +317,14 @@ echo "59f05d43eb5d6e44759ab0e51f35d99d359698f9aeb97c61030f7f3ea8b95ea9  e2b-infr
 #     拿标签归档改名顶替，%prep 打补丁这一步就会失败。
 
 # 2) 改 e2b-deploy/dep/.env：SERVER_IP= 必须改成本机 IP（否则 harbor/registry/nomad 地址全错），
-#    改完重建打进 RPM 的部署包 e2b-deploy.tar.gz（改了其它端口/变量同理）
-#    ⚠️ 不能直接 `tar -czf e2b-deploy.tar.gz e2b-deploy`：约 70MB 的 dep/ubuntu-22.04-custom.tar.gz
-#    只存在于压缩包里（e2b-deploy/ 目录不含它），直接打目录会把它弄丢。按下面三步重建
-#    （与 deploy-docs/03 篇 §4 一致）：解开旧包 → 用目录覆盖文本内容 → 重新打包。
+#    spec 直接拷 e2b-deploy/ 目录进 RPM，改完目录即可，不用重打任何压缩包（改了其它端口/变量同理）。
 #    本机 IP 取默认路由的源地址（只查路由表、不发包）。别用 hostname -I 的第一个地址：机器上有残留的
 #    沙箱网卡时它可能是 10.x 的沙箱地址，而 build.sh 的 check_host_ip 拦不住。没有默认路由时这里没有
 #    输出、sed 不执行，做法见 rollback/scripts/950/README.md §1.0。
 IP=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 [ -n "$IP" ] && sed -i "s/^SERVER_IP=.*/SERVER_IP=$IP/" e2b-deploy/dep/.env
 grep '^SERVER_IP' e2b-deploy/dep/.env      # 人工核对
-REPO=$PWD
-rm -rf /tmp/e2b-deploy-repack && mkdir -p /tmp/e2b-deploy-repack && cd /tmp/e2b-deploy-repack
-tar -xzf "$REPO/e2b-deploy.tar.gz"                          # 拿到 ubuntu-22.04-custom.tar.gz
-rsync -a --exclude .git "$REPO/e2b-deploy/" e2b-deploy/     # 用仓库目录覆盖（含刚改的 .env）
-tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy
-ls -la e2b-deploy/dep/ubuntu-22.04-custom.tar.gz            # 自检：镜像还在（约 70MB）
-cd "$REPO"
+ls -la ubuntu-22.04-custom.tar.gz          # 自检：仓库根的 ubuntu 镜像在（约 70MB，spec 的 Source9）
 
 # 3) 构建 RPM
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
@@ -433,7 +424,7 @@ tr '\0' '\n' < /proc/$pid/environ | grep FC_TRACK_DIRTY_PAGES      # 进程里�
 ```
 
 `nomad/template-manager.hcl` 会被下次 `rpm -Uvh` + 重放 overlay 覆盖；要持久，改仓库的
-`e2b-deploy/dep/template-manager.hcl` 后重建 `e2b-deploy.tar.gz` 与 RPM（第 2 节第 2 步）。
+`e2b-deploy/dep/template-manager.hcl` 后重建 RPM（第 2 节第 3 步）。
 软件跟踪的代价：没有硬件标脏时，内核要给每个干净页加写保护，首次写入各触发一次 VM exit，
 从不做 checkpoint 的沙箱也要付这笔开销——这是无 HDBSS 时默认关的原因（`dirtytracking.go:25-33` 的注释）。
 
@@ -468,7 +459,7 @@ python rollback/scripts/acceptance/checkpoint_verify.py                 # 末尾
 | —— | **harbor / minio / postgres 等组件** | 单独 `systemctl restart` / `docker restart` 对应服务即可，无需专门场景 | 否 |
 
 > ⚠️ 直接改 `/opt/e2b-infra/` 下的脚本/配置都是**临时的**——下次 `rpm -Uvh` 会覆盖。要持久，
-> 得改回仓库源码 → 重建 `e2b-deploy.tar.gz` → 重建 RPM。
+> 得改回仓库源码 → 重建 RPM。
 
 **`rpm -Uvh --force` 到底覆盖 `/opt/e2b-infra/` 里的什么**（以 spec 的 `%files` 清单为准：
 在清单里的文件升级时一律被新包内容替换；不在清单里的一律不动）：
@@ -622,7 +613,7 @@ ps -o pid,lstart,cmd -p $pid                            # lstart 应晚于本次
 alloc 就会被替换——按“蛇形”排列组合（每步只改一个变量）最稳。
 
 > 持久化提醒：`nomad/<job>.hcl` 会被下次 `rpm -Uvh` 覆盖（见 5.0）。扫描完想把某组值定为
-> 长期默认 → 改仓库 `e2b-deploy/dep/template-manager.hcl` → 重建 `e2b-deploy.tar.gz` → 重建 RPM。
+> 长期默认 → 改仓库 `e2b-deploy/dep/template-manager.hcl` → 重建 RPM。
 > 相关细节：`E2B_FC_NETNS_EXEC_HELPER` 背景见第 9 节，`MAX_STARTING_INSTANCES_PER_NODE` 见第 10 节，
 > `build.sh -r` 的实现与更多验证手段见第 11 节。
 

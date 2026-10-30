@@ -32,7 +32,7 @@ SOURCES 目录，所以下面所有文件直接放在仓库根即可。
 | `Source4/5/6` | `vmlinux.bin.{arm,x86,arm.openeuler}` | 沙箱客户机内核。aarch64 包装 arm 版为 `bin/vmlinux.bin`、openEuler 变体为 `bin/vmlinux.bin.openeuler`；x86 包装 x86 版 |
 | `Source7` | `patch_e2b.py` | SDK https→http 补丁脚本，装到 `/opt/e2b-infra/patch_e2b.py` |
 | `Source8` | `firecracker.arm` | ARM 版 Firecracker VMM，装到 `bin/firecracker`（仅 aarch64 包） |
-| `Source9` | `e2b-deploy.tar.gz` | 部署包（`build.sh` + `dep/`），整体铺进 `/opt/e2b-infra/` |
+| `Source9` | `ubuntu-22.04-custom.tar.gz` | 离线模板基础镜像，`%prep` 拷进 `e2b-deploy/dep/`；部署包本身直接取仓库的 `e2b-deploy/` 目录（§4） |
 | （未声明） | `tools-{arm64,amd64}.tar.gz` | **离线 Go 工具链**。注意它没有 SourceN 编号，`%prep` 里直接用 `%{_sourcedir}` 路径按架构解压——所以它必须和其它 Source 放在同一目录（仓库根） |
 
 ### 2.2 补丁体系
@@ -122,9 +122,11 @@ mkdir -p %{_builddir}/go-toolchain
 解出自带 Go 工具链到 `~/rpmbuild/BUILD/go-toolchain/go`。这就是**构建机不需要装 Go** 的原因。
 
 ```spec
-tar -xf %{SOURCE9} -C %{_builddir}
+rm -rf %{_builddir}/e2b-deploy
+cp -a %{_sourcedir}/e2b-deploy %{_builddir}/e2b-deploy
+cp %{SOURCE9} %{_builddir}/e2b-deploy/dep/
 ```
-把部署包解到 `BUILD/e2b-deploy/`，留给 `%install` 阶段整体拷走。
+把仓库的 `e2b-deploy/` 目录拷到 `BUILD/e2b-deploy/`，补上 ubuntu 镜像，留给 `%install` 阶段整体拷走（§4）。
 
 ### 3.3 `%build`：离线编译五个模块
 
@@ -237,36 +239,23 @@ x86_64 : goose(x86) / vmlinux.bin(x86)（无 firecracker——x86 用官方发�
 记录每个 Release 改了什么（当前最新 2026.09-4）。**每次发新包在顶部追加一条**，
 格式 `* 星期 月 日 年 作者 <邮箱> - 版本-Release`，正文一行一个要点。
 
-## 4. `e2b-deploy.tar.gz` 的地位与安全重建
+## 4. `e2b-deploy/` 怎样进 RPM
 
-它是 RPM 的 Source9，也是"dep overlay"的唯一来源。仓库里同时存在：
+`e2b-deploy/` 是"dep overlay"的唯一来源。`%prep` 直接从 `_sourcedir`（即 `--define "_sourcedir $PWD"`
+指定的仓库根）拷这个目录，再补上 Source9：
 
-- `e2b-deploy.tar.gz` —— 构建**真正用**的压缩包（含 `dep/ubuntu-22.04-custom.tar.gz` 约 70MB）；
-- `e2b-deploy/` —— 可读镜像目录（**不含**那个 70MB 镜像和 `.git`），供 review。
-
-**改了 `e2b-deploy/` 下任何文件后，必须重建压缩包再构建 RPM**，且不能直接 tar 目录
-（会把 70MB 镜像弄丢）。安全流程：
-
-```bash
-REPO=$PWD                                   # 仓库根
-cd /tmp && rm -rf e2b-deploy
-tar -xzf "$REPO/e2b-deploy.tar.gz"          # 1) 解开旧包（拿到 ubuntu-22.04-custom.tar.gz）
-rsync -av --exclude .git "$REPO/e2b-deploy/" e2b-deploy/   # 2) 用仓库目录覆盖文本内容
-tar -czf "$REPO/e2b-deploy.tar.gz" e2b-deploy              # 3) 重打包放回仓库根
+```
+rm -rf %{_builddir}/e2b-deploy
+cp -a %{_sourcedir}/e2b-deploy %{_builddir}/e2b-deploy
+cp %{SOURCE9} %{_builddir}/e2b-deploy/dep/        # ubuntu-22.04-custom.tar.gz，约 70MB
 ```
 
-**出包前核对压缩包与目录没有漂移**（两者曾经不一致过：目录改了、包没重打，RPM 用的是包，
-于是出的 RPM 是旧的）。除了目录里有意省略的 `dep/ubuntu-22.04-custom.tar.gz` 与包内的 `.git`，应无任何输出：
+所以**改了 `e2b-deploy/` 下的文件，直接重建 RPM 即可**，没有中间压缩包要重打，也就不存在目录与包漂移的问题。
+ubuntu 镜像不随目录跟踪（`.gitignore` 忽略了 `e2b-deploy/dep/` 下的同名文件），放在仓库根，
+内容多年不变，只占一次仓库体积；要换镜像时替换仓库根那一份。
 
-```bash
-rm -rf /tmp/e2b-deploy-check && mkdir -p /tmp/e2b-deploy-check
-tar -xzf "$REPO/e2b-deploy.tar.gz" -C /tmp/e2b-deploy-check
-diff -rq "$REPO/e2b-deploy" /tmp/e2b-deploy-check/e2b-deploy \
-  | grep -v -e 'ubuntu-22.04-custom.tar.gz' -e ': \.git$' -e '__pycache__'
-```
-
-反向地，如果直接改了压缩包，也要同步更新可读目录（解包后 rsync 回 `e2b-deploy/`，
-排除 `ubuntu-22.04-custom.tar.gz` 与 `.git`），保证 git diff 可读——这是仓库的约定（根 README）。
+以前 Source9 是 `e2b-deploy.tar.gz`，目录只是它的可读镜像；每改一次脚本都要整包重打，
+仓库每次涨约 70MB，还出现过目录改了、包没重打导致 RPM 是旧内容的情况。该压缩包已删除并从历史中清除。
 
 ## 5. 构建产物验收清单
 
@@ -292,7 +281,7 @@ git lfs pull                                        # e2b-infra-2026.09.tar.gz �
 
 # 1) 改动落到正确源头：
 #    - Go 源码改动 → 重新生成 0001 patch（见 §6.1）
-#    - 部署脚本/配置 → 改 e2b-deploy/dep/* → 按 §4 重建 e2b-deploy.tar.gz
+#    - 部署脚本/配置 → 改 e2b-deploy/dep/* → 直接重建 RPM（§4）
 #    - 打包逻辑     → 改 e2b-infra.spec（记得 Release+1 与 %changelog）
 
 # 2) 构建（在 aarch64 机器上）

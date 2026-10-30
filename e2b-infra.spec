@@ -16,7 +16,7 @@ Source5:        vmlinux.bin.x86
 Source6:        vmlinux.bin.arm.openeuler
 Source7:        patch_e2b.py
 Source8:        firecracker.arm
-Source9:        e2b-deploy.tar.gz
+Source9:        ubuntu-22.04-custom.tar.gz
 Patch1:         0001-adapted-for-arm-architecture.patch
 
 BuildRequires:  make
@@ -36,7 +36,10 @@ mkdir -p %{_builddir}/go-toolchain
     tar -xf %{_sourcedir}/tools-amd64.tar.gz -C %{_builddir}/go-toolchain
 %endif
 
-tar -xf %{SOURCE9} -C %{_builddir}
+# 部署包直接取仓库里的 e2b-deploy/ 目录，再补上不随目录跟踪的 ubuntu 镜像
+rm -rf %{_builddir}/e2b-deploy
+cp -a %{_sourcedir}/e2b-deploy %{_builddir}/e2b-deploy
+cp %{SOURCE9} %{_builddir}/e2b-deploy/dep/
 
 %build
 export GOROOT=%{_builddir}/go-toolchain/go
