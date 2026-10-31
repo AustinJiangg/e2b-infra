@@ -9,6 +9,9 @@ Requisite=docker.service
 Type=oneshot
 Environment=HARBOR_DIR=@HARBOR_DIR@
 Environment=HARBOR_PORT=@HARBOR_PORT@
+Environment=RESCHEDULE_JOBS=client-proxy
+# client-proxy 重调度用；token 默认读 /data/nomad/acl.token（run-nomad.sh 持久化的那份）
+Environment=NOMAD_ADDR=http://127.0.0.1:4646
 ExecStart=/bin/bash @WATCHDOG_SCRIPT@
 # 最坏情况：等待 + up + 等待 + down/up + 等待
 TimeoutStartSec=10min
