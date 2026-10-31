@@ -207,6 +207,36 @@ function install_harbor() {
     rm -f harbor.yml.bak  # 删除临时备份 
 }
 
+# Harbor 自愈看门狗：timer 每分钟 + docker 每次启动后探测 :$HARBOR_HTTP_PORT/api/v2.0/ping，
+# 不通就 compose up -d，还不通就 down + up -d 整组重建。
+# compose 里自带的 restart: always 在 daemon.json 开了 live-restore 时不管用——dockerd 重启时
+# 容器不退出、策略不触发，但 2900 的端口转发会丢（详见 dep/harbor-watchdog.sh 头部说明）。
+function install_harbor_watchdog() {
+    info "安装 Harbor 自愈看门狗（harbor-watchdog.timer）..."
+    local script="$DEP_DIR/harbor-watchdog.sh"
+    [ -f "$script" ] || error "缺少 $script"
+    chmod +x "$script"
+    sed -e "s|@HARBOR_DIR@|$WORK_DIR/harbor|" \
+        -e "s|@HARBOR_PORT@|$HARBOR_HTTP_PORT|" \
+        -e "s|@WATCHDOG_SCRIPT@|$script|" \
+        "$DEP_DIR/harbor-watchdog.service" > /etc/systemd/system/harbor-watchdog.service \
+        || error "写入 harbor-watchdog.service 失败"
+    cp -f "$DEP_DIR/harbor-watchdog.timer" /etc/systemd/system/harbor-watchdog.timer \
+        || error "写入 harbor-watchdog.timer 失败"
+    systemctl daemon-reload || error "daemon-reload 失败"
+    # service 只 enable（挂到 docker.service 的 wants 上），不 --now：它是 oneshot，由 timer/docker 拉起
+    systemctl enable harbor-watchdog.service || warn "harbor-watchdog.service enable 失败（非致命，timer 仍会兜底）"
+    systemctl enable --now harbor-watchdog.timer || error "启用 harbor-watchdog.timer 失败"
+    success "Harbor 看门狗已启用：journalctl -u harbor-watchdog 查看处置记录"
+}
+
+function uninstall_harbor_watchdog() {
+    systemctl disable --now harbor-watchdog.timer 2>/dev/null || true
+    systemctl disable harbor-watchdog.service 2>/dev/null || true
+    rm -f /etc/systemd/system/harbor-watchdog.service /etc/systemd/system/harbor-watchdog.timer
+    systemctl daemon-reload 2>/dev/null || true
+}
+
 function install_nginx() {
     info "开始安装 Nginx..."
     # 安装 nginx（CentOS/RHEL 系）
@@ -348,6 +378,7 @@ function uninstall_minio() {
 
 function uninstall_harbor() {
     info "开始卸载 Harbor..."
+    uninstall_harbor_watchdog
     # Harbor 是容器集群，无需 pkill
     cd "$WORK_DIR/harbor" || warn "Harbor 目录不存在，跳过卸载"
     docker-compose down -v || true
@@ -624,12 +655,14 @@ function start() {
 
     # iptables -F
     cd $WORK_DIR/harbor
-    bash install.sh || error "Harbor 安装脚本执行失败"
+    # 与 harbor-watchdog 共用一把锁：install.sh 里有 down/up，不能让看门狗同时插手
+    flock /run/lock/e2b-harbor.lock bash install.sh || error "Harbor 安装脚本执行失败"
 
     # prepare 生成的部分配置属主可能是 root，容器内 UID 10000 读不了
     chown -R 10000:10000 "$WORK_DIR/harbor/common/config/registry" \
                          "$WORK_DIR/harbor/common/config/nginx" || true
     docker compose -f "$WORK_DIR/harbor/docker-compose.yml" restart registry proxy || true
+    install_harbor_watchdog
 
     # 进入 E2B_DIR 并处理错误
     cd "$E2B_DIR" || error "进入 $E2B_DIR 目录失败"
@@ -1157,7 +1190,7 @@ function make_images() {
 # ===================== 参数解析（完整修正）=====================
 # 定义正确的短/长选项：m: 表示 -m 需要接收参数；d对应stop
 OPTIONS="iusdfm:r:"
-LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages,recycle-netns"  # make:/redeploy: 表示需要参数
+LONGOPTIONS="install,uninstall,start,stop,deploy,make:,redeploy:,purge-hugepages,recycle-netns,harbor-watchdog"  # make:/redeploy: 表示需要参数
 
 # 解析参数（处理 getopt 结果）
 # 兼容不同系统的 getopt，增加 -o/-l 明确指定选项
@@ -1206,6 +1239,12 @@ while true; do
             has_valid_param=1
             shift
             ;;
+        --harbor-watchdog)
+            # 单独安装/更新 Harbor 看门狗（-s 会自动装；已部署的机器不想重跑 -s 时用这个）
+            install_harbor_watchdog
+            has_valid_param=1
+            shift
+            ;;
         -f|--deploy)
             deploy
             has_valid_param=1
@@ -1250,6 +1289,7 @@ if [ $has_valid_param -eq 0 ]; then
     echo "  停止 e2b-infra 服务：$0 --stop 或 $0 -d"
     echo "  释放静态大页池：$0 --purge-hugepages（只清 HugeTLB，不动服务；建议先 -d 停服）"
     echo "  回收沙箱网络垃圾：$0 --recycle-netns（停 template-manager → 清 netns/veth/iptables → 再拉起；不碰其它组件）"
+    echo "  安装/更新 Harbor 自愈看门狗：$0 --harbor-watchdog（-s 会自动安装；Harbor :$HARBOR_HTTP_PORT 不通时自动重建）"
     echo "  部署 e2b-infra 服务：$0 --deploy 或 $0 -f"
     echo "  快速重跑单个 job：$0 --redeploy <job> 或 $0 -r <job>（例如：$0 -r template-manager，只 render+重跑该 job，跳过镜像构建）"
     echo "  构建镜像：$0 --make <镜像参数> 或 $0 -m <镜像参数>（例如：$0 -m ubuntu22.04）"

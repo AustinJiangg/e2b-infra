@@ -1,0 +1,17 @@
+[Unit]
+Description=E2B Harbor watchdog (recreate Harbor when :2900 stops answering)
+# WantedBy=docker.service：docker 每次启动（含 systemctl restart docker）后立刻检查一次，
+# 其余时间由 harbor-watchdog.timer 每分钟兜底（覆盖 dockerd 崩溃后被自动拉起等情况）
+After=docker.service
+Requisite=docker.service
+
+[Service]
+Type=oneshot
+Environment=HARBOR_DIR=@HARBOR_DIR@
+Environment=HARBOR_PORT=@HARBOR_PORT@
+ExecStart=/bin/bash @WATCHDOG_SCRIPT@
+# 最坏情况：等待 + up + 等待 + down/up + 等待
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=docker.service
