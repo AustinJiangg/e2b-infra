@@ -36,17 +36,35 @@ set +a
 # 本机 buildx 插件(v0.12.1, API 1.43)与 daemon 29.x 不兼容，强制走传统构建
 export DOCKER_BUILDKIT=0
 
+# 自建镜像的固定 tag。以前不带 tag（= latest），nomad 对 latest 每次启动任务都要重新拉，
+# docker/Harbor 一抖 api、client-proxy 就全起不来（2026-10-31 事故）。现在每个镜像额外打一个
+# 取自镜像 ID 前 12 位的 tag：内容不变 tag 就不变（不会无谓地滚动重启），内容变了 tag 变，
+# nomad job run 会自动滚动到新版本。job 里配合 force_pull = false：本机有这个 tag 就直接用。
+# tag 记在这个文件里，--only 快速重跑时复用，保证渲染出来的 job 和上次全量部署一致。
+IMAGE_TAGS_FILE="$SCRIPT_DIR/image-tags.env"
+
 if [[ -z "$ONLY_JOB" ]]; then
 BIN_DIR="./bin"
 cd "$BIN_DIR"
 
+: > "$IMAGE_TAGS_FILE.tmp"
 for dockerfile in *.Dockerfile; do
     name=${dockerfile%.Dockerfile}
-    tag="${REGISTRY_URL}/${name,,}"
-    echo "------> building $tag"
-    docker build -t "$tag" -f "$dockerfile" .
+    repo="${REGISTRY_URL}/${name,,}"
+    echo "------> building $repo"
+    docker build -t "$repo" -f "$dockerfile" .
+    id=$(docker image inspect -f '{{.Id}}' "$repo")
+    id=${id#sha256:}
+    tag="$repo:${id:0:12}"
+    docker tag "$repo" "$tag"
     docker push "$tag"
+    docker push "$repo"   # latest 照推，手工 docker pull 和旧 job 还能用
+    # api -> API_DOCKER_IMAGE、client-proxy -> CLIENT_PROXY_DOCKER_IMAGE ……（与 .env 里的变量名对应）
+    var="$(tr '[:lower:]-' '[:upper:]_' <<< "$name")_DOCKER_IMAGE"
+    echo "$var=\"${name,,}:${id:0:12}\"" >> "$IMAGE_TAGS_FILE.tmp"
+    echo "------> $tag"
 done
+mv "$IMAGE_TAGS_FILE.tmp" "$IMAGE_TAGS_FILE"
 
 declare -A IMGS=(
   [redis]="redis:${REDIS_VERSION}"
@@ -71,6 +89,18 @@ else
 fi
 
 cd "$SCRIPT_DIR"
+# 用带 tag 的镜像名覆盖 .env 里的 API_DOCKER_IMAGE=api 等（envsubst 渲染 hcl 时用）
+if [[ -f "$IMAGE_TAGS_FILE" ]]; then
+  set -a
+  source "$IMAGE_TAGS_FILE"
+  set +a
+  echo "==> 使用固定 tag 的镜像（$IMAGE_TAGS_FILE）："
+  sed 's/^/      /' "$IMAGE_TAGS_FILE"
+else
+  echo "!! 没有 $IMAGE_TAGS_FILE（还没用新版 deploy.sh 全量部署过），镜像仍是不带 tag 的 latest；"
+  echo "   跑一次 build.sh -f 生成固定 tag 后，Harbor 不在线也不影响 api/client-proxy 重启"
+fi
+
 if [[ "$DEPLOY_TYPE" == "k8s" ]]; then
   echo "==> rendering helm values.yaml ..."
   envsubst < helm/values-template.yaml > helm/values.yaml

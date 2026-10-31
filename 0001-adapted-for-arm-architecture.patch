@@ -3710,7 +3710,7 @@ index 9c284a668..fbd6d89c8 100644
      task "start" {
        driver       = "docker"
        # If we need more than 30s we will need to update the max_kill_timeout in nomad
-@@ -96,54 +65,50 @@ job "api" {
+@@ -96,54 +65,51 @@ job "api" {
        kill_signal  = "SIGTERM"
  
        resources {
@@ -3790,6 +3790,7 @@ index 9c284a668..fbd6d89c8 100644
 -        ports        = ["${port_name}"]
 +        dns_servers  = ["127.0.0.1"]
 +        image        = "${REGISTRY_URL}/${API_DOCKER_IMAGE}"
++        force_pull   = false # 镜像带固定 tag，本机有就直接用，不依赖 Harbor 在线
 +        auth_soft_fail = true #TODO:合入时需删除
 +        ports        = ["${API_PORT_NAME}"]
          args         = [
@@ -3798,7 +3799,7 @@ index 9c284a668..fbd6d89c8 100644
          ]
        }
      }
-@@ -152,11 +117,13 @@ job "api" {
+@@ -152,11 +118,14 @@ job "api" {
        driver = "docker"
  
        env {
@@ -3810,11 +3811,12 @@ index 9c284a668..fbd6d89c8 100644
 -        image = "${db_migrator_docker_image}"
 +        network_mode = "host"
 +        image = "${REGISTRY_URL}/${DB_MIGRATOR_DOCKER_IMAGE}"
++        force_pull   = false # 镜像带固定 tag，本机有就直接用，不依赖 Harbor 在线
 +        auth_soft_fail = true #TODO:合入时需删除
        }
  
        resources {
-@@ -171,3 +138,4 @@ job "api" {
+@@ -171,3 +140,4 @@ job "api" {
      }
    }
  }
@@ -4371,7 +4373,7 @@ new file mode 100644
 index 000000000..23d7d25b9
 --- /dev/null
 +++ b/iac/provider-gcp/nomad/jobs/edge.hcl
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,110 @@
 +job "client-proxy" {
 +  node_pool = "${API_NODE_POOL}"
 +  priority  = 80
@@ -4474,6 +4476,7 @@ index 000000000..23d7d25b9
 +        network_mode = "host"
 +        dns_servers  = ["127.0.0.1"]
 +        image        = "${REGISTRY_URL}/${CLIENT_PROXY_DOCKER_IMAGE}"
++        force_pull   = false # 镜像带固定 tag，本机有就直接用，不依赖 Harbor 在线
 +        auth_soft_fail = true #TODO:合入时需删除
 +        ports        = ["proxy", "health"]
 +      }

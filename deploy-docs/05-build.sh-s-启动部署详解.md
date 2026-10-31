@@ -263,12 +263,24 @@ export DOCKER_BUILDKIT=0            # 本机 buildx 插件与 daemon 版本不�
 cd bin/
 for dockerfile in *.Dockerfile:     # 典型：api / client-proxy / db-migrator
     docker build -t $REGISTRY_URL/<name> -f <name>.Dockerfile .
-    docker push  $REGISTRY_URL/<name>
+    id=<镜像 ID 前 12 位>
+    docker tag   $REGISTRY_URL/<name> $REGISTRY_URL/<name>:$id
+    docker push  $REGISTRY_URL/<name>:$id      # 固定 tag，job 实际用这个
+    docker push  $REGISTRY_URL/<name>          # latest 照推，仅供手工 pull
+    echo "<NAME>_DOCKER_IMAGE=<name>:$id" >> /opt/e2b-infra/image-tags.env
 ```
 
 构建上下文就是 `bin/`——Dockerfile 的套路是把**已编好的二进制** COPY 进
 `debian:bookworm-slim` 基础镜像（离线前提：该基础镜像已 `docker load`）。
 所以这里的 docker build 很快，没有编译发生。
+
+**固定 tag 与 `force_pull = false`**：`image-tags.env` 会在渲染前 source，覆盖 `.env` 里的
+`API_DOCKER_IMAGE=api` 等，渲染出 `.../api:<id>`；api（含 db-migrator）和 client-proxy 的 job 里
+都写了 `force_pull = false`。这样 nomad 重启任务时本机已有这个 tag 就直接用，不再去 Harbor 拉——
+以前不带 tag（= latest），nomad 对 latest **每次启动都要拉**，docker 一重启、Harbor 一时不可用，
+api/client-proxy 就全起不来。tag 取自镜像 ID：二进制没变 tag 不变（不会无谓重启），二进制变了
+tag 变、`nomad job run` 自动滚动到新版本。`deploy.sh --only`（`build.sh -r`）不构建镜像，
+直接复用 `image-tags.env`；这个文件不存在时退回 latest 并打印提示。
 
 随后把 redis 转推到私仓（离线时本地必须已有该镜像）：
 
