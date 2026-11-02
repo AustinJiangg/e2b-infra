@@ -20413,7 +20413,7 @@ index a2539a1f4..317929d94 100644
  	}
  }
 diff --git a/packages/orchestrator/internal/sandbox/network/slot.go b/packages/orchestrator/internal/sandbox/network/slot.go
-index b5cc98c8e..6ba4ce660 100644
+index b5cc98c8e..c1666db06 100644
 --- a/packages/orchestrator/internal/sandbox/network/slot.go
 +++ b/packages/orchestrator/internal/sandbox/network/slot.go
 @@ -10,6 +10,7 @@ import (
@@ -20441,6 +20441,19 @@ index b5cc98c8e..6ba4ce660 100644
  	vPeerIp net.IP
  	vEthIp  net.IP
  	vrtMask net.IPMask
+@@ -164,8 +175,11 @@ func (s *Slot) VethIP() net.IP {
+ 	return s.vEthIp
+ }
+ 
++// VethName uses its own prefix rather than upstream's "veth-": other sandbox
++// runtimes on the same host (AgentENV) name their host-side interfaces
++// veth-<n> and install iptables rules matching "veth-+".
+ func (s *Slot) VethName() string {
+-	return fmt.Sprintf("veth-%d", s.Idx)
++	return fmt.Sprintf("e2bv-%d", s.Idx)
+ }
+ 
+ func (s *Slot) VrtMask() net.IPMask {
 diff --git a/packages/orchestrator/internal/sandbox/phasetimings.go b/packages/orchestrator/internal/sandbox/phasetimings.go
 new file mode 100644
 index 000000000..44fa4b6a7

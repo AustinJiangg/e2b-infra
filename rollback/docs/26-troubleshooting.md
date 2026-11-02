@@ -142,7 +142,7 @@ iptables -t nat -S | wc -l
 bash /opt/e2b-infra/build.sh --recycle-netns
 ```
 
-它优雅停 `template-manager-system` → 清 netns / veth / iptables（只匹配 `ns-<n>`、`veth-<n>` 和 `10.11.x.y/32` 的 MASQUERADE，跳过仍有进程的槽位）→ 再拉起。**会带走全部沙箱与 checkpoint**。
+它优雅停 `template-manager-system` → 清 netns / veth / iptables（只匹配 `ns-<n>`、`e2bv-<n>` 和槽位地址池内的 `/32` MASQUERADE，跳过仍有进程的槽位）→ 再拉起。**会带走全部沙箱与 checkpoint**。
 跑的是自建二进制时不要直接用它（它按 RPM 的样子把 job 拉回来），只取清理那一步，见 [`deploy-docs/06-日常运维手册.md`](../../deploy-docs/06-日常运维手册.md) §8.1。
 清完之后等 netns 数连续几分钟不变再做性能测试。
 
@@ -215,11 +215,11 @@ python3 -c 'from e2b import Sandbox, CheckpointInfo; print(Sandbox.checkpoint)'
 cat /proc/sys/net/netfilter/nf_conntrack_count
 awk '{p=$3; st=(p=="tcp")?$6:"-"; s=""; d=""; dp=""
   for(k=4;k<=NF;k++){ if(s==""&&$k~/^src=/)s=substr($k,5); else if(d==""&&$k~/^dst=/)d=substr($k,5); else if(dp==""&&$k~/^dport=/)dp=substr($k,7) }
-  sb=(s~/^10\.1[12]\./||d~/^10\.1[12]\./)?"沙箱":"非沙箱"; a=($0~/ASSURED/)?"ASSURED":"-"
+  sb=(s~/^10\.1[34]\./||d~/^10\.1[34]\./)?"沙箱":"非沙箱"; a=($0~/ASSURED/)?"ASSURED":"-"
   c[sb" "p" "st" dport="dp" "a]++} END{for(x in c) print c[x], x}' /proc/net/nf_conntrack | sort -rn | head -10
 ```
 
-`10.11.x.y` 是槽位地址、`10.12.x.y` 是 veth 地址（默认网段）。
+`10.13.x.y` 是槽位地址、`10.14.x.y` 是 veth 地址（`.env` 里的地址池；上游默认是 10.11/10.12，同机有 AgentENV 时改用了 10.13/10.14，见部署指南 §0.6）。
 
 **原因**：宿主侧清扫每批做一次整表 dump，代价约 4.6 ms + 1 µs / 条（实测更高），与**整张宿主表**成正比，不管表里是不是沙箱的连接。
 920B 长跑里表的约 95% 与沙箱无关：宿主本机访问 lo:80 的短连接留下的 `TIME_WAIT`，和本机 DNS 查询；滚动负载跑到第二个小时，
@@ -241,9 +241,9 @@ c=$(docker ps -q --filter ancestor="$(docker ps --format '{{.Image}}' | grep -m1
 docker logs --since 60s "$c" 2>&1 | grep -c 'invalid host'
 ```
 
-第一条命令里如果不带 `-i` 的 `--dport 80 -j REDIRECT --to-ports 3002` 排在各槽位的 `-d 192.0.2.1/32 -i veth-<n> … --to-ports 5010` 前面，就是这一条。
+第一条命令里如果不带 `-i`、也不带 `--dst-type LOCAL` 的 `--dport 80 -j REDIRECT --to-ports 3002` 排在各槽位的 `-d 192.0.2.1/32 -i veth-<n> … --to-ports 5010` 前面，就是这一条（老部署；现在的 `build.sh -s` 只装带 `--dst-type LOCAL` 的那条，见下）。
 
 **原因**：部署脚本装的 80 → 3002 转发不限入口网卡，排在 hyperloop 规则前面，guest 发往 hyperloop 的连接被转给了 client-proxy（[附录 C §13.1](C-evolution-and-cases.md#131-80-端口的转发规则劫持-hyperloop-请求)）。
 
-**怎么处置**：checkpoint / restore 不受影响。用户 09-30 决定暂不改；要改时给该规则加 `! -i veth+` 并删掉旧规则，命令见 [附录 C §13.1](C-evolution-and-cases.md#131-80-端口的转发规则劫持-hyperloop-请求)。
+**怎么处置**：checkpoint / restore 不受影响。已修复：`build.sh -s` 现在把这条规则限定为 `-m addrtype --dst-type LOCAL`，并先删掉老的那条；老部署重跑一次 `build.sh -s` 即可，详见 [附录 C §13.1](C-evolution-and-cases.md#131-80-端口的转发规则劫持-hyperloop-请求)。
 日志量大时注意 client-proxy 所在盘的余量。

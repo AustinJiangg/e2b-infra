@@ -73,6 +73,8 @@ job "template-manager-system" {
         ORCHESTRATOR_SERVICES         = "orchestrator,template-manager"
         E2B_FC_NETNS_EXEC_HELPER      = "/opt/e2b-infra/bin/fc-netns-exec"
         MAX_STARTING_INSTANCES_PER_NODE = "30"
+        SANDBOXES_HOST_NETWORK_CIDR   = "${SANDBOXES_HOST_NETWORK_CIDR}"
+        SANDBOXES_VRT_NETWORK_CIDR    = "${SANDBOXES_VRT_NETWORK_CIDR}"
         LOGS_COLLECTOR_PUBLIC_IP      = "${LOGS_COLLECTOR_PUBLIC_IP}"
         ALLOW_SANDBOX_INTERNET        = "${ALLOW_SANDBOX_INTERNET}"
         SHARED_CHUNK_CACHE_PATH       = "${SHARED_CHUNK_CACHE_PATH}"

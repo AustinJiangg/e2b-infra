@@ -285,7 +285,20 @@ hugepages=$(($hugepages_ram * 1024 / $hugepage_size_in_kib))
 base_hugepages_percentage=20
 base_hugepages=$(($hugepages * $base_hugepages_percentage / 100))
 base_hugepages=$(remove_decimal $base_hugepages)
-echo "- Allocating $base_hugepages huge pages ($base_hugepages_percentage%) for base usage"
+# 静态池开机就从内存里划走、一直占着，其他进程（同机的 AgentENV 等）用不了。内存特别大的机器上
+# 20% 动辄几百 GB（2T 内存约 440GB），所以再加一道上限，默认 64GB，可在 .env 用
+# HUGEPAGES_BASE_MAX_MIB 调整。超出静态池的部分照旧走下面 80% 的 overcommit，按需分配、用完归还。
+base_hugepages_max_mib=${HUGEPAGES_BASE_MAX_MIB:-65536}
+if [[ ! "$base_hugepages_max_mib" =~ ^[0-9]+$ ]]; then
+    echo "HUGEPAGES_BASE_MAX_MIB 必须是非负整数（MiB），当前为：'${base_hugepages_max_mib}'" >&2
+    exit 1
+fi
+base_hugepages_max=$(($base_hugepages_max_mib * 1024 / $hugepage_size_in_kib))
+if ((base_hugepages > base_hugepages_max)); then
+    echo "- Base pool capped at $base_hugepages_max_mib MiB (20% would be $(($base_hugepages * $hugepage_size_in_kib / 1024)) MiB)"
+    base_hugepages=$base_hugepages_max
+fi
+echo "- Allocating $base_hugepages huge pages (min of $base_hugepages_percentage% and $base_hugepages_max_mib MiB) for base usage"
 echo $base_hugepages >/proc/sys/vm/nr_hugepages
 
 overcommitment_hugepages_percentage=$((100 - $base_hugepages_percentage))

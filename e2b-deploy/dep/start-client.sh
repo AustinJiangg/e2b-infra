@@ -231,7 +231,20 @@ hugepages=$(($hugepages_ram * 1024 / $hugepage_size_in_kib))
 base_hugepages_percentage=20
 base_hugepages=$(($hugepages * $base_hugepages_percentage / 100))
 base_hugepages=$(remove_decimal $base_hugepages)
-echo "- Allocating $base_hugepages huge pages ($base_hugepages_percentage%) for base usage"
+# 静态池开机就从内存里划走、一直占着，其他进程（同机的 AgentENV 等）用不了。内存特别大的机器上
+# 20% 动辄几百 GB（2T 内存约 440GB），所以再加一道上限，默认 64GB，可在 .env 用
+# HUGEPAGES_BASE_MAX_MIB 调整。超出静态池的部分照旧走下面 80% 的 overcommit，按需分配、用完归还。
+base_hugepages_max_mib=${HUGEPAGES_BASE_MAX_MIB:-65536}
+if [[ ! "$base_hugepages_max_mib" =~ ^[0-9]+$ ]]; then
+    echo "HUGEPAGES_BASE_MAX_MIB 必须是非负整数（MiB），当前为：'${base_hugepages_max_mib}'" >&2
+    exit 1
+fi
+base_hugepages_max=$(($base_hugepages_max_mib * 1024 / $hugepage_size_in_kib))
+if ((base_hugepages > base_hugepages_max)); then
+    echo "- Base pool capped at $base_hugepages_max_mib MiB (20% would be $(($base_hugepages * $hugepage_size_in_kib / 1024)) MiB)"
+    base_hugepages=$base_hugepages_max
+fi
+echo "- Allocating $base_hugepages huge pages (min of $base_hugepages_percentage% and $base_hugepages_max_mib MiB) for base usage"
 echo $base_hugepages >/proc/sys/vm/nr_hugepages
 
 overcommitment_hugepages_percentage=$((100 - $base_hugepages_percentage))
@@ -245,8 +258,19 @@ echo $overcommitment_hugepages >/proc/sys/vm/nr_overcommit_hugepages
 
 # Idempotent: drop any existing 'nameserver 127.0.0.1' lines first, then add exactly one
 # at the top. Re-running this script used to stack a new duplicate line on every run.
-sed -i '/^nameserver 127\.0\.0\.1$/d' /etc/resolv.conf
-sed -i '1i nameserver 127.0.0.1' /etc/resolv.conf
+# 有的机器上 /etc/resolv.conf 根本不存在（没开 systemd-resolved、NetworkManager 也没配 DNS，
+# 上外网走 http_proxy）：对不存在的文件 sed -i 会报错，set -e 下脚本直接退出；空文件则
+# '1i' 什么也插不进去。这两种情况直接写一行。只写 127.0.0.1、不补上游：同机的 AgentENV
+# 会读这个文件给沙箱选 DNS，它跳过回环地址，只有这一行时行为与文件不存在时一致。
+if [ -s /etc/resolv.conf ]; then
+    sed -i '/^nameserver 127\.0\.0\.1$/d' /etc/resolv.conf
+fi
+if [ -s /etc/resolv.conf ]; then
+    sed -i '1i nameserver 127.0.0.1' /etc/resolv.conf
+else
+    rm -f /etc/resolv.conf   # 也可能是指向不存在目标的悬空软链接
+    echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+fi
 mkdir -p /etc/dnsmasq.d
 # Idempotent: only append the consul forwarder once
 grep -qxF 'server=/consul/127.0.0.1#8600' /etc/dnsmasq.d/consul.conf 2>/dev/null \

@@ -672,8 +672,15 @@ function start() {
     # iptable_clean
 
     # -w 等待锁；-C 检查是否存在；|| 不存在就添加
-    iptables -w -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
-    || iptables -w -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002
+    # 外部机器把 *.e2b.app 解析到本机 IP 后访问 80 端口，转给 client-proxy（3002）。
+    # 只接管目的地址是本机的流量：老规则不带 --dst-type LOCAL，会把经本机转发的所有 80 端口
+    # 流量一起截走——同机 AgentENV 沙箱、docker/podman 容器访问外网 http，以及部署之后才新建的
+    # e2b 槽位（它们的 TCP 代理规则排在这条后面）。先删掉老规则，再加新的。
+    while iptables -w -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002 2>/dev/null; do
+        iptables -w -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002
+    done
+    iptables -w -t nat -C PREROUTING -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-port 3002 2>/dev/null \
+    || iptables -w -t nat -A PREROUTING -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-port 3002
     iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
     || iptables -w -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002
     success "e2b-infra 服务启动完成！所有组件健康检查通过✅"
@@ -898,17 +905,22 @@ function busy_slot_indexes() {
     return 0
 }
 
+# 宿主机侧 veth 的名字前缀，与 0001 补丁里 slot.go 的 VethName() 保持一致。上游是 veth-<idx>，
+# 补丁改成了 e2bv-<idx>：同机的 AgentENV 也叫 veth-<idx>，并装了匹配 "veth-+" 的 iptables 规则。
+SANDBOX_VETH_PREFIX="e2bv-"
+
 # 清理沙箱残留的网络资源。命名规则来自 orchestrator 的
-# internal/sandbox/network/slot.go：netns 叫 ns-<idx>、宿主机侧 veth 叫 veth-<idx>。
-# 严格锚定这两个模式——同机可能还跑着别的东西（flannel 的 vethXXXX、containerd 的
-# cni-<uuid>、cni0、docker0、virbr0），误删会把别人的网络一起端掉。
+# internal/sandbox/network/slot.go：netns 叫 ns-<idx>、宿主机侧 veth 叫 ${SANDBOX_VETH_PREFIX}<idx>。
+# 严格锚定这两个模式——同机可能还跑着别的东西（AgentENV 的 veth-<idx>、flannel 的 vethXXXX、
+# containerd 的 cni-<uuid>、cni0、docker0、virbr0），误删会把别人的网络一起端掉。
+# 老版本（前缀还是 veth-）留下的残留不在这里清，见 single-node-offline-deploy.md 的同机部署一节。
 function purge_sandbox_netns() {
     info "清理沙箱网络资源（netns / veth）..."
 
     local ns_list veth_list ns_count=0 veth_count=0 failed=0
 
     ns_list=$(ip netns list 2>/dev/null | awk '{print $1}' | grep -E '^ns-[0-9]+$')
-    veth_list=$(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^veth-[0-9]+$')
+    veth_list=$(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E "^${SANDBOX_VETH_PREFIX}[0-9]+\$")
 
     # 有沙箱在跑的槽位整条链路都保留：netns、veth 和它的 iptables 规则
     local busy busy_count=0
@@ -916,7 +928,7 @@ function purge_sandbox_netns() {
     if [ -n "$busy" ]; then
         busy_count=$(printf '%s\n' "$busy" | wc -l)
         ns_list=$(printf '%s\n' "$ns_list" | grep -vxF "$(printf 'ns-%s\n' $busy)")
-        veth_list=$(printf '%s\n' "$veth_list" | grep -vxF "$(printf 'veth-%s\n' $busy)")
+        veth_list=$(printf '%s\n' "$veth_list" | grep -vxF "$(printf "${SANDBOX_VETH_PREFIX}%s\n" $busy)")
         info "跳过 $busy_count 个在用槽位（netns 里有进程，沙箱正在跑）"
     fi
 
@@ -943,7 +955,7 @@ function purge_sandbox_netns() {
 
     local ns_left veth_left
     ns_left=$(( $(ip netns list 2>/dev/null | awk '{print $1}' | grep -cE '^ns-[0-9]+$') - busy_count ))
-    veth_left=$(( $(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^veth-[0-9]+$') - busy_count ))
+    veth_left=$(( $(ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE "^${SANDBOX_VETH_PREFIX}[0-9]+\$") - busy_count ))
     # 清理期间恰好有沙箱退出的话，减出来会是负数，夹到 0
     [ "$ns_left" -lt 0 ] && ns_left=0
     [ "$veth_left" -lt 0 ] && veth_left=0
@@ -958,14 +970,40 @@ function purge_sandbox_netns() {
 # 删掉 netns / veth 并不会带走 orchestrator 为每个槽位写进 iptables 的规则。每个槽位在
 # 宿主机上留 7 条 nat + 2 条 filter（见 orchestrator internal/sandbox/network 的
 # network.go 与 tcpproxy.go）：
-#   nat/PREROUTING   -i veth-<n> …  hyperloop 80→5010、NFS 2049→5011、portmapper 111→5012，
+#   nat/PREROUTING   -i e2bv-<n> …  hyperloop 80→5010、NFS 2049→5011、portmapper 111→5012，
 #                                   以及 TCP 代理三条 80→5016 / 443→5017 / 其余→5018
-#   nat/POSTROUTING  -s 10.11.x.y/32 -o <网卡> -j MASQUERADE   （10.11.0.0/16 是
-#                                   orchestrator 的 defaultHostNetworkCIDR）
-#   filter/FORWARD   -i veth-<n> -o <网卡> -j ACCEPT 和反向一条
+#   nat/POSTROUTING  -s <槽位宿主机 IP>/32 -o <网卡> -j MASQUERADE   （槽位宿主机 IP 取自
+#                                   .env 的 SANDBOXES_HOST_NETWORK_CIDR）
+#   filter/FORWARD   -i e2bv-<n> -o <网卡> -j ACCEPT 和反向一条
 # 网卡没了这些规则也不会自动消失，只是永远不匹配。攒到几万条之后每次 iptables 调用都要
 # 把整张表读出来再写回去，部署收尾会明显变慢（同机再跑个 k3s，kube-proxy 抢 xtables 锁
 # 会让这一步从瞬间变成一两分钟）。
+function ip_to_int() {
+    local IFS=. a b c d
+    read -r a b c d <<<"$1"
+    echo $(( (a << 24) | (b << 16) | (c << 8) | d ))
+}
+
+function int_to_ip() {
+    echo "$(( ($1 >> 24) & 255 )).$(( ($1 >> 16) & 255 )).$(( ($1 >> 8) & 255 )).$(( $1 & 255 ))"
+}
+
+# 从 iptables-save 的输出里挑出源地址落在 orchestrator 宿主机地址池里的 /32 MASQUERADE。
+# 按网段做精确的成员判断，不能用正则前缀：同机 AgentENV 有一条 -s 10.11.0.0/16 -j MASQUERADE，
+# 地址池换过之后老前缀的正则会误伤它。
+function host_cidr_masquerade_rules() {
+    local cidr="${SANDBOXES_HOST_NETWORK_CIDR:-10.11.0.0/16}" net bits mask line ip
+    net=$(ip_to_int "${cidr%/*}")
+    bits=${cidr#*/}
+    mask=$(( bits == 0 ? 0 : (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
+    while read -r line; do
+        ip=${line#-A POSTROUTING -s }
+        ip=${ip%%/32 *}
+        (( ($(ip_to_int "$ip") & mask) == (net & mask) )) && printf '%s\n' "$line"
+    done < <(grep -E '^-A POSTROUTING -s [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/32 .*-j MASQUERADE')
+    return 0
+}
+
 function purge_sandbox_iptables() {
     command -v iptables-save >/dev/null 2>&1 || { warn "没有 iptables-save，跳过规则清理"; return 0; }
 
@@ -973,23 +1011,25 @@ function purge_sandbox_iptables() {
     nat_before=$(iptables -t nat -S 2>/dev/null | wc -l)
     filter_before=$(iptables -t filter -S 2>/dev/null | wc -l)
 
-    nat_del=$(iptables-save -t nat 2>/dev/null \
-        | grep -E -e '^-A PREROUTING .*-i veth-[0-9]+( |$)' \
-                  -e '^-A POSTROUTING -s 10\.11\.[0-9]+\.[0-9]+/32 .*-j MASQUERADE' \
+    local nat_rules
+    nat_rules=$(iptables-save -t nat 2>/dev/null)
+    nat_del=$( { printf '%s\n' "$nat_rules" | grep -E "^-A PREROUTING .*-i ${SANDBOX_VETH_PREFIX}[0-9]+( |\$)"
+                 printf '%s\n' "$nat_rules" | host_cidr_masquerade_rules; } \
         | sed 's/^-A /-D /')
 
     filter_del=$(iptables-save -t filter 2>/dev/null \
-        | grep -E '^-A FORWARD .*-[io] veth-[0-9]+( |$)' \
+        | grep -E "^-A FORWARD .*-[io] ${SANDBOX_VETH_PREFIX}[0-9]+( |\$)" \
         | sed 's/^-A /-D /')
 
-    # 在用槽位的规则原样留下。veth-<n> 按名字排除（带尾随空格，免得 veth-5 连 veth-50
+    # 在用槽位的规则原样留下。e2bv-<n> 按名字排除（带尾随空格，免得 e2bv-5 连 e2bv-50
     # 一起匹配）；POSTROUTING 那条不带网卡名，只能按槽位的宿主机 IP 排除——
-    # 10.11.0.0/16 依次分配，槽位 n 拿到 10.11.<n/256>.<n%256>（见 slot.go 的注释）。
-    local busy keep i
+    # 宿主机地址池依次分配，槽位 n 拿到网络地址 + n（见 slot.go 的注释）。
+    local busy keep i host_net
     busy=$(busy_slot_indexes)
     if [ -n "$busy" ]; then
-        keep=$( printf -- 'veth-%s \n' $busy
-                for i in $busy; do printf -- '-s 10.11.%d.%d/32 \n' $((i / 256)) $((i % 256)); done )
+        host_net=$(ip_to_int "$(printf '%s' "${SANDBOXES_HOST_NETWORK_CIDR:-10.11.0.0/16}" | cut -d/ -f1)")
+        keep=$( printf -- "${SANDBOX_VETH_PREFIX}%s \n" $busy
+                for i in $busy; do printf -- '-s %s/32 \n' "$(int_to_ip $((host_net + i)))"; done )
         nat_del=$(printf '%s\n' "$nat_del" | grep -vF "$keep")
         filter_del=$(printf '%s\n' "$filter_del" | grep -vF "$keep")
     fi

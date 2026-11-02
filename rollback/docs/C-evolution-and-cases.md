@@ -864,7 +864,10 @@ guest 访问外部 80 端口的连接按规则顺序同样会被转到 client-pr
 **影响**：checkpoint / restore 不经过这条链路，本手册的功能与性能结果不受影响（长跑全部 0 不一致）。受影响的是依赖 hyperloop 的 guest 功能，
 以及 client-proxy 的日志量与宿主 conntrack 表（被劫持的连接也留下条目，见 [附录 C §8.6](#86-conntrack-清理占了冻结窗口)）。
 
-**处置**：**用户 09-30 决定暂不改。** 将来要改时，给这条规则加 `! -i veth+`，只接住不是从槽位 veth 进来的流量，两个 `build.sh` 都要改：
+**处置**：用户 09-30 决定暂不改；11 月为了与 AgentENV 同机部署改掉了（见部署指南 §0.6）。最终没有用下面这条 `! -i veth+`，
+而是只接管**目的地址是本机**的流量（`-m addrtype --dst-type LOCAL`）：hyperloop 的 `192.0.2.1` 不配在任何网卡上，
+不算本机地址，自然不再被截；同机 AgentENV 沙箱、docker/podman 容器经本机转发出去的 80 端口流量也一起避开了，
+`! -i veth+` 只管得了前者（而且同机 AgentENV 的网卡也叫 `veth-<n>`）。当初记下的方案留作对照：
 
 ```bash
 iptables -w -t nat -C PREROUTING ! -i veth+ -p tcp --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \

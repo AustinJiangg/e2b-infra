@@ -125,7 +125,7 @@ def host_net_health() -> dict:
 
     return {
         "sandbox_netns": _count(r"ip netns list 2>/dev/null | awk '{print $1}' | grep -cE '^ns-[0-9]+$'"),
-        "sandbox_veth": _count(r"ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^veth-[0-9]+$'"),
+        "sandbox_veth": _count(r"ip -o link 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -cE '^e2bv-[0-9]+$'"),
         "host_links": _count(r"ip -o link 2>/dev/null | wc -l"),
     }
 

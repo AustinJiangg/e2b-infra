@@ -78,6 +78,7 @@ yum install -y dnsmasq
 临时关闭 SELinux（enforcing→permissive）。沙箱要做大量非常规动作（nbd 设备、netns、
 raw_exec、hugetlbfs），SELinux 策略未适配，直接放开。注意这**不改** `/etc/selinux/config`，
 重启后会恢复 enforcing——重启后的恢复动作之一（见 06 篇 §8.4）。
+专门跑沙箱的机器建议直接持久化为 permissive，命令见部署指南 `single-node-offline-deploy.md` §0.4。
 
 ### 3.3 `install_postgre`（注意函数名没有 s）
 

@@ -12,7 +12,8 @@
 - openEuler / aarch64。
 - 构建 RPM 需要 `rpmbuild` 与 go 工具链（工具链随源码包提供）；也可在有网机器上把 RPM 构建好再拷到目标机。
 - 需要一个可用的 **yum 源**和 **pip 源**（在线或本地镜像）——见文末「仍需联网的部分」。
-- 会自动 `setenforce 0`（关闭 SELinux）。
+- `build.sh -i` 会 `setenforce 0`，但只在本次开机内有效，重启后要持久化见 §0.4。
+- 同机已经部署了 AgentENV 等别的沙箱系统时，先看 §0.6。
 
 ### 0.1 Docker（需自备，脚本不装）
 
@@ -124,14 +125,31 @@ sha256sum /lib/modules/$(uname -r)/kernel/drivers/block/nbd.ko   # 仍是 patch 
 4. 本机的模块是未压缩 `.ko`（上面 hash 对比已验证）。若在别的机器上原版是 `nbd.ko.xz`/
    `nbd.ko.zst` 压缩形态，覆盖前要先把压缩原版移走，否则目录里会同时存在两个候选模块。
 
+#### 没有对应当前内核的 patch 版时：用内核自带模块
+
+orchestrator 启动时读 `/sys/module/nbd/parameters/nbds_max`，模块没加载就报 `NBD module not loaded`
+起不来。部署脚本不会替你加载，也没有自动兜底；没做固化的机器上即使有人 `modprobe nbd`，也只有内核
+默认的 16 个设备。手头没有 patch 版时直接用内核自带模块，只做上面的第 3 步：
+
+```bash
+echo nbd | sudo tee /etc/modules-load.d/nbd.conf
+echo "options nbd nbds_max=512" | sudo tee /etc/modprobe.d/nbd.conf
+sudo modprobe nbd
+cat /sys/module/nbd/parameters/nbds_max     # 512
+ls /dev/nbd* | wc -l                        # 512
+```
+
+每个运行中的沙箱占一个 nbd 设备，`nbds_max` 就是单机同时运行沙箱数的上限。
+
 ### 0.3 `net.ipv4.ip_forward` 必须为 1（且要在 `build.sh -s` 之前生效）
 
-orchestrator 的每个沙箱槽位是一个 netns：里面是 `eth0`（veth，10.12.x.x/31）↔ `tap0`
-（169.254.0.22/30），靠 netns 内的 DNAT/SNAT 把宿主侧地址映射到 guest：
+orchestrator 的每个沙箱槽位是一个 netns：里面是 `eth0`（veth，10.14.x.x/31）↔ `tap0`
+（169.254.0.22/30），靠 netns 内的 DNAT/SNAT 把宿主侧地址映射到 guest（地址池见 §0.6，
+上游默认是 10.11/10.12）：
 
 ```
--A PREROUTING  -d 10.11.0.2/32 -i eth0 -j DNAT --to-destination 169.254.0.21
--A POSTROUTING -s 169.254.0.21/32 -o eth0 -j SNAT --to-source 10.11.0.2
+-A PREROUTING  -d 10.13.0.2/32 -i eth0 -j DNAT --to-destination 169.254.0.21
+-A POSTROUTING -s 169.254.0.21/32 -o eth0 -j SNAT --to-source 10.13.0.2
 ```
 
 `ip_forward=0` 时 netns 内这两张网卡之间不转发，宿主就探不到 guest 里的 envd，**建模板会在
@@ -174,6 +192,107 @@ for ns in $(ip netns list | awk '{print $1}' | head -5); do
   printf '%s %s\n' "$ns" "$(ip netns exec "$ns" sysctl -n net.ipv4.ip_forward)"
 done
 ```
+
+### 0.4 SELinux：持久设为 permissive
+
+沙箱要做大量 SELinux 策略没有适配的动作（nbd、hugetlbfs、nomad raw_exec 拉起的 firecracker），
+`build.sh -i` 里的 `setenforce 0` 只在本次开机内有效。机器重启后回到 Enforcing，nomad / consul
+会因为二进制的标签是 `user_tmp_t` 而报 `203/EXEC` 起不来。专门用来跑沙箱的机器上直接持久化：
+
+```bash
+setenforce 0
+sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config
+getenforce                                   # Permissive
+```
+
+permissive 只记录、不拦截，对同机别的服务不会多出任何限制；但它是整机的安全设置，机器有别人在用时
+先打招呼。不要改成 `disabled`：要重启，以后想再打开还得给整个文件系统重新打标签。
+
+### 0.5 `/etc/resolv.conf`
+
+`start-client.sh` 把 `nameserver 127.0.0.1` 放到 `/etc/resolv.conf` 第一行，本机的 consul 域名与
+`*.e2b.app` 都靠它走 dnsmasq 解析。有的机器上这个文件根本不存在（没开 systemd-resolved、
+NetworkManager 也没配 DNS，上外网走 `http_proxy`）——脚本会直接写一个只有这一行的文件，不用手动建。
+
+只写 127.0.0.1、不补上游 nameserver 是有意的：同机的 AgentENV 会读这个文件给它的沙箱选 DNS，
+它跳过回环地址，只有这一行时它的行为和文件不存在时一样。
+
+NetworkManager 在跑的机器上，网卡重连时它可能把这个文件重写掉，e2b 的解析要等下次 `build.sh -s`
+才恢复。先看它管不管这个文件：
+
+```bash
+NetworkManager --print-config 2>/dev/null | sed -n '/^\[main\]/,/^\[/p'
+```
+
+输出里没有 `dns=none` 或 `rc-manager=unmanaged` 的话，让它别管：
+
+```bash
+printf '[main]\ndns=none\n' > /etc/NetworkManager/conf.d/90-dns-none.conf
+systemctl reload NetworkManager
+```
+
+### 0.6 与 AgentENV 同机部署
+
+[AgentENV](https://github.com/kvcache-ai/AgentENV) 的沙箱网络和上游 e2b 几乎是同一套设计，默认配置下
+同机部署会互相打坏（以前在同一台机器上装过两者，先起来的那个能用、另一个不行，就是这个原因）：
+
+| | 上游 e2b | AgentENV（默认） | 本仓库现在 |
+|---|---|---|---|
+| 宿主机侧 veth | `veth-<n>`，n 从 1 起 | `veth-<n>`，n 从 1 起 | `e2bv-<n>` |
+| 宿主机访问沙箱的地址池 | `10.11.0.0/16` | `10.11.0.0/16` | `10.13.0.0/16` |
+| veth 对的地址池 | `10.12.0.0/16` | `10.12.0.0/16` | `10.14.0.0/16` |
+| 宿主机路由 | `10.11.x.y/32 via 10.12.…` | 同左 | `10.13.x.y/32 via 10.14.…` |
+
+撞在一起时的具体表现：
+
+- 网卡名、/32 路由同名，后建的一方报 `File exists`。e2b 启动时要预建约 300 个槽位，第一个 `veth-1`
+  就会失败。
+- AgentENV 在宿主机 `INPUT` 链插了 `-i veth-+ -s 10.11.0.0/16 -j REJECT`。e2b 沙箱的出网 TCP、
+  hyperloop 都要被 REDIRECT 到宿主机上的端口，走 INPUT，全被它拒掉。
+- 老的 `PREROUTING --dport 80 -j REDIRECT --to-port 3002` 不限目的地址，AgentENV 沙箱、
+  docker/podman 容器访问外网 http 都会被它截给 e2b 的 client-proxy。现在只接管目的地址是本机的流量
+  （`-m addrtype --dst-type LOCAL`），`build.sh -s` 会先删掉老的那条。
+- 老的 `build.sh -d` / `--recycle-netns` 删的是所有 `veth-<n>`，会把 AgentENV 正在用的网卡一起删掉。
+  现在只认 `e2bv-<n>`。
+
+现在的 e2b 用 `e2bv-` 前缀（0001 补丁里 `slot.go` 的 `VethName()`）和 `.env` 里的
+`SANDBOXES_HOST_NETWORK_CIDR` / `SANDBOXES_VRT_NETWORK_CIDR`（经 `template-manager.hcl` 传给 orchestrator），
+上面几条都不再重叠，AgentENV 一侧不用改。两个地址池不能与本机、内网在用的网段重叠，换之前先看：
+
+```bash
+ip -4 route | grep -E '^10\.1[34]\.'; ip -4 addr | grep -E 'inet 10\.1[34]\.'
+iptables-save | grep -cE '10\.1[34]\.'                       # 应为 0
+docker network inspect $(docker network ls -q) -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
+```
+
+**装了老版本 e2b 的机器**（前缀还是 `veth-`、地址池还是 10.11/10.12）：新的清理逻辑不再碰 `veth-<n>`
+和 10.11 的规则，老残留要在**确认同机没有 AgentENV** 之后手工清一次（有 AgentENV 时这些名字和网段是
+它在用，不能清）：
+
+```bash
+bash /opt/e2b-infra/build.sh -d               # 先停 e2b
+for n in $(ip netns list | awk '{print $1}' | grep -E '^ns-[0-9]+$'); do ip netns delete "$n"; done
+for l in $(ip -o link | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^veth-[0-9]+$'); do ip link delete "$l"; done
+iptables-save -t nat | grep -E -e '^-A PREROUTING .*-i veth-[0-9]+( |$)' -e '^-A POSTROUTING -s 10\.11\.[0-9]+\.[0-9]+/32 .*-j MASQUERADE' \
+  | sed 's/^-A /-D /' | { printf '*nat\n'; cat; printf 'COMMIT\n'; } | iptables-restore --noflush
+iptables-save -t filter | grep -E '^-A FORWARD .*-[io] veth-[0-9]+( |$)' \
+  | sed 's/^-A /-D /' | { printf '*filter\n'; cat; printf 'COMMIT\n'; } | iptables-restore --noflush
+```
+
+**部署后核对**：
+
+```bash
+ip -o link | grep -cE ': e2bv-[0-9]+'          # e2b 的槽位数（几百个）
+ip -o link | grep -cE ': veth-[0-9]+'          # AgentENV 的槽位数，应与部署前一样
+ip -4 route | grep -cE '^10\.13\.'             # e2b 的槽位路由
+iptables -t nat -S PREROUTING | grep 3002      # 只应有带 --dst-type LOCAL 的那条
+```
+
+两边共用的内核资源不因换网段而分开：邻居表（`net.ipv4.neigh.default.gc_thresh*`）、conntrack 表
+（`net.netfilter.nf_conntrack_max`）、宿主机网卡总数。几百个沙箱用不着调；往几万个走时先查这几项。
+
+另外两项会占用 AgentENV 可用的资源：静态大页池（`.env` 的 `HUGEPAGES_BASE_MAX_MIB`，默认最多 64GB，
+见 `init-client.sh`）和 e2b 的暖池槽位。
 
 ---
 

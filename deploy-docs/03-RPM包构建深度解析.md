@@ -38,7 +38,7 @@ SOURCES 目录，所以下面所有文件直接放在仓库根即可。
 ### 2.2 补丁体系
 
 ```
-Patch1: 0001-adapted-for-arm-architecture.patch   （898253 字节，178 个文件，唯一的下游补丁）
+Patch1: 0001-adapted-for-arm-architecture.patch   （898699 字节，178 个文件，唯一的下游补丁）
 ```
 
 `%autosetup -p1` 会在解包后应用它（`-p1` 去掉路径前缀 `a/`、`b/`）。
