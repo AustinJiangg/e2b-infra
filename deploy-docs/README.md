@@ -38,6 +38,7 @@
 | [`10-模板与快照存储位置梳理.md`](10-模板与快照存储位置梳理.md) | 模板/快照到底存在哪：本地缓存 vs 持久化存储的分层、`STORAGE_PROVIDER` 如何选 provider、为什么 `.env` 里的 MinIO 在 nomad 单机路径下没生效、想换成 MinIO 的完整改法与回滚 |
 | [`11-沙箱绑核与NUMA亲和.md`](11-沙箱绑核与NUMA亲和.md) | 多核大内存机器上怎么把沙箱限制到指定 CPU：两棵 cgroup 树的结构（为什么沙箱不受 hcl 的 resources 约束）、三个方案对比、cpuset 绑核的完整操作（持久化是可选项，默认不绑才是常态）、按大页余量换算并发上限 |
 | [`12-orchestrator资源配额调优.md`](12-orchestrator资源配额调优.md) | `template-manager.hcl` 里 `resources { memory, cpu }` 管什么（只管 orchestrator 与模板构建，不管沙箱）、怎么量实测峰值定值、改动必须同步的三个文件、配额不足时从 OOM 到 api 恒 503 的连锁反应链 |
+| [`13-与AgentENV同机部署.md`](13-与AgentENV同机部署.md) | 同一台机器上已经跑着 AgentENV 时：两边沙箱网络逐项对比（网卡名、地址池、路由、各自装的 iptables 规则）、四处冲突与两种部署顺序下的表现、e2b 一侧的改动（`e2bv-` 前缀、10.13/10.14 地址池、清理逻辑与 80 端口规则收窄）、以后换网段或前缀动哪几处、仍然共用的内核资源 |
 
 ## 推荐阅读路径
 
@@ -55,7 +56,7 @@
    环境怎么配、源码工作树怎么搭、改完代码怎么重新生成 patch 和出包。
 
 **要做变更/调参数的人**：读完上面后直接用 `single-node-offline-deploy.md` 第 5 节的场景表操作；
-涉及 CPU/NUMA 资源隔离的调优另见 `11-沙箱绑核与NUMA亲和.md`。
+涉及 CPU/NUMA 资源隔离的调优另见 `11-沙箱绑核与NUMA亲和.md`；机器上已有 AgentENV 等别的沙箱系统时先读 `13-与AgentENV同机部署.md`。
 
 ## 全文约定
 

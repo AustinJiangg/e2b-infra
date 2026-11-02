@@ -266,9 +266,9 @@ iptables 的 **nat 表**负责地址/端口转换,包在生命周期的不同阶
 ### 4.3 两条规则逐条解析
 
 ```bash
-# 规则一:外部进入的流量
-iptables -w -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
-  || iptables -w -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002
+# 规则一:外部进入、目的地址是本机的流量
+iptables -w -t nat -C PREROUTING -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-port 3002 2>/dev/null \
+  || iptables -w -t nat -A PREROUTING -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-port 3002
 
 # 规则二:本机自访问(经 loopback)的流量
 iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
@@ -284,6 +284,7 @@ iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 
 | `-C` | check:仅检查规则是否已存在(存在返回 0) |
 | `-A` | append:追加规则 |
 | `-p tcp --dport 80` | 匹配 TCP、目标端口 80 的包 |
+| `-m addrtype --dst-type LOCAL` | 只匹配目的地址是本机地址的包(本机任一网卡上的 IP) |
 | `-o lo` | 限定出接口为 loopback,即"本机访问本机"的流量 |
 | `-j REDIRECT --to-port 3002` | 把目标端口改成 3002(仍是本机) |
 | `-C ... \|\| -A ...` | **幂等**:不存在才添加,重跑脚本不叠加重复规则 |
@@ -298,6 +299,12 @@ iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 
 ```
 
 两条合起来:**无论谁、从哪访问本机 80,都被导到 3002。**
+
+**经本机转发、目的地不是本机的 80 端口流量不在其中**:沙箱访问外网 http、hyperloop(`192.0.2.1`,
+不配在任何网卡上)、docker/podman 容器出网,都不经过这两条规则。早期的规则一不带 `--dst-type LOCAL`,
+这些流量全被截给 client-proxy——e2b 沙箱访问 hyperloop 失败、client-proxy 日志暴涨(rollback 附录 C §13.1),
+同机 AgentENV 沙箱的出网 http 也被截走(见 [`13-与AgentENV同机部署.md`](13-与AgentENV同机部署.md) §2.3)。
+`build.sh -s` 现在先删老规则再装新的。
 
 ---
 

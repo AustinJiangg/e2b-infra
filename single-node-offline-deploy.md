@@ -233,36 +233,24 @@ systemctl reload NetworkManager
 
 ### 0.6 与 AgentENV 同机部署
 
-[AgentENV](https://github.com/kvcache-ai/AgentENV) 的沙箱网络和上游 e2b 几乎是同一套设计，默认配置下
-同机部署会互相打坏（以前在同一台机器上装过两者，先起来的那个能用、另一个不行，就是这个原因）：
+[AgentENV](https://github.com/kvcache-ai/AgentENV) 的沙箱网络和上游 e2b 几乎是同一套设计（网卡都叫 `veth-<n>`、
+地址池都是 10.11/10.12），默认配置下同机部署会互相打坏。本仓库已在 e2b 一侧改掉：网卡叫 `e2bv-<n>`，
+地址池是 `.env` 里的 `SANDBOXES_HOST_NETWORK_CIDR=10.13.0.0/16` / `SANDBOXES_VRT_NETWORK_CIDR=10.14.0.0/16`，
+`-d` 的清理只认自己的名字和地址池，80→3002 只接管目的地址是本机的流量。AgentENV 一侧不用改。
+撞在哪里、改了什么、以后换网段或前缀动哪几处，见 [`deploy-docs/13-与AgentENV同机部署.md`](deploy-docs/13-与AgentENV同机部署.md)。
 
-| | 上游 e2b | AgentENV（默认） | 本仓库现在 |
-|---|---|---|---|
-| 宿主机侧 veth | `veth-<n>`，n 从 1 起 | `veth-<n>`，n 从 1 起 | `e2bv-<n>` |
-| 宿主机访问沙箱的地址池 | `10.11.0.0/16` | `10.11.0.0/16` | `10.13.0.0/16` |
-| veth 对的地址池 | `10.12.0.0/16` | `10.12.0.0/16` | `10.14.0.0/16` |
-| 宿主机路由 | `10.11.x.y/32 via 10.12.…` | 同左 | `10.13.x.y/32 via 10.14.…` |
-
-撞在一起时的具体表现：
-
-- 网卡名、/32 路由同名，后建的一方报 `File exists`。e2b 启动时要预建约 300 个槽位，第一个 `veth-1`
-  就会失败。
-- AgentENV 在宿主机 `INPUT` 链插了 `-i veth-+ -s 10.11.0.0/16 -j REJECT`。e2b 沙箱的出网 TCP、
-  hyperloop 都要被 REDIRECT 到宿主机上的端口，走 INPUT，全被它拒掉。
-- 老的 `PREROUTING --dport 80 -j REDIRECT --to-port 3002` 不限目的地址，AgentENV 沙箱、
-  docker/podman 容器访问外网 http 都会被它截给 e2b 的 client-proxy。现在只接管目的地址是本机的流量
-  （`-m addrtype --dst-type LOCAL`），`build.sh -s` 会先删掉老的那条。
-- 老的 `build.sh -d` / `--recycle-netns` 删的是所有 `veth-<n>`，会把 AgentENV 正在用的网卡一起删掉。
-  现在只认 `e2bv-<n>`。
-
-现在的 e2b 用 `e2bv-` 前缀（0001 补丁里 `slot.go` 的 `VethName()`）和 `.env` 里的
-`SANDBOXES_HOST_NETWORK_CIDR` / `SANDBOXES_VRT_NETWORK_CIDR`（经 `template-manager.hcl` 传给 orchestrator），
-上面几条都不再重叠，AgentENV 一侧不用改。两个地址池不能与本机、内网在用的网段重叠，换之前先看：
+**部署前**，确认两个地址池在本机没人用（内网有没有用到只能问网络同事），并记下 AgentENV 的现状：
 
 ```bash
 ip -4 route | grep -E '^10\.1[34]\.'; ip -4 addr | grep -E 'inet 10\.1[34]\.'
 iptables-save | grep -cE '10\.1[34]\.'                       # 应为 0
 docker network inspect $(docker network ls -q) -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}'
+```
+
+```bash
+B=/tmp/aenv-before.txt
+{ ip -o link | grep -cE ': veth-[0-9]+'; ip -4 route | grep -cE '^10\.11\.'
+  iptables-save | grep -E 'veth-|10\.11\.' | sort; systemctl is-active aenv; } > $B; cat $B
 ```
 
 **装了老版本 e2b 的机器**（前缀还是 `veth-`、地址池还是 10.11/10.12）：新的清理逻辑不再碰 `veth-<n>`
@@ -286,13 +274,13 @@ ip -o link | grep -cE ': e2bv-[0-9]+'          # e2b 的槽位数（几百个）
 ip -o link | grep -cE ': veth-[0-9]+'          # AgentENV 的槽位数，应与部署前一样
 ip -4 route | grep -cE '^10\.13\.'             # e2b 的槽位路由
 iptables -t nat -S PREROUTING | grep 3002      # 只应有带 --dst-type LOCAL 的那条
+diff <({ ip -o link | grep -cE ': veth-[0-9]+'; ip -4 route | grep -cE '^10\.11\.'
+         iptables-save | grep -E 'veth-|10\.11\.' | sort; systemctl is-active aenv; }) /tmp/aenv-before.txt && echo "AgentENV 未受影响"
 ```
 
-两边共用的内核资源不因换网段而分开：邻居表（`net.ipv4.neigh.default.gc_thresh*`）、conntrack 表
-（`net.netfilter.nf_conntrack_max`）、宿主机网卡总数。几百个沙箱用不着调；往几万个走时先查这几项。
+AgentENV 在这期间自己建或删了槽位时，前两行的数字会变，这不算异常；规则行多了少了才要看。
 
-另外两项会占用 AgentENV 可用的资源：静态大页池（`.env` 的 `HUGEPAGES_BASE_MAX_MIB`，默认最多 64GB，
-见 `init-client.sh`）和 e2b 的暖池槽位。
+两边仍共用邻居表、conntrack 表、网卡总数、大页和内存，规模往上走时要看哪些值，见 13 篇 §7。
 
 ---
 
