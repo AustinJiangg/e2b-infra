@@ -384,28 +384,42 @@ done
 
 ### 1.3 Harbor 主机名与 `ubuntu:22.04-custom` 基础镜像（建模板前必做）
 
-下面两件事 `build.sh` 都不做，漏掉就建不出模板——`benchmark/build_template.py` 里模板的
-`FROM` 是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom`。**在第 4 步 `build.sh -s`
-跑完之后、建第一个模板之前**补上。
+`benchmark/build_template.py` 里模板的 `FROM` 是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom`，
+建模板之前要有两样东西。**`build.sh -s` 会在创建 Harbor 项目之后自动做这两件事**
+（`ensure_harbor_hostname`、`push_base_image`），都可以重复执行：已经做过就跳过。
+下面是它做了什么，以及它告警时怎么手工补。
 
 1. **`harbor` 这个主机名要能解析**。`build.sh` 配的 nginx 是 `server_name harbor;
    listen 443 ssl;` 反代到 `127.0.0.1:2900`，证书也装在 `/etc/docker/certs.d/harbor:443/`，
-   但没有任何地方写 hosts 条目：
+   但这个名字只能靠 `/etc/hosts` 解析。orchestrator 拉镜像时经 `/etc/resolv.conf` 问本机 dnsmasq，
+   dnsmasq 从 `/etc/hosts` 作答，并且**只在启动时读它**。缺了这一条，建模板报
+   `lookup harbor on 127.0.0.1:53: server misbehaving`。
+
+   `build.sh -s` 在 `/etc/hosts` 里没有 `harbor` 时追加 `<SERVER_IP> harbor` 并重启 dnsmasq；
+   已有条目但指向别的地址时只告警、不改。手工补：
 
    ```bash
    SERVER_IP=$(grep ^SERVER_IP /opt/e2b-infra/dep/.env | cut -d= -f2)
    grep -qE "[[:space:]]harbor([[:space:]]|$)" /etc/hosts || echo "$SERVER_IP harbor" >> /etc/hosts
+   systemctl restart dnsmasq
    getent hosts harbor
    ```
 
-2. **`dep/ubuntu-22.04-custom.tar.gz` 不会被自动 load/push**（`build.sh --make/-m` 是另一条
-   流程，做的是 `openclaw-openviking:custom`，跟这个无关）：
+2. **`dep/ubuntu-22.04-custom.tar.gz` 要推进 Harbor**（`build.sh --make/-m` 是另一条流程，
+   做的是 `openclaw-openviking:custom`，跟这个无关）。`build.sh -s` 先查 Harbor 里有没有这个 tag，
+   没有才 `docker load` → `docker tag` → `docker push`。
+
+   推送用的是 `<SERVER_IP>:2900`，**不要用 `harbor:443`**：docker daemon 配了 `HTTP(S)_PROXY`
+   （`/etc/systemd/system/docker.service.d/http-proxy.conf`）时，它的 `NO_PROXY` 一般只有本机 IP，
+   没有 `harbor` 这个只在本机 `/etc/hosts` 里的名字，请求会被转给代理，代理回 `504 Gateway Timeout`。
+   两个地址推到的是同一个仓库，模板照样用 `harbor:443/...` 拉。手工补：
 
    ```bash
-   docker load -i /opt/e2b-infra/dep/ubuntu-22.04-custom.tar.gz
-   docker tag ubuntu:22.04-custom harbor:443/e2b-orchestration/ubuntu:22.04-custom
-   docker login -u admin -p Harbor12345 harbor:443
-   docker push harbor:443/e2b-orchestration/ubuntu:22.04-custom
+   SERVER_IP=$(grep ^SERVER_IP /opt/e2b-infra/dep/.env | cut -d= -f2)
+   docker load -i /opt/e2b-infra/dep/ubuntu-22.04-custom.tar.gz        # Loaded image: ubuntu:22.04-custom
+   docker tag ubuntu:22.04-custom $SERVER_IP:2900/e2b-orchestration/ubuntu:22.04-custom
+   docker login -u admin -p Harbor12345 $SERVER_IP:2900
+   docker push $SERVER_IP:2900/e2b-orchestration/ubuntu:22.04-custom
    ```
 
    核对（应输出 `{"name":"e2b-orchestration/ubuntu","tags":["22.04-custom"]}`）：

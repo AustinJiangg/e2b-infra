@@ -665,6 +665,9 @@ function start() {
     "project_name": "e2b-orchestration",
     "public": true}'
 
+    ensure_harbor_hostname
+    push_base_image
+
     # 删掉服务
     rm -fv $E2B_DIR/bin/orchestrator.Dockerfile
     info "执行部署脚本..."
@@ -684,6 +687,60 @@ function start() {
     iptables -w -t nat -C OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002 2>/dev/null \
     || iptables -w -t nat -A OUTPUT -p tcp -o lo --dport 80 -j REDIRECT --to-port 3002
     success "e2b-infra 服务启动完成！所有组件健康检查通过✅"
+}
+
+# 模板的 FROM 写的是 harbor:443/e2b-orchestration/...：install_nginx 配的 nginx 以 server_name harbor
+# 反代到 2900，证书也装在 /etc/docker/certs.d/harbor:443/，但这个主机名没有任何地方能解析。
+# orchestrator 拉镜像时经 /etc/resolv.conf 问 127.0.0.1 的 dnsmasq，dnsmasq 从 /etc/hosts 作答。
+function ensure_harbor_hostname() {
+    local existing
+    existing=$(awk '!/^[[:space:]]*#/ { for (i = 2; i <= NF; i++) if ($i == "harbor") { print $1; exit } }' /etc/hosts)
+    if [ -z "$existing" ]; then
+        echo "$HOST_IP harbor" >> /etc/hosts
+        info "已写入 /etc/hosts：$HOST_IP harbor"
+        # dnsmasq 只在启动时读 /etc/hosts；start-client.sh 之前那次重启时还没有这一行
+        systemctl restart dnsmasq || warn "重启 dnsmasq 失败，harbor 主机名可能解析不了"
+    elif [ "$existing" != "$HOST_IP" ]; then
+        warn "/etc/hosts 里 harbor 指向 $existing，不是本机 $HOST_IP；建模板拉基础镜像会去那台机器，确认无误再继续"
+    else
+        echo "ℹ️  /etc/hosts 已有 harbor 条目"
+    fi
+    getent hosts harbor >/dev/null || warn "harbor 主机名仍解析不了，建模板会报 lookup harbor ... server misbehaving"
+}
+
+# 模板基础镜像：dep/ubuntu-22.04-custom.tar.gz → harbor 的 e2b-orchestration/ubuntu:22.04-custom。
+# harbor 里已有这个 tag 就跳过，重复部署不会每次都推一遍。
+# 推送走 $HOST_IP:$HARBOR_HTTP_PORT 而不是 harbor:443：docker daemon 配了 HTTP(S)_PROXY 时，
+# 它的 NO_PROXY 通常不含 harbor 这个只在本机 /etc/hosts 里的名字，请求会被转给代理，代理回 504。
+# 推到哪个地址都是同一个仓库，模板照样用 harbor:443/... 拉。失败只告警，不中断部署。
+function push_base_image() {
+    local tar="$DEP_DIR/ubuntu-22.04-custom.tar.gz"
+    local src="ubuntu:22.04-custom"
+    local dst="$HOST_IP:$HARBOR_HTTP_PORT/e2b-orchestration/ubuntu:22.04-custom"
+
+    if curl -sf --noproxy '*' -u "$HARBOR_USER:$HARBOR_PASSWORD" \
+        "http://127.0.0.1:$HARBOR_HTTP_PORT/v2/e2b-orchestration/ubuntu/tags/list" | grep -q '"22.04-custom"'; then
+        echo "ℹ️  harbor 里已有 e2b-orchestration/ubuntu:22.04-custom，跳过推送"
+        return 0
+    fi
+    if [ ! -f "$tar" ]; then
+        warn "缺少 $tar，没有推送模板基础镜像；建模板前按部署指南 §1.3 手工推送"
+        return 0
+    fi
+
+    info "推送模板基础镜像 $src → $dst ..."
+    if ! docker image inspect "$src" >/dev/null 2>&1; then
+        docker load -i "$tar" || { warn "docker load $tar 失败，没有推送模板基础镜像"; return 0; }
+    fi
+    if ! docker image inspect "$src" >/dev/null 2>&1; then
+        warn "load 之后没有 $src 这个标签（看上面 Loaded image: 的实际名字），没有推送模板基础镜像"
+        return 0
+    fi
+    if docker tag "$src" "$dst" && docker push "$dst"; then
+        success "模板基础镜像已推送：$dst"
+    else
+        warn "推送 $dst 失败（Harbor 未就绪或登录失败？），建模板前按部署指南 §1.3 手工推送"
+    fi
 }
 
 function iptable_clean() {

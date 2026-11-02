@@ -349,12 +349,11 @@ docker ps | grep -E "postgres|harbor"                  # 依赖在跑
 ls /root/.e2b/config.json                              # SDK 凭据已生成（首次）
 ```
 
-然后构建首个模板（`python /opt/e2b-infra/build_prod.py base`）→ `Sandbox.create("base")`。**建模板前还有两件 `build.sh` 不做的事**
-（漏掉就会失败，详见 runbook §1.3）：模板的 `FROM` 是
-`harbor:443/e2b-orchestration/ubuntu:22.04-custom`，所以 ① `/etc/hosts` 要有
-`<SERVER_IP> harbor`（nginx 是 `server_name harbor`，但没人写 hosts 条目）；
-② `dep/ubuntu-22.04-custom.tar.gz` 要手工 `docker load` → `docker tag` → `docker push`
-进 Harbor。
+然后构建首个模板（`python /opt/e2b-infra/build_prod.py base`）→ `Sandbox.create("base")`。建模板依赖两件事，`-s` 在创建 Harbor 项目之后自动做（已做过就跳过，告警时的手工补救见部署指南 §1.3）：
+模板的 `FROM` 是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom`，所以 ① `/etc/hosts` 要有
+`<SERVER_IP> harbor`（nginx 是 `server_name harbor`，这个名字只能靠 hosts 解析，`ensure_harbor_hostname`）；
+② `dep/ubuntu-22.04-custom.tar.gz` 要 `docker load` → `docker tag` → `docker push` 进 Harbor
+（`push_base_image`，推送走 `<SERVER_IP>:2900`，避开 docker daemon 的代理）。
 
 > 构建失败后重试会报 `403: Alias 'base' already used`——失败的模板以 `buildStatus: error`
 > 占着别名，重试前要先 `DELETE /templates/{id}` 释放，命令见 runbook §6.7。

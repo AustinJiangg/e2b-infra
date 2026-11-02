@@ -84,7 +84,7 @@ grep '^SERVER_IP' e2b-deploy/dep/.env
 **④ 没有 HDBSS 的机器（例如 920B）**要在 `-i` 之后、`-s` 之前给 orchestrator 加上 `FC_TRACK_DIRTY_PAGES`，
 否则脏页跟踪默认关、每次 checkpoint 都是全量；做法是部署指南 §4.1 的那条 `sed`（`-i` 每次都会把模板盖回不带这一行的版本，所以每次重新部署都要再加）。950 不需要。
 
-**⑤ 全新机器建第一个模板之前**还要做部署指南 §1.3 的两件事（让 `harbor` 这个主机名能解析、把 `ubuntu:22.04-custom` 推进 harbor），`build.sh` 不做这两件事。
+**⑤ 建模板依赖的两件事**（让 `harbor` 这个主机名能解析、把 `ubuntu:22.04-custom` 推进 harbor）由 `build.sh -s` 自动做；它告警时按部署指南 §1.3 手工补。
 
 #### 重新部署会丢什么
 
