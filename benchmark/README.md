@@ -293,3 +293,13 @@ ln -s ../../benchmark/.env rollback/scripts/.env
 ```
 
 详见 [`../rollback/scripts/README.md`](../rollback/scripts/README.md)。
+
+## 原生 pause / resume 分档耗时
+
+`native_snapshot_tiers.py` 测 e2b 原生 pause / resume 按改动量分档的耗时，也可测 `create_snapshot` 路径。每档新建沙箱、只放本档负载，内存与文件按 3:1 拆分，并校验内容和常驻进程。它是单文件脚本，在部署 e2b 的宿主上运行：
+
+```bash
+python3 native_snapshot_tiers.py --mode pause --env-file .env --out result.json
+```
+
+`--smoke` 只跑 0、16 两档；`--tiers`、`--passes`、`--iters`、`--template` 调整档位、样本数和模板。默认的 `--mode both` 同时跑两种路径。结果 JSON 里 `snapshot_ms` 在 pause 模式下就是 pause 耗时。结果解读见手册第 18 章 §9 与附录 B §13.4。

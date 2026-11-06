@@ -6,12 +6,12 @@
 
 | RPC | 做什么 | SDK 里对应 |
 |---|---|---|
-| `Pause` | 打快照 + **停掉沙箱** | 暂停沙箱 |
+| `Pause` | 打快照 + **停掉沙箱** | `sb.pause()` |
 | `Checkpoint` | 打快照 + 停掉沙箱 + **从新快照重新拉起一个** | `create_snapshot()` |
 
 两者共用 `snapshotAndCacheSandbox`（`internal/server/sandboxes.go:581`；`Server.Pause` 在 :380，`Server.Checkpoint` 在 :444），
 区别只在之后要不要再拉起一个。两者都在函数开头 `defer s.stopSandboxAsync(...)`（:400、:469）：旧沙箱一定会被停掉。
-`Pause` 打完快照就结束，产物上传进对象存储，这是"沙箱离场"的语义。
+`Pause` 打完快照就结束，产物上传进存储，这是"沙箱离场"的语义。`Pause` 会等 `waitForUpload` 完成才返回（:411）：快照元数据不能先于数据标记为就绪。所以客户端看到的 `pause` 耗时包含停沙箱、导出和上传，不只是冻结虚机。
 
 `Checkpoint` 拉起新沙箱时，三个 id 的变化是：
 
@@ -155,7 +155,7 @@ func (r *RootfsDiffCreator) process(ctx context.Context, out io.Writer) (*header
 
 ## 5. 恢复：`ResumeSandbox`
 
-`Factory.ResumeSandbox`（`sandbox.go:424`）：
+客户端对已暂停的沙箱调用 `Sandbox.connect()` 即触发 resume，服务端走 `Factory.ResumeSandbox`（`sandbox.go:424`）：
 
 ```
 新建 Firecracker 进程
@@ -193,8 +193,75 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 | 恢复 · 换页 | **虚机工作集**（强） |
 | 上传 / 下载 | 增量大小 + 网络 |
 
-一句话：**原生方案的代价与虚机规格挂钩，与改动量关系不大。** 即使内存判据修成精确的（第三篇），
+一句话：**原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。** 即使内存判据修成精确的（第三篇），
 "每次打快照都停掉沙箱、每次恢复都重建进程并换回工作集"这两项不变 —— 它们来自"沙箱离场"这个语义本身。
+
+修复后的分档实测（950 见 [第 18 章 §9](18-950-performance.md#9-原生-pause--resume-分档实测修复后)，920B 见 [附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱)）量化了这句话：
+
+| 950，客户端墙钟 p50 | 0 MiB 档 | 256 MiB 档 | 规律 |
+|---|---|---|---|
+| pause | 251.9 ms | 429.9 ms | 约 246 ms 固定开销 + 每 MiB 导出量约 0.52 ms（按六档 p50 拟合） |
+| resume | 109.3 ms | 120.7 ms | 与档位基本无关 |
+
+下面两节按阶段说明这些时间花在哪里。拆分来自 920B（`kvm-wp`，产物在 tmpfs）的单样本跟踪，用来说明结构；950 没有做同样的逐段测量，各段数值不能直接套到 950。
+
+### 6.1 pause：改动量为 0 也要约 250 ms
+
+0 MiB 档总耗时 234.9 ms 的一次 pause，时间点从 `Sandbox.Pause` 开始计：
+
+| 时间点 ms | 发生的事 | 依据 |
+|---|---|---|
+| 0～约 10 | Firecracker 暂停约 0.08 ms；写 `snapfile` 约 3.2 ms；取脏页位图 0.67 ms；约 9.6 ms 建好内存差分文件 | Firecracker 日志、文件事件 |
+| 约 12 | 建根盘差分文件，进入 `ExportDiff`，开始停沙箱 | 文件事件 |
+| 约 12～169 | Firecracker 收到 SIGTERM 后退出，168.8 ms 时进程结束 | 进程退出时间；内部分段见下 |
+| 169～232 | `doStop` 收尾（删 cgroup、停 uffd）；`NBDProvider.Close` 依次刷盘、断开 NBD 设备；`ExportDiff` 导出根盘差分 | 代码顺序、文件事件。这段没有单独计时 |
+| 232～235 | 上传到本地存储并返回 | 文件事件 |
+
+**真正保存内存状态的只有前约 10 ms，其余约 225 ms 都在销毁虚机环境并等它结束。** 根盘差分要等 NBD 设备释放后才能导出（[§4.1](#41-exportdiff-的步骤)），`Pause` 又要等上传完成，所以这段等待全部计入 `pause`。
+
+对 Firecracker 进程做内核栈采样的另一次运行（总耗时 289 ms，进程在 220.9 ms 消失；采样本身拖慢了退出，时间点只能近似参考）显示退出过程的内容：
+
+| 时间点 ms | 内核栈 | 含义 |
+|---|---|---|
+| 约 9～123 | 主线程在运行，栈不可读 | **未归因** |
+| 123.4 | `synchronize_rcu_expedited` ← `namespace_unlock` ← `drop_collected_mounts` ← `put_mnt_ns` ← `free_nsproxy` | 进程退出时释放 mount 命名空间，等 RCU 宽限期 |
+| 137 | `cleanup_mnt` | 卸载挂载 |
+| 140.5 | `__flush_workqueue` ← `kvm_irqfd_release` ← `kvm_vm_release` | 关闭 KVM 虚机 fd，等 irqfd 清理完成 |
+| 149.4 | `__wait_rcu_gp` ← `synchronize_rcu` ← `kvm_destroy_vm` | 销毁 KVM 虚机，等 RCU 宽限期 |
+
+这次采样里约 114 ms 的未归因段是退出过程中最长的一段，要继续优化 pause 应从这里查起。
+
+**改动量增大时的变化。** 同样的跟踪在 256 MiB 档（总耗时 443 ms）得到：约 61 ms 建好内存差分文件，88.8 ms 建根盘差分文件，280 ms 进程退出，368.9～440.1 ms 写根盘差分。与 0 MiB 档相比：
+
+| 阶段 | 0 MiB 档 | 256 MiB 档 | 增长 |
+|---|---|---|---|
+| 开始停沙箱之前（含内存差分导出） | 12.4 ms | 88.8 ms | 约 76 ms |
+| 开始停沙箱到 Firecracker 退出 | 约 156 ms | 约 191 ms | 约 35 ms |
+| Firecracker 退出到根盘差分导出完成 | 约 63 ms | 约 160 ms | 约 97 ms，其中写根盘差分约 71 ms（64.5 MiB） |
+
+所以增长不全是拷数据，进程退出本身也慢约 35 ms。这是单样本的比较，只说明方向。
+
+### 6.2 resume：各档都在 100 ms 上下
+
+一次 `Sandbox.connect()` 耗时 92.6 ms、第一条命令 97.9 ms 完成的 resume，时间点从客户端发起调用开始计：
+
+| 时间点 ms | 发生的事 | 依据 |
+|---|---|---|
+| 0～35 | 请求经 API 到节点（约 +3 ms 开始建 cgroup），建网络槽位、NBD、uffd，启动 Firecracker 进程（约 +27 ms 进程起来，+28 ms API 就绪） | cgroup 与 Firecracker 日志、代码顺序 |
+| 35～57 | 加载 `snapfile`（`load snapshot` 21.3 ms） | Firecracker 日志 |
+| 57～58 | 恢复 vCPU（`resume vm` 0.9 ms） | Firecracker 日志 |
+| 58～93 | 等 envd 就绪和 API 返回 | 这段未细拆 |
+| 93～98 | 第一条命令执行 | 客户端计时 |
+
+这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 耗时**不随档位变化**。
+
+成本只是推迟了。950 上恢复后第一次读 192 MiB 内存负载需要 702.6 ms，快照前同一读法 590.9 ms，多出约 112 ms 不计入 resume 耗时，而由 guest 里第一个访问这些页的程序承担。
+
+### 6.3 与 checkpoint / restore 的差别
+
+本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（[第 9 章](09-in-place-rollback.md)）。§6.1、§6.2 里进程退出、KVM 销毁、NBD 断开、进程启动、加载 `snapfile` 这些固定步骤都不会发生，所以 950 上 0 MiB 档 checkpoint / restore 墙钟 p50 是 17.2 / 22.4 ms。
+
+这不是"原生实现得慢"：原生要产出能离开这个进程、这台宿主的自足快照，停掉并重建进程是这个目标的一部分（[§7](#7-它擅长什么)）。
 
 ## 7. 它擅长什么
 

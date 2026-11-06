@@ -497,6 +497,7 @@ D 段的循环体整体包在 `try` 里，任何异常只记一条失败、不�
 
 - `pb2.py` 修复后"实际导出"与"写跟踪位图"逐行相等（[附录 B §13.1](B-920b-results.md#131-pb2py-三列并排)）。
 - `native_snapshot_bench.py` 六档 memfile 从恒约 440 MB 变成随写入量线性（[附录 B §13.3](B-920b-results.md#133-native_snapshot_benchpy六档)）。
+- `native_snapshot_tiers.py` 每档新建沙箱、只放本档负载，排除了预热本底，用于按档比较 pause、resume 耗时：950 上导出内存 15.9～294.3 MiB（[第 18 章 §9](18-950-performance.md#9-原生-pause--resume-分档实测修复后)），920B 上 16.1～292.2 MiB（[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱)）。
 
 ### 12.2 跨代拼接正确（证明 ② ③ 生效）
 

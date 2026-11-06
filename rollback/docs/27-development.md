@@ -242,7 +242,8 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 目录 | 文件 | 讲解 |
 |---|---|---|
 | `950/` | `run.sh`：smoke / func / perf / long 一站式入口 | [第 20 章](20-acceptance.md)、[第 16 章](16-test-methodology.md) |
-| `acceptance/`（五个单文件脚本互不依赖；`rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py`） | `checkpoint_verify.py`（59 项正确性）、`checkpoint_bench.py`（时机成本与产物实测）、`checkpoint_concurrent.py`（并发 A/B/C/D）、`checkpoint_bench_v2.py`（与进程级快照对照的口径）、`native_snapshot_bench.py`（原生 snapshot 同一张档位表）、`rolling_keep10.py`（滚动保留长跑） | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md)、[第 19 章](19-950-concurrency.md) |
+| `acceptance/`（单文件脚本互不依赖；`rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py`） | `checkpoint_verify.py`（59 项正确性）、`checkpoint_bench.py`（时机成本与产物实测）、`checkpoint_concurrent.py`（并发 A/B/C/D）、`checkpoint_bench_v2.py`（与进程级快照对照的口径）、`native_snapshot_bench.py`（原生 snapshot 同一张档位表）、`rolling_keep10.py`（滚动保留长跑） | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md)、[第 19 章](19-950-concurrency.md) |
+| 仓库根 `benchmark/` 下的 `native_snapshot_tiers.py`（单文件脚本，不依赖本目录） | 原生 pause / resume 每档独立沙箱的分档耗时 | [第 18 章 §9](18-950-performance.md#9-原生-pause--resume-分档实测修复后)、[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱) |
 | `crtest/` | `crtest/cases/t11.py … t41.py`（20 个用例）、`crtest/common.py`、`tests/`（离线单测）、`sdktests/test_checkpoint_errors.py`、`portability/preflight-customer.sh`、`probe950/` | [第 16 章](16-test-methodology.md) |
 | `crtest/bench/` | `bench_tiers.py`、`compliance.py`、`analyze.py`、`serial_restore.py` | [第 16 章](16-test-methodology.md) |
 | `dev/`（共享 `lib.py`） | `correctness.py`、`pause_verify.py`、`compat_matrix.py`、`hdbss_evidence.py`（配 `cap_test.c`）、`loop.py`、`timing.py`、`bench-ckpt.py` + `freeze_probe.py`、`probe-ramp.py`、`01-check-host.sh` … `04-verify-runtime.sh`、`run-all.sh` | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md) |

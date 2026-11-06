@@ -1,7 +1,7 @@
 # `rollback/scripts/` —— 快照回滚相关脚本
 
 原先散在 `e2b-infra/benchmark/`（交付态验收 + 探针）和 `e2b-infra/rollback/test-950/`
-（开发态工具箱）两处，2026-09-15 集中到这里。`benchmark/` 只留启动耗时/并发那套压测，
+（开发态工具箱）两处，2026-09-15 集中到这里。`benchmark/` 留启动耗时/并发那套压测（另有 2026-11 新增的原生 pause / resume 分档脚本 `native_snapshot_tiers.py`），
 **`benchmark/.env`、`benchmark/.env.example`、`benchmark/sync-env.sh` 不动，仍是凭据的唯一来源。**
 
 ```
@@ -46,7 +46,7 @@ python-dotenv 从**脚本所在目录逐级向上**查找 `.env`，所以这一�
 | `native_snapshot_bench.py` | e2b **原生** snapshot（pause / create_snapshot 两种模式）的同一张档位表；三套横向对照里代表原生那套，也是原生精确增量修复的验证脚本 |
 | `checkpoint_concurrent.py` | 并发：A 跨沙箱扇出（N=1…16，barrier 对齐）/ B 同沙箱多调用方争用 / D 混合稳态 / C 生命周期竞争（默认关，**可能打挂 orchestrator**）。`950/run.sh perf` 跑它的 A、B 两段 |
 
-五个脚本互不依赖，也不依赖本目录其它任何文件 —— 拷哪个 `.py` 过去就能跑哪个。
+这些脚本除 `rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py` 外互不依赖，也不依赖本目录其它任何文件 —— 拷哪个 `.py` 过去就能跑哪个。
 逐脚本的参数与判定行见 [`acceptance/README.md`](acceptance/README.md)。
 
 ### `probes/` —— 开发态探针与跨实现对照
