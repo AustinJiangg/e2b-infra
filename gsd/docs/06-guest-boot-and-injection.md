@@ -1,4 +1,4 @@
-# 05 · guest 启动、根文件系统与模板注入
+# 06 · guest 启动、根文件系统与模板注入
 
 ## 本章目标
 
@@ -10,8 +10,8 @@
 - 说清 orchestrator 的 `HOST_GSD_PATH` 开关管哪五处、开和关各走哪条分支；
 - 记住本章最重要的一条运维事实：**模板固化了建模板那一刻的内核、gsd 与 overlay-init**，换其中任何一样都必须重建模板，并且重建时不能用缓存。
 
-上一章（[04](04-architecture.md)）给出了组件与目录布局。本章回答"这些东西是怎么进到 guest 里、又是怎么在开机时就位的"。
-下一章（[06](06-overlay-hot-switch.md)）讲 gsd 在这个根文件系统上做的核心动作：热切层。
+上一章（[05](05-architecture.md)）给出了组件与目录布局。本章回答"这些东西是怎么进到 guest 里、又是怎么在开机时就位的"。
+下一章（[07](07-overlay-hot-switch.md)）讲 gsd 在这个根文件系统上做的核心动作：热切层。
 
 主要代码（下文未注明前缀的路径都在 `packages/orchestrator/internal/` 下）：`template/build/core/rootfs/gsdfiles/overlay-init.sh.tpl`、
 `template/build/core/rootfs/gsdfiles/gsd.service.tpl`、`template/build/core/rootfs/gsd.go`、`template/build/layer/gsd.go`、`cfg/model.go`。
@@ -22,7 +22,7 @@
 
 进程级回滚要回滚文件，而用户进程写的是根文件系统。上游的沙箱直接把一块 ext4 盘当根：ext4 没有"退回到某一刻"的能力。
 所以带 gsd 的模板把根换成 overlayfs——ext4 盘降为只读的最底层，所有写入落在最上面的 upper 目录里；checkpoint 时把 upper 变成只读层再换一个新的，
-restore 时把层栈换回去（[06](06-overlay-hot-switch.md)）。
+restore 时把层栈换回去（[07](07-overlay-hot-switch.md)）。
 
 这带来一个先有鸡还是先有蛋的问题：根文件系统必须在 systemd 起来之前就已经是 overlay，否则 PID 1 和所有服务的根都还指着 ext4。
 解决办法是让内核启动的第一个程序不是 systemd，而是一个脚本 `overlay-init`：它在 ext4 根上把 overlay 搭好，`chroot` 进去，再 `exec` systemd。
@@ -85,25 +85,25 @@ overlay 根目录（也就是 chroot 之后 guest 的 `/`）的属主与权限**
 之所以**每次开机**都设而不是只在建目录时设：步骤 1 的 `mkdir -p` 只对全新的根盘起作用，而更早版本建出的模板带着一个被设成 0777 的 upper，
 不重设就会把 0777 一直带下去。
 
-这是相对交接前实现的两处变化之一。交接前的脚本在挂好 overlay 之后对新根执行 `chmod 0777`（从更早的"overlay 挂在用户目录上"的方案沿袭而来），
+这是相对初始实现的两处变化之一。初始实现的脚本在挂好 overlay 之后对新根执行 `chmod 0777`（从更早的"overlay 挂在用户目录上"的方案沿袭而来），
 结果 guest 的 `/` 对所有用户可写。现在 `/` 从开机起就是 755；之后每次切换，gsd 让新 upper 的根目录沿用切换后层栈最上层的属主与权限
-（`makeUpperWork`，`ckpt/overlay.go:285`，见 [06](06-overlay-hot-switch.md)），所以 `/` 的属性不因 checkpoint 或 restore 而改变。
+（`makeUpperWork`，`ckpt/overlay.go:285`，见 [07](07-overlay-hot-switch.md)），所以 `/` 的属性不因 checkpoint 或 restore 而改变。
 
 ### 2.2 步骤 4：三个不回滚的系统目录
 
 `/var/log`、`/var/lib/systemd`、`/var/lib/chrony` 直接来自 ext4，不经过 overlay，因此**不随 restore 回滚**。
 
 脚本注释（:53-55）记录的原始理由是：系统服务在这些目录里持续写入，如果它们在 overlay 上，热切层之后这些写入会触发 copy-up，
-而在交接前的内核补丁上这会导致内核崩溃。这类崩溃的根因后来在内核里修掉了（[07](07-overlay-concurrency-and-fixes.md) 的"切换与所有 overlay 入口的互斥"一节），
+而在原始内核补丁上这会导致内核崩溃。这类崩溃的根因后来在内核里修掉了（[08](08-overlay-switch-consistency.md) 的"切换与所有 overlay 入口的互斥"一节），
 现在即使有 root 服务在 overlay 上读写，切换也是安全的。但这三处 bind 保留了下来，它们同时起到另一个作用：日志、systemd 的持久状态和时钟漂移数据本来就不该被回滚到过去。
 
-对使用者的含义是：restore 之后这三个目录里是 restore 那一刻的内容，不是 checkpoint 时的内容（[22](22-semantics-and-limits.md)）。
-另外，gsd 把 CRIU 的详细日志打进 journal，而 journal 就在根盘的 `/var/log` 里，会一直涨到 journald 自己的上限（[15](15-known-limits.md)）。
+对使用者的含义是：restore 之后这三个目录里是 restore 那一刻的内容，不是 checkpoint 时的内容（[26](26-semantics-and-limits.md)）。
+另外，gsd 把 CRIU 的详细日志打进 journal，而 journal 就在根盘的 `/var/log` 里，会一直涨到 journald 自己的上限（[16](16-known-limits.md)）。
 
 ### 2.3 步骤 6：透明大页必须在任何用户进程出现之前关掉
 
 arm64 guest 的内核配置默认把透明大页设为 `always`。大页存在时 soft-dirty 按 2 MiB 的页中间目录项记录，零散的 4 KiB 写入会让每次增量 dump 膨胀成接近全量
-（原理与现场数字见 [02](02-criu-and-incremental-memory.md)）。所以 `never` 是设计约束，不是调优选项。
+（原理与实测数字见 [03](03-criu-and-incremental-memory.md)）。所以 `never` 是设计约束，不是调优选项。
 
 设置的时机很讲究：必须在 systemd 之前。一个进程只要拿到过大页，之后再改成 `never` 也不会立刻把它已有的大页拆开。
 内核不会为 `init=` 指定的程序挂 sysfs，所以脚本通过步骤 5 刚挂到新根里的那个 sysfs 来写（:75）。写完回读，不是 `[never]` 就在内核日志里打一行 `WARNING`。
@@ -112,11 +112,11 @@ gsd 启动时会再检查一次（`ensureTHPNever`，`packages/gsd/main.go:196`�
 
 ### 2.4 步骤 7：`/tmp` 留在 overlay 上，snapshot store 是 tmpfs
 
-这是相对交接前实现的另一处变化。交接前 `/tmp` 是一个单独的 tmpfs，后果有两个：
+这是相对初始实现的另一处变化。初始实现里 `/tmp` 是一个单独的 tmpfs，后果有两个：
 
 - `/tmp` 里的文件**不随 restore 回滚**，与"回到 checkpoint 那一刻"的语义不符；
 - 更严重的是，被恢复的进程如果在 checkpoint 时打开着 `/tmp` 里的文件，而这个文件之后被删除或改了大小，CRIU 在 restore 时重新打开它会失败——
-  那时用户进程已经被杀掉，结果是一次 `DataLoss`（[12](12-failure-semantics.md)）。
+  那时用户进程已经被杀掉，结果是一次 `DataLoss`（[14](14-failure-semantics.md)）。
 
 把 `/tmp` 放回 overlay，它就和打开着它的进程一起回滚，这两个问题同时消失；附带的好处是 `/tmp` 占的是根盘而不是 guest 内存。
 但 tmpfs 原来顺带提供的三样东西要由脚本补上（:82-97 的注释）：
@@ -128,7 +128,7 @@ gsd 启动时会再检查一次（`ensureTHPNever`，`packages/gsd/main.go:196`�
 3. **不能再有别的东西在上面挂 tmpfs**（:107-110）。有些发行版默认启用 systemd 的 `tmp.mount`，或者从 `/etc/fstab` 生成它；
    它会盖住 overlay 上的 `/tmp`，把它重新排除在回滚之外。脚本把 `/etc/systemd/system/tmp.mount` 链到 `/dev/null`——`/etc` 下的屏蔽同时压过软件包自带的单元和 fstab 生成器。
 
-同一步里挂 snapshot store：`mount -t tmpfs -o size=2G`（:112）。CRIU 镜像放在 tmpfs 上占的是 guest 内存，这是容量预检存在的原因（[13](13-state-concurrency-capacity.md)）；
+同一步里挂 snapshot store：`mount -t tmpfs -o size=2G`（:112）。CRIU 镜像放在 tmpfs 上占的是 guest 内存，这是容量预检存在的原因（[15](15-state-concurrency-capacity.md)）；
 它是 tmpfs 而不在 overlay 上，则是因为镜像绝不能被回滚——restore 要读的正是它们。
 
 ### 2.5 步骤 9：为什么 `/mnt/lower` 要 bind 两次
@@ -156,16 +156,16 @@ gsd 启动时会再检查一次（`ensureTHPNever`，`packages/gsd/main.go:196`�
 |---|---|---|
 | `ExecStart` | `/usr/bin/gsd --overlay-mount=/ --base-layer=/mnt/lower --layers-root=/overlay/layers --work-root=/overlay/workspace --snapshot-store=/var/lib/gsd/snapshots` | 五个路径与 `overlay-init` 用的是同一组模板变量 |
 | `User` / `Group` | `root` | CRIU、热切层 ioctl（要求 `CAP_SYS_ADMIN`）、给任意用户进程发信号都需要 root |
-| `Restart` | `always` | gsd 崩溃后被拉起，从 `state.json` 恢复状态（[13](13-state-concurrency-capacity.md)） |
+| `Restart` | `always` | gsd 崩溃后被拉起，从 `state.json` 恢复状态（[15](15-state-concurrency-capacity.md)） |
 | `StartLimitIntervalSec` | `0` | 关掉 systemd 的启动频率限制。建模板时每建一层都要重启一次 gsd（§4.3），默认的"10 秒内 5 次"会让步骤多的模板以 `start-limit-hit` 失败 |
-| `OOMScoreAdjust` | `-1000` | gsd 不会被内存不足杀手选中。**这个值会被它 fork 出的 criu 继承**，所以内存不足时被杀的是用户进程——这正是 dump 之前要做容量预检的原因（[13](13-state-concurrency-capacity.md)） |
+| `OOMScoreAdjust` | `-1000` | gsd 不会被内存不足杀手选中。**这个值会被它 fork 出的 criu 继承**，所以内存不足时被杀的是用户进程——这正是 dump 之前要做容量预检的原因（[15](15-state-concurrency-capacity.md)） |
 | `OOMPolicy` | `continue` | 服务的控制组里有进程被内存不足杀手杀掉时，不连带停掉整个服务 |
 | `Delegate` | `yes` | 把控制组子树交给服务自己管理 |
 
 服务文件里没有声明与 `envd.service` 的先后关系，gsd 启动时 envd 可能还没起来。gsd 对此的处理是：找用户进程时查不到 envd 不算错误，
-另有一个后台协程每 500 ms 试一次、最多试 60 秒，把 envd 的主进程号预先查好（`warmEnvdPID`，`ckpt/pid.go:232`，详见 [08](08-process-trees.md)）。
+另有一个后台协程每 500 ms 试一次、最多试 60 秒，把 envd 的主进程号预先查好（`warmEnvdPID`，`ckpt/pid.go:232`，详见 [10](10-process-trees.md)）。
 
-交接前的实现里还有一个单独的"搭建 overlay"的服务单元。现在 overlay 根在 systemd 起来之前就由 `overlay-init` 搭好了，那个单元已经删除（`gsd.go:26-27` 的注释）。
+初始实现里还有一个单独的"搭建 overlay"的服务单元。现在 overlay 根在 systemd 起来之前就由 `overlay-init` 搭好了，那个单元已经删除（`gsd.go:26-27` 的注释）。
 
 ---
 
@@ -202,11 +202,11 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 | `OFF` | `<当前目录>/OFF` | 开 |
 | `rel/gsd` | `<当前目录>/rel/gsd` | 开 |
 
-要点是**只有小写的 `off` 才是关**。写成 `OFF` 或 `Off` 会被当成一个相对路径，gsd 仍然是开的，之后建模板时因为读不到这个文件而失败（[15](15-known-limits.md)）。
+要点是**只有小写的 `off` 才是关**。写成 `OFF` 或 `Off` 会被当成一个相对路径，gsd 仍然是开的，之后建模板时因为读不到这个文件而失败（[16](16-known-limits.md)）。
 
 这张表来自配置解析的测试。表里第一行"不设该变量、按默认路径注入"已于 2026-10-09 在新 920B 上真实建模板确认：orchestrator 的进程环境里没有 `HOST_GSD_PATH` 这个键，
-建出的模板里 guest 的 `/usr/bin/gsd` 与宿主 `/fc-gsd/gsd` 的 sha256 相同（[20](20-results-and-gaps.md) 的"落位后的复核"一节、[23](23-deployment.md)）。
-"关掉开关（`off`）后真实建出的模板与上游一致"这一条仍然只有单测与代码依据，没有现场结果，列在 [20](20-results-and-gaps.md) 的缺口表里。
+建出的模板里 guest 的 `/usr/bin/gsd` 与宿主 `/fc-gsd/gsd` 的 sha256 相同（[19](19-920b-functional.md) 的"落位后的复核"一节、[27](27-deployment.md)）。
+"关掉开关（`off`）后真实建出的模板与上游一致"这一条仍然只有单测与代码依据，没有上机结果，列在 [23](23-gaps-and-boundaries.md) 的缺口表里。
 
 ### 4.3 每建一层后的注入与自检
 
@@ -220,7 +220,7 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 自检脚本的判据有三条，任何一条不满足都让**整个模板构建失败**：
 
 - `systemctl is-active gsd` 输出 `active`；
-- `curl http://127.0.0.1:49984/health` 的响应里有 `"status":"ok"`——注意 `degraded` 不算通过。`/health` 免鉴权正是为了这一步（构建沙箱没有 access token，见 [04](04-architecture.md)）；
+- `curl http://127.0.0.1:49984/health` 的响应里有 `"status":"ok"`——注意 `degraded` 不算通过。`/health` 免鉴权正是为了这一步（构建沙箱没有 access token，见 [05](05-architecture.md)）；
 - `/usr/sbin/criu --version` 的输出以 `Version: 4.` 开头。
 
 前两条每 0.2 秒查一次，最多 50 次，也就是等大约 10 秒，因为 gsd 重启后需要一点时间才开始监听。失败时脚本把 `systemctl status gsd` 的末尾 20 行一并输出，进入构建日志。
@@ -244,11 +244,11 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 所以换这三者中的任何一样，都要重建模板。反过来看这也是一个保障：已有模板不会因为宿主上换了文件而悄悄变样。
 
 这条事实不是理论推演，它曾经让一次性能对照作废：对照实验切换了宿主的内核目录，以为在比较两个内核，实际上两组用的是同一个已有模板、同一个内核，
-"内核对耗时的影响很小"的结论因此不成立（经过与教训见 [17](17-performance-after-fixes.md)）。此后凡是比较内核或 gsd 版本，一律为每个版本各建一个模板。
+"内核对耗时的影响很小"的结论因此不成立（经过与教训见 [附录 E](E-regression-case.md)）。此后凡是比较内核或 gsd 版本，一律为每个版本各建一个模板。
 
-验证一个模板里到底是什么，可以在沙箱里看三样：`/proc/version` 里的内核构建时间、`gsd -commit` 输出的提交号、`/usr/bin/gsd` 的校验和（做法见 [26](26-acceptance-runbook.md)）。
+验证一个模板里到底是什么，可以在沙箱里看三样：`/proc/version` 里的内核构建时间、`gsd -commit` 输出的提交号、`/usr/bin/gsd` 的校验和（做法见 [30](30-acceptance-runbook.md)）。
 
-这条事实也解释了 [04](04-architecture.md) 里"鉴权不能缓存"的原因：gsd 的内存是从快照来的，凡是和具体沙箱有关的东西都不能留在它的内存里跨越快照。
+这条事实也解释了 [05](05-architecture.md) 里"鉴权不能缓存"的原因：gsd 的内存是从快照来的，凡是和具体沙箱有关的东西都不能留在它的内存里跨越快照。
 
 ---
 
@@ -269,8 +269,8 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 3. orchestrator 一侧，强制标志为真时 base 层直接返回"未命中缓存"，不去查索引（`template/build/phases/base/builder.go:364`）；
    后续各层同样因为强制标志而重建（`template/build/builder.go:384`）。
 
-所以本书里所有"重建模板"的步骤，都默认采用不带缓存的方式（命令见 [23](23-deployment.md)）。跨"带 gsd"与"不带 gsd"两种模式的模板派生（以一种模式的模板为基础、用另一种模式的构建器继续建）没有做处理，
-也没有测过（[15](15-known-limits.md)）。
+所以本书里所有"重建模板"的步骤，都默认采用不带缓存的方式（命令见 [27](27-deployment.md)）。跨"带 gsd"与"不带 gsd"两种模式的模板派生（以一种模式的模板为基础、用另一种模式的构建器继续建）没有做处理，
+也没有测过（[16](16-known-limits.md)）。
 
 ---
 

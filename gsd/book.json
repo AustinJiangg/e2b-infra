@@ -1,7 +1,8 @@
 {
-  "title": "gsd 进程级 Checkpoint / Restore 技术手册",
-  "version": "v0.1.2",
-  "date": "2026-11-06",
+  "title": "进程级快照回滚技术手册",
+  "version": "v1.0.0",
+  "date": "2026-11-07",
   "repo_docs_path": "gsd/docs",
-  "svgs": []
+  "svgs": [],
+  "contents": "contents.json"
 }

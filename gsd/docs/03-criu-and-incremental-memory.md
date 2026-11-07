@@ -1,4 +1,4 @@
-# 02 · CRIU 与增量内存原理
+# 03 · CRIU 与增量内存原理
 
 ## 本章目标
 
@@ -11,17 +11,17 @@
 - 认出"假全量"：明明只改了一点，增量却和全量一样大——并知道它的两个来源和各自的应对办法；
 - 说出 CRIU 的一条语义"保存时停着的任务，恢复后仍然停着"，以及 gsd 有哪两处依赖它。
 
-上一章（[01](01-problem-and-scope.md)）划定了回滚范围：用户进程树加 overlay 根文件系统。本章只讲进程那一半的原理，
-不涉及 gsd 怎样把多棵树、文件系统切换和失败处理编排在一起，那是 [09](09-checkpoint.md) 和 [10](10-restore.md) 的内容。
-文件那一半的原理在 [06](06-overlay-hot-switch.md)。下一章（[03](03-goals-and-tradeoffs.md)）把本章得出的几条约束
+上一章（[02](02-problem-and-scope.md)）划定了回滚范围：用户进程树加 overlay 根文件系统。本章只讲进程那一半的原理，
+不涉及 gsd 怎样把多棵树、文件系统切换和失败处理编排在一起，那是 [11](11-checkpoint.md) 和 [12](12-restore.md) 的内容。
+文件那一半的原理在 [07](07-overlay-hot-switch.md)。下一章（[04](04-goals-and-tradeoffs.md)）把本章得出的几条约束
 （内核必须带 soft-dirty、透明大页必须关）与其他约束放在一起，讲整体的取舍。
 
 ---
 
 ## 1. CRIU 做什么
 
-CRIU（Checkpoint/Restore In Userspace）是一个用户态工具。给它一个进程，它能把这个进程和它的全部子孙"冻"成一组文件；
-之后再给它这组文件，它能把这些进程原样建回来，从被冻住的那条指令继续执行。它不需要被保存的程序做任何配合，
+CRIU（Checkpoint/Restore In Userspace）是一个用户态工具。给它一个进程，它能把这个进程和它的全部子孙保存成一组文件；
+之后再给它这组文件，它能把这些进程原样建回来，从保存时停住的那条指令继续执行。它不需要被保存的程序做任何配合，
 但需要内核提供一些接口（编译选项 `CONFIG_CHECKPOINT_RESTORE`）。
 
 gsd 自己不实现保存和恢复进程的逻辑，它做的是在合适的时机、用合适的参数调用 `/usr/sbin/criu`（路径写死，`criuBin`，`ckpt/criu.go:20`），
@@ -45,7 +45,7 @@ gsd 用的是 `--leave-stopped`，原因见 §6。
 ### 1.2 镜像目录
 
 一次 dump 的产物是一个目录。gsd 给每个 checkpoint 的每棵树各准备一个：
-`/var/lib/gsd/snapshots/<checkpoint ID>_mem/t<序号>/`（目录布局的总表在 [04](04-architecture.md)）。里面主要有：
+`/var/lib/gsd/snapshots/<checkpoint ID>_mem/t<序号>/`（目录布局的总表在 [05](05-architecture.md)）。里面主要有：
 
 | 文件 | 内容 |
 |---|---|
@@ -76,10 +76,10 @@ gsd 用的是 `--leave-stopped`，原因见 §6。
 
 **恢复出来的进程用的是原来的 PID。** 很多程序把 PID 记在内存里或文件里，换了 PID 会出错，所以 CRIU 坚持用原值。
 这要求恢复时这些 PID 必须空着。如果 checkpoint 时的进程（或它的子进程）还活着、占着 PID，CRIU 会报 `Can't fork: File exists`。
-所以 gsd 在 restore 之前必须把当前的用户进程**连同子孙**全部杀干净（[08](08-process-trees.md)、[10](10-restore.md)）。
+所以 gsd 在 restore 之前必须把当前的用户进程**连同子孙**全部杀干净（[10](10-process-trees.md)、[12](12-restore.md)）。
 
 **恢复要把进程的全部内存读回来。** 不管 checkpoint 之后进程只改了多少，恢复时都是整个地址空间重建一遍。
-因此 restore 的耗时主要随进程的内存大小增长，而不随"这一步的改动量"增长——这与整机级回滚的成本形状正好不同（[18](18-process-vs-machine-level.md)）。
+因此 restore 的耗时主要随进程的内存大小增长，而不随"这一步的改动量"增长（代价模型见 [17](17-cost-model.md)）。
 
 ### 1.4 gsd 传给 CRIU 的选项
 
@@ -97,11 +97,11 @@ restore 的命令行由 `buildCriuRestoreCmd`（`ckpt/criu.go:100`）拼出：
 
 | 选项 | 含义 | gsd 为什么这样用 |
 |---|---|---|
-| `--tree <pid>` | 保存以这个进程为根的整棵树 | CRIU 一次只能保存一棵树。沙箱里有几棵用户进程树，gsd 就调用几次，每棵一个镜像目录（[08](08-process-trees.md)） |
+| `--tree <pid>` | 保存以这个进程为根的整棵树 | CRIU 一次只能保存一棵树。沙箱里有几棵用户进程树，gsd 就调用几次，每棵一个镜像目录（[10](10-process-trees.md)） |
 | `-D <目录>` | 镜像目录 | 见 §1.2 |
 | `--shell-job` | 允许保存"会话和终端属于树外某个进程"的任务 | 用户命令是 envd 启动的，它们所在的会话不是由树里的进程建立的。按 CRIU 的规则，这类任务不加这个选项不能保存 |
 | `--leave-stopped` | dump 完让任务停在原地 | 见 §6：从 dump 结束到 soft-dirty 清零之间，进程不能再写内存 |
-| `-v4` | 最详细的日志 | 失败时把日志尾部带进错误信息（[12](12-failure-semantics.md)）。只在 dump 时加 |
+| `-v4` | 最详细的日志 | 失败时把日志尾部带进错误信息（[14](14-failure-semantics.md)）。只在 dump 时加 |
 | `--track-mem` | 打开内存改动跟踪 | 让这次 dump 结束后内核开始记"之后哪些页被写过"，为下一次增量做准备。每次 dump 都加 |
 | `--prev-images-dir` | 指定父镜像目录，本次只写相对它改过的页 | 只在能做增量时加（§2） |
 | `--restore-detached` | 恢复完成后 CRIU 自己退出，不等被恢复的进程 | 被恢复的根进程原本是 CRIU 的子进程，CRIU 一退出它就被 PID 1 收养，从此与 gsd 没有父子关系 |
@@ -127,7 +127,7 @@ CRIU 的增量 dump 解决的就是这个问题。它需要两个选项配合：
 gsd 按**树**做增量：下一次 checkpoint 时，如果某棵树的根进程还是同一个（PID 相同，并且进程的启动时间也相同，
 后者用来排除 PID 被复用的情况），就以上一个 checkpoint 里这棵树的镜像目录为父；新出现的树做全量。
 restore 之后也可以接着做增量：恢复出来的进程从被恢复的那个镜像开始重新计脏，下一次 checkpoint 以它为父。
-认定规则和各种边界情况见 `incrementalParent`（`ckpt/service.go:396`）与 [09](09-checkpoint.md)。
+认定规则和各种边界情况见 `incrementalParent`（`ckpt/service.go:396`）与 [11](11-checkpoint.md)。
 
 ### 2.2 parent 链接，以及"父目录必须活得比子久"
 
@@ -142,10 +142,10 @@ CRIU 沿着 `parent` 一级一级往上读（所以 `buildCriuRestoreCmd` 里没
 删掉了，所有依赖它的 checkpoint 都恢复不出来，而且是在杀掉进程之后才发现。gsd 围绕这条不变量做了三件事：
 
 - 删除一个还被依赖的 checkpoint 时只是把它**隐藏**（列表里看不到、不能再 restore），镜像留到最后一个依赖它的 checkpoint 也被删除为止
-  （[13](13-state-concurrency-capacity.md)）；
+  （[15](15-state-concurrency-capacity.md)）；
 - restore 在杀进程**之前**先检查目标镜像的 `inventory.img` 可读，并沿 `parent` 一路往上，确认每一级父目录都在
   （`checkImages`，`ckpt/service.go:703`）。查出问题就拒绝，这时什么都还没动；
-- 任何一步失败之后，下一次 dump 一律做全量，不再接到一条可能已经不可靠的链上（[09](09-checkpoint.md)、[12](12-failure-semantics.md)）。
+- 任何一步失败之后，下一次 dump 一律做全量，不再接到一条可能已经不可靠的链上（[11](11-checkpoint.md)、[14](14-failure-semantics.md)）。
 
 ---
 
@@ -214,7 +214,7 @@ soft-dirty 需要每个处理器架构各自实现：在页表项里选哪一位
 
 配置上需要同时打开 `CONFIG_CHECKPOINT_RESTORE=y`（`fc-kernels/configs/arm64/6.1.158.config:196`）和
 `CONFIG_MEM_SOFT_DIRTY=y`（同文件 `:3359`）。x86_64 的那份配置没有打开 `CONFIG_CHECKPOINT_RESTORE`，
-这是 gsd 目前只支持 arm64 guest 的原因之一（[03](03-goals-and-tradeoffs.md)）。
+这是 gsd 目前只支持 arm64 guest 的原因之一（[04](04-goals-and-tradeoffs.md)）。
 
 ---
 
@@ -245,8 +245,8 @@ soft-dirty 需要每个处理器架构各自实现：在页表项里选哪一位
 | 零散地碰 3072 个 4 KB 的页（每 64 KB 碰一个） | 12 MB | 190.5 MB | 12.4 MB |
 | 连续写满 192 MB | 192 MB | 195.3 MB | 195.3 MB |
 
-> 条件：旧 920B（已退役），2026-09-11，交接时的代码，在沙箱里直接运行 CRIU（不经过 gsd），单位照原记录写作 MB。
-> 只用来说明机制；当前代码的判定值见 [20](20-results-and-gaps.md)。
+> 条件：旧 920B（已退役），2026-09-11，初始实现的代码，在沙箱里直接运行 CRIU（不经过 gsd），单位照原记录写作 MB。
+> 只用来说明机制；当前代码的判定值见 [19](19-920b-functional.md)。
 
 第一行是最极端的情形：真正改动的只有 0.375 MB，大页开着时增量却是 190.5 MB，放大了约五百倍；关掉之后是 0.8 MB。
 只有第三行那种"整块连续写满"的负载，开不开没有区别——但那不是真实程序的样子。
@@ -257,27 +257,26 @@ soft-dirty 需要每个处理器架构各自实现：在页表项里选哪一位
 用小页填意味着多得多的缺页和页表操作。同一份镜像、同一个沙箱、只切换这一个开关的对照里，
 restore 中 CRIU 那一段的中位数从 145 ms（`always`）变成 173 ms（`never`）。
 
-> 条件：旧 920B（已退役），2026-09 上旬，交接时的代码，gsd 路径的 `criu_restore_ms`。这两个数处在后来一系列修复之前，
-> 绝对值早已不同，这里只看方向。修复之后 restore 的耗时构成见 [17](17-performance-after-fixes.md)，判定值见 [20](20-results-and-gaps.md)。
+> 条件：旧 920B（已退役），2026-09 上旬，初始实现的代码，gsd 路径的 `criu_restore_ms`。这两个数处在后来一系列修复之前，
+> 绝对值早已不同，这里只看方向。修复之后 restore 的耗时构成见 [17](17-cost-model.md)，判定值见 [20](20-920b-performance.md)。
 
 ### 4.4 结论：`never` 是设计约束
 
 这是一个真正的两难：开着，增量失去意义，每次 checkpoint 都按进程大小付费；关着，restore 慢一些。
 soft-dirty 的粒度是由"一个页表项一个位"决定的，在这个前提不变的情况下，gsd 只能选择关。
-全书的所有测量都是在 `never` 下做的；与整机级比较时也必须带上这个条件——整机级的脏页跟踪在宿主侧按 4 KiB 记账，
-guest 里开不开透明大页不影响它的增量精度（[18](18-process-vs-machine-level.md)）。
+全书的所有测量都是在 `never` 下做的。
 
 因为它是正确使用的前提，不能指望使用者记得去设，所以有两处代码保证它：
 
 - **`overlay-init` 在开机时设置。** 沙箱的开机脚本在切换到真正的 `systemd` 之前把开关写成 `never`，并检查确实生效。
-  选这个时机是为了让任何用户进程都没有机会拿到大页（[05](05-guest-boot-and-injection.md)）。
+  选这个时机是为了让任何用户进程都没有机会拿到大页（[06](06-guest-boot-and-injection.md)）。
 - **gsd 启动时兜底。** `ensureTHPNever`（`packages/gsd/main.go:196`）读一次开关，不是 `never` 就改成 `never` 并打一条警告。
   这只是兜底：在这个时刻才改的话，此前已经拿到大页的进程不会立刻变回小页，它们的增量仍然会偏大，直到这些大页被拆掉或进程重启。
 
-现场确认过这两处落实后的效果：模板开机后开关是 `[never]`，内核日志里有 `overlay-init` 的设置记录；
+新 920B 上确认过这两处落实后的效果：模板开机后开关是 `[never]`，内核日志里有 `overlay-init` 的设置记录；
 一个 256 MiB 的进程做零散写入，全量 checkpoint 的镜像是 260 MiB，紧接着的增量是 1.05 MiB，进程没有占用任何大页。
 
-> 条件：新 920B，2026-09-30，提交 `a35ce1993`，功能验证脚本的对应用例，gsd 的 `image_bytes`。判定值见 [20](20-results-and-gaps.md)。
+> 条件：新 920B，2026-09-30，提交 `a35ce1993`，功能验证脚本的对应用例，gsd 的 `image_bytes`。判定值见 [19](19-920b-functional.md)。
 
 ---
 
@@ -300,7 +299,7 @@ guest 里开不开透明大页不影响它的增量精度（[18](18-process-vs-m
 | 原地逐字节改写，不分配任何新对象 | 13 MB |
 | 再用第一种写法做一次 | 16 MB（区域的布局稳定下来之后恢复正常） |
 
-> 条件：旧 920B（已退役），2026-09 上旬，交接时的代码，单位照原记录写作 MB。只用来说明机制。
+> 条件：旧 920B（已退役），2026-09 上旬，初始实现的代码，单位照原记录写作 MB。只用来说明机制。
 
 第一行的"1 MB 临时对象"就是触发点：Python 为它向系统申请了一块新内存，这块内存与堆合并，整个堆被报成脏。
 
@@ -312,11 +311,11 @@ guest 里开不开透明大页不影响它的增量精度（[18](18-process-vs-m
 - 第一次增量偏大、之后恢复正常，多半是这个原因，不是故障。
 
 **怎么判断是不是它。** `CreateCheckpoint` 的响应里有 `image_bytes`（本次镜像的实际大小）和 `parent_checkpoint_id`（是否做了增量）。
-如果 `parent_checkpoint_id` 不为空而 `image_bytes` 接近进程大小，就是假全量；排查步骤在 [25](25-troubleshooting.md)。
+如果 `parent_checkpoint_id` 不为空而 `image_bytes` 接近进程大小，就是假全量；排查步骤在 [29](29-troubleshooting.md)。
 
 ### 5.2 来源二：overlay 切换本身
 
-同一类问题还有一个出在 gsd 自己身上的来源。checkpoint 的后半段要把 overlay 的可写层沉下去（[06](06-overlay-hot-switch.md)），
+同一类问题还有一个出在 gsd 自己身上的来源。checkpoint 的后半段要把 overlay 的可写层沉下去（[07](07-overlay-hot-switch.md)），
 内核在切换时要清理这个文件系统的目录项缓存。按代码里的记录，这个清理会让用户进程的内存区域重新带上 `VM_SOFTDIRTY`
 （`CreateCheckpoint` 中调用 `clearSoftDirty` 之前的注释，`ckpt/service.go:331`）。
 
@@ -349,17 +348,17 @@ guest 里开不开透明大页不影响它的增量精度（[18](18-process-vs-m
 5. 以后恢复到那个 checkpoint 时，这一页的内容来自更早的父镜像——是旧值。
 
 这是一种**静默的内存错误**：checkpoint 和 restore 都报成功，进程也能跑，只是有几页内存的内容属于另一个时刻。
-交接前的实现用的正是 `--leave-running`，存在这个窗口。
+初始实现用的正是 `--leave-running`，存在这个窗口。
 
 修复后改用 `--leave-stopped`：CRIU 保存完一棵树就让它停在原地，gsd 做完层切换、重写完 `clear_refs` 之后，
 才统一发 `SIGCONT` 放行。在这段时间里进程一条指令也不执行，自然不会写内存。多棵树时这个安排还带来了文件系统的一致性：
-先保存完的树在等待期间不会写文件（论证见 [09](09-checkpoint.md)）。
+先保存完的树在等待期间不会写文件（论证见 [11](11-checkpoint.md)）。
 
 针对这个窗口有一个专门的验证：让一个进程以固定速率不停地写内存，反复做"checkpoint、停住、读出内存作为期望值、
 再 checkpoint、restore、逐页比对"。新 920B 上 2026-10-08 对提交 `259f1a25c` 跑了 30 轮，没有一轮出现内容不符的页
-（判定值与脚本说明见 [20](20-results-and-gaps.md)、[19](19-testing-and-debug-kernel.md)）。
+（判定值与脚本说明见 [19](19-920b-functional.md)、[18](18-testing-and-debug-kernel.md)）。
 
-进程停着的时间会计入响应里的 `stopped_ms`，它的定义和量级见 [11](11-end-to-end.md)、[24](24-configuration-and-observability.md)。
+进程停着的时间会计入响应里的 `stopped_ms`，它的定义和量级见 [13](13-end-to-end.md)、[28](28-configuration-and-observability.md)。
 
 ---
 
@@ -377,13 +376,13 @@ gsd 有两处依赖这条语义。
 
 **依赖一：保留用户自己停住的进程。** 用户可能有意停住了某个进程。checkpoint 不应该把它放开，restore 之后它也应该还停着。
 后一半由 CRIU 的这条语义自动保证；前一半由 gsd 保证：在第一棵树 dump 之前，gsd 记下每个进程当时是否停着，
-dump 结束后只给"dump 之前不是停着的"进程发 `SIGCONT`（`resumable`，`ckpt/pid.go:414`；[08](08-process-trees.md)）。
+dump 结束后只给"dump 之前不是停着的"进程发 `SIGCONT`（`resumable`，`ckpt/pid.go:414`；[10](10-process-trees.md)）。
 
 **依赖二：gsd 不能在 dump 之前自己发 `SIGSTOP`。** 多棵树的情况下，一个很自然的想法是先把所有树都停住，
 再一棵一棵慢慢保存，这样各棵树的状态严格是同一时刻的。但按上面的语义，被 gsd 停住的任务会在镜像里被记成"停着的"，
 恢复出来全都不动；而 gsd 没有办法区分"我停的"和"用户停的"。所以 gsd 不在 dump 之前发信号，
 而是靠 `--leave-stopped` 让每棵树保存完之后停下。这个选择的代价是树与树之间有很短的先后差，
-论证写在 `CreateCheckpoint` 的函数头注释里（`ckpt/service.go:147`），展开见 [09](09-checkpoint.md)。
+论证写在 `CreateCheckpoint` 的函数头注释里（`ckpt/service.go:147`），展开见 [11](11-checkpoint.md)。
 
 ---
 

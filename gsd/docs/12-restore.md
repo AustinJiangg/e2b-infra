@@ -1,4 +1,4 @@
-# 10 · restore 的实现
+# 12 · restore 的实现
 
 ## 本章目标
 
@@ -10,8 +10,8 @@
 - 说明 restore 成功之后增量链怎么接续，历史为什么是一棵树而不是一条线；
 - 知道 gsd 启动时为什么要打开加急的 RCU。
 
-上一章（[09](09-checkpoint.md)）是 create：它没有不可逆的步骤。restore 不同——它的第一件实事就是杀掉用户进程，而被杀掉的进程无法复原。
-所以本章的主线是"**提交点**在哪、提交点之前把什么做完"。下一章（[11](11-end-to-end.md)）把 create 和 restore 放在一条时间线上走一遍。
+上一章（[11](11-checkpoint.md)）是 checkpoint：它没有不可逆的步骤。restore 不同——它的第一件实事就是杀掉用户进程，而被杀掉的进程无法复原。
+所以本章的主线是"**提交点**在哪、提交点之前把什么做完"。下一章（[13](13-end-to-end.md)）把 checkpoint 和 restore 放在一条时间线上走一遍。
 
 主要代码：`ckpt/service.go` 的 `RestoreCheckpoint`（:463）、`checkImages`（:703）、`restoreFailed`（:635）；`ckpt/overlay.go` 的 `PrepareRestore` / `CommitRestore` / `AbortRestore`；
 `ckpt/criu.go` 的 `buildCriuRestoreCmd`、`killTrees`。
@@ -20,7 +20,7 @@
 
 ## 1. restore 的语义
 
-"restore 到 checkpoint C"的意思是：让沙箱里的用户进程和根文件系统回到 create C 的那一刻。拆开是三件事：
+"restore 到 checkpoint C"的意思是：让沙箱里的用户进程和根文件系统回到做 checkpoint C 的那一刻。拆开是三件事：
 
 1. **当前的用户进程全部消失**——它们属于被丢弃的那段时间线；
 2. **根文件系统切回 C 记录的层栈**，配一个全新的空 upper；
@@ -53,7 +53,7 @@
 ```
 
 第一段里失败的请求，调用方可以当它没发生过。第二段里失败的请求返回 `DataLoss`，错误信息里写明用户进程已经没了、文件系统处在 `old` 还是 `target` 状态，
-gsd 同时进入"restore 半途失败"的 degraded：Create 被拒绝，Restore 和 Delete 仍然允许，直到下一次 restore 成功（[12](12-failure-semantics.md)）。
+gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，restore 和 delete 仍然允许，直到下一次 restore 成功（[14](14-failure-semantics.md)）。
 
 ---
 
@@ -64,7 +64,7 @@ gsd 同时进入"restore 半途失败"的 degraded：Create 被拒绝，Restore 
 | # | 步骤 | 代码 | 失败时 |
 |---|---|---|---|
 | 1 | 取操作锁 `opMu` | `ckpt/service.go:464` | |
-| 2 | `checkReady(true)` | :469，函数在 :677 | fatal 或状态文件写不进去 → `FailedPrecondition`。与 create 的区别：上一次 restore 半途失败**不**拒绝 restore——restore 正是用来走出那个状态的 |
+| 2 | `checkReady(true)` | :469，函数在 :677 | fatal 或状态文件写不进去 → `FailedPrecondition`。与 checkpoint 的区别：上一次 restore 半途失败**不**拒绝 restore——restore 正是用来走出那个状态的 |
 | 3 | 登记 `defer s.persist()` | :472 | |
 | 4 | 在条目池里查目标 | :475 | 不存在，或者已被删除而只是隐藏着 → `NotFound` |
 | 5 | 对目标的每棵树 `checkImages` | :484-491 | `FailedPrecondition`，信息里写明哪棵树、`nothing was changed` |
@@ -75,10 +75,10 @@ gsd 同时进入"restore 半途失败"的 degraded：Create 被拒绝，Restore 
 
 **第 5 步**检查的是镜像"能不能用"（`checkImages`，`ckpt/service.go:703`）：这棵树的 `inventory.img` 存在且能读出至少一个字节；然后沿镜像目录里的 `parent` 符号链接一路往上，
 每一个父镜像目录的 `inventory.img` 也同样可读，直到没有 `parent` 为止；走的过程中发现链成环也算失败。增量镜像里标记为"在父镜像里"的页，restore 时要从父目录以及更上面的祖先里读，
-所以链上任何一环缺失都会让 restore 在半途失败。正常的删除流程不会删掉被依赖的父目录（[13](13-state-concurrency-capacity.md)）；这一步兜的是目录被外部删掉、tmpfs 被清之类的意外。
+所以链上任何一环缺失都会让 restore 在半途失败。正常的删除流程不会删掉被依赖的父目录（[15](15-state-concurrency-capacity.md)）；这一步兜的是目录被外部删掉、tmpfs 被清之类的意外。
 它只检查入口文件，不校验镜像的全部内容——镜像内部损坏仍然要到第二段才暴露（§5.2）。
 
-**第 6 步**的内容在 [06](06-overlay-hot-switch.md) 讲过：取新的 restore 序号、预检选项串长度、确认目标层栈里每个由 gsd 管理的层目录还在、建好一对全新的 upper 与 work 并登记为"待用"。
+**第 6 步**的内容在 [07](07-overlay-hot-switch.md) 讲过：取新的 restore 序号、预检选项串长度、确认目标层栈里每个由 gsd 管理的层目录还在、建好一对全新的 upper 与 work 并登记为"待用"。
 
 **第 7 步**的位置是刻意的：扫描放在准备好层之后、紧挨着杀进程（`service.go:504` 的注释）。这次扫描的结果直接被当作杀进程的第一轮，中间隔得越短，漏掉的新进程越少。
 
@@ -86,7 +86,7 @@ gsd 同时进入"restore 半途失败"的 degraded：Create 被拒绝，Restore 
 
 | # | 步骤 | 代码 | 说明 |
 |---|---|---|---|
-| 8 | `killTrees`：先冻住、反复扫描到没有新进程、整体 `SIGKILL`、等进程号释放 | :524 | 算法见 [08](08-process-trees.md)。耗时记为 `kill_ms`。没有用户进程时跳过 |
+| 8 | `killTrees`：先冻住、反复扫描到没有新进程、整体 `SIGKILL`、等进程号释放 | :524 | 算法见 [10](10-process-trees.md)。耗时记为 `kill_ms`。没有用户进程时跳过 |
 | 9 | 清空 `lastTrees` | :535 | 原来那些进程的 soft-dirty 历史不再有意义 |
 
 `killTrees` 报告的错误（某个信号发不出去、冻结轮数到了上限）只记一条告警，restore **继续往下走**。理由是此刻已经没有退路：部分进程已经被杀，停下来不比继续做更好。
@@ -104,7 +104,7 @@ gsd 同时进入"restore 半途失败"的 degraded：Create 被拒绝，Restore 
 | 13 | `clearRestoreFailure`：解除"restore 半途失败"的 degraded | :622 | |
 | 14 | 返回；`defer` 写 `state.json`、放锁 | :627 | |
 
-第 10 步的耗时记为 `overlay_restore_ms`，第 11 步各棵之和记为 `criu_restore_ms`。`CommitRestore` 成功后会自己启动一次后台回收：被切走的旧 upper 连同里面被丢弃的写入此刻成了垃圾（[13](13-state-concurrency-capacity.md)）。
+第 10 步的耗时记为 `overlay_restore_ms`，第 11 步各棵之和记为 `criu_restore_ms`。`CommitRestore` 成功后会自己启动一次后台回收：被切走的旧 upper 连同里面被丢弃的写入此刻成了垃圾（[15](15-state-concurrency-capacity.md)）。
 
 **第 10 步失败**分两种情况（`service.go:541-545`）：
 
@@ -127,8 +127,8 @@ gsd 同时进入"restore 半途失败"的 degraded：Create 被拒绝，Restore 
 
 CRIU 恢复一棵树时要让每个进程拿回它**原来的进程号**，进程之间靠进程号互相引用（父子关系、进程组、会话）。只要有一个旧进程还占着其中一个号，CRIU 就报 `Can't fork … File exists` 并失败。
 
-交接前的实现只对上一次记下的那一个进程号发 `SIGKILL`。它的子进程被 PID 1 收养后继续活着，占着进程号，于是第二次 restore 偶发失败；
-这些子进程还会继续往文件系统上写。现在的做法是对当前**全部**用户进程连同子孙，先冻住、清点到不再增长、再整体杀掉（[08](08-process-trees.md)），并等到它们的进程号真正被释放。
+初始实现只对上一次记下的那一个进程号发 `SIGKILL`。它的子进程被 PID 1 收养后继续活着，占着进程号，于是第二次 restore 偶发失败；
+这些子进程还会继续往文件系统上写。现在的做法是对当前**全部**用户进程连同子孙，先冻住、清点到不再增长、再整体杀掉（[10](10-process-trees.md)），并等到它们的进程号真正被释放。
 
 ### 4.3 为什么 `--restore-detached`
 
@@ -146,7 +146,7 @@ CRIU 恢复一棵树时要让每个进程拿回它**原来的进程号**，进�
 | `--pidfile` | 把恢复出来的根进程号写到文件里。gsd 每次运行前先删掉旧的，运行后读它（`execCriuRestore`，`criu.go:114`） |
 
 恢复出来的根进程是 criu 的子进程；criu 一退出，它就被 PID 1 收养。所以 **restore 之后每棵树的根的父进程都是 PID 1**，而不是 envd，也不是 gsd。
-这带来一个使用上的后果：恢复出来的进程与当初启动它的那次 SDK 调用之间的连接（通向 envd 的标准输出管道）不会被接回去，SDK 那一端原来的命令句柄不再收到它的输出（[22](22-semantics-and-limits.md)）。
+这带来一个使用上的后果：恢复出来的进程与当初启动它的那次 SDK 调用之间的连接（通向 envd 的标准输出管道）不会被接回去，SDK 那一端原来的命令句柄不再收到它的输出（[26](26-semantics-and-limits.md)）。
 
 CRIU 另有一个选项可以让恢复出来的进程成为调用者的兄弟进程，这里没有用；代码里对应的注释只是把现状说清楚（`criu.go:101-102`）。
 
@@ -156,7 +156,7 @@ criu restore 的输出同样写两处：gsd 的标准错误，以及这棵树镜
 
 各棵树的进程号互不相同（它们来自同一时刻的同一个进程号命名空间），当前用户进程又已经杀干净，所以后恢复的树要的进程号不会被先恢复的树占着——串行在正确性上没有问题。
 
-代价是总耗时随树的数量线性增加。改成几个 criu 同时跑在原理上可行：各棵树互不依赖，树间共享的管道和 socket 在 create 时就已经被拒绝了。没有这么做的理由写在代码里（`ckpt/service.go:557-565`）：
+代价是总耗时随树的数量线性增加。改成几个 criu 同时跑在原理上可行：各棵树互不依赖，树间共享的管道和 socket 在 checkpoint 时就已经被拒绝了。没有这么做的理由写在代码里（`ckpt/service.go:557-565`）：
 
 - 每个 `criu restore` 都要把恢复出来的任务迁回原来的控制组，并各自按进程号建进程；并发时对内核里相应的全局锁和进程号分配的争用**没有实测过**；
 - 一棵失败时，其余几棵的收尾更复杂。
@@ -168,8 +168,8 @@ criu restore 的输出同样写两处：gsd 的标准错误，以及这棵树镜
 gsd 启动时向 `/sys/kernel/rcu_expedited` 写 1（`enableExpeditedRCU`，`packages/gsd/main.go:178`）。这一行与 restore 的耗时直接相关。
 
 CRIU 恢复进程时要把它迁回原来所在的控制组。在 cgroup v2 上，迁移一个任务要取一把全局的读写锁的写端，它的慢路径要等一个 RCU 宽限期。
-在只有 2 个虚拟 CPU 的沙箱里，系统空闲一会儿之后，每次这样的等待要 20～50 ms，而且完全随机——这是交接时 `criu_restore_ms` 大幅抖动的主因之一。
-打开加急之后，同样的迁移降到约 0.1 ms（这几个数出自 `main.go:171-177` 的注释，是定位这个问题时测到的，测量条件与归因过程见 [16](16-restore-slowness-case.md)）。
+在只有 2 个虚拟 CPU 的沙箱里，系统空闲一会儿之后，每次这样的等待要 20～50 ms，而且完全随机——这是初始实现里 `criu_restore_ms` 大幅抖动的主因之一。
+打开加急之后，同样的迁移降到约 0.1 ms（这几个数出自 `main.go:171-177` 的注释，是定位这个问题时测到的，测量条件与归因过程见 [附录 D](D-restore-slowness-case.md)）。
 
 这个设置只影响本 guest；写失败只记一条告警，gsd 照常启动，只是 restore 会带着那段抖动。
 
@@ -202,7 +202,7 @@ gsd 不去杀 `t0`，也不继续尝试 `t2`。沙箱不是任何一个 checkpoi
 | 某棵 criu restore 失败或超时 | 已恢复的几棵在跑，其余没有 | `target`：已经是目标 checkpoint 的 | `DataLoss` | 是 |
 
 注意 criu restore 超时在这里也是 `DataLoss`，不是 `DeadlineExceeded`：`restoreFailed`（`service.go:635`）不区分原因，因为对调用方来说重要的是"沙箱处在中间态"，而不是 criu 为什么没做完。
-每棵树的 restore 时限默认 60 秒，全部树合计上限是它的 3 倍，到时限的处理与 dump 相同（[09](09-checkpoint.md)）。
+每棵树的 restore 时限默认 60 秒，全部树合计上限是它的 3 倍，到时限的处理与 dump 相同（[11](11-checkpoint.md)）。
 
 degraded 的原因随 `state.json` 持久化（字段 `restore_failure`）：gsd 在这种状态下重启并不会让沙箱变回完整状态，所以原因要带过重启，直到一次 restore 成功才清掉。
 
@@ -210,30 +210,30 @@ degraded 的原因随 `state.json` 持久化（字段 `restore_failure`）：gsd
 
 ## 6. restore 之后：增量链的接续
 
-restore 成功之后，沙箱里的用户进程是从目标 checkpoint 的镜像恢复出来的，它们的内存内容就等于那份镜像。所以**下一次 create 可以直接以目标 checkpoint 为父做增量**——
+restore 成功之后，沙箱里的用户进程是从目标 checkpoint 的镜像恢复出来的，它们的内存内容就等于那份镜像。所以**下一次 checkpoint 可以直接以目标 checkpoint 为父做增量**——
 只写恢复之后改过的页。
 
 要让这件事成立，`lastTrees` 必须在 restore 成功时改成"目标 checkpoint 的各棵树"。这里有一个细节（`ckpt/service.go:609-613`）：
-恢复出来的根进程号与 dump 时相同，但它是一个**新进程**，启动时间变了。而"同一棵树"是按进程号加启动时间认的（[08](08-process-trees.md)），
+恢复出来的根进程号与 dump 时相同，但它是一个**新进程**，启动时间变了。而"同一棵树"是按进程号加启动时间认的（[10](10-process-trees.md)），
 所以 gsd 用 `--pidfile` 里的进程号重新读一次启动时间，再记进 `lastTrees`；读不到（那个进程刚恢复出来就退出了）就不记，那棵树之后不存在，也无所谓增量。
 
 由此，checkpoint 的历史是一棵**树**而不是一条线：
 
 ```
 C1 ── C2 ── C3
-        └── C4 ── C5        （在 C3 之后 restore 到 C2，再 create 出 C4、C5）
+        └── C4 ── C5        （在 C3 之后 restore 到 C2，再做 checkpoint 得到 C4、C5）
 ```
 
 C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，但 C3 这个条目本身仍然在、仍然可以 restore。
-这棵树上的父子依赖决定了删除时哪些镜像必须保留，见 [13](13-state-concurrency-capacity.md)。
+这棵树上的父子依赖决定了删除时哪些镜像必须保留，见 [15](15-state-concurrency-capacity.md)。
 
-目标没有进程镜像时，restore 之后 `lastTrees` 为空；之后新启动的进程在下一次 create 时做全量。
+目标没有进程镜像时，restore 之后 `lastTrees` 为空；之后新启动的进程在下一次 checkpoint 时做全量。
 
 ---
 
 ## 7. 耗时的构成
 
-一次 restore 的耗时几乎全部在两项上：`criu_restore_ms` 和 `kill_ms`。下面两组数只用来建立量级感，**判定值见 [20](20-results-and-gaps.md)，不能与那里的数相减**。
+一次 restore 的耗时几乎全部在两项上：`criu_restore_ms` 和 `kill_ms`。下面两组数只用来建立量级感，**判定值见 [20](20-920b-performance.md)，不能与那里的数相减**。
 
 单棵树、192 MiB 内存负载，连续 8 次 restore 的中位数（新 920B、2026-10-08、`259f1a25c`，单位 ms）：
 
@@ -250,7 +250,7 @@ C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，
 | 3 | 83.53 | 10.02 | 94.79 |
 
 读法：`criu_restore` 随树数线性增加，这是串行恢复的直接结果；它也随每棵树的内存量增长（对比两张表里的单树）。切换文件系统的那一下不到 1 ms，第一段的检查与准备加起来不到 1 ms。
-`criu_restore` 里面具体是什么、为什么是这个量级，见 [16](16-restore-slowness-case.md) 和 [17](17-performance-after-fixes.md)。
+`criu_restore` 里面具体是什么、为什么是这个量级，见 [附录 D](D-restore-slowness-case.md) 和 [17](17-cost-model.md)。
 
 ---
 
@@ -272,7 +272,7 @@ C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，
 
 ## 本章要点
 
-1. restore 的提交点是杀进程。杀之前做完镜像检查、层目录准备和进程扫描，这一段失败"什么都没动"；杀之后的任何失败都是 `DataLoss`，并让 gsd 进入只拒绝 create 的 degraded。
+1. restore 的提交点是杀进程。杀之前做完镜像检查、层目录准备和进程扫描，这一段失败"什么都没动"；杀之后的任何失败都是 `DataLoss`，并让 gsd 进入只拒绝 checkpoint 的 degraded。
 2. 不管目标有没有进程镜像，当前用户进程一律杀掉：restore 的语义是回到那一刻，那一刻之后启动的进程不能留在回滚过的文件系统上。
 3. 必须杀整棵树并等进程号释放，否则 CRIU 按原进程号重建时报 `Can't fork … File exists`；杀进程的告警不中断 restore，因为已经没有退路。
 4. 顺序是杀进程 → 切文件系统 → 逐棵 `criu restore --restore-detached`；恢复出的根被 PID 1 收养，与原来的 SDK 命令句柄不再相连。

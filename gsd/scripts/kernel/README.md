@@ -2,7 +2,7 @@
 
 调试内核是在发布版 guest 内核的基础上打开 KASAN、lockdep 等检查编出来的另一个内核，只用于压测：
 它把"释放后使用""加锁顺序可能死锁"这类在发布版上只是概率事件的问题变成当场报告。
-为什么需要、开了什么、它不能代替什么，见手册 [19 章 §7](../../docs/19-testing-and-debug-kernel.md)；这里只讲怎么编、怎么用。
+为什么需要、开了什么、它不能代替什么，见手册 [18 章 §7](../../docs/18-testing-and-debug-kernel.md)；这里只讲怎么编、怎么用。
 
 | 文件 | 是什么 |
 |---|---|
@@ -41,7 +41,7 @@ lockdep 一旦报告过一次问题就把自己关掉，之后不再检查任何
 
 **源码树**：amazonlinux/linux 的 tag `microvm-kernel-6.1.158-15.288.amzn2023`，依次打上代码仓
 `fc-kernels/patches/6.1.158/` 下的三个补丁（`0001-virtio_balloon-…`、`0002-overlayfs-hot-switch-checkpoint.patch`、
-`0003-overlayfs-hot-switch-fixes.patch`）。与发布版内核是同一棵树，只是 config 不同（发布版内核的构建见手册 [23 章](../../docs/23-deployment.md)）。
+`0003-overlayfs-hot-switch-fixes.patch`）。与发布版内核是同一棵树，只是 config 不同（发布版内核的构建见手册 [27 章](../../docs/27-deployment.md)）。
 
 **工具链**（新 920B 上实际用的）：gcc 12.3.1、GNU ld 2.41、flex、bison；在 arm64 机器上原生编译。
 

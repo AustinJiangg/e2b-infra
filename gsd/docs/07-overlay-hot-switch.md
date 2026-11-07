@@ -1,4 +1,4 @@
-# 06 · overlayfs 热切层：机制
+# 07 · overlayfs 热切层：机制
 
 ## 本章目标
 
@@ -10,10 +10,10 @@
 - 说明切换之后，已经在内存里的 inode、目录项和打开的文件各自变成什么；
 - 读懂 gsd 侧的 `SinkUpper` 与 `PrepareRestore` / `CommitRestore`，知道每次 restore 为什么要用一对全新命名的目录。
 
-上一章（[05](05-guest-boot-and-injection.md)）讲了 overlay 根是怎么在开机时搭起来的。本章讲 gsd 在这个根上做的核心动作。
-本章**只讲现在的机制**；这套机制在并发、对象生命周期上曾经有过哪些缺陷、怎么发现、怎么修、怎么验证，全部在下一章（[07](07-overlay-concurrency-and-fixes.md)）。
+上一章（[06](06-guest-boot-and-injection.md)）讲了 overlay 根是怎么在开机时搭起来的。本章讲 gsd 在这个根上做的核心动作。
+本章**只讲现在的机制**；这套机制在并发、对象生命周期上曾经有过哪些缺陷、怎么发现、怎么修、怎么验证，全部在后两章（[08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)）。
 
-主要代码：`ckpt/overlay.go`；内核侧是两个补丁——`0002-overlayfs-hot-switch-checkpoint.patch`（交接时的原始补丁，定义了接口）
+主要代码：`ckpt/overlay.go`；内核侧是两个补丁——`0002-overlayfs-hot-switch-checkpoint.patch`（原始补丁，定义了接口）
 和 `0003-overlayfs-hot-switch-fixes.patch`（在其上的全部修复，合并成一个）。按全书约定，内核代码只引"补丁文件名 + 函数名"。
 
 ---
@@ -67,12 +67,12 @@ lowerdir=<层1>:<层2>:…:/mnt/lower,upperdir=<新 upper>,workdir=<新 work>,ov
 - **选项之间用逗号**分隔，`lowerdir` 内部各层之间用**冒号**分隔，最上面的层写在最前。因此层目录的路径里不能出现逗号或冒号。
 - 只认四个键：`lowerdir`、`upperdir`、`workdir`、`ovl_kind`。出现别的键返回 `-EINVAL`。
 - `lowerdir` 必填。给了 `upperdir` 就必须同时给 `workdir`。
-- 每个路径在内核里用 `kern_path` 解析，起点是**调用进程的根**，并要求是目录。这就是 [05](05-guest-boot-and-injection.md) 里 `/mnt/lower` 与 `/overlay` 必须在新根里再 bind 一次的原因。
+- 每个路径在内核里用 `kern_path` 解析，起点是**调用进程的根**，并要求是目录。这就是 [06](06-guest-boot-and-injection.md) 里 `/mnt/lower` 与 `/overlay` 必须在新根里再 bind 一次的原因。
 - `options_len` 为 0 或大于一页返回 `-EINVAL`。guest 内核是 4 KiB 页，所以整个选项串**不能超过 4096 字节**；长度不含结尾的空字符，内核自己补。
 
 4096 字节这个上限直接决定了层栈能有多深——每多一层，`lowerdir` 就长一段。gsd 为此做了两件事：层目录用很短的名字 `L<n>`（`layerName`，`overlay.go:464`），
 并且在调用 ioctl 之前自己先算长度（`checkOverlayOptionsLen`，`overlay.go:540`），超限时返回一个说得清原因的错误而不是让内核回一个看不出原因的 `-EINVAL`。
-容量上的后果见 [13](13-state-concurrency-capacity.md)。
+容量上的后果见 [15](15-state-concurrency-capacity.md)。
 
 ### 2.3 `ovl_kind`：两种切换的唯一区别
 
@@ -111,8 +111,8 @@ lowerdir=<层1>:<层2>:…:/mnt/lower,upperdir=<新 upper>,workdir=<新 work>,ov
 | `-EINTR` | 等待串行化锁或读写锁时调用者收到了致命信号 |
 | 路径解析的错误 | 某个层目录不存在等 |
 
-`-EXDEV` 是"所有层必须在同一个 ext4 上"这条硬约束（[03](03-goals-and-tradeoffs.md)）在内核里的落点之一；另一个落点是 gsd 用 `rename` 做层下沉，`rename` 本身就不能跨文件系统。
-按 `overlay-init` 搭出来的布局（[05](05-guest-boot-and-injection.md)），gsd 不会触发 `-EOPNOTSUPP` 和 `-EXDEV`。
+`-EXDEV` 是"所有层必须在同一个 ext4 上"这条硬约束（[04](04-goals-and-tradeoffs.md)）在内核里的落点之一；另一个落点是 gsd 用 `rename` 做层下沉，`rename` 本身就不能跨文件系统。
+按 `overlay-init` 搭出来的布局（[06](06-guest-boot-and-injection.md)），gsd 不会触发 `-EOPNOTSUPP` 和 `-EXDEV`。
 
 ---
 
@@ -120,7 +120,7 @@ lowerdir=<层1>:<层2>:…:/mnt/lower,upperdir=<新 upper>,workdir=<新 work>,ov
 
 下面是 `0003-overlayfs-hot-switch-fixes.patch` 里 `ovl_do_ioctl_checkpoint` 的现状。把它分成三段来看：准备、提交、善后。
 外层的 `ovl_ioctl_checkpoint` 先取一把互斥锁，保证同一个 overlay 上的两次切换不会交错——切换在开头读当前层栈、在提交点替换它，中间不能插进另一次切换。
-这一节按顺序叙述流程；同一过程的阶段图和三把锁各管什么的表在 [07](07-overlay-concurrency-and-fixes.md) 的"总览：一次 ioctl 的阶段、提交点与锁"一节。
+这一节按顺序叙述流程；同一过程的阶段图和三把锁各管什么的表在 [08](08-overlay-switch-consistency.md) 的"总览：一次 ioctl 的阶段、提交点与锁"一节。
 
 ### 3.1 准备：所有可能失败的事
 
@@ -161,13 +161,13 @@ lowerdir=<层1>:<层2>:…:/mnt/lower,upperdir=<新 upper>,workdir=<新 work>,ov
 
 放开写锁之后，释放计划持有的引用，释放**上一次**切换留下的延迟释放表。
 
-这一节里"延迟到下一次切换再释放""层数组退役与改指"都是为了在不引入释放后使用的前提下不泄漏，它们各自的论证见 [07](07-overlay-concurrency-and-fixes.md) 的"切换与所有 overlay 入口的互斥"和"回收：被换下的层、mount 与缓存引用"两节。
+这一节里"延迟到下一次切换再释放""层数组退役与改指"都是为了在不引入释放后使用的前提下不泄漏，它们各自的论证见 [08](08-overlay-switch-consistency.md) 的"切换与所有 overlay 入口的互斥"一节和 [09](09-overlay-cache-and-reclaim.md) 的"回收：被换下的层、mount 与缓存引用"一节。
 
 ### 3.4 冻结的范围
 
 从取到写锁到放开写锁之间，这个 overlay 上所有需要读后端状态的操作都在等待——这是切换对 guest 里**所有**进程（不只是用户进程）造成的停顿。
 它的长度取决于内存里被钉住的 inode 数量，以及 §5.2 里要拷贝的文件大小。gsd 把一次 checkpoint 切换的耗时记在 `overlay_sink_ms`、一次 restore 切换记在 `overlay_restore_ms`
-（位置见 [11](11-end-to-end.md)）；在 2026-10-08 的确认验证里两者都不到 1 ms（新 920B、`259f1a25c`、没有可写打开的大文件；判定值见 [20](20-results-and-gaps.md)）。
+（位置见 [13](13-end-to-end.md)）；在 2026-10-08 的确认验证里两者都不到 1 ms（新 920B、`259f1a25c`、没有可写打开的大文件；判定值见 [20](20-920b-performance.md)）。
 
 ---
 
@@ -199,8 +199,8 @@ restore 不保留旧 upper，而且 lower 也可能整个换了一组。缓存�
 - **只存在于被丢弃 upper 里的目录**没有任何后端了：它被从 inode 哈希里移除，对它的操作返回 `-ESTALE`。
 
 对进程的含义是：restore 之后，从根开始的新路径查找看到的是目标 checkpoint 的文件系统；而在 restore 之前就拿着的当前目录、打开的文件，可能看到旧时间线，或者得到 `-ESTALE`。
-用户进程不受影响——它们在切换之前已经被 gsd 全部杀掉，恢复出来的进程由 CRIU 在新层栈上重新打开文件（[10](10-restore.md)）。
-受影响的是不在回滚范围内的进程：root 起的服务、envd 的文件接口。这是 [03](03-goals-and-tradeoffs.md) 的取舍三，细节和它引出的几个修复在 [07](07-overlay-concurrency-and-fixes.md)，对使用者的说明在 [22](22-semantics-and-limits.md)。
+用户进程不受影响——它们在切换之前已经被 gsd 全部杀掉，恢复出来的进程由 CRIU 在新层栈上重新打开文件（[12](12-restore.md)）。
+受影响的是不在回滚范围内的进程：root 起的服务、envd 的文件接口。这是 [04](04-goals-and-tradeoffs.md) 的取舍三，细节和它引出的几个修复在 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)，对使用者的说明在 [26](26-semantics-and-limits.md)。
 
 ### 4.3 代数还用在哪
 
@@ -228,25 +228,25 @@ restore 不保留旧 upper，而且 lower 也可能整个换了一组。缓存�
 - 在下沉的那一层里放一份**拷贝**顶替它的位置，作为 checkpoint 的内容。两者用"交换"式的改名对调，下沉的层里任何时刻都不缺这个名字。
 
 代价是在写锁内做一次整文件拷贝，期间 overlay 上的操作都被挡住。2026-09-30 的修复验证里测过三档：可写打开的文件为 16、64、128 MiB 时，切换耗时分别是 12.9、48.0、101.5 ms，
-约 0.8 ms/MiB（新 920B，口径是 `overlay_sink_ms`；判定值见 [20](20-results-and-gaps.md)）。
+约 0.8 ms/MiB（新 920B，口径是 `overlay_sink_ms`；判定值见 [20](20-920b-performance.md)）。
 
 这个行为由模块参数 `overlay.ckpt_move_open` 控制：`2`（默认）全部搬，`1` 只搬当时还被内存映射着的，`0` 不搬。有多个硬链接的文件不搬（它的其他名字会把 inode 留在下沉的层里），
-内核为此打一条限速的告警，之后对它的写入会改到 checkpoint 的内容。这些都是已知限制，见 [15](15-known-limits.md)；为什么这样设计、怎么验证的，见 [07](07-overlay-concurrency-and-fixes.md) 的"打开的文件跨切换的语义"一节。
+内核为此打一条限速的告警，之后对它的写入会改到 checkpoint 的内容。这些都是已知限制，见 [16](16-known-limits.md)；为什么这样设计、怎么验证的，见 [08](08-overlay-switch-consistency.md) 的"打开的文件跨切换的语义"一节。
 
 ### 5.3 内存映射本身不触发 copy-up
 
 `ovl_mmap` 现在的行为与上游 overlayfs 一致：把映射直接建在文件当前的真实文件上，**不做 copy-up**。只读映射和私有映射本来就不会写穿到文件；
 共享可写映射要求文件以读写方式打开，而读写打开在打开时就已经 copy-up 过了。
 
-这一条值得单独写出来，是因为交接前的补丁在这里对所有可写映射都做 copy-up，后果是每次 restore 都把被执行的二进制文件拷进 upper，根盘逐渐写满。
-那是 restore 变慢的真根因，完整的归因过程在 [16](16-restore-slowness-case.md)；本章只需要记住现状：映射不拷文件。
+这一条值得单独写出来，是因为原始补丁在这里对所有可写映射都做 copy-up，后果是每次 restore 都把被执行的二进制文件拷进 upper，根盘逐渐写满。
+那是 restore 变慢的真根因，完整的归因过程在 [附录 D](D-restore-slowness-case.md)；本章只需要记住现状：映射不拷文件。
 
 ---
 
 ## 6. gsd 一侧怎么用
 
 `OverlayManager`（`ckpt/overlay.go:41`）记着四样东西：当前 upper、当前 work、当前层栈 `layers`（最上面的在前，最后一个是基础层 `/mnt/lower`）、两个序号。
-它自己有一把锁 `mu`，与 `Service` 的操作锁是两回事——后台回收（[13](13-state-concurrency-capacity.md)）也要进这把锁。
+它自己有一把锁 `mu`，与 `Service` 的操作锁是两回事——后台回收（[15](15-state-concurrency-capacity.md)）也要进这把锁。
 
 ### 6.1 `SinkUpper`：checkpoint 的切换
 
@@ -269,7 +269,7 @@ restore 不保留旧 upper，而且 lower 也可能整个换了一组。缓存�
 
 ### 6.2 `PrepareRestore` / `CommitRestore` / `AbortRestore`：restore 的切换
 
-restore 的切换被拆成两半，是因为 `Service` 要在它们中间**杀进程**（[10](10-restore.md)）：杀进程不可逆，所以一切可能失败又不改变状态的事都要在杀之前做完。
+restore 的切换被拆成两半，是因为 `Service` 要在它们中间**杀进程**（[12](12-restore.md)）：杀进程不可逆，所以一切可能失败又不改变状态的事都要在杀之前做完。
 
 `PrepareRestore`（`overlay.go:203`）只做准备，失败时什么都没动：
 
@@ -301,13 +301,13 @@ work 目录只有内核使用，固定 0755。
 ### 6.5 一个会让人困惑的现象
 
 切换不更新 `/proc/mounts` 里这个 overlay 的挂载选项：无论做过多少次 checkpoint 和 restore，那里显示的始终是开机时的
-`lowerdir=/mnt/lower,upperdir=/overlay/workspace/upper,…`。要知道当前真正的层栈，看 gsd 的 `state.json` 或日志，不要看 `/proc/mounts`（[15](15-known-limits.md)、[25](25-troubleshooting.md)）。
+`lowerdir=/mnt/lower,upperdir=/overlay/workspace/upper,…`。要知道当前真正的层栈，看 gsd 的 `state.json` 或日志，不要看 `/proc/mounts`（[16](16-known-limits.md)、[29](29-troubleshooting.md)）。
 
 ---
 
 ## 7. arm64 的 soft-dirty
 
-`0002` 补丁里与 overlayfs 无关的另一半，是给 arm64 加上 soft-dirty 支持——CRIU 的增量 dump 靠它知道哪些页被写过（原理在 [02](02-criu-and-incremental-memory.md)），而上游内核在 arm64 上没有实现它。要点只有几处：
+`0002` 补丁里与 overlayfs 无关的另一半，是给 arm64 加上 soft-dirty 支持——CRIU 的增量 dump 靠它知道哪些页被写过（原理在 [03](03-criu-and-incremental-memory.md)），而上游内核在 arm64 上没有实现它。要点只有几处：
 
 - 架构配置里声明 `HAVE_ARCH_SOFT_DIRTY`；页表项里占用两个软件位：有效页表项的第 63 位（`PTE_SOFT_DIRTY`）和换出页表项的第 61 位（`PTE_SWP_SOFT_DIRTY`）；
 - 把页表项标脏的函数同时置上 soft-dirty 位；更新访问标志时保留这一位；

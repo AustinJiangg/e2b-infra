@@ -1,4 +1,4 @@
-# 09 · checkpoint 的实现
+# 11 · checkpoint 的实现
 
 ## 本章目标
 
@@ -8,10 +8,10 @@
 - 解释多棵树逐棵 dump 为什么仍然得到一个自洽的状态，以及它在哪一点上不是原子的；
 - 说清三个容易被改坏的设计决定：为什么用 `--leave-stopped`、为什么下沉之后要再写一次 `clear_refs`、为什么不能在 dump 之前自己发 `SIGSTOP`；
 - 说明按树增量的父镜像怎么选、什么时候被清空、失败后为什么必须全量；
-- 说出没有用户进程、或者 upper 为空时 create 做了什么。
+- 说出没有用户进程、或者 upper 为空时 checkpoint 做了什么。
 
-前面几章准备好了零件：文件系统怎么换层（[06](06-overlay-hot-switch.md)）、用户进程怎么分成树（[08](08-process-trees.md)）、CRIU 的增量靠什么（[02](02-criu-and-incremental-memory.md)）。
-本章把它们按 `CreateCheckpoint` 的执行顺序装起来。下一章（[10](10-restore.md)）是 restore。
+前面几章讲了各个部件：文件系统怎么换层（[07](07-overlay-hot-switch.md)）、用户进程怎么分成树（[10](10-process-trees.md)）、CRIU 的增量靠什么（[03](03-criu-and-incremental-memory.md)）。
+本章把它们按 `CreateCheckpoint` 的执行顺序串起来。下一章（[12](12-restore.md)）是 restore。
 
 主要代码：`ckpt/service.go` 的 `CreateCheckpoint`（:163）及其辅助函数；`ckpt/criu.go` 的 `buildCriuDumpCmd`、`runCriuCmd`。
 
@@ -32,7 +32,7 @@
         → 写 state.json → 放锁
 ```
 
-create 没有不可逆的步骤：任何一步失败，收尾之后沙箱都回到 create 之前的样子（进程在跑，文件系统没变，没有多出条目）。这与 restore 形成对比（[10](10-restore.md)、[12](12-failure-semantics.md)）。
+checkpoint 没有不可逆的步骤：任何一步失败，收尾之后沙箱都回到 checkpoint 之前的样子（进程在跑，文件系统没变，没有多出条目）。这与 restore 形成对比（[12](12-restore.md)、[14](14-failure-semantics.md)）。
 
 ---
 
@@ -42,8 +42,8 @@ create 没有不可逆的步骤：任何一步失败，收尾之后沙箱都回�
 
 | # | 步骤 | 代码 | 说明 |
 |---|---|---|---|
-| 1 | 取操作锁 `opMu`，全程持有 | `ckpt/service.go:164` | Create、Restore、Delete 互斥，后来的排队（[13](13-state-concurrency-capacity.md)）。`total_ms` 从拿到锁之后开始计 |
-| 2 | `checkReady(false)` | :170，函数在 :677 | fatal、上一次 restore 半途失败、状态文件写不进去，三种情况都拒绝 create（[12](12-failure-semantics.md)） |
+| 1 | 取操作锁 `opMu`，全程持有 | `ckpt/service.go:164` | checkpoint、restore、delete 互斥，后来的排队（[15](15-state-concurrency-capacity.md)）。`total_ms` 从拿到锁之后开始计 |
+| 2 | `checkReady(false)` | :170，函数在 :677 | fatal、上一次 restore 半途失败、状态文件写不进去，三种情况都拒绝 checkpoint（[14](14-failure-semantics.md)） |
 | 3 | 登记 `defer s.persist()` | :174 | 无论成功失败，退出前都把状态落盘：失败路径也可能改过状态（清空了增量父镜像、下沉回滚时改了记录） |
 | 4 | 生成 id：`ckpt_<纳秒时间戳>` | :176 | |
 
@@ -52,10 +52,10 @@ create 没有不可逆的步骤：任何一步失败，收尾之后沙箱都回�
 | # | 步骤 | 代码 | 说明 |
 |---|---|---|---|
 | 5 | `scanUsers`：一次 `/proc` 扫描 | :180 | 读不了 `/proc` 直接返回 `Internal`，不降级成只有文件系统的 checkpoint |
-| 6 | 找根，得到树的棵数 | :185 | 定义见 [08](08-process-trees.md) |
+| 6 | 找根，得到树的棵数 | :185 | 定义见 [10](10-process-trees.md) |
 | 7 | 记录所有树里每个进程此刻的状态 | :189-192 | 为了最后只放开"dump 前不是停止状态"的进程；必须在第一棵 dump 之前记全 |
 | 8 | 多树预检 `crossTreeShared` | :200 | 两棵及以上才做。命中则 `FailedPrecondition` |
-| 9 | 容量预检 `estimateDumpIn` | :209 | 全部树的匿名内存与共享内存之和乘 1.2，与 snapshot store 剩余空间、guest 可用内存比较，任一不够则 `ResourceExhausted`（[13](13-state-concurrency-capacity.md)） |
+| 9 | 容量预检 `estimateDumpIn` | :209 | 全部树的匿名内存与共享内存之和乘 1.2，与 snapshot store 剩余空间、guest 可用内存比较，任一不够则 `ResourceExhausted`（[15](15-state-concurrency-capacity.md)） |
 
 第 5～7 步的耗时记为 `find_pids_ms`，第 8～9 步记为 `precheck_ms`。**到第 9 步为止，沙箱没有被改动过任何东西**：没有进程被停过，没有目录被建过。
 第 8、9 步的拒绝因此是最干净的一类失败——调用方按错误信息处理后重试即可。没有用户进程时第 7～9 步整个跳过。
@@ -101,7 +101,7 @@ criu 的标准输出和标准错误被同时写到两处（`execCriuDump`，`cri
 | 13 | 再扫一次 `/proc`，列出各棵树现在的全部进程 | :297 `treePIDs` | 第 5 步的扫描与 CRIU 冻结之间可能有新派生的进程，以现在的为准；扫描失败则退而只处理各个根，并告警 |
 | 14 | 算出要放开的名单 `resumable` | :302 | 去掉第 7 步记录里就是停止状态的 |
 | 15 | 把"放开"包成只执行一次的函数并登记 `defer` | :303-313 | 之后任何错误路径都保证进程被放回运行状态 |
-| 16 | `SinkUpper`：下沉 upper | :322 | 改名加 ioctl（[06](06-overlay-hot-switch.md)）。耗时记为 `overlay_sink_ms`。失败见 §6 |
+| 16 | `SinkUpper`：下沉 upper | :322 | 改名加 ioctl（[07](07-overlay-hot-switch.md)）。耗时记为 `overlay_sink_ms`。失败见 §6 |
 | 17 | `clearSoftDirty`：对第 13 步列出的每个进程向 `/proc/<pid>/clear_refs` 写 `4` | :334，函数在 :418 | 见 §3.3。写失败的进程数进响应的 `clear_refs_failed` |
 | 18 | 放开：对名单里的进程发 `SIGCONT` | :336 | **冻结窗口结束**。`stopped_ms` = 此刻减去 `tFirstStopped` |
 
@@ -132,18 +132,18 @@ CRIU 一次只能 dump 一棵树，N 棵树就是 N 次先后进行的 dump。�
 
 **不是原子的地方**在树与树之间：排在后面的树，在前面的树已经冻住之后还多跑了一段——长度是前面各棵树的 dump 时间之和。
 互不通信的后台命令对此无感。通过文件、网络相互协作的两棵树，restore 之后看到的对方状态可能比自己"旧"这么一小段。
-需要严格一致的进程应当用同一条命令启动成一棵树（[22](22-semantics-and-limits.md)）。
+需要严格一致的进程应当用同一条命令启动成一棵树（[26](26-semantics-and-limits.md)）。
 
 ### 3.2 为什么 `--leave-stopped`
 
-交接前的实现用的是 `--leave-running`：dump 一结束进程就继续跑，gsd 随后下沉文件系统、重写 `clear_refs`。这在"dump 结束"与"`clear_refs` 写完"之间留下一个窗口，窗口里进程是活的：
+初始实现用的是 `--leave-running`：dump 一结束进程就继续跑，gsd 随后下沉文件系统、重写 `clear_refs`。这在"dump 结束"与"`clear_refs` 写完"之间留下一个窗口，窗口里进程是活的：
 
 - 进程在窗口里写了某一页 → 这一页被标上 soft-dirty；
 - gsd 随后写 `clear_refs` → 这一页的 soft-dirty 被清掉；
 - 下一次增量 dump 时，这一页看起来"没被改过" → 不写进镜像，restore 时从父镜像里取——取到的是窗口之前的旧内容。
 
-结果是 restore 出来的内存里有个别页是旧的，而且毫无征兆。这类漏页在 2026-09-23 的现场对照里反复出现：把 guest 里的 gsd 换回修改前的二进制，有效的 50 轮比对里 31 轮有漏页（单轮最多 717 页），同一天换成修改后的二进制 30 轮为 0（新 920B，口径同下；出处见 [20](20-results-and-gaps.md)）；
-改为 `--leave-stopped` 之后，2026-10-08 确认验证的 30 轮比对漏页为 0（新 920B、`259f1a25c`；判定值见 [20](20-results-and-gaps.md)，测试方法见 [19](19-testing-and-debug-kernel.md)）。
+结果是 restore 出来的内存里有个别页是旧的，而且毫无征兆。这类漏页在 2026-09-23 的对照里反复出现：把 guest 里的 gsd 换回修改前的二进制，有效的 50 轮比对里 31 轮有漏页（单轮最多 717 页），同一天换成修改后的二进制 30 轮为 0（新 920B，口径同下；出处见 [19](19-920b-functional.md)）；
+改为 `--leave-stopped` 之后，2026-10-08 确认验证的 30 轮比对漏页为 0（新 920B、`259f1a25c`；判定值见 [19](19-920b-functional.md)，测试方法见 [18](18-testing-and-debug-kernel.md)）。
 
 `--leave-stopped` 让进程从 dump 结束一直停到 `clear_refs` 写完，窗口里它们不可能写内存，也就没有可丢的修改。它同时保证了 §3.1 的第 2 句，以及文件系统与内存的对应。
 
@@ -151,14 +151,14 @@ CRIU 一次只能 dump 一棵树，N 棵树就是 N 次先后进行的 dump。�
 
 ### 3.3 为什么下沉之后要重写 `clear_refs`
 
-CRIU 带 `--track-mem` dump 时已经清过一次 soft-dirty，按理下一次增量的基线已经建立。但紧接着的 overlay 切换会在内核里收缩目录项缓存（[06](06-overlay-hot-switch.md)），
-这个动作会让用户进程的内存区域被标上"区域级"的 soft-dirty 标志——不是某一页脏了，而是整个区域被视为脏（原理见 [02](02-criu-and-incremental-memory.md) 的"假全量"）。
+CRIU 带 `--track-mem` dump 时已经清过一次 soft-dirty，按理下一次增量的基线已经建立。但紧接着的 overlay 切换会在内核里收缩目录项缓存（[07](07-overlay-hot-switch.md)），
+这个动作会让用户进程的内存区域被标上"区域级"的 soft-dirty 标志——不是某一页脏了，而是整个区域被视为脏（原理见 [03](03-criu-and-incremental-memory.md) 的"假全量"）。
 如果不处理，下一次增量 dump 会把这些区域整个写出来，增量退化成接近全量。
 
 所以 gsd 在下沉之后对被 dump 过的全部进程再写一次 `clear_refs`（`writeClearRefs`，`ckpt/service.go:434`，写入字符 `4` 表示清 soft-dirty）。
 这时进程还停着，所以这一次清除与进程的写入之间没有竞争——这正是 §3.2 的窗口被关上的地方。
 
-某个进程写失败时不让整个 create 失败：它的后果只是下一次增量比需要的大（最坏退化成全量），数据不会错。每个失败的进程打一条告警，个数放进响应的 `clear_refs_failed`。
+某个进程写失败时不让整个 checkpoint 失败：它的后果只是下一次增量比需要的大（最坏退化成全量），数据不会错。每个失败的进程打一条告警，个数放进响应的 `clear_refs_failed`。
 进程已经不在了（`/proc/<pid>` 消失）不算失败。
 
 ### 3.4 为什么不在 dump 之前自己 `SIGSTOP`
@@ -167,7 +167,7 @@ CRIU 带 `--track-mem` dump 时已经清过一次 soft-dirty，按理下一次�
 
 不这样做，是因为 CRIU 的一条语义（`ckpt/service.go:157-160` 的注释）：**它开始接管时已经处于停止状态的任务，在镜像里被记成"停止"，restore 之后会被再发一次停止信号、留在停止状态。**
 gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复出来的进程就全是停着的。而 gsd 无法在 restore 之后分辨"这个进程是我为了 dump 停的"还是"用户自己按 Ctrl-Z 停的"——
-后者正是靠这条语义才得以在 create 和 restore 之后保持停止（[08](08-process-trees.md)）。两者不能兼得，于是选择让 CRIU 自己去冻结每棵树，gsd 只在 dump 之后借 `--leave-stopped` 接手。
+后者正是靠这条语义才得以在 checkpoint 和 restore 之后保持停止（[10](10-process-trees.md)）。两者不能兼得，于是选择让 CRIU 自己去冻结每棵树，gsd 只在 dump 之后借 `--leave-stopped` 接手。
 
 ---
 
@@ -175,13 +175,13 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 ### 4.1 父镜像是谁
 
-每棵树有自己的增量链。`incrementalParent`（`ckpt/service.go:396`）为一棵树选父镜像的规则在 [08](08-process-trees.md) 讲过：根的进程号和启动时间都与 `lastTrees` 里某一项相同，且那一项所属的 checkpoint 仍在条目池里。
+每棵树有自己的增量链。`incrementalParent`（`ckpt/service.go:396`）为一棵树选父镜像的规则在 [10](10-process-trees.md) 讲过：根的进程号和启动时间都与 `lastTrees` 里某一项相同，且那一项所属的 checkpoint 仍在条目池里。
 
-`lastTrees` 里的各项总是指向**同一个** checkpoint——"上一个成功的 create，或者上一次 restore 到的那个 checkpoint"——因为每次成功的 create 或 restore 都把它整体替换。
+`lastTrees` 里的各项总是指向**同一个** checkpoint——"上一个成功的 checkpoint，或者上一次 restore 到的那个 checkpoint"——因为每次成功的 checkpoint 或 restore 都把它整体替换。
 所以按现在的流程，一个 checkpoint 的各棵树要么是全量，要么都以同一个 checkpoint 为父；`parent_checkpoint_id` 报告的就是它。
-（条目池的依赖模型是按"可以有多个父"实现的，不依赖这一点，见 [13](13-state-concurrency-capacity.md)。）
+（条目池的依赖模型是按"可以有多个父"实现的，不依赖这一点，见 [15](15-state-concurrency-capacity.md)。）
 
-混合的情况很常见：一个 checkpoint 里，老树做增量、新起的树做全量。确认验证里的一组数字直观地展示了这一点（新 920B、2026-10-08、每棵树 64 MiB 的内存负载；判定值见 [20](20-results-and-gaps.md)）：
+混合的情况很常见：一个 checkpoint 里，老树做增量、新起的树做全量。确认验证里的一组数字直观地展示了这一点（新 920B、2026-10-08、每棵树 64 MiB 的内存负载；判定值见 [19](19-920b-functional.md)）：
 
 | checkpoint | 当时的树 | 镜像大小 |
 |---|---|---|
@@ -195,10 +195,10 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 | 时刻 | 清什么 | 为什么 |
 |---|---|---|
-| create 的任何一步失败（dump 或下沉） | 全部 | §6.3 |
-| 它指向的 checkpoint 被 Delete | 指向它的各项 | 哪怕那个 checkpoint 因为还有子节点只是被隐藏、镜像还在，也清掉：继续以它为父会让新的 checkpoint 也挂在它下面，它就得一直留到这条新链也删光，而用户删它是希望它尽早消失（`ckpt/service.go:775-778`） |
-| restore 杀掉进程之后 | 全部；restore 成功则改成目标 checkpoint 的各棵树 | 原来那些进程没了，它们的 soft-dirty 历史不再有意义（[10](10-restore.md)） |
-| gsd 重启后加载的是旧格式的状态文件 | 全部 | 旧格式不带根的进程号与启动时间，认不出是哪棵树（[13](13-state-concurrency-capacity.md)） |
+| checkpoint 的任何一步失败（dump 或下沉） | 全部 | §6.3 |
+| 它指向的 checkpoint 被 delete | 指向它的各项 | 哪怕那个 checkpoint 因为还有子节点只是被隐藏、镜像还在，也清掉：继续以它为父会让新的 checkpoint 也挂在它下面，它就得一直留到这条新链也删光，而用户删它是希望它尽早消失（`ckpt/service.go:775-778`） |
+| restore 杀掉进程之后 | 全部；restore 成功则改成目标 checkpoint 的各棵树 | 原来那些进程没了，它们的 soft-dirty 历史不再有意义（[12](12-restore.md)） |
+| gsd 重启后加载的是旧格式的状态文件 | 全部 | 旧格式不带根的进程号与启动时间，认不出是哪棵树（[15](15-state-concurrency-capacity.md)） |
 
 全量总是安全的：它不依赖任何 soft-dirty 历史。清空的唯一代价是下一次 dump 多写一些。
 
@@ -206,7 +206,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 ## 5. 时限
 
-每棵树的 dump 有一个时限，默认 60 秒（`defaultCriuDumpTimeout`，`ckpt/service.go:25`；参数 `-criu-dump-timeout`）。一次 create 里全部树合计另有一个上限，是它的 3 倍
+每棵树的 dump 有一个时限，默认 60 秒（`defaultCriuDumpTimeout`，`ckpt/service.go:25`；参数 `-criu-dump-timeout`）。一次 checkpoint 里全部树合计另有一个上限，是它的 3 倍
 （`criuTotalTimeoutFactor`，`service.go:33`）。合计上限存在的理由是：先 dump 完的树在后面的树 dump 期间一直停着，树多的时候不能让"每一棵都差一点超时"把停顿累加到 N 倍。
 只有一棵树时合计上限不起作用，单棵时限先到。
 
@@ -214,7 +214,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 2 秒之后（`criuTermGrace`，`criu.go:23`）还没退出就 `SIGKILL`。超时返回的错误里带着上下文的超时错误，`criuErrorCode`（`service.go:865`）据此把它映射成 `DeadlineExceeded`，
 调用方可以和"criu 自己报错"（`Internal`）区分开。
 
-这个时限是 gsd 自己的，与 SDK 的 `request_timeout` 无关：SDK 那一侧超时只是客户端不等了，gsd 里的 create 会继续做完（第 11 步的上下文与请求脱钩）。
+这个时限是 gsd 自己的，与 SDK 的 `request_timeout` 无关：SDK 那一侧超时只是客户端不等了，gsd 里的 checkpoint 会继续做完（第 11 步的上下文与请求脱钩）。
 
 ---
 
@@ -233,20 +233,20 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 ### 6.2 下沉失败
 
-这时所有树都已经 dump 成功并停着。`SinkUpper` 自己负责文件系统一侧的回退（把改了名的 upper 改回原名、删掉新建的目录，见 [06](06-overlay-hot-switch.md)）；
+这时所有树都已经 dump 成功并停着。`SinkUpper` 自己负责文件系统一侧的回退（把改了名的 upper 改回原名、删掉新建的目录，见 [07](07-overlay-hot-switch.md)）；
 `CreateCheckpoint` 丢弃全部镜像、清空 `lastTrees`，第 15 步登记的 `defer` 把进程放开。错误码由 `overlayErrorCode`（`service.go:874`）决定：
 层栈太深（选项串超过内核上限）是 `ResourceExhausted`，其余是 `Internal`。
 
 ### 6.3 为什么失败后不能退回上一个父镜像
 
-失败后把 `lastTrees` 恢复成 create 之前的样子，看起来能省掉下一次的全量。但这是错的（`discardFailedCheckpoint` 的注释，`ckpt/service.go:822-824`）：
+失败后把 `lastTrees` 恢复成 checkpoint 之前的样子，看起来能省掉下一次的全量。但这是错的（`discardFailedCheckpoint` 的注释，`ckpt/service.go:822-824`）：
 
 - dump 失败时，CRIU 可能已经把一部分任务的 soft-dirty 清零了（它是先写页、再清零的）；
 - 下沉失败时，这次 dump 已经把全部任务完整地清零过。
 
 无论哪种，soft-dirty 现在记录的是"自这次失败的 dump 以来"的修改，而不是"自上一个成功的 checkpoint 以来"的。如果下一次仍以更早的那个镜像为父，
 那么"上一个成功的 checkpoint"到"这次失败的 dump"之间被改过的页，既不在父镜像里（父镜像更早），也不会被当成脏页写出来——restore 出来的内存就是错的。
-所以失败之后唯一正确的做法是清空，强制下一次全量。这是 [12](12-failure-semantics.md) 不变量清单里的一条。
+所以失败之后唯一正确的做法是清空，强制下一次全量。这是 [14](14-failure-semantics.md) 不变量清单里的一条。
 
 ### 6.4 失败之后的状态
 
@@ -264,7 +264,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 所以单树时它很短，多树时它约等于"除第一棵外各棵的 dump 时间之和"，排在最前面的那棵树停得最久。
 
 下表出自 2026-10-08 的一轮多树性能测量（新 920B；每棵树 64 MiB；1、2、3 棵树各 8 轮的中位数，单位 ms；这一轮早于最终提交，用的是当时的模板与内核；
-只用来说明形状，**判定值见 [20](20-results-and-gaps.md)，不能与那里的数相减**）：
+只用来说明形状，**判定值见 [20](20-920b-performance.md)，不能与那里的数相减**）：
 
 | 树数 | 增量且内存未改：`criu_dump` / `stopped` | 首次全量：`criu_dump` / `stopped` | 全部改写后的增量：`criu_dump` / `stopped` |
 |---|---|---|---|
@@ -274,7 +274,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 读法：`criu_dump` 随树数线性增长；`stopped` 在多树时大致等于"`criu_dump` 减去一棵的份额"。三棵树首次全量时，最先 dump 的那棵多停了约 92 ms，而单树时只有 2.4 ms。
 还要注意 `stopped_ms` **不包含**每棵树自己 dump 期间被 CRIU 冻结的时间——那段时间进程同样不在运行，它记在 `criu_dump_ms` 里。
-对一棵具体的树来说，它不在运行的总时长是"自己的 dump 时间 + 自己 dump 完之后到放开的时间"。代价模型的完整讨论在 [17](17-performance-after-fixes.md)。
+对一棵具体的树来说，它不在运行的总时长是"自己的 dump 时间 + 自己 dump 完之后到放开的时间"。代价模型的完整讨论在 [17](17-cost-model.md)。
 
 ---
 
@@ -282,14 +282,14 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 ### 8.1 没有用户进程
 
-空闲的沙箱没有用户进程树。这时 create 不是错误，而是做一个**只有文件系统的 checkpoint**：第 7～9 步、第 12～15 步、第 17～18 步都跳过，
+空闲的沙箱没有用户进程树。这时 checkpoint 不是错误，而是做一个**只有文件系统的 checkpoint**：第 7～9 步、第 12～15 步、第 17～18 步都跳过，
 镜像目录是空的，条目里没有树。响应里 `has_process_image=false`、`process_trees=0`、`image_bytes=0`，`timings` 里只有 `find_pids_ms`、`overlay_sink_ms`、`total_ms` 非零。
 
-restore 到这样的 checkpoint 时，当前的用户进程照样全部被杀掉，文件系统切回去，不恢复出任何进程（[10](10-restore.md)）。
+restore 到这样的 checkpoint 时，当前的用户进程照样全部被杀掉，文件系统切回去，不恢复出任何进程（[12](12-restore.md)）。
 
 ### 8.2 upper 为空
 
-两次 checkpoint 之间如果没有写过任何文件，`SinkUpper` 发现当前 upper 是空目录，直接返回当前层栈：不改名，不发 ioctl，也不新增层（[06](06-overlay-hot-switch.md)）。
+两次 checkpoint 之间如果没有写过任何文件，`SinkUpper` 发现当前 upper 是空目录，直接返回当前层栈：不改名，不发 ioctl，也不新增层（[07](07-overlay-hot-switch.md)）。
 新条目与上一个条目记录的是同一组层，进程镜像则是各自的。这让"只改内存、不写文件"的负载反复 checkpoint 时层栈不会变深。
 
 ---
@@ -313,10 +313,10 @@ restore 到这样的 checkpoint 时，当前的用户进程照样全部被杀掉
 
 ## 本章要点
 
-1. create 的骨架是：扫描与预检（什么都没动）→ 逐棵 `criu dump --leave-stopped` → 全部停住后下沉 upper → 重写 `clear_refs` → 一起放开 → 入池、落盘。全程持操作锁。
-2. create 没有不可逆步骤；任何一步失败，进程被放开、镜像被删、改名被回退，沙箱回到 create 之前的样子。
+1. checkpoint 的主线是：扫描与预检（什么都没动）→ 逐棵 `criu dump --leave-stopped` → 全部停住后下沉 upper → 重写 `clear_refs` → 一起放开 → 入池、落盘。全程持操作锁。
+2. checkpoint 没有不可逆步骤；任何一步失败，进程被放开、镜像被删、改名被回退，沙箱回到 checkpoint 之前的样子。
 3. 多棵树逐棵 dump 得到的是"最后一棵被冻住那一刻"的自洽状态，因为先 dump 的树一直停着；树与树之间不是原子的，后 dump 的多跑了前面各棵的 dump 时间。
 4. `--leave-stopped` 关掉了"dump 结束到 `clear_refs` 写完"之间进程还在写内存的窗口，那个窗口会让下一次增量静默漏页；下沉之后重写 `clear_refs` 是因为切换会让内存区域整体带脏。
 5. gsd 不在 dump 之前自己发 `SIGSTOP`：CRIU 会把接管时已停止的任务恢复成停止状态，这条语义留给了用户自己停住的进程。
-6. 增量按树做，父镜像是上一个成功的 create 或 restore 到的 checkpoint 里同一棵树的目录；任何一步失败、父 checkpoint 被删、restore 杀进程之后都清空，下一次全量。失败后不能退回更早的父镜像。
+6. 增量按树做，父镜像是上一个成功的 checkpoint 或 restore 到的 checkpoint 里同一棵树的目录；任何一步失败、父 checkpoint 被删、restore 杀进程之后都清空，下一次全量。失败后不能退回更早的父镜像。
 7. `stopped_ms` 从第一棵 dump 完算起，多树时约等于其余各棵的 dump 时间之和；没有用户进程时做只有文件系统的 checkpoint，upper 为空时不下沉。

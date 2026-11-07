@@ -7,12 +7,12 @@
 
 | 章 | 图讲什么 |
 |---|---|
-| [04 总体架构、请求路径与鉴权](../docs/04-architecture.md) | 组件与分工：请求从 SDK 到 guest 里的 gsd 经过谁 |
-| [05 guest 启动、根文件系统与模板注入](../docs/05-guest-boot-and-injection.md) | `overlay-init` 搭出来的根文件系统：ext4 根盘、基础层、upper 与 work 的关系 |
-| [07 overlayfs 热切层：并发、生命周期与修复](../docs/07-overlay-concurrency-and-fixes.md) | 修复后一次层切换在内核里的阶段图（提交点前后各做什么） |
-| [11 端到端走查](../docs/11-end-to-end.md) | 时序全图：一次 checkpoint 与一次 restore 在 SDK、宿主代理、gsd、CRIU、内核之间怎么走 |
-| [16 restore 为什么慢：一次归因](../docs/16-restore-slowness-case.md) | 归因链：从"restore 慢且抖"的现象一步步追到根因 |
-| [18 进程级与整机级：分工与对照](../docs/18-process-vs-machine-level.md) | 进程级与整机级各自工作的位置：同一个 SDK 入口，请求在宿主代理处分岔 |
+| [05 总体架构、请求路径与鉴权](../docs/05-architecture.md) | 组件与分工：请求从 SDK 到 guest 里的 gsd 经过谁 |
+| [06 guest 启动、根文件系统与模板注入](../docs/06-guest-boot-and-injection.md) | `overlay-init` 搭出来的根文件系统：ext4 根盘、基础层、upper 与 work 的关系 |
+| [08 overlayfs 热切层：切换一致性](../docs/08-overlay-switch-consistency.md) | 修复后一次层切换在内核里的阶段图（提交点前后各做什么） |
+| [13 端到端走查](../docs/13-end-to-end.md) | 时序全图：一次 checkpoint 与一次 restore 在 SDK、宿主代理、gsd、CRIU、内核之间怎么走 |
+| [附录 D 案例：restore 慢的归因](../docs/D-restore-slowness-case.md) | 归因链：从"restore 慢且抖"的现象一步步追到根因 |
+| [24 与沙箱级对比：设计差异与性能](../docs/24-vs-sandbox-level.md) | 进程级与沙箱级各自工作的位置：同一个 SDK 入口，请求在宿主代理处分岔 |
 
 以各章正文为准；章里增删了图，这张表跟着改。
 

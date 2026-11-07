@@ -1,4 +1,4 @@
-# 23 · 部署
+# 27 · 部署
 
 ## 本章目标
 
@@ -6,17 +6,15 @@
 
 1. 列出 gsd 这套栈由哪几个部件组成、各自从代码仓的哪里来、装到机器的哪里；
 2. 在不联网的机器上把 gsd 与 orchestrator 编出来，把 guest 内核按固定基线打上补丁编出来，并核对补丁能从基线重放出同一棵源码树；
-3. 按运行时布局摆放文件，分清"与整机级回滚共用的机器"和"只跑 gsd 的机器"两种摆法；
+3. 按运行时布局摆放文件，分清"与沙箱级回滚共用的机器"和"只跑 gsd 的机器"两种摆法；
 4. 用切栈脚本把宿主切到 gsd 栈，知道它改了什么、在什么情况下拒绝执行；
 5. 在 gsd 栈下建出模板 `base-gsd`，并说清为什么换内核、换 gsd 之后必须重建模板；
 6. 部署后用一段脚本逐项确认 guest 里的内核、gsd、CRIU 与文件系统布局都是预期的。
 
-前两章（[21](21-quickstart.md)、[22](22-semantics-and-limits.md)）面向调用方，从本章起面向部署与运维。本章讲"从代码到一个能用的模板"的全过程；
-装好之后有哪些开关、怎么看日志在下一章（[24](24-configuration-and-observability.md)），出了问题按症状查 [25](25-troubleshooting.md)，成套的上机验收在 [26](26-acceptance-runbook.md)。
+前两章（[25](25-quickstart.md)、[26](26-semantics-and-limits.md)）面向调用方，从本章起面向部署与运维。本章讲"从代码到一个能用的模板"的全过程；
+装好之后有哪些开关、怎么看日志在下一章（[28](28-configuration-and-observability.md)），出了问题按症状查 [29](29-troubleshooting.md)，成套的上机验收在 [30](30-acceptance-runbook.md)。
 
-本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码版本是 `deltabox-gsd@259f1a25c`。950：未部署、未测，见 §7。
-
-2026-11-06 起 orchestrator 为 `259f1a25c-e2bv`：宿主机侧网卡改名 `e2bv-<n>`，地址池沿用部署 job 的 `SANDBOXES_HOST_NETWORK_CIDR` / `SANDBOXES_VRT_NETWORK_CIDR`，与 e2b-infra `870d087` 的沙箱级部署一致。验证见 [20 章 §3.5](20-results-and-gaps.md#35-适配新部署后的全流程复测2026-11-06)。
+本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码基准是 `deltabox-gsd@bc3cce913`。950：尚未运行，流程见 §7，结果填在 [22](22-950-results.md)。
 
 ---
 
@@ -27,15 +25,15 @@ gsd 这套栈不改 Firecracker，也不改宿主内核。要部署的是下面�
 | 部件 | 源码 | 装到哪里 | 说明 |
 |---|---|---|---|
 | gsd | `packages/gsd/` | 宿主 `/fc-gsd/gsd`；建模板时被拷进 guest 的 `/usr/bin/gsd` | 纯 Go、静态链接（`CGO_ENABLED=0`）的 arm64 二进制。宿主上的这个文件只在建模板时被读取，宿主自己不运行它 |
-| gsd 版 orchestrator | `packages/orchestrator/` | 宿主 `/fc-gsd/orchestrator` | 与上游相比多了"建模板时注入 gsd"的逻辑（[05](05-guest-boot-and-injection.md)）。需要 CGO（`CGO_ENABLED=1`） |
+| gsd 版 orchestrator | `packages/orchestrator/` | 宿主 `/fc-gsd/orchestrator` | 与上游相比多了"建模板时注入 gsd"的逻辑（[06](06-guest-boot-and-injection.md)）。需要 CGO（`CGO_ENABLED=1`） |
 | guest 内核 | `fc-kernels/`（构建脚本、config、补丁） | 宿主 `/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin` | 上游 6.1.158 的固定基线加三个补丁。arm64 的 `Image`，文件名按 orchestrator 的约定叫 `vmlinux.bin` |
 | guest 基础镜像 | `packages/gsd/docker/Dockerfile.criu421` | 镜像仓库，例如 `…/e2b-orchestration/ubuntu:22.04-custom-criu421` | 在 `ubuntu:22.04-custom` 上加源码编译的 CRIU 4.2.1（`/usr/sbin/criu`） |
 | 启动脚本与服务单元 | `packages/orchestrator/internal/template/build/core/rootfs/gsdfiles/` | 嵌在 orchestrator 二进制里，建模板时写进 guest 的 `/usr/bin/overlay-init` 与 `/etc/systemd/system/gsd.service` | 不需要单独部署 |
-| Python SDK | `py-sdk/` | 客户端的解释器 | 见 [21](21-quickstart.md) |
+| Python SDK | `py-sdk/` | 客户端的解释器 | 见 [25](25-quickstart.md) |
 
-发布时必须逐项记录这六样的源码版本与构建哈希。10-08 的完整验收以 `259f1a25c` 为基准；10-16 重用同一套 gsd、orchestrator 与内核，客户端 SDK 使用后续 `dcca61266`，它只补充入口流量令牌的传递，未修改 gsd 协议或内核接口。其他版本组合不能据此推断兼容。gsd 与内核补丁之间有接口约定（切换文件系统层的 ioctl），orchestrator 嵌着的启动脚本决定了 gsd 的启动参数，SDK 与 gsd 之间是同一份线协议；混用不同提交的部件，轻则功能缺失，重则在第一次 checkpoint 时才报错。
+发布时必须逐项记录这六样的源码版本与构建哈希。10-08 的完整验收以 `259f1a25c` 为基准；10-16 重用同一套 gsd、orchestrator 与内核，客户端 SDK 使用后续 `dcca61266`，它只补充入口流量令牌的传递，未修改 gsd 协议或内核接口；11-06 的全流程验证沿用同一套 gsd 与内核，orchestrator 带上了 `bc3cce913` 对 `slot.go` 的改动（[19](19-920b-functional.md)）。代码基准 `bc3cce913` 相对 `259f1a25c` 只多这两个提交，`packages/gsd/` 与 `fc-kernels/` 没有变化；直接从 `bc3cce913` 整包重编的产物没有单独跑过验收，它与上述已验证产物的源码相同，嵌入的提交号不同。其他版本组合不能据此推断兼容。gsd 与内核补丁之间有接口约定（切换文件系统层的 ioctl），orchestrator 嵌着的启动脚本决定了 gsd 的启动参数，SDK 与 gsd 之间是同一份线协议；混用不同提交的部件，轻则功能缺失，重则在第一次 checkpoint 时才报错。
 
-**只支持 arm64 的 guest。** x86_64 的 guest 内核 config 没有打开 CRIU 需要的选项，脏页跟踪的补丁也只做了 arm64（[03](03-goals-and-tradeoffs.md)）。
+**只支持 arm64 的 guest。** x86_64 的 guest 内核 config 没有打开 CRIU 需要的选项，脏页跟踪的补丁也只做了 arm64（[04](04-goals-and-tradeoffs.md)）。
 
 ---
 
@@ -46,10 +44,10 @@ gsd 这套栈不改 Firecracker，也不改宿主内核。要部署的是下面�
 两个二进制都用 Go 编，下面是在不联网的机器上的做法。前提是机器上有一份匹配的 Go 工具链（新 920B 上用的是 go1.25.4）和一份预先备好的模块缓存。
 
 ```bash
-W=<代码仓工作区>                 # 检出在 deltabox-gsd@259f1a25c，工作区干净
+W=<代码仓工作区>                 # 检出在 deltabox-gsd@bc3cce913，工作区干净
 GO=<go 工具链>/bin/go
 OUT=<产物目录>
-V=259f1a25c                      # 嵌进二进制的提交号，与工作区的 HEAD 一致
+V=bc3cce913                      # 嵌进二进制的提交号，与工作区的 HEAD 一致
 
 export GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly
 export GOMODCACHE=<模块缓存目录> GOCACHE=<构建缓存目录>
@@ -67,7 +65,7 @@ CGO_ENABLED=1 $GO build -ldflags "-X=main.commitSHA=$V" -o $OUT/orchestrator . \
   && $GO test -count=1 ./internal/template/... ./internal/cfg/...
 
 sha256sum $OUT/gsd $OUT/orchestrator
-$OUT/gsd -commit                 # 应输出 259f1a25c
+$OUT/gsd -commit                 # 应输出 bc3cce913
 ```
 
 四个环境变量各管一件事，合起来保证"这次构建只用到本机已有的东西"：
@@ -81,7 +79,7 @@ $OUT/gsd -commit                 # 应输出 259f1a25c
 先跑 vet 和单测再编，是因为这两个二进制一旦进了模板，要到做 checkpoint 时才会暴露问题，而重建模板、重跑验证的代价远高于在这里多花一分钟。
 
 新 920B 上的具体路径可以作为参照：Go 工具链取自 RPM 构建树里解出来的那一份（`<e2b-repo>/tmp/rpmbuild/BUILD/go-toolchain/go/bin/go`），`GOMODCACHE` 与 `GOCACHE` 放在构建工作区下的 `gomodcache/` 与 `gocache/`。
-别的机器按自己的路径替换即可，没有任何一处依赖这些路径本身。2026-10-08 那次构建产物的 sha256 记在 [20](20-results-and-gaps.md) 的条件标签里。
+别的机器按自己的路径替换即可，没有任何一处依赖这些路径本身。2026-10-08 那次构建产物的 sha256 记在 [19](19-920b-functional.md) 的条件标签里。
 
 编好之后放到运行时位置（布局见 §3）：
 
@@ -148,10 +146,10 @@ cd - && git worktree remove /tmp/applycheck
 ```
 
 `git write-tree` 输出的是应用完三个补丁之后整棵源码树的哈希，它只取决于文件内容，与提交历史、提交说明无关。
-2026-10-08 在新 920B 上对 `259f1a25c` 里的三个补丁做这一步，三个都 `apply OK`，得到的树哈希是 `744cbce67cef413e4838035c8a2788f97e5e9d3a`，与编出发布内核的那棵源码树相同。
-以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。三个补丁文件各自的 sha256 记在 [20](20-results-and-gaps.md)。
+2026-10-08 在新 920B 上对 `259f1a25c` 里的三个补丁做这一步（`bc3cce913` 里的这三个文件没有变化），三个都 `apply OK`，得到的树哈希是 `744cbce67cef413e4838035c8a2788f97e5e9d3a`，与编出发布内核的那棵源码树相同。
+以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。三个补丁文件各自的 sha256 记在 [19](19-920b-functional.md)。
 
-调试用的内核（打开 KASAN、lockdep 等检查）用同一棵源码树、另一份 config 编，做法与注意事项在 [19](19-testing-and-debug-kernel.md)，config 片段随手册附带在 `scripts/kernel/`。
+调试用的内核（打开 KASAN、lockdep 等检查）用同一棵源码树、另一份 config 编，做法与注意事项在 [18](18-testing-and-debug-kernel.md)，config 片段随手册附带在 `scripts/kernel/`。
 
 ### 2.4 guest 基础镜像
 
@@ -166,7 +164,7 @@ docker push <镜像仓库>/e2b-orchestration/ubuntu:22.04-custom-criu421
 这一步需要能访问 apt 源和 CRIU 源码包（下载地址是构建参数 `CRIU_TARBALL`，可以用 `--build-arg` 换成内网镜像；需要代理时同样只用 `--build-arg` 传，不会留在镜像里）。镜像建一次即可，换 gsd、换内核都不需要重建它。
 
 有两点和"随便找个带 criu 的镜像"不同。第一，建模板时的 provision 步骤**不再安装**发行版自带的 criu 包，免得把源码编的 4.2.1 盖掉，所以镜像里必须自己带好。
-第二，建模板的最后会在 guest 里检查 `/usr/sbin/criu --version` 是 4.x，不是则建模板失败（[25](25-troubleshooting.md)）。用自己的业务镜像建模板时，以这个 Dockerfile 为基础往上加东西。
+第二，建模板的最后会在 guest 里检查 `/usr/sbin/criu --version` 是 4.x，不是则建模板失败（[29](29-troubleshooting.md)）。用自己的业务镜像建模板时，以这个 Dockerfile 为基础往上加东西。
 
 ---
 
@@ -190,7 +188,7 @@ orchestrator 用两个环境变量找另外两样东西：
 - `HOST_GSD_PATH`：要注入的 gsd 二进制，**默认值就是 `/fc-gsd/gsd`**。所以按上面的布局摆好之后不需要设它，建模板时默认就会注入 gsd。不想注入（让这个 orchestrator 建出与上游相同的模板）时设成小写的 `off`。
 - `HOST_KERNELS_DIR`：guest 内核的根目录，默认值是 `/fc-kernels`，orchestrator 在它下面按 `vmlinux-<版本>/vmlinux.bin` 找内核。
 
-两个变量的完整取值规则（包括 `OFF` 大写不算关这类细节）在 [24](24-configuration-and-observability.md) 的开关总表里。
+两个变量的完整取值规则（包括 `OFF` 大写不算关这类细节）在 [28](28-configuration-and-observability.md) 的开关总表里。
 
 ### 3.2 两种机器
 
@@ -198,7 +196,7 @@ orchestrator 用两个环境变量找另外两样东西：
 
 | 机器 | 内核放哪里 | `HOST_KERNELS_DIR` |
 |---|---|---|
-| **与整机级回滚共用**（新 920B 是这种）：`/fc-kernels/vmlinux-6.1.158/` 已经被另一套栈的内核占着，两套栈的 guest 内核版本号相同、内容不同 | `/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin` | 切到 gsd 栈时设为 `/fc-gsd/kernels`；切回另一套栈时去掉 |
+| **与沙箱级回滚共用**（新 920B 是这种）：`/fc-kernels/vmlinux-6.1.158/` 已经被另一套栈的内核占着，两套栈的 guest 内核版本号相同、内容不同 | `/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin` | 切到 gsd 栈时设为 `/fc-gsd/kernels`；切回另一套栈时去掉 |
 | **只跑 gsd** | 直接放 `/fc-kernels/vmlinux-6.1.158/vmlinux.bin` | 不用设 |
 
 共用的机器上绝对不要用补丁内核去覆盖 `/fc-kernels` 下原有的文件：两套栈对 guest 内核的要求不同，覆盖之后另一套栈新建的模板会带着错误的内核。
@@ -209,7 +207,7 @@ orchestrator 监听固定端口（新 920B 上是 5008），同一台机器同�
 
 > **gsd 栈运行期间建的所有模板都会被注入 gsd、启动程序换成 `overlay-init`。** 这与谁发起的构建、模板叫什么名字无关。
 
-共用机器上，切到 gsd 栈之后其他使用者不应再建他们自己的模板；反过来，在别的栈下建出来的模板里没有 gsd。两种模板之间互相派生（以一种模板为基础建另一种）没有处理，不要这样用（[15](15-known-limits.md)）。
+共用机器上，切到 gsd 栈之后其他使用者不应再建他们自己的模板；反过来，在别的栈下建出来的模板里没有 gsd。两种模板之间互相派生（以一种模板为基础建另一种）没有处理，不要这样用（[16](16-known-limits.md)）。
 
 ---
 
@@ -233,6 +231,8 @@ bash scripts/ops/switch-gsd-new920b.sh gsd      # 切到 gsd 栈
 3. **生成 job 定义**：读事先用 `nomad job inspect` 存下的基线 job，只改三处——启动命令里的二进制路径换成 `/fc-gsd/orchestrator`；去掉 `HOST_GSD_PATH`（用默认值）；加上 `HOST_KERNELS_DIR=/fc-gsd/kernels`——再去掉版本号、提交时间等由 nomad 维护的字段。生成的文件含有 job 里的密钥，以 600 权限保存。
 4. **提交 job**。旧的 orchestrator 还占着端口时 nomad 会报端口冲突，脚本每 15 秒重试一次，最多 6 次。
 5. **等切换真正完成**，最长 360 秒：占着端口的进程必须是新的二进制、`/health` 为 200、**并且这个进程的环境里 `HOST_GSD_PATH` 与 `HOST_KERNELS_DIR` 就是期望的值**。确认之后再等 20 秒让 API 一侧重新连上，打印切换后的现状。
+
+脚本返回之后再等 1～2 分钟才建沙箱。2026-11-06 在新 920B 上，切换返回后 1 秒建沙箱报 `500: Failed to place sandbox`，约 1.5 分钟后同一命令正常（[29](29-troubleshooting.md) §8）。
 
 第 1 步里"还有 firecracker 在跑就拒绝"是一道保护：切换会重启 orchestrator，正在运行的沙箱会受影响，而共用机器上那些沙箱可能是别人的。脚本不提供强制选项，要切就先让沙箱都结束。
 
@@ -280,26 +280,26 @@ Template.build(
 python build_template.py --alias base-gsd --memory 2048 --image <镜像仓库>/e2b-orchestration/ubuntu:22.04-custom-criu421
 ```
 
-它不带 `--use-cache` 时就是 `skip_cache=True`。2 vCPU、2048 MB 是本书全部实测所用的规格（[20](20-results-and-gaps.md)）；进程镜像占 guest 内存，内存给多少要按 [22](22-semantics-and-limits.md) 的容量一节来定。
+它不带 `--use-cache` 时就是 `skip_cache=True`。2 vCPU、2048 MB 是本书全部实测所用的规格（[19](19-920b-functional.md)）；进程镜像占 guest 内存，内存给多少要按 [26](26-semantics-and-limits.md) 的容量一节来定。
 
-构建过程中 orchestrator 多做了这些事（细节见 [05](05-guest-boot-and-injection.md)）：往根文件系统里加 gsd、`gsd.service` 和 `overlay-init`；让 guest 以 `overlay-init` 而不是 systemd 作为启动程序；模板的每一层建好后把宿主的 gsd 拷进沙箱、重启 gsd，然后**自检**——`gsd.service` 是 active、`/health` 回 `ok`、`/usr/sbin/criu` 是 4.x，轮询最多约 10 秒。
+构建过程中 orchestrator 多做了这些事（细节见 [06](06-guest-boot-and-injection.md)）：往根文件系统里加 gsd、`gsd.service` 和 `overlay-init`；让 guest 以 `overlay-init` 而不是 systemd 作为启动程序；模板的每一层建好后把宿主的 gsd 拷进沙箱、重启 gsd，然后**自检**——`gsd.service` 是 active、`/health` 回 `ok`、`/usr/sbin/criu` 是 4.x，轮询最多约 10 秒。
 自检不过，构建就失败，不会留下一个"建成功了但做不了 checkpoint"的模板。新 920B 上 2026-10-08 建这个模板用了 17.2 秒（仅作量级参考）。
 
 不设 `HOST_GSD_PATH`、gsd 放在默认位置 `/fc-gsd/gsd` 这条路径，已于 2026-10-09 在新 920B 上实际建模板确认：orchestrator 的进程环境里没有 `HOST_GSD_PATH` 这个键，`/fc-gsd/gsd` 被注入，
-guest 内 `/usr/bin/gsd` 的 sha256 与它相同、`gsd -commit` 输出 `259f1a25c`、`gsd.service` 为 active、THP 为 never；`base-gsd`（2 vCPU / 2048 MB）不用缓存，15.2 秒建成，随后的功能验证全部通过（结果见 [20](20-results-and-gaps.md) 的"落位后的复核"一节）。
-`HOST_GSD_PATH=off` 的关闭态仍然没有真实建过模板（[15](15-known-limits.md) 的 T-08）。
+guest 内 `/usr/bin/gsd` 的 sha256 与它相同、`gsd -commit` 输出 `259f1a25c`、`gsd.service` 为 active、THP 为 never；`base-gsd`（2 vCPU / 2048 MB）不用缓存，15.2 秒建成，随后的功能验证全部通过（结果见 [19](19-920b-functional.md) 的"落位后的复核"一节）。
+`HOST_GSD_PATH=off` 的关闭态仍然没有真实建过模板（[16](16-known-limits.md) 的 T-08）。
 
-要提醒的是，这一步自检**不验证内核是否带补丁**（[15](15-known-limits.md) 的 L-16）：`HOST_KERNELS_DIR` 指错、用没打补丁的内核建模板，自检照样通过，要到第一次 checkpoint 才失败。内核对不对靠 §6 到 guest 里核对版本串。
+要提醒的是，这一步自检**不验证内核是否带补丁**（[16](16-known-limits.md) 的 L-16）：`HOST_KERNELS_DIR` 指错、用没打补丁的内核建模板，自检照样通过，要到第一次 checkpoint 才失败。内核对不对靠 §6 到 guest 里核对版本串。
 
 关于模板，有三条规则必须记住：
 
 **模板固化了建模板时的内核、gsd 和启动脚本。** 沙箱不是"开机"出来的，而是从模板的快照恢复出来的：内核已经在内存里跑着，gsd 进程也已经在跑。所以宿主上后来换掉 `/fc-gsd/gsd` 或内核文件，**对已有的模板和从它起的沙箱没有任何影响**；
-同理，换了三者中的任何一样，都必须重建模板才会生效。这一点曾经让一次内核性能对照失效（[17](17-performance-after-fixes.md)），部署时最容易犯的错也是"换了文件、没重建模板、以为已经升级"。
+同理，换了三者中的任何一样，都必须重建模板才会生效。这一点曾经让一次内核性能对照失效（[附录 E](E-regression-case.md)），部署时最容易犯的错也是"换了文件、没重建模板、以为已经升级"。
 升级的完整顺序是：换文件 →（换的是 orchestrator 时）重新切栈 → 重建模板 → 用 §6 核对 guest 里的版本。
 
 **重建模板不要用构建缓存。** 带 gsd 与不带 gsd 的基础层在缓存里是分开的，不会互相复用；但缓存的键里不含 gsd 二进制或内核的版本，换了 gsd 之后用缓存重建，可能拿到旧的那一层。上面的命令默认不用缓存。
 
-**旧一代的模板不要再用。** 用修复之前的内核或 gsd 建的模板里固化着已知有严重缺陷的版本（[14](14-issue-resolution.md)）。升级之后把旧模板从使用方的配置里撤掉；判断一个模板是哪一代，看 §6 里 guest 的 `gsd -commit` 与内核版本串。
+**旧一代的模板不要再用。** 用修复之前的内核或 gsd 建的模板里固化着已知有严重缺陷的版本（[附录 C](C-issue-resolution.md)）。升级之后把旧模板从使用方的配置里撤掉；判断一个模板是哪一代，看 §6 里 guest 的 `gsd -commit` 与内核版本串。
 
 ---
 
@@ -338,30 +338,54 @@ finally:
 
 | 项 | 期望 | 不符时意味着 |
 |---|---|---|
-| `gsd commit` | 部署的提交号（本书是 `259f1a25c`） | 模板是用旧的 gsd 建的，或宿主上放的不是这一版 |
+| `gsd commit` | 部署的提交号。按 §2.1 从代码基准构建时是 `bc3cce913`；本书验证用的 gsd 二进制构建于 `259f1a25c`，输出的是这个值 | 模板是用旧的 gsd 建的，或宿主上放的不是这一版 |
 | `gsd sha256` | 与宿主 `sha256sum /fc-gsd/gsd` 相同 | 同上；提交号相同而 sha 不同说明是另一次构建 |
 | `kernel` | 版本串以 `Linux version 6.1.158+` 开头，构建时间是你编这个内核的时间 | 模板固化的是别的内核：建模板时 `HOST_KERNELS_DIR` 指错了，或没重建模板 |
-| `thp` | `always madvise [never]` | 启动脚本没能关掉透明大页；增量 checkpoint 会膨胀成接近全量（[02](02-criu-and-incremental-memory.md)） |
-| `rcu_exp` | `1` | gsd 启动时没能打开加速的 RCU；restore 会慢且抖动（[16](16-restore-slowness-case.md)） |
+| `thp` | `always madvise [never]` | 启动脚本没能关掉透明大页；增量 checkpoint 会膨胀成接近全量（[03](03-criu-and-incremental-memory.md)） |
+| `rcu_exp` | `1` | gsd 启动时没能打开加速的 RCU；restore 会慢且抖动（[附录 D](D-restore-slowness-case.md)） |
 | `gsd.service` | `active` | gsd 没起来，看 `journalctl -u gsd` |
-| `health` | `{"status":"ok"}` | 是 `degraded` 时按 [25](25-troubleshooting.md) 处理 |
+| `health` | `{"status":"ok"}` | 是 `degraded` 时按 [29](29-troubleshooting.md) 处理 |
 | `criu` | `Version: 4.2.1` | 基础镜像不对 |
 | `/` | `755 root:root` | 模板是用旧的启动脚本建的 |
 | `/tmp` | `1777 root:root`，`mount: none` | `/tmp` 上还挂着单独的内存盘，它不会跟着回滚 |
 | `store` | `tmpfs 2G` | 镜像目录没有挂成内存盘 |
 | `dmesg` 的 `overlay-init` 行 | 有 `overlay mounted at /mnt/newroot, / is 755 root:root`、`transparent_hugepage=never`、`/tmp on overlay: 1777 root:root, tmp.mount -> /dev/null`，没有 `WARNING` | 启动脚本的某一步没成功 |
-| `is_running` | `True` | 宿主到 guest 49984 端口的路径不通（[25](25-troubleshooting.md)） |
+| `is_running` | `True` | 宿主到 guest 49984 端口的路径不通（[29](29-troubleshooting.md)） |
 
-内核版本串与各文件 sha256 的参考值（2026-10-08 那次部署）在 [20](20-results-and-gaps.md) 的条件标签表里。
+内核版本串与各文件 sha256 的参考值（2026-10-08 那次部署）在 [19](19-920b-functional.md) 的条件标签表里。
 
-这段自检只确认"部件就位"，不确认"功能正确"。接下来按 [26](26-acceptance-runbook.md) 跑验收脚本，第一个脚本 `verify_gsd` 会重复其中几项并实际做若干次 checkpoint / restore。
+这段自检只确认"部件就位"，不确认"功能正确"。接下来按 [30](30-acceptance-runbook.md) 跑验收脚本，第一个脚本 `verify_gsd` 会重复其中几项并实际做若干次 checkpoint / restore。
 
 ---
 
 ## 7. 950
 
-950 上**未部署、未测**。gsd 的设计不依赖 950 独有的硬件特性（它的脏页跟踪在 guest 内核里用软件完成），按理同样的部件可以直接部署，但这只是推断，没有任何结果支持。
-在 950 上部署的前提（宿主内核与 Firecracker 的版本要求、与整机级回滚共用时的布局、切栈方式）**待补**；在补上并做过 [26](26-acceptance-runbook.md) 的验收之前，不要把本章的步骤当作 950 上的部署说明。
+950 上**尚未运行**，本书没有 950 的进程级结果，跑完之后填进 [22](22-950-results.md)。gsd 的设计不依赖 950 独有的硬件特性（它的脏页跟踪在 guest 内核里用软件完成），按理同样的部件可以直接部署，但这只是推断，兼容性要在 950 上确认。
+
+950 上不走 §2 的构建，用预先构建好的离线包部署。同一套入口已于 2026-11-06 在新 920B 上完整走过一遍（结果见 [19](19-920b-functional.md) 的"2026-11-06 全流程复测"一节），在 950 上还没有执行。与本章前面各节的差别是：
+
+- 三个运行文件的位置与 §3 相同，但 `install` 发现这些位置上已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 `/usr/bin`、`/fc-kernels` 和 `/fc-versions`。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。
+- 切栈不用 §4 的 `switch-gsd-new920b.sh`，由离线包的 `ops/950.sh` 完成：先把本机原有的 job 保存成基线（文件含密钥，只留在本机），切到 gsd 栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 `/health`；切回时恢复这份基线。
+- 只支持 orchestrator 与 template-manager 合并部署（`ORCHESTRATOR_SERVICES=orchestrator,template-manager`），其他形态由预检拒绝。
+- orchestrator 是动态链接的，需要 glibc 2.38 的符号；不满足时停在切栈之前，不替换系统 glibc。gsd 是静态链接的。
+- 基础镜像从离线归档导入 950 使用的镜像仓库，不重新构建；SDK 用随包的 wheel 离线安装进一个克隆出来的 conda 环境，不用 `PYTHONPATH`。
+
+步骤按下表的顺序执行，命令都在离线包目录下以 root 运行：
+
+| 步 | 命令 | 做什么 |
+|---|---|---|
+| 1 | `bash ops/950.sh verify` | 校验包内全部文件的 SHA256 |
+| 2 | `bash ops/950.sh install-sdk` | 在克隆出的 conda 环境里离线安装 SDK，并跑 SDK 请求头的单测 |
+| 3 | `bash ops/950.sh preflight` | 只读预检：架构、KVM、命令、动态库、gsd 提交号、job 结构、沙箱地址池环境变量、运行中的进程与 `/health`、活沙箱、SDK 与依赖 |
+| 4 | `bash ops/import-image.sh` | 导入镜像、在不联网的临时容器里检查 CRIU 与预装包、推送到镜像仓库 |
+| 5 | `bash ops/950.sh save-baseline` | 保存本机原有的 job、二进制路径与 SHA256；已有基线时拒绝覆盖 |
+| 6 | `bash ops/950.sh install` | 把三个文件放到 `/fc-gsd/` |
+| 7 | `bash ops/950.sh gsd`，再 `bash ops/950.sh status` | 切到 gsd 栈并确认；返回后等 1～2 分钟再建沙箱 |
+| 8 | `python gsd/scripts/build_template.py --alias base-gsd --cpu 2 --memory 2048 --image "$GSD_TEMPLATE_IMAGE"` | 在 gsd 栈下建模板，不用缓存 |
+| 9 | `bash ops/950.sh acceptance`、`bash ops/950.sh stress` | 验收与压测，见 [30](30-acceptance-runbook.md) §8 |
+| 10 | `bash ops/950.sh sandbox` | 切回本机原有的 job；随后在原有的 SDK 环境里跑 `python ops/sandbox_smoke.py --template base`（模板名按本机） |
+
+第 8 步的 `GSD_TEMPLATE_IMAGE` 与第 4 步用的镜像引用相同，默认是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`。§6 的自检在第 9 步由 `ops/guest_check.py` 完成。
 
 ---
 
@@ -390,5 +414,5 @@ finally:
 - 运行时只有三个文件：`/fc-gsd/gsd`、`/fc-gsd/orchestrator`、`/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin`。默认就注入 gsd，不用设 `HOST_GSD_PATH`；与别的栈共用的机器用 `HOST_KERNELS_DIR=/fc-gsd/kernels` 指向补丁内核，只跑 gsd 的机器把内核直接放 `/fc-kernels`。
 - 切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；还有 firecracker 在跑时拒绝切换。gsd 栈运行期间建的所有模板都会被注入。
 - 模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。
-- 部署后到 guest 里核对：`gsd -commit`、内核版本串、透明大页为 `[never]`、`rcu_expedited` 为 1、`/health` 为 ok、CRIU 4.2.1、`/` 为 755、`/tmp` 在 overlay 上；然后转 [26](26-acceptance-runbook.md) 做验收。
-- 950 未部署、未测，部署前提待补。
+- 部署后到 guest 里核对：`gsd -commit`、内核版本串、透明大页为 `[never]`、`rcu_expedited` 为 1、`/health` 为 ok、CRIU 4.2.1、`/` 为 755、`/tmp` 在 overlay 上；然后转 [30](30-acceptance-runbook.md) 做验收。
+- 950 尚未运行。部署用离线包，流程见 §7，结果填在 [22](22-950-results.md)。
