@@ -1,0 +1,18 @@
+{
+  "platform": "新 920B（192.168.45.47），无 AgentENV",
+  "date": "2026-11-06",
+  "deployment": "e2b-infra 504f02c，RPM，build.sh -d -i -s",
+  "release_commit": "259f1a25c-e2bv（259f1a25c 加 VethName 前缀改动）",
+  "sdk_commit": "dcca61266",
+  "artifacts_sha256": {
+    "orchestrator": "151308ba59fa5785686b51b0940919889b641e5a5fbbd1beb2b9da4272715832",
+    "gsd": "a38b0db90c309abe4a7e1b4ad6b9180c2f257cbe204c4a982190b2b4b04894bb",
+    "kernel": "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+  },
+  "validation": {
+    "acceptance": "PASS：verify_fixes 26 PASS / 0 FAIL / 2 SKIP，verify_multitree 12 项，竞态 30 轮，性能 18 次恢复校验",
+    "stress": "PASS：探针七例，all、noworkers 各 300 轮，multitree、deldense 各 200 轮",
+    "switch_back": "PASS：sandbox_smoke 5 PASS / 0 FAIL / 0 SKIP"
+  },
+  "scope": "未覆盖 AgentENV 同机，未在 950 运行，V12 跳过"
+}

@@ -16,6 +16,8 @@
 
 本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码版本是 `deltabox-gsd@259f1a25c`。950：未部署、未测，见 §7。
 
+2026-11-06 起 orchestrator 为 `259f1a25c-e2bv`：宿主机侧网卡改名 `e2bv-<n>`，地址池沿用部署 job 的 `SANDBOXES_HOST_NETWORK_CIDR` / `SANDBOXES_VRT_NETWORK_CIDR`，与 e2b-infra `870d087` 的沙箱级部署一致。验证见 [20 章 §3.5](20-results-and-gaps.md#35-适配新部署后的全流程复测2026-11-06)。
+
 ---
 
 ## 1. 部件清单
