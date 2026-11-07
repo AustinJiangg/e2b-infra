@@ -1,6 +1,6 @@
 # 11 · 失败语义与正确性不变量
 
-正确性要求覆盖失败路径。本章定义提交点前后的结果、纪元与账本不变量、断链和污染防护；调用方如何处理错误见第 22 章。
+正确性要求覆盖失败路径。本章定义提交点前后的结果、纪元与账本不变量、断链和污染防护；调用方如何处理错误见第 24 章。
 
 ## 1. 总纲：静默损坏比报错糟得多
 
@@ -81,7 +81,7 @@ pub fn faults_vm(&self) -> bool {
 
   注释里的 60 s 是 SDK 的**通用**请求超时。两边预算相等时，客户端总是先放弃 —— 于是调用方看到一个光秃秃的读超时，
   「回滚成功了，是 guest 没醒过来」这条真正的信息永远到不了他手上。SDK 的 checkpoint 调用另有更长的默认超时（`CHECKPOINT_REQUEST_TIMEOUT`），
-  细节与重试策略见 [第 22 章](22-api-semantics.md)。健康的 restore 远在这个上限之内应答，所以 45 s 对 guest 不构成约束，
+  细节与重试策略见 [第 24 章](24-api-semantics.md)。健康的 restore 远在这个上限之内应答，所以 45 s 对 guest 不构成约束，
   **它唯一决定的是由谁来报告这次失败**。
 
   这一档还会在服务端留一条带完整耗时的 error 日志（`finishRestore`）—— 因为这类问题罕见，且沙箱一销毁现场就没了：
@@ -182,7 +182,7 @@ Firecracker 一旦写完差分快照就**清空了脏页位图**（`dump_dirty` 
 ## 7. 删除：依赖感知的回收与合并
 
 `delete(id)` 不能简单删文件 —— 后代要靠它解析内容。`Store.Delete`（`store.go:2014`）分三段：锁内改账本、锁外删文件、最后做合并。
-机制细节（合并的证明、层合并的条件）在 [第 6 章](06-memory-diff-tree.md) 与 [第 7 章](07-disk-layering.md)；给用户看的「怎么删才释放空间」在 [第 22 章](22-api-semantics.md)。
+机制细节（合并的证明、层合并的条件）在 [第 6 章](06-memory-diff-tree.md) 与 [第 7 章](07-disk-layering.md)；给用户看的「怎么删才释放空间」在 [第 24 章](24-api-semantics.md)。
 
 ### 7.1 锁内：隐藏还是移除
 
@@ -241,14 +241,14 @@ return e.Dir, nil, nil                                    // 目录放锁后再�
 中间那一行为什么按成功应答？因为从调用方的角度删除已经完成：条目从 `list` 里消失了，此时若回错误，调用方重试只会得到 404，
 反而让人以为「第一次没删成、第二次发现已经不在」。反过来，最后一行不能回 404 —— 那会告诉调用方「已经不在了」，而实际上什么都没删。
 祖先与层的删除失败只记日志，不影响应答。对应的单元测试是 `service_test.go` 的 `TestDeleteOfNothingIsNotFound`、
-`TestDeleteThatTookEffectIsASuccessEvenIfItsFilesStay`、`TestDeleteFailureSortsTheThreeOutcomes`。错误总表见 [第 22 章 §8](22-api-semantics.md#8-错误总表)。
+`TestDeleteThatTookEffectIsASuccessEvenIfItsFilesStay`、`TestDeleteFailureSortsTheThreeOutcomes`。错误总表见 [第 24 章 §8](24-api-semantics.md#8-错误总表)。
 
 ### 7.4 结尾：合并
 
 最后调用 `runCompaction`（`store.go:2039`，`compact.go:425`）。候选是**隐藏、非基准、已提交、恰有一个子节点**的条目 H；
 做法是把 H 并入它唯一的子节点 C：C 接管 H 的父节点，回滚位图取并集，内容以 C 为准；两者的 rootfs 层在「永远成对出现」时一起合并。
 
-开关与默认值（`CHECKPOINT_COMPACT` 默认开，`CHECKPOINT_COMPACT_MAX_PER_OP` 默认 8）见 [第 24 章 §2.3](24-configuration-and-capacity.md#23-树与存储行为)，合并的机制与证明见 [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)。放在失败语义里要说的是它怎么失败：
+开关与默认值（`CHECKPOINT_COMPACT` 默认开，`CHECKPOINT_COMPACT_MAX_PER_OP` 默认 8）见 [第 26 章 §2.3](26-configuration-and-capacity.md#23-树与存储行为)，合并的机制与证明见 [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)。放在失败语义里要说的是它怎么失败：
 
 - 一次合并失败时树原样不动，**本轮合并就此结束**，候选排回队尾，等下一次 delete；
 - 同一候选累计失败 3 次（`compactMaxAttempts`）后放弃，行为等同不合并；它若之后重新成为候选会再入队；
@@ -319,7 +319,7 @@ restore 在污染期间仍然可用，因为它不依赖当前账本：它用的
 同一个 `internal` 下面就有三种要求不同动作的失败：普通的 `internal`（沙箱在原状态，可换目标重试）、`rootfs_poisoned`（restore 一次即可恢复 checkpoint）、
 `guest_unresponsive`（回滚已完成，由调用方按业务决定）。SDK 先按 `reason` 选异常类，服务端没给 `reason` 时才退回按 `code` 选。
 全部 `reason`、HTTP 状态、SDK 异常类与调用方动作的对照表，以及错误在 Firecracker、FC 客户端、沙箱层、服务层、SDK 各层的形态，见
-[第 22 章](22-api-semantics.md)。
+[第 24 章](24-api-semantics.md)。
 
 ## 11. 代码位置
 

@@ -14,7 +14,7 @@
 | 产物盘 | 根分区 `/dev/mapper/openeuler-root`，**ext4 真盘**，4.3T；产物目录 `/orchestrator/build/checkpoints` 在根分区上 |
 | 脏页后端 | **`kvm-wp`**（KVM 软件写保护；920B 没有 HDBSS，orchestrator 显式设 `FC_TRACK_DIRTY_PAGES=true`）。每个干净页的第一次写都要陷出一次虚机，这笔开销含在下面每个数字里 |
 | orchestrator | `deltabox-dev@8ea5322bf` 构建，与它拉起的 FC 同在一个上限 256 GiB 的 memory cgroup 里（cgroup v1；页缓存记在这个账上，guest 内存走 2 MiB 大页、不记账，[第 12 章 §8](12-state-and-lifecycle.md#8-节点级效应)） |
-| Firecracker | 部署件自带，sha256 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9`（核对身份以它为准）。放在 `/fc-versions/v1.13.1/` 下，目录名取自模板记录的版本；二进制自报 `Firecracker v1.12.1`，即分叉所基于的上游版本（[第 23 章 §4](23-build-and-self-check.md#4-版本配对)） |
+| Firecracker | 部署件自带，sha256 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9`（核对身份以它为准）。放在 `/fc-versions/v1.13.1/` 下，目录名取自模板记录的版本；二进制自报 `Firecracker v1.12.1`，即分叉所基于的上游版本（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
 | guest 内核 | 6.1.158 |
 | 模板 | `base`：2 vCPU / 2048 MB，rootfs 940 MiB（[附录 E §2](E-environment-and-tools.md#2-测试环境与沙箱规格)） |
 
@@ -72,8 +72,8 @@ FC 单测那次跑的源码早于 `8ea5322bf`；此后 FC 目录只多了测试�
 - **第一次（2026-09-29 上午）**：部署件由 `8ea5322bf` 构建，即本章其余各节的代码；
 - **第二次（2026-09-29 下午）**：部署件由 `93ccb02` 构建。它在 `8ea5322bf` 之上多四个提交：delete 按实际情况回答
   （不再把所有错误都答成 404：条目不存在仍是 404 `not_found`；删除已生效、只是之后清理文件失败时照常返回成功并打 WARN；其他错误回 500 `internal`，
-  错误码见 [第 22 章](22-api-semantics.md)）；orchestrator 启动时除了打能力行，还把同样的内容写进能力文件
-  `/orchestrator/build/checkpoint-capabilities.json`（能力行在高负载下会很快被日志轮转冲掉，smoke 改读这个文件，[第 24 章 §3.1](24-configuration-and-capacity.md#31-能力文件)）；
+  错误码见 [第 24 章](24-api-semantics.md)）；orchestrator 启动时除了打能力行，还把同样的内容写进能力文件
+  `/orchestrator/build/checkpoint-capabilities.json`（能力行在高负载下会很快被日志轮转冲掉，smoke 改读这个文件，[第 26 章 §3.1](26-configuration-and-capacity.md#31-能力文件)）；
   另两个提交只改注释（SDK 超时说明、conntrack 与全量根的代码注释）。
 
 | 项 | 第一次（`8ea5322bf` 部署件） | 第二次（`93ccb02` 部署件） |
@@ -201,7 +201,7 @@ FC 单测那次跑的源码早于 `8ea5322bf`；此后 FC 目录只多了测试�
 |---|---|---|
 | RPM 部署版 `4af2872c6` | 本组长跑修复前基线，已包含 74 条 MR 后提交 | [附录 C §5.1](C-evolution-and-cases.md#51-mr-基线与并发优化基线要分别阅读) |
 | `cba26f7c1` | index.json 不再每次重写（[附录 C §8.2](C-evolution-and-cases.md#82-每次-checkpoint-整份重写-indexjson)）；锁外删文件（[附录 C §8.3](C-evolution-and-cases.md#83-在全局锁里删文件)）；GC 直方图取证开关 | [第 12 章](12-state-and-lifecycle.md) |
-| `baae30b56` | 代理开 full duplex（[附录 C §8.1](C-evolution-and-cases.md#81-流式命令偶发截断)） | [第 22 章 §11.3](22-api-semantics.md#113-两类流式截断要分清) |
+| `baae30b56` | 代理开 full duplex（[附录 C §8.1](C-evolution-and-cases.md#81-流式命令偶发截断)） | [第 24 章 §11.3](24-api-semantics.md#113-两类流式截断要分清) |
 | `5319de5dc` | 拷贝前 `MADV_POPULATE`（[附录 C §8.4](C-evolution-and-cases.md#84-gc-长暂停落进别的沙箱的冻结窗口)）；restore 自计读量（[附录 C §8.5](C-evolution-and-cases.md#85-restore-读盘量指标在并发时虚高)） | [第 12 章 §8](12-state-and-lifecycle.md#8-节点级效应) |
 | `1b112fbbd` | conntrack 整表扫描与选路（[附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)） | [第 10 章 §4](10-device-network-time.md#4-连接跟踪) |
 | `df4b38336` | 层按视图引用计数回收、子节点计数表（[附录 C §8.7](C-evolution-and-cases.md#87-rootfs-层文件从不回收)） | [第 7 章 §4](07-disk-layering.md#4-删除-checkpoint先判断哪些层仍被需要) |
@@ -464,7 +464,7 @@ T36 的 restore 次数（16658）不计入 [§10.1](#101-731877-次-restore0-不
 | 视图块数仍在增长 | 上界约 16 万块；long11 2 h 末约 10.7 万块，最后 30 min 仍约 2.1 万块 / h，未饱和 | 按 0.283 ms / 千块外推到上界约再 +15 ms，待更长的长跑确认；根治需改侧车为区间编码（改盘上格式） |
 | 脏页跟踪关闭时不合并 | 每个 checkpoint 都是全量根，层累积 | 设计边界；950 用 HDBSS、920B 显式开跟踪，都不走这条路 |
 | 16 路首个增量 checkpoint 两种形态 | 约 450 ms 与约 100–130 ms 两簇，修复前就有 | 未找到触发条件，暂缓 |
-| netns 泄漏 | 每重启一次 orchestrator 漏约 290 个 | 上游问题，靠运维清理（[第 26 章 §9](26-troubleshooting.md#9-网络槽位netns泄漏)） |
+| netns 泄漏 | 每重启一次 orchestrator 漏约 290 个 | 上游问题，靠运维清理（[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏)） |
 | 客户端偶发 `Bad file descriptor` | 每轮 0–2 次，服务端未收到这些请求 | 客户端连接层，只记录 |
 | 并发时 GC 偶发长暂停 | ct-opt 出现过 5 次 ≥ 100 ms，此后各轮未再出现 | 未归因，只记录 |
 
@@ -627,7 +627,7 @@ cp0 含预热写入的 192 + 64 MB，是本底。pause 模式下每一档都是�
 | 增量 checkpoint 之后、restore 期间 | 读一个位图文件，与集合做一次按位并 | 内存里的位运算，未单独计时；restore 本来就要导出活跃脏图（这一步不是新增的） |
 | 原生 pause 时 | 集合并进写跟踪位图 | 同上 |
 
-`save_live_bitmap` 这个计时键在 restore 路径上一直都有；全量 checkpoint 上是新增的。计时键的全表见 [第 25 章](25-observability.md)。
+`save_live_bitmap` 这个计时键在 restore 路径上一直都有；全量 checkpoint 上是新增的。计时键的全表见 [第 27 章](27-observability.md)。
 
 还有一个"代价"不是开销，而是正确结果本来的样子：做过 checkpoint 的沙箱，原生 pause 导出的是**这一代启动以来**写过的全部页，而不只是最近一段。
 T39 的服务端日志（[第 16 章 §12.4](16-test-methodology.md#124-与-checkpoint-叠加后导出完整证明累积位图)）里，写跟踪位图本身只有 2.6k~5.1k 页，导出却有 31k~34k 页，差出来的约 28k 页（约 110 MiB）正是 checkpoint 清掉、由集合补回的部分。
@@ -724,7 +724,7 @@ checkpoint 30.39 / 70.79 对 32.7 / 75.1 ms。p50 差 2–3 ms，是网络往返
 ### 18.5 一轮怎么跑
 
 1. 记录起跑状态：二进制 sha256、orchestrator 进程的环境变量、宿主 netns 数与 nat 规则数；
-2. 需要时先清理泄漏的网络槽位（每重启一次 orchestrator 会漏约 290 个，[第 26 章 §9](26-troubleshooting.md#9-网络槽位netns泄漏)），
+2. 需要时先清理泄漏的网络槽位（每重启一次 orchestrator 会漏约 290 个，[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏)），
    再带本轮开关重启 orchestrator，跑一遍 smoke 确认栈正常；
 3. 起旁路采样，再起驱动；
 4. 结束后停旁路，按固定脚本出本轮分析，与上一轮并排；

@@ -1,6 +1,6 @@
 # 03 · 设计目标、能力边界与方案选择
 
-本章把业务目标转化为设计约束，并给出当前能力与边界。性能目标的测量定义和结果分别在第四篇说明，使用方需要遵守的完整契约见第 22 章。
+本章把业务目标转化为设计约束，并给出当前能力与边界。性能目标的测量定义和结果分别在第四篇说明，使用方需要遵守的完整契约见第 24 章。
 
 ## 1. 目标场景
 
@@ -138,7 +138,7 @@
 | 内容解析 | 按页沿祖先链寻址，恢复成本与链深无关；删除时同步合并隐藏条目，只为回收空间（[第 6 章](06-memory-diff-tree.md)） |
 
 唯一保留的固定开销是**全量根**（每个沙箱的第一次 checkpoint）：模板 memfile 不在本地，树根存一次全量让回滚路径不跨网络。
-它有开关（[第 24 章](24-configuration-and-capacity.md)），取舍见 [第 6 章](06-memory-diff-tree.md)。
+它有开关（[第 26 章](26-configuration-and-capacity.md)），取舍见 [第 6 章](06-memory-diff-tree.md)。
 
 ### 5.2 不重建任何宿主资源
 
@@ -172,7 +172,7 @@
 | Firecracker 自报脏页后端 | `hdbss` / `kvm-wp` / `off` |
 | `FC_HDBSS_REQUIRED` | 生产部署可以选择**宁可启动失败** |
 
-机制见 [第 5 章](05-dirty-tracking-and-hdbss.md)，字段见 [第 25 章](25-observability.md)，开关见 [第 24 章](24-configuration-and-capacity.md)。
+机制见 [第 5 章](05-dirty-tracking-and-hdbss.md)，字段见 [第 27 章](27-observability.md)，开关见 [第 26 章](26-configuration-and-capacity.md)。
 
 ## 6. 设计收益与代价
 
@@ -185,18 +185,18 @@
 
 | 能力或范围 | 当前状态与使用约束 | 详细说明 |
 |---|---|---|
-| 活沙箱原地回滚 | 已支持；内存、vCPU、中断控制器、设备逻辑状态、根盘及进程一起恢复，沙箱 ID、IP 和宿主资源保留 | [第 22 章 §1](22-api-semantics.md#1-restore-回滚回什么)、[第 9 章](09-in-place-rollback.md) |
-| 增量与树形历史 | 已支持 checkpoint / restore / list / delete，可在保留的分支间切换；不跟踪脏页时退回全量，空间与耗时增加 | [第 21 章](21-sdk-quickstart.md)、[第 6 章](06-memory-diff-tree.md)、[第 23 章](23-build-and-self-check.md) |
-| 外部副作用 | 设计边界；外部数据库、API、消息与上传文件不会随 guest 回退，业务需自行幂等或去重 | [第 22 章 §2.1](22-api-semantics.md#21-外部世界) |
-| 连接与在途调用 | 设计边界；跨 restore 的 TCP 连接需要重连，在途命令和文件请求可能被中断，已发送响应头的流会截断 | [第 22 章 §2.2](22-api-semantics.md#22-tcp-连接跨越-restore-的一律作废要重连)、[第 22 章 §11](22-api-semantics.md#11-多个调用方与并发) |
-| 时间与随机状态 | 设计边界；单调时钟倒退，墙钟在成功返回前校正，用户态缓存的随机状态会回退、需按业务需要重新初始化 | [第 22 章 §2.3](22-api-semantics.md#23-时钟)、[第 22 章 §2.4](22-api-semantics.md#24-随机数与被回滚这件事本身) |
-| 生命周期与持久化 | 设计边界；checkpoint 仅在所属活沙箱当前这一代有效，不跨重启、迁移或原生 pause / resume；拷走目录也不能独立恢复。离场与持久化使用原生 snapshot | [第 22 章 §3](22-api-semantics.md#3-checkpoint-什么时候失效)、[第 12 章](12-state-and-lifecycle.md)、[第 15 章](15-native-cooperation-and-cost.md) |
-| 并发调用 | 已支持跨沙箱并发；同沙箱 checkpoint / restore / delete 串行，等待与中断按接口契约处理 | [第 22 章 §11](22-api-semantics.md#11-多个调用方与并发)、[第 19 章](19-950-concurrency.md) |
-| 删除与空间回收 | 已支持隐藏、合并与回收；有依赖的数据删除后不立即释放。滚动保留的收敛依赖脏页跟踪、合并启用且处理跟得上；字节上限检查当前占用，不是严格空间预留 | [第 22 章 §4](22-api-semantics.md#4-删除与空间回收用户视角)、[第 24 章 §4](24-configuration-and-capacity.md#4-容量规划) |
+| 活沙箱原地回滚 | 已支持；内存、vCPU、中断控制器、设备逻辑状态、根盘及进程一起恢复，沙箱 ID、IP 和宿主资源保留 | [第 24 章 §1](24-api-semantics.md#1-restore-回滚回什么)、[第 9 章](09-in-place-rollback.md) |
+| 增量与树形历史 | 已支持 checkpoint / restore / list / delete，可在保留的分支间切换；不跟踪脏页时退回全量，空间与耗时增加 | [第 23 章](23-sdk-quickstart.md)、[第 6 章](06-memory-diff-tree.md)、[第 25 章](25-build-and-self-check.md) |
+| 外部副作用 | 设计边界；外部数据库、API、消息与上传文件不会随 guest 回退，业务需自行幂等或去重 | [第 24 章 §2.1](24-api-semantics.md#21-外部世界) |
+| 连接与在途调用 | 设计边界；跨 restore 的 TCP 连接需要重连，在途命令和文件请求可能被中断，已发送响应头的流会截断 | [第 24 章 §2.2](24-api-semantics.md#22-tcp-连接跨越-restore-的一律作废要重连)、[第 24 章 §11](24-api-semantics.md#11-多个调用方与并发) |
+| 时间与随机状态 | 设计边界；单调时钟倒退，墙钟在成功返回前校正，用户态缓存的随机状态会回退、需按业务需要重新初始化 | [第 24 章 §2.3](24-api-semantics.md#23-时钟)、[第 24 章 §2.4](24-api-semantics.md#24-随机数与被回滚这件事本身) |
+| 生命周期与持久化 | 设计边界；checkpoint 仅在所属活沙箱当前这一代有效，不跨重启、迁移或原生 pause / resume；拷走目录也不能独立恢复。离场与持久化使用原生 snapshot | [第 24 章 §3](24-api-semantics.md#3-checkpoint-什么时候失效)、[第 12 章](12-state-and-lifecycle.md)、[第 15 章](15-native-cooperation-and-cost.md) |
+| 并发调用 | 已支持跨沙箱并发；同沙箱 checkpoint / restore / delete 串行，等待与中断按接口契约处理 | [第 24 章 §11](24-api-semantics.md#11-多个调用方与并发)、[第 21 章](21-concurrency-and-longrun.md) |
+| 删除与空间回收 | 已支持隐藏、合并与回收；有依赖的数据删除后不立即释放。滚动保留的收敛依赖脏页跟踪、合并启用且处理跟得上；字节上限检查当前占用，不是严格空间预留 | [第 24 章 §4](24-api-semantics.md#4-删除与空间回收用户视角)、[第 26 章 §4](26-configuration-and-capacity.md#4-容量规划) |
 | 设备拓扑 | 设计边界；恢复要求快照与运行对象的拓扑一致，balloon / vsock / vhost-user block 明确拒绝 | [第 9 章 §4](09-in-place-rollback.md#4-validate_topology为什么必须一致) |
-| restore 失败 | 按提交点分级；多数失败保持沙箱可用，提交点后发生“撕裂”时只能销毁重建 | [第 11 章](11-failures-and-invariants.md)、[第 22 章](22-api-semantics.md) |
+| restore 失败 | 按提交点分级；多数失败保持沙箱可用，提交点后发生“撕裂”时只能销毁重建 | [第 11 章](11-failures-and-invariants.md)、[第 24 章](24-api-semantics.md) |
 
-可导出 checkpoint 或跨重启账本加载属于 [第 28 章 §2](28-status-and-directions.md#2-候选开发方向) 的可选增强，当前使用仍遵循上述生命周期契约；单独补齐账本加载不能恢复已消失的虚机与设备资源。
+可导出 checkpoint 或跨重启账本加载属于 [第 30 章 §2](30-status-and-directions.md#2-候选开发方向) 的可选增强，当前使用仍遵循上述生命周期契约；单独补齐账本加载不能恢复已消失的虚机与设备资源。
 
 ## 8. 备选架构，以及为什么不是它们
 

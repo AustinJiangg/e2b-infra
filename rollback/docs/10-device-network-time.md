@@ -178,7 +178,7 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 （`EINVAL`、`EOPNOTSUPP` 等）进程级记住，此后一律走整表路径。
 
 每批的开销分解进 restore 的计时：`conntrack_host_queue`（等在途清扫）、`conntrack_host_sweep`（覆盖本次的那次清扫）、
-`conntrack_host_batch_count`、`conntrack_host_entries_count`。定义见 [第 25 章](25-observability.md)；
+`conntrack_host_batch_count`、`conntrack_host_entries_count`。定义见 [第 27 章](27-observability.md)；
 并发与长跑下宿主表的增长、攒批与改算法前后的对比见 [附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)。
 
 注意这个代价与**整张宿主表**成正比，不是与本沙箱或全部沙箱的条目数成正比：宿主表里还有本机其他进程的连接，920B 长跑里约 95% 的条目与沙箱无关（lo:80 的 `TIME_WAIT`、本机 DNS）。宿主上其他流量一多，restore 的 `conntrack_bg` 就跟着变长，数据与根因见 [附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)。
@@ -227,8 +227,8 @@ if s.dropConnections != nil {
 ### 4.7 对使用方的结论
 
 restore 会作废该沙箱上**全部跨越回滚的 TCP 连接**，同节点其他沙箱不受影响，restore 之后新建的连接不受影响。
-面向使用方的完整说明在 [第 22 章](22-api-semantics.md)，调用方看到的错误形态（unary 的 409、流式的传输层错误）在
-[第 22 章](22-api-semantics.md)。
+面向使用方的完整说明在 [第 24 章](24-api-semantics.md)，调用方看到的错误形态（unary 的 409、流式的传输层错误）在
+[第 24 章](24-api-semantics.md)。
 
 ## 5. 时间
 
@@ -279,7 +279,7 @@ avail / used 是按设备读环的方式从已回滚的 guest 内存里读出来
 需要对比「回滚前」与「回滚后」时调高日志级别即可。这类日志的价值在于**罕见故障只有一次现场**：一个几百次才复现一次的挂死，
 如果现场只有「沙箱没反应」，基本无从下手；有了这一行，至少能分清是设备没往下走，还是 guest 没往下走。
 
-按症状排查的步骤（连接挂死、RX 卡死、串口卡住等）见 [第 26 章](26-troubleshooting.md)。
+按症状排查的步骤（连接挂死、RX 卡死、串口卡住等）见 [第 28 章](28-troubleshooting.md)。
 
 ## 8. 检查表：还有哪些地方可能有同类问题
 

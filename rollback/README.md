@@ -8,8 +8,8 @@
 
 - [手册首页与完整目录](docs/README.md)
 - [交付范围、版本与阅读方法](docs/01-delivery-and-reading.md)
-- [950功能结果](docs/17-functional-verification.md)、[性能与HDBSS](docs/18-950-performance.md)、[并发与持续运行](docs/19-950-concurrency.md)
-- [配置与容量](docs/24-configuration-and-capacity.md)、[测试环境与工具](docs/E-environment-and-tools.md)
+- [950功能结果](docs/17-functional-verification.md)、[性能与HDBSS](docs/18-950-performance.md)、[并发与持续运行](docs/21-concurrency-and-longrun.md)
+- [配置与容量](docs/26-configuration-and-capacity.md)、[测试环境与工具](docs/E-environment-and-tools.md)
 - [920B详细结果](docs/B-920b-results.md)、[版本演进与工程修复案例](docs/C-evolution-and-cases.md)
 - [本次迁移与检查记录](migration/README.md)
 - [950 测试结果摘要](evidence/950/README.md)、[阶段收尾与后续事项](milestones/2026-10-17-sandbox.md)

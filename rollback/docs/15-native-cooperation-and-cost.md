@@ -134,7 +134,7 @@ restore 在一次暂停里把回滚集的页、vCPU、中断控制器、设备�
 
 ### 5.1 checkpoint 替代不了原生
 
-checkpoint 的产物随这一代 Firecracker 进程回收：沙箱删除、超时回收、orchestrator 重启、宿主重启、迁移到别的节点，checkpoint 都随之消失（[第 22 章 §3](22-api-semantics.md#3-checkpoint-什么时候失效)）。
+checkpoint 的产物随这一代 Firecracker 进程回收：沙箱删除、超时回收、orchestrator 重启、宿主重启、迁移到别的节点，checkpoint 都随之消失（[第 24 章 §3](24-api-semantics.md#3-checkpoint-什么时候失效)）。
 这不是"没来得及做持久化"，而是由原地回滚的前提决定的：restore 要往**活着的**那个进程里写，进程不在了，差分就没有可以写回的对象
 （[第 12 章 §13](12-state-and-lifecycle.md#13-四层依赖)）。凡是"原来的进程已经不在了"的需求，也就是 [§1.2](#12-原生快照沙箱离场之后) 列的全部需求，checkpoint 都做不到。
 
@@ -176,7 +176,7 @@ checkpoint 的产物随这一代 Firecracker 进程回收：沙箱删除、超�
   pause 导出的是此刻完整的状态，包括 restore 写回的内容（[§7](#7-checkpoint-之后做原生-pause-的正确性前提)）。
 - **原生 pause / resume → 旧的 checkpoint：作废。** resume 用同一个沙箱 ID 新建了一个 Firecracker 进程，是新的一代。
   上一代的差分没有可以写回的对象，服务端按"代"管理 checkpoint：新一代看不到上一代的条目，restore 旧条目得到 `not_found`；
-  新一代可以照常 checkpoint，第一次是一棵新的全量根（[第 12 章 §11.1](12-state-and-lifecycle.md#111-代际边界的规则)、[第 22 章 §3.1](22-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）。
+  新一代可以照常 checkpoint，第一次是一棵新的全量根（[第 12 章 §11.1](12-state-and-lifecycle.md#111-代际边界的规则)、[第 24 章 §3.1](24-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）。
 - SDK 的 `create_snapshot()`（原生 `Checkpoint` RPC）同样会换一代：它停掉旧进程、从新快照拉起新进程，所以它之前的 checkpoint 同样作废。
 
 ### 6.2 一个 Agent 工作流，以及底下发生了什么
@@ -202,7 +202,7 @@ checkpoint 的产物随这一代 Firecracker 进程回收：沙箱删除、超�
 - **⑨ 之后**，第 2 代的"自启动以来脏页集"从空开始，它的父代是 ⑧ 的快照；第 2 代再 pause 时，导出的是相对 ⑧ 的差分。
 - **②③⑥ 在 ⑨ 之后消失是设计使然**，不是缺陷。checkpoint 的定位是任务执行期间的工作台，跨会话的东西交给原生 snapshot。
 
-使用者需要的具体操作和注意事项见 [第 22 章 §5](22-api-semantics.md#5-与原生-snapshotpause--resume怎么配合)。
+使用者需要的具体操作和注意事项见 [第 24 章 §5](24-api-semantics.md#5-与原生-snapshotpause--resume怎么配合)。
 
 ## 7. checkpoint 之后做原生 pause 的正确性前提
 

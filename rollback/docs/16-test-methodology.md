@@ -1,16 +1,16 @@
 # 16 · 测试体系、环境与测量口径
 
-本章定义测试层次、负载、判据和计时口径。方法适用于结果判读，不能替代某一轮实际执行的证明；950 结果在第 17～19 章，920B 的完整结果在附录 B。
+本章定义测试层次、负载、判据和计时口径。方法适用于结果判读，不能替代某一轮实际执行的证明；950 结果在第 17–21 章，920B 的完整结果在附录 B。
 
 ## 1. 三层测试
 
 | 层 | 位置 | 证什么 | 怎么跑 |
 |---|---|---|---|
-| 单元测试与属性测试 | 代码仓库 `KASandbox_0904`（分支 `deltabox-dev`），与被测代码同目录；Go 在 `packages/orchestrator/internal/checkpoint/`、`internal/sandbox/{block,fc,network,rootfs,uffd}/`，FC 在各源文件的 `#[cfg(test)]`，SDK 在 `py-sdk/tests/test_checkpoint_errors.py` | 部件与不变量 | 见[第 27 章](27-development.md) |
+| 单元测试与属性测试 | 代码仓库 `KASandbox_0904`（分支 `deltabox-dev`），与被测代码同目录；Go 在 `packages/orchestrator/internal/checkpoint/`、`internal/sandbox/{block,fc,network,rootfs,uffd}/`，FC 在各源文件的 `#[cfg(test)]`，SDK 在 `py-sdk/tests/test_checkpoint_errors.py` | 部件与不变量 | 见[第 29 章](29-development.md) |
 | 交付态验收 | `e2b-infra/rollback/scripts/acceptance/`：五个单文件脚本，互不依赖；另有滚动保留长跑驱动 `rolling_keep10.py`，从同目录导入 `checkpoint_concurrent.py` | 整机正确性、耗时、并发、长跑 | 单文件脚本单独拷到目标机即可跑；`rolling_keep10.py` 要与 `checkpoint_concurrent.py` 一起拷 |
 | 补充测试与开发态工具 | `rollback/scripts/crtest/`（20 个用例 + 基准）、`rollback/scripts/dev/`（共享 `lib.py` 的工具箱） | 盲区、边界、故障注入、长稳 | 一站式入口 `rollback/scripts/950/run.sh` |
 
-单元测试证的是**部件**，本部分讲的是**整机**。单测守着哪些不变量见 [第 11 章](11-failures-and-invariants.md) 的不变量清单与[第 27 章](27-development.md)；
+单元测试证的是**部件**，本部分讲的是**整机**。单测守着哪些不变量见 [第 11 章](11-failures-and-invariants.md) 的不变量清单与[第 29 章](29-development.md)；
 其中有一类值得单独一提：**属性测试**（`compact_sim_test.go`、`layer_refs_test.go`、`blockset_test.go`）不是写死几个例子，
 而是随机生成大量操作序列，每一步都拿实现与一个简单的参照模型（或从盘上重算的结果）比对；其中几组还故意往实现里注入变异，确认测试真的会失败——
 这正是"先自证会失败"用在单测上。
@@ -41,7 +41,7 @@
 
 ## 2. 测试矩阵
 
-全书唯一一张。只记状态，数字见 [第 18 章](18-950-performance.md)、[第 19 章](19-950-concurrency.md)。"本期"的代码讲解基准见 [README](README.md)；950 的 2026-10-15 smoke，以及 2026-10-13 perf、func 与 HDBSS 专项均已回传文本。smoke 有能力文件、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator hash；源码 / RPM 对应与 perf / func 当轮身份尚待补，不能自动等同于该基准的完整验收。
+全书唯一一张。只记状态，数字见 [第 18 章](18-950-performance.md)、[第 21 章](21-concurrency-and-longrun.md)。"本期"的代码讲解基准见 [README](README.md)；950 的 2026-10-15 smoke，以及 2026-10-13 perf、func 与 HDBSS 专项均已回传文本。smoke 有能力文件、SDK 自检与 FC 路径 hash，HDBSS 专项有 FC / orchestrator hash；源码 / RPM 对应与 perf / func 当轮身份尚待补，不能自动等同于该基准的完整验收。
 
 | 要证的性质 | 脚本 / 用例 | 判据 | 本期 · 920B | 本期 · 950 |
 |---|---|---|---|---|
@@ -50,12 +50,12 @@
 | 树语义：线性 / 前滚 / 分叉跨 LCA / 删除与合并（compact / fold） / 失败 | `dev/correctness.py ext4` | 末行 `ALL PASS` | 已跑（RPM 部署版） | 待测 |
 | checkpoint 之后原生 pause，磁盘与内存完好 | `dev/pause_verify.py`（磁盘）；crtest T39（内存与盘上标记） | `O_DIRECT` 读回一致；内存 md5 一致 | T39 已跑，`pause_verify.py` 未跑 | T39 通过并归档；`pause_verify.py` 仍无本期证据 |
 | 不弄坏原生生命周期 | `dev/compat_matrix.py`；crtest T41 | 无 `BROKEN` | T41 已跑 | T41 通过并归档（外部出网未测）；`compat_matrix.py` 仍无本期证据 |
-| HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[第 20 章 §5.1](20-acceptance.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 默认 order 1 的能力、自报、启用日志、数据面与 MD5 文本证据已归档（[第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)）；未扫描其他 order |
+| HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 默认 order 1 的能力、自报、启用日志、数据面与 MD5 文本证据已归档（[第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)）；未扫描其他 order |
 | 稳定性：数百次交替回滚 | `dev/loop.py ext4` | `failures: 0` | 未跑；由长测覆盖（见下） | 待测 |
 | 盲区、边界、故障注入 | crtest T11–T41 | 各用例三段式断言 | 已跑（重启类单独跑） | 默认 16 个用例通过并归档（[第 17 章 §3](17-functional-verification.md#3-950-默认功能回归2026-10-13)）；T18 / T21 / T37 / T38 跳过，重启 / 注入 / 配额专项未测 |
-| 短时并发：跨沙箱扩展性与同沙箱争用 | `acceptance/checkpoint_concurrent.py` A/B 段 | A 逐项校验；B 结合 RPC、命令错误与操作后状态 | 已跑 | 2026-10-13 文本已归档，见 [第 19 章 §1](19-950-concurrency.md#1-950-短时并发2026-10-13-ab)；B 的命令异常单列 |
-| 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（[第 19 章 §2](19-950-concurrency.md#2-950-func-中的短稳态与恢复后请求)）；全规模、D 段与小时级长稳仍缺结果 |
-| 恢复返回后立即请求 | crtest T40 | 线程完成、账本与活体硬判；另核对请求失败计数 | 已跑 | 默认非 overlap 场景通过并归档（[第 19 章 §2](19-950-concurrency.md#2-950-func-中的短稳态与恢复后请求)）；不外推为在途命令可跨 restore |
+| 短时并发：跨沙箱扩展性与同沙箱争用 | `acceptance/checkpoint_concurrent.py` A/B 段 | A 逐项校验；B 结合 RPC、命令错误与操作后状态 | 已跑 | 2026-10-13 文本已归档，见 [第 21 章 §1](21-concurrency-and-longrun.md#1-950-短时并发2026-10-13-ab)；B 的命令异常单列 |
+| 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（[第 21 章 §2](21-concurrency-and-longrun.md#2-950-func-中的短稳态与恢复后请求)）；全规模、D 段与小时级长稳仍缺结果 |
+| 恢复返回后立即请求 | crtest T40 | 线程完成、账本与活体硬判；另核对请求失败计数 | 已跑 | 默认非 overlap 场景通过并归档（[第 21 章 §2](21-concurrency-and-longrun.md#2-950-func-中的短稳态与恢复后请求)）；不外推为在途命令可跨 restore |
 | SDK 异常语义 | `crtest/sdktests/test_checkpoint_errors.py` | pytest 全过 | 已跑 | func 中通过并归档（[第 17 章 §3](17-functional-verification.md#3-950-默认功能回归2026-10-13)），不是 SKIP |
 | 分档性能、串行长尾、空闲后 restore | 见 [第 16 章](16-test-methodology.md) | —— | 已跑 | 12 档与串行 100 次文本已归档（[第 18 章](18-950-performance.md)）；空闲后专项仍缺结果 |
 
@@ -110,7 +110,7 @@
 但"各分段之和"不受这个约束：`timings_ms` 里既有冻结窗口内的段，也有窗口外的段
 （例如 restore 的 `assemble_view_pre`、`conntrack_bg`、`wait_envd`），全部相加会超过冻结窗口；
 而且 `seal` 只计到换层完成、不等数据落盘（[第 7 章](07-disk-layering.md)），它的耗时也不代表那一步的全部成本。
-所以**分段只用来看时间分布，不做加总核对**。全部计时键与含义见 [第 25 章](25-observability.md)。
+所以**分段只用来看时间分布，不做加总核对**。全部计时键与含义见 [第 27 章](27-observability.md)。
 
 冻结窗口为什么还要列：墙钟里有多少是虚机真停住的，决定了"要更快该往哪使劲"。
 如果某一档墙钟里绝大部分都是冻结，说明这条路上没有"虚机还在跑"的部分可省，要更快只能让暂停窗口本身变短；
@@ -171,7 +171,7 @@
 - **不同条件的数不相减。** 950 与 920B 的脏页后端、机型、盘至少三项同时不同，差值不能归因于其中任何一项，尤其不能归因于 HDBSS。
   要量 HDBSS 的收益，只能在同一台 950 上各跑一遍、其余条件不动。
 - **空着比错的数强。** 读不到的格子写"-"或"待测"，不猜、不折算、不用"大约"填格子。一个错的数会被引用很多年，一个空格只会被人问一句。
-- **口径说明和数字放在一起。** 分开放，数字一定会被单独引用。所以每一轮实测都要有一份写明条件的留档（[第 20 章](20-acceptance.md)）。
+- **口径说明和数字放在一起。** 分开放，数字一定会被单独引用。所以每一轮实测都要有一份写明条件的留档（[第 22 章](22-acceptance.md)）。
 
 ## 5. 负载构造：三种失真
 
@@ -347,7 +347,7 @@ restore 表里另有一列"读盘"（`materialize_disk_read_mb` 与 `fc_rollback
 单沙箱基准回答"一次多快"。有一类问题它永远回答不了：**跑久了、跑多了会怎样。**
 隐藏条目会不会越积越多、层文件会不会漏回收、链会不会越来越深、盘会不会一直涨、GC 停顿会不会越来越长、
 罕见的截断与失联一小时出几次——这些都不会在第一次、第一百次里露出来，只会在数万次操作、数十分钟之后露出来。
-本节定义920B历史D段及滚动保留长测的测量方法，对应[附录B的轮次与结果](B-920b-results.md#9-轮次总表)。950的A/B、T36和T40分别采用[第 19 章](19-950-concurrency.md)所列的实际负载、客户端墙钟和统计口径，不统一套用本节的服务端长测口径。
+本节定义920B历史D段及滚动保留长测的测量方法，对应[附录B的轮次与结果](B-920b-results.md#9-轮次总表)。950的A/B、T36和T40分别采用[第 21 章](21-concurrency-and-longrun.md)所列的实际负载、客户端墙钟和统计口径，不统一套用本节的服务端长测口径。
 
 ### 8.1 驱动与负载
 
@@ -400,7 +400,7 @@ restore 表里另有一列"读盘"（`materialize_disk_read_mb` 与 `fc_rollback
 
 ### 8.4 读盘量：用哪个键
 
-restore 的读盘量有两套口径，并发时读数完全不同（各键的定义只在 [第 25 章 §3.3](25-observability.md#33-restore)）：
+restore 的读盘量有两套口径，并发时读数完全不同（各键的定义只在 [第 27 章 §3.3](27-observability.md#33-restore)）：
 
 - `materialize_read_mb`、`materialize_base_read_mb` 由物化过程自己边读边计，含页缓存命中，只计本沙箱，并发时也可直接比较；
 - `materialize_disk_read_mb` 是 **orchestrator 进程级**的真实读盘差值，并发时会混入同时段其他沙箱的读；
@@ -426,11 +426,11 @@ restore 的读盘量有两套口径，并发时读数完全不同（各键的定
 长跑里出现的长尾，要靠旁路数据才解释得了：
 
 - **GC 停顿**：服务端开 `GODEBUG=gctrace=1`，STW 取每行的清扫终止 + 标记终止两段之和；需要区分"等所有 P 停下"和"收集器本身"时，
-  再开 `CHECKPOINT_RUNTIME_METRICS=1`，每 10 s 一行 runtime/metrics 直方图（分位取桶上界，不会低估）。开关见 [第 24 章](24-configuration-and-capacity.md)。
+  再开 `CHECKPOINT_RUNTIME_METRICS=1`，每 10 s 一行 runtime/metrics 直方图（分位取桶上界，不会低估）。开关见 [第 26 章](26-configuration-and-capacity.md)。
 - **内存压力**：orchestrator 与它拉起的 FC 在同一个 memory cgroup 里（记账的是页缓存与进程堆，guest 内存走大页不记账，
   [第 12 章 §8](12-state-and-lifecycle.md#8-节点级效应)），采样 cgroup 的用量与 `failcnt`，用来解释 GC 停顿和缺页路径上的回收。
 - **流式截断**：客户端按异常类（`incomplete chunked read` 一类）计数，同时在 orchestrator 与 client-proxy 日志里数 `ReverseProxy read error`，
-  两侧对照判断截断发生在哪一跳；需要逐请求取证时开 `PROXY_TRACE`（[第 25 章](25-observability.md)）。
+  两侧对照判断截断发生在哪一跳；需要逐请求取证时开 `PROXY_TRACE`（[第 27 章](27-observability.md)）。
 - **宿主连接跟踪表**：每 5 s 采一次 `nf_conntrack_count`，用来解释 `conntrack_bg` 的变化——它的耗时随宿主表大小走。
 
 ## 9. `checkpoint_concurrent.py`：并发四段

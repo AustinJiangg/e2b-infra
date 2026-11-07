@@ -2,7 +2,7 @@
 
 本章的[950 测试结果摘要](../evidence/950/README.md)记录轮次与验证边界。原始日志仅保留在本地 `rollback/scripts/950/results/`，由 Git 忽略，不提交或分发；尚未回传的 JSON/JSONL 或部署身份仍属验证缺口。
 
-先说明如何证明恢复了真实状态，再给出 950 默认 func 与 smoke 的实际覆盖和结果。开发分支单测及 920B 的专项证据可通过附录 B 与第 27 章查阅。
+先说明如何证明恢复了真实状态，再给出 950 默认 func 与 smoke 的实际覆盖和结果。开发分支单测及 920B 的专项证据可通过附录 B 与第 29 章查阅。
 
 ## 1. 正确性脚本的判据
 
@@ -119,7 +119,7 @@
 不加 `O_DIRECT` 时，刚写过的数据还在 guest 页缓存里，读回来一定对——修复后的第一版验证就是这样假通过的。
 
 脚本另钉住一条边界：pause / resume 之后回不到 pause 之前的 checkpoint。这是一条**断言**而不是一句注释：
-哪天行为变了（无论是变得支持、还是变成静默返回错数据），它会立刻报出来。语义见 [第 22 章](22-api-semantics.md)。
+哪天行为变了（无论是变得支持、还是变成静默返回错数据），它会立刻报出来。语义见 [第 24 章](24-api-semantics.md)。
 
 ### 1.5 `compat_matrix.py`：与原生生命周期的组合
 
@@ -139,7 +139,7 @@
 D 连做三次 checkpoint（多层封存）之后 pause 1 格——[附录 C §7.2](C-evolution-and-cases.md#72-checkpoint-之后原生-pause封层丢了) 缺陷的本质是"当前层之下还有 N 个封存层"，一层测不透；
 E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 格。
 数据一律 `O_DIRECT` 读回 8 MiB 比 sha256。预期的两个 `REFUSED`：pause / resume 之后回不到之前的 checkpoint
-（账本不跨 pause，[第 22 章 §3.1](22-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）；kill 之后不能 connect（e2b 原有行为，放进矩阵是为了让基线完整）。
+（账本不跨 pause，[第 24 章 §3.1](24-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）；kill 之后不能 connect（e2b 原有行为，放进矩阵是为了让基线完整）。
 
 ### 1.6 `hdbss_evidence.py`：能力不等于数据面
 
@@ -157,7 +157,7 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 本轮 950 的启用与数据面证据已归档在 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)。
 920B 可作无 HDBSS 的负样本，但不同机器结果不能直接相减；本轮只量 HDBSS 自身，没有软件写保护对照。
 
-同样的三层证据也在上机验收入口里：`run.sh hdbss`（脚本 `crtest/bench/hdbss_bench.py`，[第 20 章 §5.1](20-acceptance.md#51-hdbss-档hdbss-专项)）。它的 L1 直接用 `KVM_CHECK_EXTENSION` 查询，L3 的冷写 / 热写由 guest 里的常驻写者来量，KVM 退出数取自 debugfs，并且多核对一项 `FC_HDBSS_ORDER` 是否生效。
+同样的三层证据也在上机验收入口里：`run.sh hdbss`（脚本 `crtest/bench/hdbss_bench.py`，[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)）。它的 L1 直接用 `KVM_CHECK_EXTENSION` 查询，L3 的冷写 / 热写由 guest 里的常驻写者来量，KVM 退出数取自 debugfs，并且多核对一项 `FC_HDBSS_ORDER` 是否生效。
 
 ### 1.7 `loop.py`：稳定性
 
@@ -198,7 +198,7 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 | T41 干净沙箱原生 pause/resume | 没做过 checkpoint 的沙箱 | pause/resume 后内存、盘、进程、连接都正常；连做三轮；resume 后能重新 checkpoint / restore；`list` 为空 |
 
 用例的一个共同写法是"**硬判**"与"**只记录**"分开：能从语义推出唯一正确答案的（现场一致、账本相等、异常类正确）才硬判；
-依赖负载与机器的量（曲线、截断次数、并发下的耗时）只记录，留给 [第 18 章](18-950-performance.md) 和 [第 19 章](19-950-concurrency.md) 去读。
+依赖负载与机器的量（曲线、截断次数、并发下的耗时）只记录，留给 [第 18 章](18-950-performance.md) 和 [第 21 章](21-concurrency-and-longrun.md) 去读。
 把后者也写成断言，只会得到一批在别的机器上随机失败的用例。
 
 三条口径容易问错，记在这里：
@@ -244,7 +244,7 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 
 从使用者角度，这轮证明了：测试覆盖的恢复目标内容可以准确还原，恢复后命令、文件读写和进程仍可工作；
 同沙箱多调用方的 checkpoint 账本能够收敛；本次测试覆盖的原生 pause / resume 路径没有被破坏。
-T36 的混合操作分布与 T40 的恢复后请求时序见 [第 19 章 §2](19-950-concurrency.md#2-950-func-中的短稳态与恢复后请求)，不与 perf 的固定改动量分档混算。
+T36 的混合操作分布与 T40 的恢复后请求时序见 [第 21 章 §2](21-concurrency-and-longrun.md#2-950-func-中的短稳态与恢复后请求)，不与 perf 的固定改动量分档混算。
 
 ### 跳过项与结论边界
 
@@ -293,7 +293,7 @@ KVM / userfaultfd、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参
 预检的 `在用的 FC 版本` 为 **`v1.13.1`**，本轮依据是部署脚本 `/opt/e2b-infra/init-client.sh` 中的 `FIRECRACKER_VERSION=1.13.1`；
 预检时没有活着的 FC 进程，api 也未显式设置默认版本，**不是从运行中 FC 的 `/proc/<pid>/exe` 取得路径**。
 选定文件的 `SaveDirtyBitmap` / `RollbackSnapshot` 字符串计数为 2 / 3；其余未使用版本目录仅作 INFO 列示，不参与本轮配套判定。
-自报版本 `FC 1.12.1` 与目录查找键 `v1.13.1` 的区别见 [第 23 章 §4](23-build-and-self-check.md#4-版本配对)。
+自报版本 `FC 1.12.1` 与目录查找键 `v1.13.1` 的区别见 [第 25 章 §4](25-build-and-self-check.md#4-版本配对)。
 
 | 核对路径 | 完整 sha256 |
 |---|---|
@@ -317,4 +317,4 @@ KVM / userfaultfd、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参
 
 **验收范围：** 本轮 smoke 的宿主预检、SDK 自检、能力信息、FC 配套检查及正确性均通过；不替代重启 / 故障注入专项、小时级长稳或所有模板的覆盖。
 `commit=4853232` 是程序自报标签，源码 / RPM 对应仍需核实；身份记录仅证明本轮采集状态。
-本轮只有 2 次增量与 10 次恢复，不并入 perf 的正式分档、p99 或长期统计，性能数字仍以 [第 18 章](18-950-performance.md) 与 [第 19 章](19-950-concurrency.md) 为准。
+本轮只有 2 次增量与 10 次恢复，不并入 perf 的正式分档、p99 或长期统计，性能数字仍以 [第 18 章](18-950-performance.md) 与 [第 21 章](21-concurrency-and-longrun.md) 为准。

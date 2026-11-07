@@ -1120,483 +1120,483 @@
       "source": "22-long-run-and-concurrency.md",
       "key": "7",
       "title": "7. 950 短时并发：2026-10-13 A/B",
-      "dest": "19-950-concurrency.md",
+      "dest": "21-concurrency-and-longrun.md",
       "mode": "保留并重编"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "key": "8",
       "title": "8. 950 func 中的短稳态与恢复后请求",
-      "dest": "19-950-concurrency.md",
+      "dest": "21-concurrency-and-longrun.md",
       "mode": "保留并重编"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "key": "6.3",
       "title": "6.3 到 950 上要重测什么",
-      "dest": "19-950-concurrency.md",
+      "dest": "21-concurrency-and-longrun.md",
       "mode": "保留并重编"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "2",
       "title": "2. 各档一览",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "保留并重编"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "3",
       "title": "3. smoke",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "保留并重编"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "4",
       "title": "4. func",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "保留并重编"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "5",
       "title": "5. perf",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "保留并重编"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "6",
       "title": "6. long",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "保留并重编"
     },
     {
       "source": "21-benchmarks-and-compliance.md",
       "key": "7",
       "title": "7. 已知项与缺口",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "保留并重编"
     },
     {
       "source": "23-quickstart.md",
       "key": "2",
       "title": "2. 第一个例子：checkpoint → 改动 → restore → list → delete",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "保留并重编"
     },
     {
       "source": "23-quickstart.md",
       "key": "3",
       "title": "3. 异步用法",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "保留并重编"
     },
     {
       "source": "23-quickstart.md",
       "key": "4",
       "title": "4. `mem_mode`：这次是全量还是增量",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "保留并重编"
     },
     {
       "source": "23-quickstart.md",
       "key": "5",
       "title": "5. 树形历史",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "保留并重编"
     },
     {
       "source": "23-quickstart.md",
       "key": "6",
       "title": "6. 出错时",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "保留并重编"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "1",
       "title": "1. restore 回滚回什么",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "2",
       "title": "2. restore 回滚不了什么",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "3",
       "title": "3. checkpoint 什么时候失效",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "4",
       "title": "4. 删除与空间回收：用户视角",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "5",
       "title": "5. 与原生 snapshot（pause / resume）怎么配合",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "6",
       "title": "6. 其他需要知道的边界",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "key": "1",
       "title": "1. 错误怎么到达调用方",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "key": "2",
       "title": "2. 错误总表",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "key": "3",
       "title": "3. 异常类层次",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "key": "4",
       "title": "4. 超时与不重放",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "key": "5",
       "title": "5. 多个调用方与并发",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "1",
       "title": "1. 先分清两层：要不要记脏页、用什么方式记",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "2",
       "title": "2. 平台前提",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "3",
       "title": "3. 版本配对",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "4.1",
       "title": "4.1 二进制是不是这一套",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "按交付范围重写，保留必要条件和验证方法"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "4.3",
       "title": "4.3 orchestrator 自报的能力",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "4.4",
       "title": "4.4 宿主预检",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "4.5",
       "title": "4.5 网络槽位水位基线",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "4.6",
       "title": "4.6 增量真的生效",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "保留并重编"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "key": "1",
       "title": "1. 开关怎么读、怎么生效",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "保留并重编"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "key": "2",
       "title": "2. 开关总表",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "保留并重编"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "key": "3",
       "title": "3. 启动能力行",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "保留并重编"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "key": "4",
       "title": "4. 容量规划",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "保留并重编"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "key": "5",
       "title": "5. 改一个开关：操作步骤",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "按交付范围重写，保留必要条件和验证方法"
     },
     {
       "source": "28-observability-reference.md",
       "key": "1",
       "title": "1. 数字从哪来",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "2",
       "title": "2. 能力行与 memMode",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "3",
       "title": "3. timings 全字段与计时键",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "4",
       "title": "4. Firecracker 自报的分段",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "5",
       "title": "5. metrics",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "6",
       "title": "6. `CHECKPOINT_RUNTIME_METRICS` 输出",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "7",
       "title": "7. `PROXY_TRACE`",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "28-observability-reference.md",
       "key": "8",
       "title": "8. 日志关键字速查",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "1",
       "title": "1. 增量退化成全量",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "2",
       "title": "2. checkpoint 被拒（507 / 429）",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "3",
       "title": "3. 撕裂（torn）与虚机 faulted",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "4",
       "title": "4. guest 失联（guest_unresponsive）",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "5",
       "title": "5. restore 后连接挂死或流截断",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "6",
       "title": "6. 空闲后第一次 restore 慢",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "7",
       "title": "7. restore 随运行时间变慢",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "8",
       "title": "8. GC 长停顿与 memory cgroup 回收",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "9",
       "title": "9. 网络槽位（netns）泄漏",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "10",
       "title": "10. conntrack 占了冻结窗口",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "11",
       "title": "11. Firecracker 版本目录错配",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "12",
       "title": "12. SDK 自检失败",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "13",
       "title": "13. 其他错误的运维视角",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "14",
       "title": "14. restore 随宿主上其他流量变慢",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "15",
       "title": "15. client-proxy 日志暴涨、guest 访问 hyperloop 不通",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "保留并重编"
     },
     {
       "source": "B-extending.md",
       "key": "1",
       "title": "1. 代码在哪",
-      "dest": "27-development.md",
+      "dest": "29-development.md",
       "mode": "保留并重编"
     },
     {
       "source": "B-extending.md",
       "key": "2",
       "title": "2. 按任务的改动指引",
-      "dest": "27-development.md",
+      "dest": "29-development.md",
       "mode": "保留并重编"
     },
     {
       "source": "B-extending.md",
       "key": "3",
       "title": "3. 改动自查清单",
-      "dest": "27-development.md",
+      "dest": "29-development.md",
       "mode": "保留并重编"
     },
     {
       "source": "B-extending.md",
       "key": "4",
       "title": "4. 怎么验证一次改动",
-      "dest": "27-development.md",
+      "dest": "29-development.md",
       "mode": "保留并重编"
     },
     {
       "source": "A-glossary-and-code-map.md",
       "key": "2",
       "title": "2. 代码地图",
-      "dest": "27-development.md",
+      "dest": "29-development.md",
       "mode": "保留并重编"
     },
     {
       "source": "00b-status-and-roadmap.md",
       "key": "2",
       "title": "2. 已知问题与验证缺口",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "保留并重编"
     },
     {
       "source": "00b-status-and-roadmap.md",
       "key": "3",
       "title": "3. 候选开发方向",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "保留并重编"
     },
     {
       "source": "B-extending.md",
       "key": "5",
       "title": "5. 已知缺口与可能的方向",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "保留并重编"
     },
     {
@@ -1953,7 +1953,7 @@
       "source": "00b-status-and-roadmap.md",
       "key": "4",
       "title": "4. 如何维护本章",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "重写或合并重复内容"
     },
     {
@@ -2002,7 +2002,7 @@
       "source": "19-testing-and-functional-verification.md",
       "key": "7",
       "title": "7. `run.sh` 各档",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "重写或合并重复内容"
     },
     {
@@ -2030,28 +2030,28 @@
       "source": "22-long-run-and-concurrency.md",
       "key": "6",
       "title": "6. 结论与剩余长尾",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "重写或合并重复内容"
     },
     {
       "source": "23-quickstart.md",
       "key": "1",
       "title": "1. 前提",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "重写或合并重复内容"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "4",
       "title": "4. 部署后自检清单",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "重写或合并重复内容"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "1",
       "title": "1. 跑之前",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "重写或合并重复内容"
     },
     {
@@ -2079,14 +2079,14 @@
       "source": "30-acceptance-runbook.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "30-acceptance-runbook.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "20-acceptance.md",
+      "dest": "22-acceptance.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
@@ -2135,28 +2135,28 @@
       "source": "25-errors-timeouts-concurrency.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "23-quickstart.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "23-quickstart.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "21-sdk-quickstart.md",
+      "dest": "23-sdk-quickstart.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
@@ -2261,14 +2261,14 @@
       "source": "29-troubleshooting.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "29-troubleshooting.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "26-troubleshooting.md",
+      "dest": "28-troubleshooting.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
@@ -2317,56 +2317,56 @@
       "source": "22-long-run-and-concurrency.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "19-950-concurrency.md",
+      "dest": "21-concurrency-and-longrun.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "19-950-concurrency.md",
+      "dest": "21-concurrency-and-longrun.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "28-observability-reference.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "28-observability-reference.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "25-observability.md",
+      "dest": "27-observability.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "23-build-and-self-check.md",
+      "dest": "25-build-and-self-check.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "24-semantics-and-limits.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "22-api-semantics.md",
+      "dest": "24-api-semantics.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
@@ -2387,14 +2387,14 @@
       "source": "00b-status-and-roadmap.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "00b-status-and-roadmap.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "28-status-and-directions.md",
+      "dest": "30-status-and-directions.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
@@ -2499,14 +2499,14 @@
       "source": "27-configuration-and-capacity.md",
       "key": "本章目标",
       "title": "本章目标",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "key": "本章要点",
       "title": "本章要点",
-      "dest": "24-configuration-and-capacity.md",
+      "dest": "26-configuration-and-capacity.md",
       "mode": "本章目标与要点随新章职责重写"
     },
     {
@@ -2720,7 +2720,7 @@
     {
       "source": "00b-status-and-roadmap.md",
       "anchor": "00b--能力现状与后续方向",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": ""
     },
     {
@@ -2732,31 +2732,31 @@
     {
       "source": "00b-status-and-roadmap.md",
       "anchor": "2-已知问题与验证缺口",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": "1-已知问题与验证缺口"
     },
     {
       "source": "00b-status-and-roadmap.md",
       "anchor": "3-候选开发方向",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": "2-候选开发方向"
     },
     {
       "source": "00b-status-and-roadmap.md",
       "anchor": "4-如何维护本章",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": ""
     },
     {
       "source": "00b-status-and-roadmap.md",
       "anchor": "本章目标",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": ""
     },
     {
       "source": "00b-status-and-roadmap.md",
       "anchor": "本章要点",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": ""
     },
     {
@@ -5516,7 +5516,7 @@
     {
       "source": "19-testing-and-functional-verification.md",
       "anchor": "7-runsh-各档",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": ""
     },
     {
@@ -5918,7 +5918,7 @@
     {
       "source": "21-benchmarks-and-compliance.md",
       "anchor": "7-已知项与缺口",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "7-已知项与缺口"
     },
     {
@@ -6026,7 +6026,7 @@
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "22--长跑与并发实测",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": ""
     },
     {
@@ -6182,7 +6182,7 @@
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "6-结论与剩余长尾",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": ""
     },
     {
@@ -6200,397 +6200,397 @@
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "63-到-950-上要重测什么",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "3-到-950-上要重测什么"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "7-950-短时并发2026-10-13-ab",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "1-950-短时并发2026-10-13-ab"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "71-条件与证据",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "11-条件与证据"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "72-a跨沙箱突发扩展性",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "12-a跨沙箱突发扩展性"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "73-b同一沙箱的四调用方争用",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "13-b同一沙箱的四调用方争用"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "74-这轮能说明的范围",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "14-这轮能说明的范围"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "8-950-func-中的短稳态与恢复后请求",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "2-950-func-中的短稳态与恢复后请求"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "81-t364-沙箱--120-s-混合短稳态",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "21-t364-沙箱--120-s-混合短稳态"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "82-t40恢复完成后立即发起命令",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": "22-t40恢复完成后立即发起命令"
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "本章目标",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": ""
     },
     {
       "source": "22-long-run-and-concurrency.md",
       "anchor": "本章要点",
-      "target": "19-950-concurrency.md",
+      "target": "21-concurrency-and-longrun.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "1-前提",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "11-服务端",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "12-sdke2b2200--checkpoint-覆盖层",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "13-自检",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "14-连接凭据",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "2-第一个例子checkpoint--改动--restore--list--delete",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "2-第一个例子checkpoint--改动--restore--list--delete"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "21-接口一览",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "21-接口一览"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "22-checkpointinfo",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "22-checkpointinfo"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "23--快速上手",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "3-异步用法",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "3-异步用法"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "4-mem_mode这次是全量还是增量",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "4-mem_mode这次是全量还是增量"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "5-树形历史",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "5-树形历史"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "6-出错时",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": "6-出错时"
     },
     {
       "source": "23-quickstart.md",
       "anchor": "本章目标",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "23-quickstart.md",
       "anchor": "本章要点",
-      "target": "21-sdk-quickstart.md",
+      "target": "23-sdk-quickstart.md",
       "target_anchor": ""
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "1-restore-回滚回什么",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "1-restore-回滚回什么"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "2-restore-回滚不了什么",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "2-restore-回滚不了什么"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "21-外部世界",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "21-外部世界"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "22-tcp-连接跨越-restore-的一律作废要重连",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "22-tcp-连接跨越-restore-的一律作废要重连"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "23-时钟",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "23-时钟"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "24--语义与使用边界",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": ""
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "24-随机数与被回滚这件事本身",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "24-随机数与被回滚这件事本身"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "3-checkpoint-什么时候失效",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "3-checkpoint-什么时候失效"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "31-原生-pause--resume-与-checkpoint-的代际边界",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "31-原生-pause--resume-与-checkpoint-的代际边界"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "4-删除与空间回收用户视角",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "4-删除与空间回收用户视角"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "41-delete-做了什么",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "41-delete-做了什么"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "42-保留最新-n-个删最旧的会收敛",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "42-保留最新-n-个删最旧的会收敛"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "43-两种每沙箱上限",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "43-两种每沙箱上限"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "44-在字节上限下删哪个才能释放空间",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "44-在字节上限下删哪个才能释放空间"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "5-与原生-snapshotpause--resume怎么配合",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "5-与原生-snapshotpause--resume怎么配合"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "6-其他需要知道的边界",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "6-其他需要知道的边界"
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "本章目标",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": ""
     },
     {
       "source": "24-semantics-and-limits.md",
       "anchor": "本章要点",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": ""
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "1-错误怎么到达调用方",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "7-错误怎么到达调用方"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "2-错误总表",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "8-错误总表"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "21-按-reason",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "81-按-reason"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "22-没有-reason-时老服务端",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "82-没有-reason-时老服务端"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "25--错误超时与并发调用",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": ""
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "3-异常类层次",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "9-异常类层次"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "4-超时与不重放",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "10-超时与不重放"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "41-默认超时",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "101-默认超时"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "42-服务端不取消",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "102-服务端不取消"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "43-四个-rpc-不自动重发",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "103-四个-rpc-不自动重发"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "5-多个调用方与并发",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "11-多个调用方与并发"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "51-同一个沙箱操作串行",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "111-同一个沙箱操作串行"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "52-restore-对在途调用的影响",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "112-restore-对在途调用的影响"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "53-两类流式截断要分清",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": "113-两类流式截断要分清"
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "本章目标",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": ""
     },
     {
       "source": "25-errors-timeouts-concurrency.md",
       "anchor": "本章要点",
-      "target": "22-api-semantics.md",
+      "target": "24-api-semantics.md",
       "target_anchor": ""
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "1-先分清两层要不要记脏页用什么方式记",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "2-先分清两层要不要记脏页用什么方式记"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "2-平台前提",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "3-平台前提"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "26--部署前提与检查清单",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": ""
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "3-版本配对",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "4-版本配对"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "4-部署后自检清单",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": ""
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "41-二进制是不是这一套",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "5-二进制是不是这一套"
     },
     {
@@ -6602,25 +6602,25 @@
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "43-orchestrator-自报的能力",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "6-orchestrator-自报的能力"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "44-宿主预检",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "7-宿主预检"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "45-网络槽位水位基线",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "8-网络槽位水位基线"
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "46-增量真的生效",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": "9-增量真的生效"
     },
     {
@@ -6638,391 +6638,391 @@
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "本章目标",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": ""
     },
     {
       "source": "26-deployment-prerequisites.md",
       "anchor": "本章要点",
-      "target": "23-build-and-self-check.md",
+      "target": "25-build-and-self-check.md",
       "target_anchor": ""
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "1-开关怎么读怎么生效",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "1-开关怎么读怎么生效"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "2-开关总表",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "2-开关总表"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "21-脏页跟踪与-hdbss",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "21-脏页跟踪与-hdbss"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "22-限额与超时",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "22-限额与超时"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "23-树与存储行为",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "23-树与存储行为"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "24-调试与取证用完即关",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "24-调试与取证用完即关"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "25-故障注入仅供测试交付态不要设",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "25-故障注入仅供测试交付态不要设"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "26-相关的通用变量",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "26-相关的通用变量"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "27--配置参考与容量规划",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": ""
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "3-启动能力行",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "3-启动能力行"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "31-能力文件",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "31-能力文件"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "4-容量规划",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "4-容量规划"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "41-一个沙箱的-checkpoint-占多少盘",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "41-一个沙箱的-checkpoint-占多少盘"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "42-节点产物盘怎么估",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "42-节点产物盘怎么估"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "43-数量上限怎么选",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "43-数量上限怎么选"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "44-字节上限怎么选",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "44-字节上限怎么选"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "45-合并让保留最新-n-个收敛",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "45-合并让保留最新-n-个收敛"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "46-多租户节点的建议",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "46-多租户节点的建议"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "5-改一个开关操作步骤",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": "5-改一个开关操作步骤"
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "本章目标",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": ""
     },
     {
       "source": "27-configuration-and-capacity.md",
       "anchor": "本章要点",
-      "target": "24-configuration-and-capacity.md",
+      "target": "26-configuration-and-capacity.md",
       "target_anchor": ""
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "1-数字从哪来",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "1-数字从哪来"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "2-能力行与-memmode",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "2-能力行与-memmode"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "28--可观测性参考",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": ""
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "3-timings-全字段与计时键",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "3-timings-全字段与计时键"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "31-通用约定",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "31-通用约定"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "32-checkpoint",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "32-checkpoint"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "33-restore",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "33-restore"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "34-delete",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "34-delete"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "35-日志行上-timings-之外的字段",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "35-日志行上-timings-之外的字段"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "4-firecracker-自报的分段",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "4-firecracker-自报的分段"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "5-metrics",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "5-metrics"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "6-checkpoint_runtime_metrics-输出",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "6-checkpoint_runtime_metrics-输出"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "7-proxy_trace",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "7-proxy_trace"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "8-日志关键字速查",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": "8-日志关键字速查"
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "本章目标",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": ""
     },
     {
       "source": "28-observability-reference.md",
       "anchor": "本章要点",
-      "target": "25-observability.md",
+      "target": "27-observability.md",
       "target_anchor": ""
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "1-增量退化成全量",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "1-增量退化成全量"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "10-conntrack-占了冻结窗口",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "10-conntrack-占了冻结窗口"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "11-firecracker-版本目录错配",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "11-firecracker-版本目录错配"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "12-sdk-自检失败",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "12-sdk-自检失败"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "13-其他错误的运维视角",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "13-其他错误的运维视角"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "14-restore-随宿主上其他流量变慢",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "14-restore-随宿主上其他流量变慢"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "15-client-proxy-日志暴涨guest-访问-hyperloop-不通",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "15-client-proxy-日志暴涨guest-访问-hyperloop-不通"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "2-checkpoint-被拒507--429",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "2-checkpoint-被拒507--429"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "29--排障",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": ""
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "3-撕裂torn与虚机-faulted",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "3-撕裂torn与虚机-faulted"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "4-guest-失联guest_unresponsive",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "4-guest-失联guest_unresponsive"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "5-restore-后连接挂死或流截断",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "5-restore-后连接挂死或流截断"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "6-空闲后第一次-restore-慢",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "6-空闲后第一次-restore-慢"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "7-restore-随运行时间变慢",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "7-restore-随运行时间变慢"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "8-gc-长停顿与-memory-cgroup-回收",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "8-gc-长停顿与-memory-cgroup-回收"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "9-网络槽位netns泄漏",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": "9-网络槽位netns泄漏"
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "本章目标",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": ""
     },
     {
       "source": "29-troubleshooting.md",
       "anchor": "本章要点",
-      "target": "26-troubleshooting.md",
+      "target": "28-troubleshooting.md",
       "target_anchor": ""
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "1-跑之前",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": ""
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "2-各档一览",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "2-各档一览"
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "3-smoke",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "3-smoke"
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "30--上机验收",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": ""
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "4-func",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "4-func"
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "5-perf",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "5-perf"
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "51-hdbss-档hdbss-专项",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "51-hdbss-档hdbss-专项"
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "6-long",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": "6-long"
     },
     {
@@ -7034,13 +7034,13 @@
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "本章目标",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": ""
     },
     {
       "source": "30-acceptance-runbook.md",
       "anchor": "本章要点",
-      "target": "20-acceptance.md",
+      "target": "22-acceptance.md",
       "target_anchor": ""
     },
     {
@@ -7082,37 +7082,37 @@
     {
       "source": "A-glossary-and-code-map.md",
       "anchor": "2-代码地图",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "5-代码地图"
     },
     {
       "source": "A-glossary-and-code-map.md",
       "anchor": "21-orchestrator",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "51-orchestrator"
     },
     {
       "source": "A-glossary-and-code-map.md",
       "anchor": "22-firecracker",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "52-firecracker"
     },
     {
       "source": "A-glossary-and-code-map.md",
       "anchor": "23-python-sdkpy-sdk",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "53-python-sdkpy-sdk"
     },
     {
       "source": "A-glossary-and-code-map.md",
       "anchor": "24-测试脚本e2b-infrarollbackscripts",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "54-测试脚本e2b-infrarollbackscripts"
     },
     {
       "source": "A-glossary-and-code-map.md",
       "anchor": "25-原生快照的精确增量原生-pause-路径",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "55-原生快照的精确增量原生-pause-路径"
     },
     {
@@ -7154,109 +7154,109 @@
     {
       "source": "B-extending.md",
       "anchor": "1-代码在哪",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "1-代码在哪"
     },
     {
       "source": "B-extending.md",
       "anchor": "11-仓库与分支",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "11-仓库与分支"
     },
     {
       "source": "B-extending.md",
       "anchor": "12-交付形态",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "12-交付形态"
     },
     {
       "source": "B-extending.md",
       "anchor": "13-阅读源码的顺序",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "13-阅读源码的顺序"
     },
     {
       "source": "B-extending.md",
       "anchor": "2-按任务的改动指引",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "2-按任务的改动指引"
     },
     {
       "source": "B-extending.md",
       "anchor": "21-加一种-virtio-设备",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "21-加一种-virtio-设备"
     },
     {
       "source": "B-extending.md",
       "anchor": "22-支持一种新的存储能力",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "22-支持一种新的存储能力"
     },
     {
       "source": "B-extending.md",
       "anchor": "23-加一个-api",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "23-加一个-api"
     },
     {
       "source": "B-extending.md",
       "anchor": "24-改-firecracker-侧",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "24-改-firecracker-侧"
     },
     {
       "source": "B-extending.md",
       "anchor": "25-改账本",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "25-改账本"
     },
     {
       "source": "B-extending.md",
       "anchor": "3-改动自查清单",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "3-改动自查清单"
     },
     {
       "source": "B-extending.md",
       "anchor": "4-怎么验证一次改动",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "4-怎么验证一次改动"
     },
     {
       "source": "B-extending.md",
       "anchor": "41-三层",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "41-三层"
     },
     {
       "source": "B-extending.md",
       "anchor": "42-至少要看的三个信号",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "42-至少要看的三个信号"
     },
     {
       "source": "B-extending.md",
       "anchor": "43-故障注入钩子只给开发者",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": "43-故障注入钩子只给开发者"
     },
     {
       "source": "B-extending.md",
       "anchor": "5-已知缺口与可能的方向",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": "3-已知缺口与可能的方向"
     },
     {
       "source": "B-extending.md",
       "anchor": "51-待验证项",
-      "target": "28-status-and-directions.md",
+      "target": "30-status-and-directions.md",
       "target_anchor": "31-待验证项"
     },
     {
       "source": "B-extending.md",
       "anchor": "附录-b--继续开发",
-      "target": "27-development.md",
+      "target": "29-development.md",
       "target_anchor": ""
     },
     {

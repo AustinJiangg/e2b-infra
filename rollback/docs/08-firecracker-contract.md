@@ -153,7 +153,7 @@ pub struct RollbackResponse {
 ```
 
 端点的主体是九个阶段加一个提交点（第十步"踢设备"在随后的 resume 里），见 [第 9 章](09-in-place-rollback.md)；
-各计时与计数字段如何进入 orchestrator 的计时键见 [第 25 章](25-observability.md)。这里只说接口层面的决定。
+各计时与计数字段如何进入 orchestrator 的计时键见 [第 27 章](27-observability.md)。这里只说接口层面的决定。
 
 ### 3.1 `resume_vm: false`
 
@@ -244,7 +244,7 @@ defer httpClient.CloseIdleConnections()
 | 细节 | 理由 |
 |---|---|
 | **禁用 keep-alive**（`fc/rollback.go:121`、:241） | Firecracker 的 API server 有并发连接上限。这个 client 每次调用新建，池化连接会一直开到 transport 被回收 —— 回滚够多次就用光上限，此后每次都是 503 |
-| **client 自己不设超时**（`Timeout: 0`，:126、:244） | 时限由调用方的 context 统一给（`CHECKPOINT_FC_CALL_TIMEOUT`，见 [第 24 章](24-configuration-and-capacity.md)）；transport 里再藏一个固定值，两者不一致时它会悄悄胜出 |
+| **client 自己不设超时**（`Timeout: 0`，:126、:244） | 时限由调用方的 context 统一给（`CHECKPOINT_FC_CALL_TIMEOUT`，见 [第 26 章](26-configuration-and-capacity.md)）；transport 里再藏一个固定值，两者不一致时它会悄悄胜出 |
 
 rollback 调用超时按撕裂处理（`internal/sandbox/checkpoint.go:633`，`RollbackInPlace`）：主机放弃等待时，说不清 Firecracker 停在提交点的哪一侧 ——
 它可能已经把半个回滚集写进了活的 guest 内存。恢复运行这样一个 guest，会让它把一个说不清的状态写进磁盘。
@@ -385,7 +385,7 @@ if r := numPages % 64; r != 0 {
 ## 6. 版本配对
 
 **orchestrator 与 Firecracker 必须成对交付。** 两者出自同一个代码仓库的同一个版本（`packages/` 与 `firecracker/`，代码基准见 [README](README.md)）；
-按 rpm 部署时分别对应 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`（部署前核对见 [第 23 章](23-build-and-self-check.md)）。
+按 rpm 部署时分别对应 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`（部署前核对见 [第 25 章](25-build-and-self-check.md)）。
 
 配错的后果：
 

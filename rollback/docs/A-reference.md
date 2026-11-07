@@ -1,6 +1,6 @@
 # 附录 A · 术语、协议与文件格式参考
 
-本附录用于查阅术语、协议、文件格式和不变量速查；实现推导与代码阅读顺序分别见第二、三篇和第 27 章。
+本附录用于查阅术语、协议、文件格式和不变量速查；实现推导与代码阅读顺序分别见第二、三篇和第 29 章。
 
 ## 1. 术语表
 
@@ -8,7 +8,7 @@
 
 | 术语 | 英文 / 标识 | 一句话 | 详见 |
 |---|---|---|---|
-| **checkpoint** | checkpoint | 沙箱某一时刻的状态记录，也指拍它的操作（与 restore 成对）。接口名里叫 `CreateCheckpoint` | [第 21 章](21-sdk-quickstart.md)、[第 6 章](06-memory-diff-tree.md) |
+| **checkpoint** | checkpoint | 沙箱某一时刻的状态记录，也指拍它的操作（与 restore 成对）。接口名里叫 `CreateCheckpoint` | [第 23 章](23-sdk-quickstart.md)、[第 6 章](06-memory-diff-tree.md) |
 | **restore / 回滚** | restore / rollback | 把活着的沙箱原地退回某个 checkpoint，沙箱 ID 与 FC 进程不变 | [第 9 章](09-in-place-rollback.md) |
 | **纪元** | epoch | 两次"脏页跟踪被重置"之间的时间段 | [第 6 章](06-memory-diff-tree.md) |
 | **纪元位图 / 侧车** | `E_x`、`mem_bitmap`、sidecar | 记录一个纪元里写过哪些页 | [第 6 章](06-memory-diff-tree.md)、[第 8 章](08-firecracker-contract.md) |
@@ -20,7 +20,7 @@
 | **隐藏条目** | hidden entry | 在树里、不在 API 里的条目：被删但仍有后代要经过它解析 | [第 6 章](06-memory-diff-tree.md)、[第 11 章](11-failures-and-invariants.md) |
 | **合并** | fold / compact | 隐藏、非基准、恰有一个子节点的条目并入它的子节点：子节点接管它的父节点，回滚集取并集，内容以子节点为准，rootfs 层成对合并。在 delete 结尾同步执行，由 `CHECKPOINT_COMPACT` 控制 | [第 6 章](06-memory-diff-tree.md)、[第 7 章](07-disk-layering.md) |
 | **条目数上界** | 2V + 1 | 合并追平后，一个沙箱的条目数不超过 2 × 可见数 + 1 | [第 6 章](06-memory-diff-tree.md) |
-| **字节配额** | `CHECKPOINT_MAX_BYTES_PER_SANDBOX` | 每沙箱 checkpoint 占用磁盘实际块数的上限，默认关；超限拒绝 checkpoint（reason `checkpoint_bytes_limit`），restore 不受限 | [第 24 章](24-configuration-and-capacity.md)、[第 22 章](22-api-semantics.md) |
+| **字节配额** | `CHECKPOINT_MAX_BYTES_PER_SANDBOX` | 每沙箱 checkpoint 占用磁盘实际块数的上限，默认关；超限拒绝 checkpoint（reason `checkpoint_bytes_limit`），restore 不受限 | [第 26 章](26-configuration-and-capacity.md)、[第 24 章](24-api-semantics.md) |
 | **层引用计数** | layer refs | 每个封存层被多少个已发布视图和活账本引用；最后一个引用消失时回收该层 | [第 7 章](07-disk-layering.md) |
 | **断链** | broken chain | 纪元丢失，此后下一次 checkpoint 是新的全量根 | [第 11 章](11-failures-and-invariants.md) |
 | **封存** | seal | 把活写层原地变成只读层，零数据搬运 | [第 7 章](07-disk-layering.md) |
@@ -69,7 +69,7 @@
 | 术语 | 一句话 | 详见 |
 |---|---|---|
 | **静默失效** | 断言全过、内容全对，坏的是成本、覆盖范围或判据本身 | [第 16 章](16-test-methodology.md) |
-| **`mem_mode` / `memMode`** | 服务端每次 checkpoint 回报本次是 `full` 还是 `incremental`；除了沙箱的第一个，出现 `full` 就是有问题 | [第 25 章](25-observability.md)、[第 16 章](16-test-methodology.md) |
+| **`mem_mode` / `memMode`** | 服务端每次 checkpoint 回报本次是 `full` 还是 `incremental`；除了沙箱的第一个，出现 `full` 就是有问题 | [第 27 章](27-observability.md)、[第 16 章](16-test-methodology.md) |
 | **条件标签** | 一个耗时或体积数字必须随身携带的机型、脏页后端、产物盘、模板规格、二进制、脚本参数 | [第 16 章](16-test-methodology.md) |
 | **名义改动量 / 档位** | 基准里每次迭代请求改多少（内存:文件 = 3:1），判定表按它分档 | [第 16 章](16-test-methodology.md) |
 | **时机成本** | "写完立刻拍"减"`sync` 后再拍"，回写争用的代价，不是快照机制的代价 | [第 16 章](16-test-methodology.md) |
@@ -78,7 +78,7 @@
 | **工作集**（对比脏页） | 被碰过的页集；脏页是被写过的页集。把读也算脏时增量退化成工作集 | [第 5 章](05-dirty-tracking-and-hdbss.md)、[第 14 章](14-native-precise-increment.md) |
 | **`REFUSED` / `BROKEN`** | 兼容矩阵的两种非 OK 判定：前者是安全的拒绝（边界），后者是真问题 | [第 16 章](16-test-methodology.md) |
 | **真实链深** | 沿 `parent_id` 走到根的最大深度，含隐藏条目 | [第 16 章](16-test-methodology.md) |
-| **上限 60 / 滚动保留 10** | 长跑的两种常规负载：服务端数量上限 60；客户端只保留最新 10 个、删最旧。另有只用来找问题、耗时不进判定的无上限压测 | [第 16 章](16-test-methodology.md)、[第 19 章](19-950-concurrency.md) |
+| **上限 60 / 滚动保留 10** | 长跑的两种常规负载：服务端数量上限 60；客户端只保留最新 10 个、删最旧。另有只用来找问题、耗时不进判定的无上限压测 | [第 16 章](16-test-methodology.md)、[第 21 章](21-concurrency-and-longrun.md) |
 | **走平** | 长跑中资源量（占盘、目录数、真实链深等）在最后 15 min 的最小二乘斜率接近 0；只看终值不算 | [第 16 章](16-test-methodology.md) |
 
 ### 1.5 原生快照的精确增量
@@ -113,11 +113,11 @@
 | `layers/layer-<uuid>.<id>` | 层合并产生的合成层（及其 `.meta`），`<uuid>` 是接收方那一层的，`<id>` 是被并入条目的 ID | orchestrator | 同上 | [第 7 章](07-disk-layering.md) |
 | `manifest.json` | 单条目的完整 JSON | orchestrator | 无人（事后排查） | [第 4 章](04-architecture-and-flow.md) |
 | `index.json` | 沙箱的条目清单；**默认不写**，`CHECKPOINT_DEBUG_INDEX=true` 时后台最多每 5 s 写一次 | orchestrator | 无人（调试） | [第 4 章](04-architecture-and-flow.md) |
-| `timings.json` | `{计时键: 毫秒}`，每个 checkpoint 一份 | orchestrator | 基准脚本 | [第 25 章](25-observability.md) |
-| `last-restore-timings.json` | 沙箱目录下，每次 restore 覆写 | orchestrator | 基准脚本 | [第 25 章](25-observability.md) |
+| `timings.json` | `{计时键: 毫秒}`，每个 checkpoint 一份 | orchestrator | 基准脚本 | [第 27 章](27-observability.md) |
+| `last-restore-timings.json` | 沙箱目录下，每次 restore 覆写 | orchestrator | 基准脚本 | [第 27 章](27-observability.md) |
 | `revert_mem.tmp`、`revert_bitmap.tmp` | 物化结果：稀疏内存文件与 FCDB，写在目标 checkpoint 目录下，只存在于一次 restore 期间 | orchestrator | FC | [第 6 章](06-memory-diff-tree.md) |
 | `<store>/.trash-<uuid>` | 被丢弃的整个沙箱目录，锁内改名、锁外删除；启动时清空 store 根会顺带删掉残留 | orchestrator | —— | [第 12 章](12-state-and-lifecycle.md) |
-| `<DEFAULT_CACHE_DIR>/checkpoint-capabilities.json` | 启动能力的 JSON（能力行的键 + `pid`、`started_at`、`version`、`commit`），在 store 根的父目录，每次启动整份替换 | orchestrator | 运维、`run.sh smoke` | [第 24 章 §3.1](24-configuration-and-capacity.md#31-能力文件) |
+| `<DEFAULT_CACHE_DIR>/checkpoint-capabilities.json` | 启动能力的 JSON（能力行的键 + `pid`、`started_at`、`version`、`commit`），在 store 根的父目录，每次启动整份替换 | orchestrator | 运维、`run.sh smoke` | [第 26 章 §3.1](26-configuration-and-capacity.md#31-能力文件) |
 
 ### 2.1 FCDB 逐字节
 
@@ -134,7 +134,7 @@
 
 ## 3. 接口速查
 
-SDK 与 RPC 的调用方式见 [第 21 章](21-sdk-quickstart.md)，超时、不重放与错误处置见 [第 22 章](22-api-semantics.md)。
+SDK 与 RPC 的调用方式见 [第 23 章](23-sdk-quickstart.md)，超时、不重放与错误处置见 [第 24 章](24-api-semantics.md)。
 
 | SDK 方法 | RPC（宿主侧端口 49984） |
 |---|---|

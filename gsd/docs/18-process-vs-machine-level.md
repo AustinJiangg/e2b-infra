@@ -306,7 +306,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 | 设计目标、硬约束、非目标 | [03 目标与边界](../../rollback/docs/03-goals-and-boundaries.md) |
 | 整机级与 e2b 原生快照的分工与配合 | [15 原生快照协作与成本](../../rollback/docs/15-native-cooperation-and-cost.md) |
 | 分档基准、成本模型的拟合、条件标签（§4.2 的出处） | [18 950 性能](../../rollback/docs/18-950-performance.md) |
-| restore 回滚什么、连接与时钟、失效条件（§5 的出处） | [22 API 语义](../../rollback/docs/22-api-semantics.md) |
+| restore 回滚什么、连接与时钟、失效条件（§5 的出处） | [22 API 语义](../../rollback/docs/24-api-semantics.md) |
 | 失败分级与"撕裂" | [11 失败与不变量](../../rollback/docs/11-failures-and-invariants.md) |
 
 ---

@@ -454,7 +454,7 @@ pause 日志会写明这次导出多少页、依据是哪一种、集合里有�
 第 1 道门对应的开关是 `FC_TRACK_DIRTY_PAGES`，判定在 `fc/dirtytracking.go`：没设置时跟硬件走（探到 KVM 能力 502，也就是 HDBSS，就开，否则关；
 `hostDefaultTrackDirtyPages`，:92），设置了就按 `strconv.ParseBool` 解析，解析不了则忽略并跟硬件走（`decideTrackDirtyPages`，:68）。
 这是整个 orchestrator 一个值，与 checkpoint 用的是同一个开关；为什么默认值跟着硬件走见 [第 5 章 §4.7](05-dirty-tracking-and-hdbss.md#47-默认值为什么跟着硬件走)，
-开关总表见 [第 24 章 §2.1](24-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
+开关总表见 [第 26 章 §2.1](26-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
 
 第 3 道门里"没有端点"的判定（`fc/rollback.go:264-271`）：Firecracker 回 404，或者回 400 且正文是上游 Firecracker 对未知路由的固定报错
 `Invalid request method and/or path`，就包成 `ErrDirtyTrackingUnavailable`（`fc/memory.go:29`、:60-63）。其他错误不走退路，直接让 pause 失败：

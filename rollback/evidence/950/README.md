@@ -15,7 +15,7 @@
 
 ## 身份与验证边界
 
-具体测试条件与测量口径见手册[功能验证](../../docs/17-functional-verification.md)、[性能实测](../../docs/18-950-performance.md)和[并发验证](../../docs/19-950-concurrency.md)。各轮部署身份分别判断，不能用后一轮配置或哈希追认前一轮。
+具体测试条件与测量口径见手册[功能验证](../../docs/17-functional-verification.md)、[性能实测](../../docs/18-950-performance.md)和[并发验证](../../docs/21-concurrency-and-longrun.md)。各轮部署身份分别判断，不能用后一轮配置或哈希追认前一轮。
 
 手册的讲解源码为 `KASandbox_0904/deltabox-dev@57a30632cb9cb8eb67a35dd226d9ef4b40458af4`。这是代码阅读基准，不是对所有被测二进制身份的认定。交付分支合入不属于本次阶段收尾。
 

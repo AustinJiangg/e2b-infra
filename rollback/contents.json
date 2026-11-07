@@ -36,26 +36,28 @@
         "16-test-methodology.md",
         "17-functional-verification.md",
         "18-950-performance.md",
-        "19-950-concurrency.md",
-        "20-acceptance.md"
+        "19-native-pause-resume.md",
+        "20-920b-performance.md",
+        "21-concurrency-and-longrun.md",
+        "22-acceptance.md"
       ]
     },
     {
       "title": "第五篇：使用、部署与运维",
       "chapters": [
-        "21-sdk-quickstart.md",
-        "22-api-semantics.md",
-        "23-build-and-self-check.md",
-        "24-configuration-and-capacity.md",
-        "25-observability.md",
-        "26-troubleshooting.md"
+        "23-sdk-quickstart.md",
+        "24-api-semantics.md",
+        "25-build-and-self-check.md",
+        "26-configuration-and-capacity.md",
+        "27-observability.md",
+        "28-troubleshooting.md"
       ]
     },
     {
       "title": "第六篇：接手开发与后续方向",
       "chapters": [
-        "27-development.md",
-        "28-status-and-directions.md"
+        "29-development.md",
+        "30-status-and-directions.md"
       ]
     }
   ],

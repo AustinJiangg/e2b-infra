@@ -425,7 +425,7 @@ header 写不出来、封存层没能进 store 等发生在 `AppendLayer` 之外
 
 污染由一次成功的 restore 清除：`SetRootfsToEntry`（:276）用该条目自己的 header 重建当前管理记录，此时账本与栈重新对齐。
 那些进了活栈却没进账本的层记在 `rootfsState.unrecorded`（:47），它们不在任何视图里、不被计数，等下一次 restore 替换活栈时回收；没有 restore 就随沙箱走。
-污染对调用方意味着什么（先 restore 一个已有的 checkpoint）见 [第 22 章](22-api-semantics.md)。
+污染对调用方意味着什么（先 restore 一个已有的 checkpoint）见 [第 24 章](24-api-semantics.md)。
 
 ## 9. 与原生 pause 的区别：导出后不继续使用原 Overlay
 

@@ -35,7 +35,7 @@
 
 内部部署模板（`e2b-deploy/dep/template-manager.hcl`）**有意不传**这个变量：950 上不需要。
 没有 HDBSS 的机器不设时默认关，是因为软件写保护要让每个干净页的第一次写入陷出一次，对从不做 checkpoint 的沙箱是净亏（原理见 [第 5 章](05-dirty-tracking-and-hdbss.md)）。
-取值只认 Go `strconv.ParseBool` 的写法，`yes`、`on` 之类会被忽略并打 WARN，详见 [第 24 章 §2.1](24-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
+取值只认 Go `strconv.ParseBool` 的写法，`yes`、`on` 之类会被忽略并打 WARN，详见 [第 26 章 §2.1](26-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
 
 ## 3. 平台前提
 
@@ -54,7 +54,7 @@
 | 9 | 2 MiB 大页：guest 内存走 hugetlb，`init-client.sh` 启动时预留一部分，其余走 overcommit | `grep -i huge /proc/meminfo`；`cat /proc/sys/vm/nr_overcommit_hugepages` | 沙箱数被大页数卡住 |
 | 10 | **产物盘**：store 根 `/orchestrator/build/checkpoints`（由 `ORCHESTRATOR_BASE_PATH`、`DEFAULT_CACHE_DIR` 决定，目录布局见 [第 4 章 §5](04-architecture-and-flow.md#5-数据面目录布局)）所在文件系统为 **ext4**，支持稀疏文件 | `df -T /orchestrator/build` | 交付方案只在 ext4 上验证过；为什么是 ext4 见 [第 3 章 §9](03-goals-and-boundaries.md#9-为什么交付用-ext4) |
 | 11 | 产物盘与沙箱缓存盘（`/orchestrator/sandbox`，活写层所在）是**同一个文件系统** | `findmnt -no SOURCE --target /orchestrator/build; findmnt -no SOURCE --target /orchestrator/sandbox` 两行相同 | 封层从 rename 退化为拷贝，checkpoint 变慢 |
-| 12 | 产物盘余量：按 [第 24 章 §4](24-configuration-and-capacity.md#4-容量规划) 估；服务端另有水位闸，低于 max(4 GiB, 2 × guest 内存) 时拒绝 checkpoint 与 restore | `df -h /orchestrator/build` | 507 `disk_full` |
+| 12 | 产物盘余量：按 [第 26 章 §4](26-configuration-and-capacity.md#4-容量规划) 估；服务端另有水位闸，低于 max(4 GiB, 2 × guest 内存) 时拒绝 checkpoint 与 restore | `df -h /orchestrator/build` | 507 `disk_full` |
 
 把 2–11 项一次查完的脚本是 `rollback/scripts/crtest/portability/preflight-customer.sh`（零依赖、只读，退出码 = FAIL 项数），在 clone 下来的 e2b-infra 仓库根目录执行：
 
@@ -62,7 +62,7 @@
 bash rollback/scripts/crtest/portability/preflight-customer.sh
 ```
 
-它也是 [第 20 章](20-acceptance.md) 里 `run.sh smoke` 的第一项。`WARN` 不算失败，但要逐条看一眼说明。
+它也是 [第 22 章](22-acceptance.md) 里 `run.sh smoke` 的第一项。`WARN` 不算失败，但要逐条看一眼说明。
 
 ## 4. 版本配对
 
@@ -107,9 +107,9 @@ done
 
 以下涉及 `template-manager`、Nomad alloc 或辅助脚本的命令采用内部950环境约定；客户替换为实际进程、日志与工具路径。
 
-orchestrator 启动时打一行 `checkpoint capabilities`，说清脏页跟踪开没开、为什么，以及各项限额的生效值和来源（字段逐个解释在 [第 24 章 §3](24-configuration-and-capacity.md#3-启动能力行)）。
+orchestrator 启动时打一行 `checkpoint capabilities`，说清脏页跟踪开没开、为什么，以及各项限额的生效值和来源（字段逐个解释在 [第 26 章 §3](26-configuration-and-capacity.md#3-启动能力行)）。
 从 deltabox-dev `93ccb02` 起，同样的内容还写进**能力文件** `checkpoint-capabilities.json`：在 `DEFAULT_CACHE_DIR` 下（默认 `/orchestrator/build/`，即 store 根的父目录），
-另带 `pid`、`started_at`、`version`、`commit` 四个键（[第 24 章 §3.1](24-configuration-and-capacity.md#31-能力文件)）。
+另带 `pid`、`started_at`、`version`、`commit` 四个键（[第 26 章 §3.1](26-configuration-and-capacity.md#31-能力文件)）。
 日志行在当前 alloc 的 `start.stdout.<n>` 里，**会轮转**（负载下几分钟就把启动行滚掉）；能力文件不会，下次启动时整份替换。
 
 先看能力文件。文件里的 `pid` 必须是正在运行的进程，否则是以前那次启动留下的，不算：
@@ -158,14 +158,14 @@ tr '\0' '\n' < /proc/$(pidof -s template-manager)/environ | grep -E '^(CHECKPOIN
 ip netns list | grep -cE '^ns-[0-9]+$'
 ```
 
-记下这个数。正常水位 = 300（预建池）+ 历史峰值并发；每重启一次 orchestrator 会多漏约一池（[第 26 章 §9](26-troubleshooting.md#9-网络槽位netns泄漏)）。
+记下这个数。正常水位 = 300（预建池）+ 历史峰值并发；每重启一次 orchestrator 会多漏约一池（[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏)）。
 刚启动时这个数还在涨（暖池填充），**做任何性能测试前等它连续几分钟不变**。
 
 ## 9. 增量真的生效
 
 以下涉及 `template-manager`、Nomad alloc 或辅助脚本的命令采用内部950环境约定；客户替换为实际进程、日志与工具路径。
 
-这一步要建沙箱，用 [第 20 章](20-acceptance.md) 的 `run.sh smoke` 一次做完。smoke 里的 `checkpoint_verify.py` 开头打印
+这一步要建沙箱，用 [第 22 章](22-acceptance.md) 的 `run.sh smoke` 一次做完。smoke 里的 `checkpoint_verify.py` 开头打印
 `脏页后端 : …`——这是 Firecracker 自己报的第 ② 层（950 应为 HDBSS，显式开启的无 HDBSS 机器为 KVM 写保护），能力行只能回答第 ① 层。
 
 另外两个独立证据：

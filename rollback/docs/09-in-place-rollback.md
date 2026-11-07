@@ -392,7 +392,7 @@ orchestrator 侧（`internal/sandbox/checkpoint.go` — `RollbackInPlace`）对�
 Firecracker 以 `rollback-fault-inject` 特性构建时，`FC_ROLLBACK_FAULT_INJECT=post_commit` 在阶段 5 与阶段 6 之间注入一个 `RollbackError::Gic`
 （与真实的阶段 6 失败是同一个变体，下游看到的是逐字节相同的提交点后失败；生产构建里这段代码与字符串都不存在，`rollback.rs:195-258`）；
 orchestrator 的 `RollbackInPlace` 接受一个 `afterCommit` 回调，生产路径从不传它。完整的失败分级见 [第 11 章](11-failures-and-invariants.md)，
-错误码与 SDK 异常见 [第 22 章](22-api-semantics.md)。
+错误码与 SDK 异常见 [第 24 章](24-api-semantics.md)。
 
 ## 6. 计时与回报
 
@@ -415,7 +415,7 @@ pub struct RollbackResponse {
   orchestrator 不读 Firecracker 的 metrics 文件，所以这些计数只能搭应答回来；
 - orchestrator 把它们摊平进自己的 timings：`fc_validate`、`fc_quiesce`、`fc_bitmap`、`fc_memory`、`fc_vcpus`、`fc_gic`、`fc_devices`、`fc_total`，
   以及 `fc_vcpu_mmio_drained_count`（Firecracker 不回报时这个键整个缺席，以区分"没报"和"为 0"）。理由是 Firecracker 这一段是冻结窗口的主体，
-  把它留成一个不透明的总数，就等于放弃了定位问题的能力。各键定义见 [第 25 章](25-observability.md)，实测分布见 [第 18 章](18-950-performance.md)；
+  把它留成一个不透明的总数，就等于放弃了定位问题的能力。各键定义见 [第 27 章](27-observability.md)，实测分布见 [第 18 章](18-950-performance.md)；
 - `restored_pages` 是"本次回退了多少"的直接度量，可与回滚集大小对照，对不上说明契约出了问题。
 
 回滚后 Firecracker 还会按 info 级别逐设备记一行队列位置（`log_queue_diagnostics`），用途见 [第 10 章 §7](10-device-network-time.md#7-为什么要有逐设备的诊断日志)。

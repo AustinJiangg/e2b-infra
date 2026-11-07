@@ -101,7 +101,7 @@ Python SDK 的 checkpoint / restore 能力是在 **phz（Git 作者 `penghaozhou
 |---|---|---|
 | phz 原始 SDK | `60f8c35101b67c95cfcc680455b32024054d935d`，Author 为 `penghaozhou <penghaozhou@huawei.com>`，Committer 为 `j30059180` | 引入同步 / 异步 checkpoint 创建、恢复、列表与删除接口、类型、Connect-RPC 封装，以及协议与构建配套 |
 | 本方 MR 前适配 | `60f8c3510 → deltabox@0f9b58f`；代表提交 `5c42b396892cb12ed0125c2b288c1beaeaad6bda`，Author 为 `j30059180` | `gsd` 改名为 `checkpointd`、移除无效 Basic 认证头、报告 `mem_mode`、连接路由及协议生成配套调整 |
-| 本方 MR 后完善 | `deltabox@0f9b58f → deltabox-dev@57a3063`；SDK 路径的提交 Author 均为 `j30059180` | 访问令牌传递、禁止非幂等 RPC 自动重试、独立超时、异常语义，以及恢复后连接与流式调用行为等；机制见 [第 22 章](22-api-semantics.md) |
+| 本方 MR 后完善 | `deltabox@0f9b58f → deltabox-dev@57a3063`；SDK 路径的提交 Author 均为 `j30059180` | 访问令牌传递、禁止非幂等 RPC 自动重试、独立超时、异常语义，以及恢复后连接与流式调用行为等；机制见 [第 24 章](24-api-semantics.md) |
 
 原始提交的 **Author 与 Committer 不同**：提交者记录表示集成到交付历史的人，不能据此将 phz 的 SDK 原始实现归为本方编写。
 下表沿用主表词法及端点差分口径：原始引入取 `60f8c3510^ → 60f8c3510`，本方两阶段分别取该提交到 MR、MR 到当前版；末行直接取原始引入后到当前版的端点差分。
@@ -169,7 +169,7 @@ Python SDK 的 checkpoint / restore 能力是在 **phz（Git 作者 `penghaozhou
 
 共享库不按被多少用例调用重复计数。`950/run.sh` 的入口关系按当前脚本检查；“入口涉及”包含需要显式启用的重启、故障与配额专项，不表示默认档会全部执行。
 `dev/`、`probe950/` 和独立验收脚本中不在统一入口里的部分保留为独立工具与手动专项，不凭目录名认定已经弃用。
-测试体系及用例判据见 [第 16 章](16-test-methodology.md)，通过项数、跳过项及性能证据见 [第 18 章](18-950-performance.md)、[第 19 章](19-950-concurrency.md)。
+测试体系及用例判据见 [第 16 章](16-test-methodology.md)，通过项数、跳过项及性能证据见 [第 18 章](18-950-performance.md)、[第 21 章](21-concurrency-and-longrun.md)。
 **代码行数、用例数、实际通过项数与覆盖率是不同指标，不能相互替代。**
 
 ## 5. 物理行复核、排除与去重

@@ -28,7 +28,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 ## 2. 条件与来源
 
 [§2](#2-条件与来源)～[§7](#7-同-checkpoint-串行-restore-100-次) 归档结果目录 `rollback/scripts/950/results/20261013-161100-perf/` 中已回传的文本；稍后的 HDBSS 专项在 [§8](#8-hdbss-专项默认-order-1-的启用证据与写密集实测) 单列。
-`SUMMARY.md` 为 **PASS 4 · FAIL 0 · SKIP 0**；其中包括并发 A/B，数据另见 [第 19 章](19-950-concurrency.md)，本节只列非并发部分。
+`SUMMARY.md` 为 **PASS 4 · FAIL 0 · SKIP 0**；其中包括并发 A/B，数据另见 [第 21 章](21-concurrency-and-longrun.md)，本节只列非并发部分。
 脚本 PASS 表示流程与它检查的正确性通过，**不表示每档性能都在线内**；`compliance.py` 在有超线档时仍返回成功。
 
 | 条件 | 本轮证据 |
@@ -331,7 +331,7 @@ checkpoint 在 256 MiB 达标、512 MiB 超线。纯内存和纯文件只测了�
 | 128 | 73.0 | 346.8 | 4.8 | 67.8 | 108.9 | 1.6 |
 | 256 | 125.5 | 429.9 | 3.4 | 105.6 | 120.7 | 1.1 |
 
-256 MiB 档 restore 与 resume 的数字接近，但含义不同：restore 返回时内存已写回；resume 返回时页还没有加载，之后读这些页要再付约 112 ms。此外 restore 保留原 Firecracker 进程，resume 换了一代进程，之前的 checkpoint 全部失效（[第 22 章 §3.1](22-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）。
+256 MiB 档 restore 与 resume 的数字接近，但含义不同：restore 返回时内存已写回；resume 返回时页还没有加载，之后读这些页要再付约 112 ms。此外 restore 保留原 Firecracker 进程，resume 换了一代进程，之前的 checkpoint 全部失效（[第 24 章 §3.1](24-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）。
 
 ### 9.5 边界
 

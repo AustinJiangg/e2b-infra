@@ -6,7 +6,7 @@
 
 正式交付是功能代码和本手册；完整上机工具在外部辅助仓库 `e2b-infra/rollback/scripts/`，不在 RPM 或 KASandbox 交付分支中自动附带。以下 `run.sh` 命令以已经取得该工具目录为前提，并从辅助仓库根目录执行。
 
-客户采用自己的 E2B 部署方式。使用已安装配套 SDK 的解释器，设置实际客户端连接凭据与模板，确认[平台与能力前提](23-build-and-self-check.md)。宿主侧性能采集需要读取服务端计时和产物，远程仅调用接口不能替代这些观测。
+客户采用自己的 E2B 部署方式。使用已安装配套 SDK 的解释器，设置实际客户端连接凭据与模板，确认[平台与能力前提](25-build-and-self-check.md)。宿主侧性能采集需要读取服务端计时和产物，远程仅调用接口不能替代这些观测。
 
 ```bash
 PY=$(command -v python3)
@@ -31,7 +31,7 @@ bash rollback/scripts/950/run.sh long
 | `smoke` | ≤ 3 分钟 | 这台机器的 checkpoint 能不能用、是不是增量 | 5 项全 PASS |
 | `func` | ≤ 40 分钟 | 功能与健壮性 | FAIL = 0 |
 | `perf` | ≤ 40 分钟（`--quick` ≤ 10 分钟，只验证脚本跑得通） | 分档耗时、达标判定、长尾、并发 | FAIL = 0；超达标线**不**判 FAIL |
-| `hdbss` | 约 4 分钟（每个 order；扫描时每个 order 另加约 1 分钟重启；`--quick` 约 20 秒） | 这个沙箱是否真在用 HDBSS、`FC_HDBSS_ORDER` 是否生效、写密集负载下的代价（[第 20 章 §5.1](#51-hdbss-档hdbss-专项)） | FAIL = 0；性能数字不判；后端不是 `hdbss` 时整档 SKIP |
+| `hdbss` | 约 4 分钟（每个 order；扫描时每个 order 另加约 1 分钟重启；`--quick` 约 20 秒） | 这个沙箱是否真在用 HDBSS、`FC_HDBSS_ORDER` 是否生效、写密集负载下的代价（[第 22 章 §5.1](#51-hdbss-档hdbss-专项)） | FAIL = 0；性能数字不判；后端不是 `hdbss` 时整档 SKIP |
 | `long` | 小时级，不自动跑 | 长跑与大样本 | 只打印命令清单 |
 
 每档在 `rollback/scripts/950/results/<时间戳>-<档>/` 下写一份 `SUMMARY.md`（表头"项 / 结果 / 耗时 / 关键数字或原因 / 产物"，上方是主机、内核、env 文件、解释器、模板与 PASS/FAIL/SKIP 计数）、
@@ -46,7 +46,7 @@ bash rollback/scripts/950/run.sh long
 |---|---|---|---|
 | 宿主预检 | `crtest/portability/preflight-customer.sh`：CPU、KVM、GIC、HDBSS 能力、内核特性、模块、大页、产物盘、FC 二进制身份、SDK；FC 只判定选定的在用版本，其余版本目录记 INFO | 退出码 0（`WARN` 不算 FAIL） | `preflight.log` |
 | SDK 覆盖层自检 | `install.py --check` | 打出 `自检通过（干净子进程）` | `sdk-check.log` |
-| 能力文件 / 能力行 | 先读能力文件 `checkpoint-capabilities.json`（目录取正在运行的进程环境里的 `DEFAULT_CACHE_DIR`，没有就 `$ORCHESTRATOR_BASE_PATH/build`，再没有就 `/orchestrator/build`；给了 `--store` 就取它的父目录），其中 `pid` 须是该进程；没有有效的文件（此前的版本不写）就从**正在运行**的 orchestrator 所在 alloc 的日志里找最后一次 `checkpoint capabilities`，再退到 journald | 读到有效的能力文件，或抓到带 `track_dirty_pages` 的能力行；两样都没有时判 SKIP，按 [第 20 章](20-acceptance.md) 手工留档 | `capabilities.log` |
+| 能力文件 / 能力行 | 先读能力文件 `checkpoint-capabilities.json`（目录取正在运行的进程环境里的 `DEFAULT_CACHE_DIR`，没有就 `$ORCHESTRATOR_BASE_PATH/build`，再没有就 `/orchestrator/build`；给了 `--store` 就取它的父目录），其中 `pid` 须是该进程；没有有效的文件（此前的版本不写）就从**正在运行**的 orchestrator 所在 alloc 的日志里找最后一次 `checkpoint capabilities`，再退到 journald | 读到有效的能力文件，或抓到带 `track_dirty_pages` 的能力行；两样都没有时判 SKIP，按 [第 22 章](22-acceptance.md) 手工留档 | `capabilities.log` |
 | FC sha256 | `/fc-versions/*/firecracker` 与 `/opt/e2b-infra/bin/firecracker`；摘要优先显示预检选定的在用版本 | 脚本 PASS 表示采集到非空身份文本；另须核对选定FC与该次实际构建产物的预期hash；内部950历史哈希见[第17章](17-functional-verification.md#4-950-smoke部署预检与正确性验收)；未判定在用版本而退回第一行时，摘要会注明 | `fc-sha256.log` |
 | 功能正确性 | `acceptance/checkpoint_verify.py`：三代现场，内存 / 根文件系统 / 删除 / 权限位，心跳进程 pid 证明内存真的回来了 | 打出 `✓ 59 项校验全部通过。` | `checkpoint_verify.log` |
 
@@ -73,7 +73,7 @@ bash rollback/scripts/950/run.sh long
 | 用例 | 为什么默认跳 | 要跑的开关 |
 |---|---|---|
 | T18（重启后账本不跨重启） | 要重启 orchestrator，全机沙箱都会没 | `--allow-restart --restart-cmd "…"`（重启命令按本机部署方式给，脚本不替你猜） |
-| T21（四条故障注入） | 要服务端带 `CHECKPOINT_FAULT_INJECT` 重启 | 按 [第 24 章 §5](24-configuration-and-capacity.md#5-改一个开关操作步骤) 改 env 重启后加 `--fault-cases` |
+| T21（四条故障注入） | 要服务端带 `CHECKPOINT_FAULT_INJECT` 重启 | 按 [第 26 章 §5](26-configuration-and-capacity.md#5-改一个开关操作步骤) 改 env 重启后加 `--fault-cases` |
 | T38（FC 侧 faulted 路径） | 要带 `rollback-fault-inject` 特性的 FC 并设 `FC_ROLLBACK_FAULT_INJECT=post_commit`；交付的 FC 不带 | 同上 |
 | T37（水位闸与个数上限） | 要服务端带 `CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` 重启 | `--quota-cases` |
 
@@ -81,7 +81,7 @@ bash rollback/scripts/950/run.sh long
 解释器里没装 pytest 时那一项也判 SKIP，装上后重跑：`python3 -m pip install "pytest>=7.4,<8" "pytest-asyncio>=0.23,<0.24"`。
 
 **950 默认 func 已有实测归档**：2026-10-13 的 `20261013-163056-func`，16 个默认 crtest 用例与 SDK pytest 通过，四类重启 / 注入 / 配额项按计划跳过。
-逐项与 warning 的解释见 [第 17 章 §3](17-functional-verification.md#3-950-默认功能回归2026-10-13)，混合短稳态与恢复后立即命令见 [第 19 章 §2](19-950-concurrency.md#2-950-func-中的短稳态与恢复后请求)。
+逐项与 warning 的解释见 [第 17 章 §3](17-functional-verification.md#3-950-默认功能回归2026-10-13)，混合短稳态与恢复后立即命令见 [第 21 章 §2](21-concurrency-and-longrun.md#2-950-func-中的短稳态与恢复后请求)。
 判读时既看 PASS，也核对 T36 / T40 的失败记录项；不能将默认短测的通过写成小时级长稳，或写成所有负载的 restore 均满足 100 ms。
 
 **PASS 判据**：每个用例退出码 0 = 通过，1 = 断言不过，3 = 前置不满足（记 SKIP）。整档 FAIL = 0。
@@ -124,7 +124,7 @@ bash rollback/scripts/950/run.sh hdbss --python "$PY" --orders 1,2,4,6,9 --allow
 **性能数字只记录，不判 PASS / FAIL。**
 
 **order 扫描要重启。** `FC_HDBSS_ORDER` 由 Firecracker 在构建每台虚机时读，环境继承自 orchestrator，换一个值就要改 nomad job 的 env 并重启 `template-manager-system`：
-这台机器上的全部沙箱与 checkpoint 随之作废（[第 24 章 §5](24-configuration-and-capacity.md#5-改一个开关操作步骤)）。所以 `--orders` 必须同时带 `--allow-restart`，不带则报错退出；机器上还有活着的 firecracker 时默认也拒绝扫描（退出码 2，不建结果目录、不碰 job），确认这些沙箱可以消失才加 `--kill-sandboxes-ok`。
+这台机器上的全部沙箱与 checkpoint 随之作废（[第 26 章 §5](26-configuration-and-capacity.md#5-改一个开关操作步骤)）。所以 `--orders` 必须同时带 `--allow-restart`，不带则报错退出；机器上还有活着的 firecracker 时默认也拒绝扫描（退出码 2，不建结果目录、不碰 job），确认这些沙箱可以消失才加 `--kill-sandboxes-ok`。
 `run.sh` 取运行中的 job 定义留底（结果目录下的 `job-before.json`），只在 task 的 Env 里加这一个变量再提交，不改 `/opt/e2b-infra` 下的文件；
 每个 order 重启后等 `/health` 回 200、进程环境里的值对得上，基准再在 300 秒内重试建沙箱。扫完、中途失败或被中断，都把留底的定义提交回去，
 并在 `SUMMARY.md` 的"order 扫描与 job 恢复"一节写明测完了哪些 order、启动命令与 Env 和扫描前是否完全相同、现在进程环境里的 `FC_HDBSS_ORDER`；恢复失败时给出手工恢复的命令。
@@ -152,12 +152,12 @@ bash rollback/scripts/950/run.sh long
 - 串行 restore 5000 次；
 - 分档基准全表（18 档 × 3 遍）与达标判定。
 
-打印出的清单第一段用 `PY=$(command -v python3)` 取解释器，所以要在包含配套SDK的那个环境里照抄（与 [第 20 章](20-acceptance.md) 的 `$PY` 是同一个）；其余命令原样可用，每条都已 `tee` 到 `$OUT` 下。
+打印出的清单第一段用 `PY=$(command -v python3)` 取解释器，所以要在包含配套SDK的那个环境里照抄（与 [第 22 章](22-acceptance.md) 的 `$PY` 是同一个）；其余命令原样可用，每条都已 `tee` 到 `$OUT` 下。
 长跑前确认 netns 数已稳定。`checkpoint_concurrent.py` 建沙箱时给的寿命是 3600 s，清单里的长跑都在这之内；把时长加到 1 小时以上时，沙箱会先被回收，结果作废。
 
 ## 7. 已知项与缺口
 
-能力边界、已知问题与候选开发方向的统一入口见 [第 28 章](28-status-and-directions.md)；本节维护实测与验证缺口的详细记录。
+能力边界、已知问题与候选开发方向的统一入口见 [第 30 章](30-status-and-directions.md)；本节维护实测与验证缺口的详细记录。
 
 | # | 项 | 现状 |
 |---|---|---|
@@ -167,17 +167,17 @@ bash rollback/scripts/950/run.sh long
 | 4 | conntrack 后台清扫贴近关键路径 | `conntrack_bg` p50 在滚动负载下 52–55 ms、上限 60 负载下 74.9 ms（宿主表约 1.9 万条），已接近冻结窗口。清扫代价跟着整张宿主表走，表里约 95% 是与沙箱无关的条目；long11 第二个小时本机 DNS 条目堆积把它推到 69 ms。按 ct mark 过滤的方案 A 已设计，用户 09-30 决定暂不实施（[附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)） |
 | 5 | 滚动负载下 restore 随回滚量增长 | 60 min 内 `materialize_read_mb` p50 44 → 57 MB，写回滚内存约 0.65 ms/MB，restore p50 71 → 84 ms。guest 后台写让回滚量真实变大，是工作量不是缺陷（[附录 C §8.9](C-evolution-and-cases.md#89-视图块数增长restore-随时间变慢)） |
 | 6 | 脏页跟踪关闭时不合并 | 每个 checkpoint 都是全量根，没有"隐藏且只有一个子节点"的条目，层照样累积。950 用 HDBSS、920B 显式开跟踪，都不走这条路 |
-| 7 | 每重启一次 orchestrator 泄漏约 290 个 netns | 上游问题，靠运维清理（[第 26 章 §9](26-troubleshooting.md#9-网络槽位netns泄漏)） |
+| 7 | 每重启一次 orchestrator 泄漏约 290 个 netns | 上游问题，靠运维清理（[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏)） |
 | 8 | 撕裂之后 SDK 的 `is_running()` | 两次运行分别得到 `TimeoutException` 和 `False`，用例注释预期为真；只记录，不判定 |
 | 9 | 客户端偶发 `ReadError: [Errno 9] Bad file descriptor` | 每轮 0–2 次，服务端没收到这些请求，在客户端 httpx 连接层；只记录 |
-| 10 | 非 restore 的流截断修复要两份代理都带上 | orchestrator 的沙箱代理与 client-proxy 共用同一段代理代码，部署件里两者都要是修复后的版本（[第 22 章 §11.3](22-api-semantics.md#113-两类流式截断要分清)、[附录 C §8.1](C-evolution-and-cases.md#81-流式命令偶发截断)） |
+| 10 | 非 restore 的流截断修复要两份代理都带上 | orchestrator 的沙箱代理与 client-proxy 共用同一段代理代码，部署件里两者都要是修复后的版本（[第 24 章 §11.3](24-api-semantics.md#113-两类流式截断要分清)、[附录 C §8.1](C-evolution-and-cases.md#81-流式命令偶发截断)） |
 | 11 | 字节配额默认关 | 是否在交付件里默认开、开多大待定；crtest 没有对应用例，端到端验证只在工作区脚本里做过 |
 | 12 | SDK 覆盖层自检判据已改 | 已在两次 RPM 部署件上重跑 smoke，都是 5 / 5（[附录 B §5](B-920b-results.md#5-部署后回归)） |
 | 13 | 开发态工具 | `correctness.py`（已按合并语义更新）已在两次 RPM 部署件上跑过，都是 ALL PASS（[附录 B §5](B-920b-results.md#5-部署后回归)）；`pause_verify.py`、`compat_matrix.py`、`loop.py`、`timing.py` 未在本期代码上跑 |
-| 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-950-默认功能回归2026-10-13)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收)，perf 的 12 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 19 章](19-950-concurrency.md)。smoke 已有能力文件自报 commit、SDK 与 FC 路径 hash，HDBSS 轮有二进制 hash 与 guest vCPU；perf / func 当轮二进制身份、原始 JSON / JSONL、`00-context.md`、源码 commit / RPM 对应和介质仍待补。950 重启 / 注入 / 配额专项本轮跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 19 章 §3](19-950-concurrency.md#3-到-950-上要重测什么) |
+| 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-950-默认功能回归2026-10-13)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收)，perf 的 12 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 21 章](21-concurrency-and-longrun.md)。smoke 已有能力文件自报 commit、SDK 与 FC 路径 hash，HDBSS 轮有二进制 hash 与 guest vCPU；perf / func 当轮二进制身份、原始 JSON / JSONL、`00-context.md`、源码 commit / RPM 对应和介质仍待补。950 重启 / 注入 / 配额专项本轮跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 21 章 §3](21-concurrency-and-longrun.md#3-到-950-上要重测什么) |
 | 15 | HDBSS 与软件写保护的收益对照 | 用户决定不做：客户只要 HDBSS 自身的性能，950 上不测写保护 |
 | 16 | 950 上的 HDBSS L3 证据落盘 | 已回传 2026-10-13 16:52 默认 order 1 的能力、自报、dmesg / FC 日志、冷 / 热写与 debugfs 退出计数，见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)；JSON / JSONL 尚未回传，不从文本推定长期表现 |
-| 17 | `FC_HDBSS_ORDER` 取值对比 | 已确认默认 order 1 生效；本轮仅 `run.sh hdbss`，没有 `--orders`，其他 order 比较仍待补。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`（[第 20 章 §5.1](#51-hdbss-档hdbss-专项)） |
+| 17 | `FC_HDBSS_ORDER` 取值对比 | 已确认默认 order 1 生效；本轮仅 `run.sh hdbss`，没有 `--orders`，其他 order 比较仍待补。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`（[第 22 章 §5.1](#51-hdbss-档hdbss-专项)） |
 | 18 | 跨树回滚 | 有单元测试（丢失 epoch 后跨树 restore 三种 sidecar 形态），无端到端用例 |
 | 19 | HDBSS 在 vCPU 创建之后武装 | 只靠调用点位置保证，没有断言 |
 | 20 | 条件标签留档 | 每轮必须记全机型、脏页后端、产物盘、模板、二进制 sha、脚本参数；漏记的数据事后补不上 |

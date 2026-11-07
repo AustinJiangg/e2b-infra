@@ -220,20 +220,20 @@ print(sandbox.commands.run(
 
 本文依据《E2B快照回滚技术手册》v0.5.6 撰写。任务案例为说明机制而构造；性能、功能与并发数字分别引用对应测试轮次，不合并为同一版本的统一验收结论。
 
-1. [第 22 章：接口语义、恢复范围与生命周期](../docs/22-api-semantics.md)。
-2. [第 21 章：配套 SDK、使用示例与历史管理](../docs/21-sdk-quickstart.md)。
+1. [第 22 章：接口语义、恢复范围与生命周期](../docs/24-api-semantics.md)。
+2. [第 21 章：配套 SDK、使用示例与历史管理](../docs/23-sdk-quickstart.md)。
 3. [第 3 章：设计目标与取舍](../docs/03-goals-and-boundaries.md)；[第 4 章：总体架构与端到端流程](../docs/04-architecture-and-flow.md)；实现细节见手册第 5～12 章。
 4. [第 15 章：快速回滚与原生快照的分工](../docs/15-native-cooperation-and-cost.md)。
 5. [第 18 章：950 性能分档、条件、统计口径与 HDBSS 证据](../docs/18-950-performance.md)，主要引用第 2～4 节；HDBSS 专项见第 8 节。
 6. [第 17 章：功能正确性验证](../docs/17-functional-verification.md)，引用第 4 节的 2026-10-15 smoke 验收。
-7. [第 19 章：950 并发与恢复后立即请求](../docs/19-950-concurrency.md)，分别引用第 1.2 节与第 2.2 节。
-8. [第 28 章：已知问题与待验证范围](../docs/28-status-and-directions.md)。
+7. [第 19 章：950 并发与恢复后立即请求](../docs/21-concurrency-and-longrun.md)，分别引用第 1.2 节与第 2.2 节。
+8. [第 28 章：已知问题与待验证范围](../docs/30-status-and-directions.md)。
 
-[1]: ../docs/22-api-semantics.md
-[2]: ../docs/21-sdk-quickstart.md
+[1]: ../docs/24-api-semantics.md
+[2]: ../docs/23-sdk-quickstart.md
 [3]: ../docs/03-goals-and-boundaries.md
 [4]: ../docs/15-native-cooperation-and-cost.md
 [5]: ../docs/18-950-performance.md
 [6]: ../docs/17-functional-verification.md
-[7]: ../docs/19-950-concurrency.md
-[8]: ../docs/28-status-and-directions.md
+[7]: ../docs/21-concurrency-and-longrun.md
+[8]: ../docs/30-status-and-directions.md

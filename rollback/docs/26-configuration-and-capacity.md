@@ -17,8 +17,8 @@
 
 | 变量 | 读取方 | 默认 | 取值与解析 | 作用 | 能力行 |
 |---|---|---|---|---|---|
-| `FC_TRACK_DIRTY_PAGES` | orchestrator，启动时一次 | 未设 = 跟随硬件：探到 KVM 能力 502（HDBSS）则开，否则关 | Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关。其他值（`yes`、`on`、空串、拼错）**忽略**，按未设处理，并打 WARN `FC_TRACK_DIRTY_PAGES="…" is not a boolean and was ignored` | 第 ① 层：虚机启动时是否武装脏页跟踪。关着时每次 checkpoint 都是全量。950 不设；无 HDBSS 而要增量的机器设 `true`（走 KVM 写保护，[第 23 章 §2](23-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)） | `track_dirty_pages`、`track_dirty_pages_reason` |
-| `FC_HDBSS_ORDER` | Firecracker，每台虚机构建时 | `1`（每 vCPU 8 KiB） | 按无符号整数解析，解析不了或未设都取 `1`；值原样交给内核，内核不接受则 HDBSS 启用失败 | 每 vCPU HDBSS 缓冲区大小的编码（`n` → 4 KiB × 2^n）。950已有默认order 1的写密集测量；不同order的收益比较未实测；测它的入口是 `run.sh hdbss --orders …`（[第 20 章 §5.1](20-acceptance.md#51-hdbss-档hdbss-专项)） | 无；FC 日志 `HDBSS enabled (buffer order …)`，950 上 `dmesg` 的 `Enable HDBSS success, HDBSS buffer size: …` |
+| `FC_TRACK_DIRTY_PAGES` | orchestrator，启动时一次 | 未设 = 跟随硬件：探到 KVM 能力 502（HDBSS）则开，否则关 | Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关。其他值（`yes`、`on`、空串、拼错）**忽略**，按未设处理，并打 WARN `FC_TRACK_DIRTY_PAGES="…" is not a boolean and was ignored` | 第 ① 层：虚机启动时是否武装脏页跟踪。关着时每次 checkpoint 都是全量。950 不设；无 HDBSS 而要增量的机器设 `true`（走 KVM 写保护，[第 25 章 §2](25-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)） | `track_dirty_pages`、`track_dirty_pages_reason` |
+| `FC_HDBSS_ORDER` | Firecracker，每台虚机构建时 | `1`（每 vCPU 8 KiB） | 按无符号整数解析，解析不了或未设都取 `1`；值原样交给内核，内核不接受则 HDBSS 启用失败 | 每 vCPU HDBSS 缓冲区大小的编码（`n` → 4 KiB × 2^n）。950已有默认order 1的写密集测量；不同order的收益比较未实测；测它的入口是 `run.sh hdbss --orders …`（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)） | 无；FC 日志 `HDBSS enabled (buffer order …)`，950 上 `dmesg` 的 `Enable HDBSS success, HDBSS buffer size: …` |
 | `FC_HDBSS_REQUIRED` | Firecracker，每台虚机构建且已武装脏页跟踪时 | 关 | **只认 `true` 和 `1`**，其余（含 `TRUE`）一律为关 | 已武装跟踪时，开：HDBSS启用失败则虚机构建失败；关：退回KVM写保护。未武装时直接为`off`，该变量不会强行开启跟踪；内部测试未设置 | FC后端、启用日志及沙箱创建结果；不在orchestrator能力行中 |
 
 ### 2.2 限额与超时
@@ -31,7 +31,7 @@
 | `CHECKPOINT_LOCK_WAIT_TIMEOUT` | `60s` | Go 时长（`90s`、`2m`），须 > 0；否则 WARN，用默认 | checkpoint / restore / delete 在同一沙箱的操作锁上排队的上限，超过回 **503** `busy`，带 `Retry-After: 1`，本次什么都没做 | `lock_wait_timeout`、`_source` |
 | `CHECKPOINT_FC_CALL_TIMEOUT` | `2m` | Go 时长，须 > 0；否则 WARN，用默认 | 单次 Firecracker API 调用（pause / snapshot / rollback / resume）的时限。pause 超时：补一次 resume 后按普通失败返回；**rollback 超时：无法判断虚机停在哪个时刻，按撕裂处理**（500 `torn`） | `fc_call_timeout`、`_source` |
 
-各拒绝在 SDK 里对应哪个异常、调用方该做什么，见 [第 22 章](22-api-semantics.md)。
+各拒绝在 SDK 里对应哪个异常、调用方该做什么，见 [第 24 章](24-api-semantics.md)。
 SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁等待与服务端 45 s envd 等待之和；**把 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 调大时，客户端超时要跟着调大**。
 
 ### 2.3 树与存储行为
@@ -47,8 +47,8 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 
 | 变量 | 默认 | 取值与解析 | 作用 | 怎么确认生效 |
 |---|---|---|---|---|
-| `CHECKPOINT_RUNTIME_METRICS` | 关 | `strconv.ParseBool`；解析不了 → WARN，按关 | 每 10 s 打一行 `runtime GC pauses`：GC STW 的"等 P 停下"与"总时长"两个直方图（读法见 [第 25 章 §6](25-observability.md#6-checkpoint_runtime_metrics-输出)）。关时零开销 | 启动时一行 INFO `logging runtime GC pause histograms` |
-| `PROXY_TRACE` | 关 | 不分大小写，`1`、`true`、`yes`、`on` 为开，其余为关；进程内第一次用到时读一次 | orchestrator 沙箱代理的逐请求日志（开始 / 结束两行）和连接池丢弃行，用于取证流截断（[第 25 章 §7](25-observability.md#7-proxy_trace)）。日志量大 | 能力行后紧跟一行 `proxy trace`，字段 `enabled` |
+| `CHECKPOINT_RUNTIME_METRICS` | 关 | `strconv.ParseBool`；解析不了 → WARN，按关 | 每 10 s 打一行 `runtime GC pauses`：GC STW 的"等 P 停下"与"总时长"两个直方图（读法见 [第 27 章 §6](27-observability.md#6-checkpoint_runtime_metrics-输出)）。关时零开销 | 启动时一行 INFO `logging runtime GC pause histograms` |
+| `PROXY_TRACE` | 关 | 不分大小写，`1`、`true`、`yes`、`on` 为开，其余为关；进程内第一次用到时读一次 | orchestrator 沙箱代理的逐请求日志（开始 / 结束两行）和连接池丢弃行，用于取证流截断（[第 27 章 §7](27-observability.md#7-proxy_trace)）。日志量大 | 能力行后紧跟一行 `proxy trace`，字段 `enabled` |
 | `GODEBUG=gctrace=1` | —— | Go 运行时标准变量 | 每次 GC 一行写到 stderr（alloc 日志 `start.stderr.<n>`），配合上一项判断 GC 停顿 | 看 stderr |
 
 client-proxy 用的是同一份代理代码，在它的 job 里设 `PROXY_TRACE` 同样生效。
@@ -66,12 +66,12 @@ client-proxy 用的是同一份代理代码，在它的 job 里设 `PROXY_TRACE`
 |---|---|---|
 | `ORCHESTRATOR_BASE_PATH` | `/orchestrator` | 决定 store 根：`${DEFAULT_CACHE_DIR}/checkpoints` |
 | `DEFAULT_CACHE_DIR` | `${ORCHESTRATOR_BASE_PATH}/build` | 同上；产物盘就是它所在的文件系统 |
-| `FIRECRACKER_VERSIONS_DIR` | `/fc-versions` | FC 二进制按 `<它>/<模板记录的版本>/firecracker` 找（[第 23 章 §4](23-build-and-self-check.md#4-版本配对)）；T38 用它指向注入版 FC |
+| `FIRECRACKER_VERSIONS_DIR` | `/fc-versions` | FC 二进制按 `<它>/<模板记录的版本>/firecracker` 找（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)）；T38 用它指向注入版 FC |
 
 ## 3. 启动能力行
 
 orchestrator 启动时打一行 INFO `checkpoint capabilities`，同样的键和值还写进能力文件（[§3.1](#31-能力文件)）。每个值都是用运行时那组函数读出来的，不会出现"日志说一个值、实际按另一个值跑"。
-怎么抓见 [第 23 章 §6](23-build-and-self-check.md#6-orchestrator-自报的能力)。
+怎么抓见 [第 25 章 §6](25-build-and-self-check.md#6-orchestrator-自报的能力)。
 
 | 字段 | 含义 |
 |---|---|
@@ -107,7 +107,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
   | `pid` | 写这个文件的 orchestrator 进程号（RPM 部署里是 `template-manager` 进程） |
   | `started_at` | 该进程的启动时间，RFC3339 |
   | `version` | orchestrator 的版本号（`main.go` 的 `version`） |
-  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。早期 RPM 记录为空，950 的 2026-10-15 smoke 自报 `4853232`（[第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收)）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[第 23 章 §4](23-build-and-self-check.md#4-版本配对)） |
+  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。早期 RPM 记录为空，950 的 2026-10-15 smoke 自报 `4853232`（[第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收)）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
 
 - **何时写**：每次启动写一次，先写同目录下的临时文件、再改名覆盖旧文件，读到的要么是上次启动的整份、要么是这次的整份。
   写成功打 INFO `capabilities file written`（字段 `path`）；写失败只打 WARN `failed to write the capabilities file; the log line above is the only copy`，启动照常。
@@ -159,7 +159,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 
 几件运维要知道的事：
 
-- **删基准（沙箱当前所在的那个 checkpoint）几乎不释放空间**（只还 snapfile 与 header，几十 KiB），删分叉点同理；释放空间要删**最旧的**，或 restore 到更早的点再删掉之后那一支（用户视角的说明在 [第 22 章 §4.4](22-api-semantics.md#44-在字节上限下删哪个才能释放空间)）。
+- **删基准（沙箱当前所在的那个 checkpoint）几乎不释放空间**（只还 snapfile 与 header，几十 KiB），删分叉点同理；释放空间要删**最旧的**，或 restore 到更早的点再删掉之后那一支（用户视角的说明在 [第 24 章 §4.4](24-api-semantics.md#44-在字节上限下删哪个才能释放空间)）。
 - 两个增量改的页互不相交时，合并释放为 0；最旧的是全量根、而子节点改了大部分内存时，合并释放接近一份 guest 内存。
 - 拒绝时 WARN 行 `refused a checkpoint operation` 带 `checkpoint_bytes_held`、`max_checkpoint_bytes_per_sandbox`、`base_checkpoint_id`、`floor_bytes`、`floor_bytes_source`；
   删除行 `deleted checkpoint` 带 `sandbox_checkpoint_bytes` 与 `freed_bytes`（含合并效果）。注意 delete 的 `compact_mb` 是合并**写入**量，不是释放量。
@@ -169,7 +169,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 
 客户端"保留最新 N 个、删最旧"时，每次删的都是下一个的父节点：不合并的话它只能被隐藏，隐藏条目、目录数、链深和占盘随时间线性增长，最终写满节点；
 开合并后每个被隐藏的节点并进它唯一的子节点，合并处理跟上时条目数稳定在2N+1以内，消除隐藏历史的无界积累；实际占盘仍由保留数据、视图覆盖和写入模式决定（920B 开与不开合并的对照见 [附录 C §8.8](C-evolution-and-cases.md#88-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
-代价是 delete 里同步做合并、delete 变慢（已知项，[第 20 章 §7](20-acceptance.md#7-已知项与缺口)）。**生产不要关 `CHECKPOINT_COMPACT`。**
+代价是 delete 里同步做合并、delete 变慢（已知项，[第 22 章 §7](22-acceptance.md#7-已知项与缺口)）。**生产不要关 `CHECKPOINT_COMPACT`。**
 
 **脏页跟踪关着时合并不起作用**：每个 checkpoint 都是全量根，没有"隐藏且只有一个子节点"的条目，层照样累积。无 HDBSS 又不开跟踪的节点，必须靠数量上限与字节上限兜住。
 

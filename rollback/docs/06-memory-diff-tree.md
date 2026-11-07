@@ -404,7 +404,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 量级示例一行出自开发早期在 950 上跑的一轮 `checkpoint_verify.py`（2026-08-29，HDBSS 硬件标脏，ext4 真盘，2 GB 模板，当时的开发版本，restore 10 次）。它只用来说明"第一次比之后贵几倍"，不是当前代码的判定数字：920B的全量与增量见[附录 B §6](B-920b-results.md#6-分档基准与判定)，950 在 2026-10-13 的 perf 与 HDBSS 专项文本实测见 [第 18 章](18-950-performance.md)，各轮身份条件与负载范围在该节单列。
 
 这也是 [第 3 章](03-goals-and-boundaries.md) 所说"唯一保留的固定开销"。什么时候值得关掉 `CHECKPOINT_FULL_ROOT`：沙箱多、每个只打两三个点、存储紧张、
-且对象存储就在同机房 —— 此时第一次 checkpoint 的固定开销比偶尔一次跨网络读更值得省。这是部署决策，不是代码决策（[第 24 章](24-configuration-and-capacity.md)）。
+且对象存储就在同机房 —— 此时第一次 checkpoint 的固定开销比偶尔一次跨网络读更值得省。这是部署决策，不是代码决策（[第 26 章](26-configuration-and-capacity.md)）。
 
 全量根还有一个副作用：**内存差分树在数据上是自包含的**。[第 12 章](12-state-and-lifecycle.md) 讨论"能不能把 checkpoint 搬走"时会用到这一点 ——
 内存那一半已经不缺什么了，缺的是磁盘和运行时环境。
@@ -436,7 +436,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 - 创建侧不做克隆，也与链深无关。
 
 所以**恢复成本与链深无关**，不需要为了恢复速度周期性压平历史或做全量重整。这是差分树相对"链式增量快照"（每次恢复要重放整条链）
-的结构性优势：它是**按页寻址**的，不是**按代重放**的。怎样把"链深"与"回滚集大小"这两个绑在一起的变量拆开来测，见 [第 16 章 §6.4](16-test-methodology.md#64-把两个绑在一起的变量拆开)；本期代码上这项对照还没有重跑（[第 20 章 §7](20-acceptance.md#7-已知项与缺口)），长跑各轮的链深与耗时见 [附录 B §9](B-920b-results.md#9-轮次总表)。
+的结构性优势：它是**按页寻址**的，不是**按代重放**的。怎样把"链深"与"回滚集大小"这两个绑在一起的变量拆开来测，见 [第 16 章 §6.4](16-test-methodology.md#64-把两个绑在一起的变量拆开)；本期代码上这项对照还没有重跑（[第 22 章 §7](22-acceptance.md#7-已知项与缺口)），长跑各轮的链深与耗时见 [附录 B §9](B-920b-results.md#9-轮次总表)。
 
 ## 8. 全量与增量怎么选
 
@@ -458,7 +458,7 @@ guest 醒来后在别处莫名其妙地失败。拒绝只损失这一次 restore
 原生 pause 导出的内存差分是**相对模板 memfile** 的，必须包含 guest **自启动以来**写过的每一页；而 Firecracker 的写跟踪位图在每次 checkpoint（`dump_dirty` 后 `reset_dirty`）和每次 restore（阶段 9）都会清零，restore 写回回滚集走的又是 KVM 不记日志的映射。只看位图的话，打过 checkpoint 的沙箱做原生 pause 时会少导页，而 pause 本身报成功。
 所以 orchestrator 为每台虚机维护一个**自启动以来脏页集**：在每次清零之前，把即将被忘掉的位图并进去 —— 用的正是本章的纪元位图（增量 checkpoint 的侧车）、restore 前导出的活跃脏图和物化出的回滚集位图；原生 pause 时再把集合并回写跟踪位图。任何一份并不进去，整个集合就标为不可信、退回按驻留页导出 —— 导多了只费时间，导少了毁掉沙箱。这个集合服务的是原生 pause 路径：何时并入什么、不可信时怎么退、代价与验证，见第三篇的 [第 14 章 §9](14-native-precise-increment.md#9-与-checkpoint-叠加累积位图)；内存与磁盘两半合起来的完整前提见 [第 15 章 §7](15-native-cooperation-and-cost.md#7-checkpoint-之后做原生-pause-的正确性前提)。
 
-反方向不成立：原生 pause / resume 之后是新一代沙箱（新的 LifecycleID），之前的 checkpoint 全部失效。用户视角的说法见 [第 22 章](22-api-semantics.md)。
+反方向不成立：原生 pause / resume 之后是新一代沙箱（新的 LifecycleID），之前的 checkpoint 全部失效。用户视角的说法见 [第 24 章](24-api-semantics.md)。
 
 ## 10. 删除、隐藏与合并
 
@@ -558,4 +558,4 @@ V + h₂ + b − r ≥ 2·h₂   ⇒   h₂ ≤ V + b − 1
 
 `CHECKPOINT_COMPACT=false`（按 `strconv.ParseBool` 读，`compact.go:143-159`）时 `queueCompactLocked` 不入队、`runCompaction` 直接返回，
 行为回到没有合并时：隐藏条目只在成为"无子、非基准"的叶子时才被级联删除。由 `compact_test.go:509` `TestFoldingOffKeepsTheOldBehaviour` 守着。
-给用户看的"怎么删才释放空间"见 [第 22 章](22-api-semantics.md)，开关总表见 [第 24 章](24-configuration-and-capacity.md)。
+给用户看的"怎么删才释放空间"见 [第 24 章](24-api-semantics.md)，开关总表见 [第 26 章](26-configuration-and-capacity.md)。

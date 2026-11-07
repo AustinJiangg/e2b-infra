@@ -22,7 +22,7 @@
 |---|---|---|
 | MR 交付基线 `deltabox` | `0f9b58f9281ad9e20411333e9a619b691808fc5a` | 首次合入 openEuler KASandbox 的 MR !119 所包含的功能版本 |
 | 手册讲解基准 `deltabox-dev` | `57a30632cb9cb8eb67a35dd226d9ef4b40458af4` | MR 后继续开发、包含本章所述后续修改的源码版本 |
-| 实测二进制 / RPM | 各轮分别记录 | 性能、正确性结论对应当轮构建与环境，不能仅由分支名推定；见 [第 18 章](18-950-performance.md)、[第 19 章](19-950-concurrency.md) |
+| 实测二进制 / RPM | 各轮分别记录 | 性能、正确性结论对应当轮构建与环境，不能仅由分支名推定；见 [第 18 章](18-950-performance.md)、[第 21 章](21-concurrency-and-longrun.md) |
 
 MR 版已经具备宿主侧 checkpoint / restore 编排、内存差分树、磁盘分层、Firecracker 进程内原地回滚、脏页跟踪与 Python SDK 入口。
 本手册后面的实现章节描述的是开发版的完整机制；这些基础能力与后续加固、优化共同构成当前实现。
@@ -46,7 +46,7 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 | 多个调用方操作同一个沙箱 | checkpoint、restore、delete 相互改变同一份状态；restore 还会中断命令或文件请求 | 修改操作按沙箱串行，限定等待时间，明确回滚中断与失败语义 |
 | 长时间反复操作、保留历史 | 内存树、磁盘层、块集合与产物数量增长，会增加读写、装配和回收成本 | 在不改变可见 checkpoint 恢复语义的前提下回收、合并，并提供容量限制 |
 
-**“并发优化”包含减少跨沙箱互相影响，也包含持续负载下的性能与资源管理。** 同一个沙箱的修改操作仍然串行执行，具体契约见 [第 22 章 §11](22-api-semantics.md#11-多个调用方与并发)。
+**“并发优化”包含减少跨沙箱互相影响，也包含持续负载下的性能与资源管理。** 同一个沙箱的修改操作仍然串行执行，具体契约见 [第 24 章 §11](24-api-semantics.md#11-多个调用方与并发)。
 下面按问题说明修改；各组给出代表提交，部分改动同时服务多个目标。
 
 ## 4. 后续修改与优化总览
@@ -83,13 +83,13 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 
 **修改。** conntrack 清理与回滚并行执行，在 resume 前等待完成；复用 netlink 连接，多个沙箱的宿主清扫合批，结合表规模选择扫描方式。
 代理启用 full duplex，修复普通请求的偶发流式截断；对真正跨越 restore 的连接主动关闭，并通过可用的 HTTP 状态与 SDK 异常说明回滚中断。
-由此减少重复网络清理，并让调用方能区分应重连、应处理错误的情况。已发出响应头的流式请求仍只能表现为连接截断，见第 22 章。
+由此减少重复网络清理，并让调用方能区分应重连、应处理错误的情况。已发出响应头的流式请求仍只能表现为连接截断，见第 24 章。
 
 | 代表 commit | 修改 | 机制与验证入口 |
 |---|---|---|
 | `68c547f1b`、`579f75d68`、`702279c98`、`1b112fbbd` | 清理与回滚并行、连接复用、多沙箱合批与扫描优化 | [第 10 章 §4](10-device-network-time.md#4-连接跟踪)、[附录 C §8.6](#86-conntrack-清理占了冻结窗口) |
 | `baae30b56` | 修复代理普通流式请求的偶发截断 | [附录 C §8.1](#81-流式命令偶发截断) |
-| `35240dae9`、`6c0137002`、`b6c6db83b` | 回滚中断连接，并在命令、文件等调用路径传递含义 | [第 22 章 §11](22-api-semantics.md#11-多个调用方与并发) |
+| `35240dae9`、`6c0137002`、`b6c6db83b` | 回滚中断连接，并在命令、文件等调用路径传递含义 | [第 24 章 §11](24-api-semantics.md#11-多个调用方与并发) |
 
 ### 4.4 控制历史增长后的读取、装配与空间成本
 
@@ -104,10 +104,10 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 | `1cec056fc`、`8ea5322bf` | 位图装配及视图读取计时 | [附录 C §8.9](#89-视图块数增长restore-随时间变慢) |
 | `eef657be7` | 按视图引用回收不再使用的磁盘层 | [第 7 章 §4](07-disk-layering.md#4-删除-checkpoint先判断哪些层仍被需要)、[附录 C §8.7](#87-rootfs-层文件从不回收) |
 | `27661f444`、`359e7cbb0` | 隐藏内存节点与磁盘层的安全合并 | [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)、[第 7 章 §5](07-disk-layering.md#5-层合并保留读取结果减少层文件)、[附录 C §8.8](#88-隐藏-checkpoint-无上界积累磁盘随时间线性增长) |
-| `4d0f3ecfe`、`0c4c2c5ae`、`e8cf55cb5` | 容量限制及按实际结果返回 delete 错误 | [第 24 章](24-configuration-and-capacity.md)、[第 22 章](22-api-semantics.md) |
+| `4d0f3ecfe`、`0c4c2c5ae`、`e8cf55cb5` | 容量限制及按实际结果返回 delete 错误 | [第 26 章](26-configuration-and-capacity.md)、[第 24 章](24-api-semantics.md) |
 
 收敛依赖具体用法：持续删除、合并启用且候选处理跟得上，才有相应保证。数量和字节限制默认关闭；字节限制检查当前占用，不是严格空间预留。
-删除 base 或分叉依赖也不一定立即释放空间。容量与合并边界统一见 [第 24 章 §4](24-configuration-and-capacity.md#4-容量规划)。
+删除 base 或分叉依赖也不一定立即释放空间。容量与合并边界统一见 [第 26 章 §4](26-configuration-and-capacity.md#4-容量规划)。
 
 ### 4.5 减少节点级长尾，限制故障影响范围
 
@@ -119,7 +119,7 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 | 代表 commit | 修改 | 机制与验证入口 |
 |---|---|---|
 | `d3c770927`、`6f014db5c` | 缺页预处理、映射故障转错误 | [第 12 章 §8](12-state-and-lifecycle.md#8-节点级效应)、[附录 C §8.4](#84-gc-长暂停落进别的沙箱的冻结窗口) |
-| `b568e5f69`、`d17a047fe`、`4af2872c6` | 移除与操作协调、等待上限、同 ID 不同生命周期隔离 | [第 12 章](12-state-and-lifecycle.md)、[第 22 章](22-api-semantics.md) |
+| `b568e5f69`、`d17a047fe`、`4af2872c6` | 移除与操作协调、等待上限、同 ID 不同生命周期隔离 | [第 12 章](12-state-and-lifecycle.md)、[第 24 章](24-api-semantics.md) |
 | `c59aa71c6`、`b2dded20f`、`49643fe23`、`ff7b066d7` | 恢复结果记账、磁盘账本污染处理及提交点后 Faulted 门控 | [第 11 章](11-failures-and-invariants.md)、[第 9 章 §5](09-in-place-rollback.md#5-失败模型) |
 
 ### 4.6 同期完成的正确性、兼容性与诊断完善
@@ -131,8 +131,8 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 | ARM vCPU / 中断与设备状态：`6b3dbf44e`、`2deade706`、`8bd222604`、`f61648bfc`、`3d45eec88`、`63bf62c93` | 保存与恢复前排干挂起 MMIO；GIC 绝对清除再设置；修正串口状态、恢复 tap offload 并补 seccomp，避免旧运行状态残留影响恢复 | [09 §3.6–3.8](09-in-place-rollback.md#36-阶段-5vcpu)、[附录 B §10.4](B-920b-results.md#104-串口段) |
 | 内存回写完整性：`1f3f48da2`、`865bf68e4`、`eb09d5455`、`3539c45df` | 拒绝截断 diff 与覆盖不足的内存文件；全量根的回滚因子独立于侧车位图，避免错误恢复或遗漏回写 | [第 6 章](06-memory-diff-tree.md)、[第 9 章 §3.3](09-in-place-rollback.md#33-阶段-3取活跃脏图与覆盖校验)、[第 16 章](16-test-methodology.md) |
 | 原生 pause 精确增量与配合：`c42d23e73`、`bc19b45dc` | 原生内存增量改用 4 KiB 写跟踪；累积 checkpoint 清位图前的写页，防止两条路径叠加时漏页，条件不满足时保留回退 | [第 14 章](14-native-precise-increment.md)–[第 15 章](15-native-cooperation-and-cost.md) |
-| SDK 与调用契约：`3f41488fd`、`26ac31121`、`b2ececd3e`、`211c796b5`、`7017b2517` | 补流量 token、独立超时、关闭自动重放并细化错误，使调用方能采取对应处理 | [第 22 章](22-api-semantics.md) |
-| 可观测性与验证：`5319de5dc`、`cba26f7c1`、`93ccb02e8`、`372ed6c03` | 读盘量按本次 restore 自计，补 GC 取证与能力文件，并提供测试专用故障注入，支持定位并发干扰和验证失败路径 | [第 25 章](25-observability.md)、[第 16 章](16-test-methodology.md)、[附录 C §8.5](#85-restore-读盘量指标在并发时虚高) |
+| SDK 与调用契约：`3f41488fd`、`26ac31121`、`b2ececd3e`、`211c796b5`、`7017b2517` | 补流量 token、独立超时、关闭自动重放并细化错误，使调用方能采取对应处理 | [第 24 章](24-api-semantics.md) |
+| 可观测性与验证：`5319de5dc`、`cba26f7c1`、`93ccb02e8`、`372ed6c03` | 读盘量按本次 restore 自计，补 GC 取证与能力文件，并提供测试专用故障注入，支持定位并发干扰和验证失败路径 | [第 27 章](27-observability.md)、[第 16 章](16-test-methodology.md)、[附录 C §8.5](#85-restore-读盘量指标在并发时虚高) |
 
 ## 5. 如何理解后续优化的验证结果
 
@@ -153,18 +153,18 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 | 950已归档轮次在给定改动量下的单沙箱性能 | [第 18 章](18-950-performance.md) | 按实际负载、计时和身份范围判断；全量首点与增量分开，保留超线档位，不将讲解SHA追认为被测版本 |
 | 锁、网络、GC、索引等具体优化是否有效 | [附录 C §8](#8-问题逐个讲)、[附录 C §9](#9-已解决) | 阅读对应问题的轮次与指标；综合效果不全部归于单个 commit |
 | 多沙箱持续运行的一致性、延迟和资源走势 | [附录 B §10](B-920b-results.md#10-最终版的结果) | 920B 长跑包含多个版本；逐项一致性、时间序列和空间走势分别判断，累计次数不视为最终版本单轮结果 |
-| 950 当前已有的并发与部署证据 | [第 19 章 §1](19-950-concurrency.md#1-950-短时并发2026-10-13-ab)、[第 19 章 §2](19-950-concurrency.md#2-950-func-中的短稳态与恢复后请求)、[第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收) | 区分短时并发、混合短稳态与 smoke；各轮二进制身份与覆盖范围独立核对 |
+| 950 当前已有的并发与部署证据 | [第 21 章 §1](21-concurrency-and-longrun.md#1-950-短时并发2026-10-13-ab)、[第 21 章 §2](21-concurrency-and-longrun.md#2-950-func-中的短稳态与恢复后请求)、[第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收) | 区分短时并发、混合短稳态与 smoke；各轮二进制身份与覆盖范围独立核对 |
 | 原生精确增量与 checkpoint 混用是否正确 | [第 15 章](15-native-cooperation-and-cost.md) | 查原生路径专门的体积、恢复与叠加验证 |
 
-判定性数字仍在第17～19章及附录B统一维护。920B 软件写保护与 950 HDBSS 的结果按各自条件阅读，跨平台差值不能直接归于某项软件优化或 HDBSS。
+判定性数字仍在第17–21章及附录B统一维护。920B 软件写保护与 950 HDBSS 的结果按各自条件阅读，跨平台差值不能直接归于某项软件优化或 HDBSS。
 
 ## 6. 客户阅读与部署时应确认什么
 
 本章说明的是从 MR 基线到 `deltabox-dev@57a30632c` 的源码演进。取得 MR 基线代码时，不能据此认为已经包含全部后续改动；取得 RPM 时，也应核对其中 orchestrator、Firecracker 与 SDK 的版本和配对关系。
-源码、部署补丁和被测二进制的身份边界见 [README](README.md)、[第 23 章](23-build-and-self-check.md)；能力核对方法见 [第 24 章 §3](24-configuration-and-capacity.md#3-启动能力行)。
+源码、部署补丁和被测二进制的身份边界见 [README](README.md)、[第 25 章](25-build-and-self-check.md)；能力核对方法见 [第 26 章 §3](26-configuration-and-capacity.md#3-启动能力行)。
 
 后续优化已有并发和长跑验证，也保留明确边界：同沙箱修改操作串行；跨回滚连接需要重连；checkpoint 随当前生命周期失效；空间收敛依赖删除与合并条件；并发尾延迟和宿主 conntrack 表规模仍需按实际负载评估。
-当前限制、已知问题、验证缺口与候选开发方向统一从 [第 28 章](28-status-and-directions.md) 查阅；长尾分析及 950 后续验证安排分别见[附录 B](B-920b-results.md)和[第 19 章 §3](19-950-concurrency.md#3-到-950-上要重测什么)，使用契约见 [第22章](22-api-semantics.md)。
+当前限制、已知问题、验证缺口与候选开发方向统一从 [第 30 章](30-status-and-directions.md) 查阅；长尾分析及 950 后续验证安排分别见[附录 B](B-920b-results.md)和[第 21 章 §3](21-concurrency-and-longrun.md#3-到-950-上要重测什么)，使用契约见 [第24章](24-api-semantics.md)。
 
 ## 7. 为什么测试要多问一句
 
@@ -178,7 +178,7 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 ### 7.1 增量静默退化成全量
 
 **是什么。** 增量 checkpoint 的前提是 Firecracker 在虚机启动时就武装了脏页跟踪（[第 5 章](05-dirty-tracking-and-hdbss.md)）。
-机器上没有 HDBSS、orchestrator 又没有显式设 `FC_TRACK_DIRTY_PAGES=true` 时，跟踪默认关闭（为什么默认关见 [第 23 章 §2](23-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)），
+机器上没有 HDBSS、orchestrator 又没有显式设 `FC_TRACK_DIRTY_PAGES=true` 时，跟踪默认关闭（为什么默认关见 [第 25 章 §2](25-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)），
 这时每一次 checkpoint 都只能整份拷走 guest 内存。
 
 **真实例子。** 920B 开发机没有 HDBSS，靠 nomad job 里显式写的 `FC_TRACK_DIRTY_PAGES=true` 得到增量。
@@ -191,7 +191,7 @@ git diff --stat 0f9b58f9281ad9e20411333e9a619b691808fc5a 57a30632cb9cb8eb67a35dd
 但"变慢"没有对照时看不出是退化——你不知道它本来应该多快。
 
 **靠什么看得见。** 只能加一条报告"**怎么做的**"而不是"做对没有"的通道：服务端每次 checkpoint 都回报 `mem_mode`
-（`full` 或 `incremental`，[第 25 章 §2](25-observability.md#2-能力行与-memmode)）。
+（`full` 或 `incremental`，[第 27 章 §2](27-observability.md#2-能力行与-memmode)）。
 判据一句话：**除了沙箱的第一个 checkpoint（以及断链后的那一个），出现 `full` 就是有问题。**
 所有正确性脚本和性能脚本都把它当硬断言，性能脚本更进一步：一轮里出现一个 `full`，整轮作废。
 
@@ -254,7 +254,7 @@ guest 碰过的页全部导出，与改了多少无关。
 没有任何东西提醒你。
 
 **靠什么看得见。** 两条：装 SDK 覆盖层是这条判据有效的前提，所以覆盖层的 `install.py --check` 会专门自检
-`CheckpointInfo` 与 proto 两侧都有 `mem_mode`，验收流程把它列为第一步（[第 20 章](20-acceptance.md)）；
+`CheckpointInfo` 与 proto 两侧都有 `mem_mode`，验收流程把它列为第一步（[第 22 章](22-acceptance.md)）；
 报告里必须**记项数与 SDK 版本**，59 和 57 的差不是噪声，是两条判据的生死。
 
 ### 7.5 共同点与三条纪律
@@ -304,7 +304,7 @@ handler 一写响应头，`net/http` 就把请求体剩下的部分读掉并关�
 窗口只有"写完最后一字节"到"那次 EOF 读"之间的几微秒，节点越忙越容易撞上 —— 这就是它只在长跑里出现的原因。
 
 **修法**：代理 handler 在转发前为请求开启 full duplex（`baae30b`）。orchestrator 的沙箱代理和 client-proxy 共用这段代码，两边都要带上。
-两类截断的区分见 [第 22 章 §11.3](22-api-semantics.md#113-两类流式截断要分清)。单元测试让上游在读完请求体之前就应答，确定性复现：旧代码 10 / 10 失败，新代码 20 / 20 通过。
+两类截断的区分见 [第 24 章 §11.3](24-api-semantics.md#113-两类流式截断要分清)。单元测试让上游在读完请求体之前就应答，确定性复现：旧代码 10 / 10 失败，新代码 20 / 20 通过。
 
 **验证**：long4 客户端截断 0、orchestrator 0 行、client-proxy 0 行，也是三轮里唯一一轮客户端失败为 0 的。
 按 long2 / long3 平均每轮 8 次、再按 long4 的操作量缩放（λ ≈ 7.5），泊松分布下出现 0 次的概率约 5 × 10⁻⁴。
@@ -331,7 +331,7 @@ handler 一写响应头，`net/http` 就把请求体剩下的部分读掉并关�
 **定位**：每次提交在全局锁下复制并排序本沙箱全部条目，锁后把整份 JSON 重写一遍。深度 2000 时一次提交分配约 4 MB，
 是 GC 最大的垃圾来源。而代码里**没有任何地方读回它**：启动时 store 根目录整个清空，提交的原子性来自文件 rename 与锁内发布。
 
-**修法**：热路径不再写 index；调试开关 `CHECKPOINT_DEBUG_INDEX` 打开时由后台每沙箱最多每 5 s 写一次（[第 24 章 §2](24-configuration-and-capacity.md#2-开关总表)）。
+**修法**：热路径不再写 index；调试开关 `CHECKPOINT_DEBUG_INDEX` 打开时由后台每沙箱最多每 5 s 写一次（[第 26 章 §2](26-configuration-and-capacity.md#2-开关总表)）。
 计时键名 `commit_index` 保留，只计锁内那段，前后可比。
 
 **验证**（long3）：`commit_index` 各深度 p50 都是 0.002 ms、全程最大 1.2 ms；不再随链深变化。连带效果：
@@ -405,7 +405,7 @@ cgroup 不再顶满：long7 与最终长测 cgroup 用量最大 131.6 / 130.5 Gi
 long3 整段 p50 210.8 MB、最后 5 min 段 p50 352.2 MB，而 D 段一次 restore 实际要读的只有几十 MB。
 
 **修法**：物化过程自己边读边计，新增 `materialize_read_mb`（读了多少 checkpoint 文件）和 `materialize_base_read_mb`（从模板内存源读了多少），
-都只计本沙箱、含页缓存命中（[第 16 章 §8.4](16-test-methodology.md#84-读盘量用哪个键)，键定义见 [第 25 章 §3.3](25-observability.md#33-restore)）。
+都只计本沙箱、含页缓存命中（[第 16 章 §8.4](16-test-methodology.md#84-读盘量用哪个键)，键定义见 [第 27 章 §3.3](27-observability.md#33-restore)）。
 
 **验证**（long5）：`materialize_read_mb` p50 / p99 / max = 55.1 / 71.1 / 82.9 MB，`materialize_base_read_mb` 全为 0；
 同一条 restore 上旧键是新键的 4.3 倍（中位数）。本章之后凡是说"restore 读了多少"，都用新键。
@@ -737,7 +737,7 @@ N = 16 时 cp1 的客户端墙钟 p50 / p90（ms）：
 - **日志体量**：最终长测的 orchestrator 日志 30 min 2.76 GB、742 万行，分析完才删；分析脚本要能流式读。
 
 本期另有几项修复不是由长跑暴露的，也不在本章展开：全量根回滚因子恒为全 1（正确性加固，单元测试覆盖，[第 6 章](06-memory-diff-tree.md)）、
-每沙箱字节配额（新功能，默认关，[第 22 章 §4.4](22-api-semantics.md#44-在字节上限下删哪个才能释放空间)、[第 24 章 §4.4](24-configuration-and-capacity.md#44-字节上限怎么选)）、
+每沙箱字节配额（新功能，默认关，[第 24 章 §4.4](24-api-semantics.md#44-在字节上限下删哪个才能释放空间)、[第 26 章 §4.4](26-configuration-and-capacity.md#44-字节上限怎么选)）、
 仓库补齐 Firecracker 单元测试所需的测试内核（[附录 B §2](B-920b-results.md#2-总表)）。
 
 ## 9. 已解决
@@ -875,4 +875,4 @@ iptables -w -t nat -C PREROUTING ! -i veth+ -p tcp --dport 80 -j REDIRECT --to-p
 ```
 
 已经装好的节点还要删掉旧的那条（`iptables -w -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 3002`）。
-`OUTPUT -o lo --dport 80` 那条只管本机发起的连接，不用动。排障条目见 [第 26 章 §15](26-troubleshooting.md#15-client-proxy-日志暴涨guest-访问-hyperloop-不通)。
+`OUTPUT -o lo --dport 80` 那条只管本机发起的连接，不用动。排障条目见 [第 28 章 §15](28-troubleshooting.md#15-client-proxy-日志暴涨guest-访问-hyperloop-不通)。

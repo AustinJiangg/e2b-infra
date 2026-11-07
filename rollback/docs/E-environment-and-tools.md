@@ -6,16 +6,16 @@
 
 | 条件或配置 | 已有证据 | 对客户的含义 |
 |---|---|---|
-| 系统 | 950，`slot6`，aarch64；2026-10-13 宿主内核 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | 平台前提见第 23 章，具体型号和拓扑只采用实际回传值 |
+| 系统 | 950，`slot6`，aarch64；2026-10-13 宿主内核 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | 平台前提见第 25 章，具体型号和拓扑只采用实际回传值 |
 | 内存产物 | perf 两遍首次全量均为 2048 MiB；实际模板其他字段按各轮记录 | 不从 920B 模板推定 950 未留档字段 |
 | 存储 | `/orchestrator/build/checkpoints`、ext4；下层介质在 perf 轮未核实 | 客户路径可不同，需满足文件系统与同盘条件 |
 | `FC_TRACK_DIRTY_PAGES` | 默认未设置时，orchestrator 探测 KVM 能力 502；smoke 能力文件实际记录见第 17 章 | 以启动能力与结果核对是否启用，不仅查看环境变量 |
 | HDBSS 后端 | perf/func 等日志自报 `hdbss`，专项另有内核与 FC 启用证据 | 能力探测、FC 自报与数据面证据分别核对 |
-| `FC_HDBSS_ORDER` | HDBSS 专项默认 order 1；本轮未扫描其他 order | 默认和可选值查第 24 章，不把未测 order 写成已验证 |
-| 2026-10-15 smoke有效配置 | `track_dirty_pages=true`（硬件能力502）；`compact=true`、最多合并8个；`debug_index=false`；数量/字节上限均0；最低余量4294967296字节；`fault_inject=[]` | 这是该次能力文件记录，不追认更早perf/func；对应配置语义查第24章 |
+| `FC_HDBSS_ORDER` | HDBSS 专项默认 order 1；本轮未扫描其他 order | 默认和可选值查第 26 章，不把未测 order 写成已验证 |
+| 2026-10-15 smoke有效配置 | `track_dirty_pages=true`（硬件能力502）；`compact=true`、最多合并8个；`debug_index=false`；数量/字节上限均0；最低余量4294967296字节；`fault_inject=[]` | 这是该次能力文件记录，不追认更早perf/func；对应配置语义查第26章 |
 | 内部部署 | `/opt/e2b-infra`、RPM、Nomad、SDK 覆盖层 | 只说明测试环境，不要求客户采用此安装方法 |
 
-配置总表在[第 24 章](24-configuration-and-capacity.md)。perf、HDBSS、func 和 smoke 的身份分别在各自结果中记录，不能互相追认。
+配置总表在[第 26 章](26-configuration-and-capacity.md)。perf、HDBSS、func 和 smoke 的身份分别在各自结果中记录，不能互相追认。
 
 ## 2. 测试环境与沙箱规格
 
@@ -102,7 +102,7 @@ python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 ```
 
 期望看到 `payload 的 21 个文件都在位` 和 `自检通过（干净子进程）：…`。异常族的判据是"原有 8 个子类都在，且 reason 映射表里每一项都是 `CheckpointException` 的子类"——
-现在是基类加 9 个子类共 10 个（新增 `CheckpointBytesLimitException`，[第 22 章](22-api-semantics.md)）。
+现在是基类加 9 个子类共 10 个（新增 `CheckpointBytesLimitException`，[第 24 章](24-api-semantics.md)）。
 
 ## 5. 轮次与结果来源索引
 

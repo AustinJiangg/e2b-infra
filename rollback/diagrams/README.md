@@ -28,7 +28,7 @@
 ## 改图注意
 
 - **图里不含任何实测数字**，是有意为之：950 上还没有数据，920B 的数字口径不同，
-  混进架构图容易被当成 950 的性能承诺。判定性的数字集中在 [`../docs/18-950-performance.md`](../docs/18-950-performance.md) 与 [`../docs/19-950-concurrency.md`](../docs/19-950-concurrency.md)，并标注了口径与缺口。
+  混进架构图容易被当成 950 的性能承诺。判定性的数字集中在 [`../docs/18-950-performance.md`](../docs/18-950-performance.md) 与 [`../docs/21-concurrency-and-longrun.md`](../docs/21-concurrency-and-longrun.md)，并标注了口径与缺口。
 - **`03-vs-native.svg` 里「脏页判据的三方差异」那一块不要删。** 对比基准是我们所基于的
   **ARM 适配版**，而 x86 原生的增量本来就是精确的 —— 少了这块说明，图会被读成
   「我们比 e2b 原生强」，那是不对的。同一段说明在 [`../docs/05-dirty-tracking-and-hdbss.md`](../docs/05-dirty-tracking-and-hdbss.md#5-判据差异读也算脏) §5。

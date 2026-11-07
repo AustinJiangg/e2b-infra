@@ -1,6 +1,6 @@
 # 05 · 脏页跟踪与 HDBSS
 
-增量的前提是准确知道哪些页被写过。本章集中解释跟踪判据、KVM 日志语义、后端探测与 HDBSS 启用；配置项和 950 实测设置分别见第 24 章与附录 E。
+增量的前提是准确知道哪些页被写过。本章集中解释跟踪判据、KVM 日志语义、后端探测与 HDBSS 启用；配置项和 950 实测设置分别见第 26 章与附录 E。
 
 ## 1. 脏页跟踪的作用
 
@@ -181,7 +181,7 @@ Firecracker 侧其实有两份脏页记录：
   **不报错，测试照样通过，测的却不是增量。**
 - **第二层退回软件路径** → 结果一模一样（都是 `KVM_GET_DIRTY_LOG` 位图），只是每个干净页首次写多一次 VM-Exit。**只有延迟能看出来。**
 
-开关的取值与默认值见 [第 24 章 §2.1](24-configuration-and-capacity.md#21-脏页跟踪与-hdbss)，三种机器上各该怎么设见 [第 23 章 §2](23-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)。
+开关的取值与默认值见 [第 26 章 §2.1](26-configuration-and-capacity.md#21-脏页跟踪与-hdbss)，三种机器上各该怎么设见 [第 25 章 §2](25-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)。
 
 ### 4.2 两侧各做一件事
 
@@ -201,7 +201,7 @@ func hardwareDirtyTracking() bool {
 `KVM_CHECK_EXTENSION` **只查询**：不建 VM、不启用任何东西；没有 `/dev/kvm` 的机器上安全地返回 false。
 判定逻辑在 `decideTrackDirtyPages`（:68）：变量未设置时跟硬件走；能被 `strconv.ParseBool` 解析就照办；解析不了则忽略并跟硬件走。
 这个决策是**整个 orchestrator 一个值**（包级变量，启动时算一次），不是每沙箱一个。做成"按沙箱按需武装"需要在创建沙箱时就知道它会不会打
-checkpoint，而目前的 API 里没有这个信息；这是一个明确的可扩展点（[第 28 章 §2](28-status-and-directions.md#2-候选开发方向)）。
+checkpoint，而目前的 API 里没有这个信息；这是一个明确的可扩展点（[第 30 章 §2](30-status-and-directions.md#2-候选开发方向)）。
 
 **Firecracker** 在 `Vm::setup_dirty_tracking()`（`vstate/vm.rs:206`）里真正武装：region 没有 bitmap 就是 `off`；
 aarch64 上调 `enable_hdbss(order)`（`arch/aarch64/vm.rs:66`，对 VM fd 做 `KVM_ENABLE_CAP`，cap 502）。成功记为 `hdbss`；
@@ -283,7 +283,7 @@ HDBSS **不会被快照继承**：从快照恢复会创建新的 KVM VM 和新�
   （`dirtytracking.go:92-104`、:73-78）。跟踪关着时另打一条 WARN。
 
 "一个部署悄悄丢了增量 checkpoint，应该能从日志里读出原因，而不是只表现为慢"—— 这是这段代码的全部动机。
-字段与日志的完整列表见 [第 25 章](25-observability.md)，部署后怎么逐项核对见 [第 23 章](23-build-and-self-check.md)。
+字段与日志的完整列表见 [第 27 章](27-observability.md)，部署后怎么逐项核对见 [第 25 章](25-build-and-self-check.md)。
 
 ### 4.7 默认值为什么跟着硬件走
 
@@ -391,7 +391,7 @@ HDBSS 把"每页一次 VM-Exit"换成了"CPU 顺手记一笔 + 定期汇总"，�
 也记录了额外首写代价；不能把硬件标脏理解成所有写入或快照都零开销。
 
 本轮没有扫描其他 order，所以 buffer 大小之间的性能比较仍是缺口。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`，
-逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[第 20 章 §5.1](20-acceptance.md#51-hdbss-档hdbss-专项)）。
+逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)）。
 冷/热比不是单独的开关判据：写者的 cache、TLB、调度和后台活动也影响两遍耗时，需与能力、自报、启用日志和退出计数一起判断。
 
 ### 6.3 什么时候不该开

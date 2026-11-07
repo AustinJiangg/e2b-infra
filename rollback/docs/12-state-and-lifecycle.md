@@ -94,7 +94,7 @@ func (s *Store) LockSandboxWithin(sandboxID string, wait time.Duration) (func(),
 **注意顺序**：`gate()` 返回前已放掉 `Store.mu`，然后才去等沙箱锁。反过来（持着全局锁去等）会让一个进行中的 checkpoint 把全局账本锁一直占着。
 
 排队有上限：持锁方可能卡在一个永不返回的调用上（NBD flush、不再应答的 Firecracker），无限排队只会让每个等待者各占一条连接、最后得到一个光秃秃的读超时。
-所以应答客户端的路径都用限时版本 `LockSandboxWithin`，等满 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 就回 busy（[第 24 章](24-configuration-and-capacity.md)、[第 22 章](22-api-semantics.md)）。
+所以应答客户端的路径都用限时版本 `LockSandboxWithin`，等满 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 就回 busy（[第 26 章](26-configuration-and-capacity.md)、[第 24 章](24-api-semantics.md)）。
 沙箱插入 / 移除的回调也用限时版本，超时只告警、照常继续；不限时的 `LockSandbox` 留给不面向客户端的内部路径。
 沙箱被移除后这把锁**不删**：同一个 id 经 pause/resume 会回来，两代共享同一个目录树，必须由同一把锁串行。
 
@@ -197,7 +197,7 @@ POSIX 保证同目录内的 rename 是原子的：要么旧名要么新名，不
 
 对使用方的含义：checkpoint 是「这台宿主、这个 orchestrator 进程、这一代沙箱」之内的回滚点，**不是备份**。orchestrator 升级或重启、宿主重启之后，
 之前的 checkpoint ID 全部失效（对它们 restore 得到 404）；要跨重启、跨宿主保存沙箱状态，用 e2b 原生的 pause / snapshot。
-面向使用方的完整说明在 [第 22 章](22-api-semantics.md)。
+面向使用方的完整说明在 [第 24 章](24-api-semantics.md)。
 
 ### 5.2 两态可见性
 
@@ -259,7 +259,7 @@ defer cleanup()      // 删掉 revert_mem.tmp 与 revert_bitmap.tmp
 ## 8. 节点级效应
 
 同一节点上的沙箱在账本层面互不相干，但通过三样共享资源互相影响。它们不会破坏正确性，但会把一个沙箱的代价算到别的沙箱的冻结窗口里。
-这三样的实测表现（并发 restore 下的锁等待、宿主表增长、GC 暂停）都在 [第 19 章](19-950-concurrency.md)。
+这三样的实测表现（并发 restore 下的锁等待、宿主表增长、GC 暂停）都在 [第 21 章](21-concurrency-and-longrun.md)。
 
 **① 全局账本锁。** [§2.1](#21-storemu保护账本持锁不做-io) 的规则就是为此：任何在 `Store.mu` 下做的慢事，都会出现在别的沙箱 restore 的 `materialize_lock_wait` 里。
 
@@ -314,7 +314,7 @@ GC 的 STW 阶段要等所有处于 `_Prunning` 的 P 响应抢占。只要有�
 **减少垃圾**同样有帮助：GC 次数越少，撞上"某个 goroutine 恰好睡在回收里"的机会越少。index.json 默认不写、发布 O(1)、锁外删文件，都减少了分配与 GC 次数。
 
 **取证**：`CHECKPOINT_RUNTIME_METRICS=true` 时 orchestrator 每 10 s 记一行 runtime/metrics 的 STW 直方图（等 P 停下的 `stopping`、总暂停 `total`、GC 周期数）
-（`internal/runtimemetrics/runtimemetrics.go`），正是上面那条判据所需的两半。开关见 [第 24 章](24-configuration-and-capacity.md)，字段见 [第 25 章](25-observability.md)。
+（`internal/runtimemetrics/runtimemetrics.go`），正是上面那条判据所需的两半。开关见 [第 26 章](26-configuration-and-capacity.md)，字段见 [第 27 章](27-observability.md)。
 
 缓解前后长跑下的 STW 分布、长暂停次数与最大值，以及 cgroup 回收的取证数据，见 [附录 C §8.4](C-evolution-and-cases.md#84-gc-长暂停落进别的沙箱的冻结窗口)。
 
@@ -556,7 +556,7 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 而是节点上每个沙箱往稀疏映射里的写都可能失败。更隐蔽的是，调用方删掉的 checkpoint 并不一定释放空间 —— 仍被后代依赖的条目只会被隐藏，
 「保留最新 N 个、删最旧」这种常见用法恰好每次都删掉下一个的父节点，隐藏条目与它们的层会一直累积。
 
-所以现行实现有四层机制，各管一段（各自的开关、默认值与取值建议只在 [第 24 章 §2](24-configuration-and-capacity.md#2-开关总表) 与 [第 24 章 §4](24-configuration-and-capacity.md#4-容量规划) 定义）：
+所以现行实现有四层机制，各管一段（各自的开关、默认值与取值建议只在 [第 26 章 §2](26-configuration-and-capacity.md#2-开关总表) 与 [第 26 章 §4](26-configuration-and-capacity.md#4-容量规划) 定义）：
 
 - **节点级水位**：产物盘可用空间不足时，checkpoint 与 restore 在动手之前被拒，把「节点写满」变成调用方能处理的应答；
 - **每沙箱个数上限**：只数可见的 checkpoint；
@@ -566,12 +566,12 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 几条推论：
 
 - **个数上限不足以控制字节**：隐藏条目不计入个数，而一个 checkpoint 的大小从几页到一整份 guest 内存不等。合并把隐藏条目的数量压到有界，字节上限才管得住总量。
-- **字节上限有一个下限**：删到只剩基准时，基准是一棵约一份 guest 内存大小的全量根，上限再小就删什么都回不来。下限的推导与告警阈值见 [第 24 章 §4.4](24-configuration-and-capacity.md#44-字节上限怎么选)。
+- **字节上限有一个下限**：删到只剩基准时，基准是一棵约一份 guest 内存大小的全量根，上限再小就删什么都回不来。下限的推导与告警阈值见 [第 26 章 §4.4](26-configuration-and-capacity.md#44-字节上限怎么选)。
 - **怎么删才释放空间**取决于合并能释放什么：删基准几乎不释放；删较老的非基准条目会触发合并，释放两者重叠的那部分页。
-  给使用方的操作建议在 [第 22 章 §4.4](22-api-semantics.md#44-在字节上限下删哪个才能释放空间)。
+  给使用方的操作建议在 [第 24 章 §4.4](24-api-semantics.md#44-在字节上限下删哪个才能释放空间)。
 - **脏页跟踪关闭时不合并**：每个 checkpoint 都是全量根，没有「只有一个子节点的隐藏条目」，层照样累积。这是设计边界，交付环境都开着跟踪。
 
-开关的取值与容量规划见 [第 24 章](24-configuration-and-capacity.md)，删除与合并的机制见 [第 6 章](06-memory-diff-tree.md)、[第 11 章](11-failures-and-invariants.md)。
+开关的取值与容量规划见 [第 26 章](26-configuration-and-capacity.md)，删除与合并的机制见 [第 6 章](06-memory-diff-tree.md)、[第 11 章](11-failures-and-invariants.md)。
 
 ## 18. 代码位置
 

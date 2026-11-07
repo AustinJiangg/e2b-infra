@@ -12,7 +12,7 @@ from e2b import Sandbox, CheckpointInfo
 
 沿用客户现有的 API 地址、沙箱域名、鉴权和 TLS 设置。环境变量 `E2B_API_KEY`、`E2B_API_URL`、`E2B_DOMAIN` 与 `E2B_HTTP_SSL` 应与实际部署一致；本章不要求采用内部测试机的 localhost、明文连接或 `/root/.e2b/config.json`。
 
-服务端能力检查见[第 23 章](23-build-and-self-check.md)，错误处理见[第 22 章](22-api-semantics.md)。
+服务端能力检查见[第 25 章](25-build-and-self-check.md)，错误处理见[第 24 章](24-api-semantics.md)。
 
 ## 2. 第一个例子：checkpoint → 改动 → restore → list → delete
 
@@ -80,11 +80,11 @@ finally:
 | `create(name=None, request_timeout=None)` | `CheckpointInfo` | 做一次 checkpoint。`name` 只是给人看的标签，不要求唯一；ID 由服务端生成 |
 | `restore(checkpoint_id, request_timeout=None)` | `bool` | 把沙箱原地回滚到该 checkpoint。**只会返回 `True`**，失败一律抛异常，不要拿返回值做分支 |
 | `list(request_timeout=None)` | `List[CheckpointInfo]` | 本沙箱当前这一代的全部可见 checkpoint，按创建时间从旧到新 |
-| `delete(checkpoint_id, request_timeout=None)` | `bool` | 从接口上删除一个 checkpoint（空间何时释放见 [第 22 章](22-api-semantics.md)）。同样只会返回 `True` |
+| `delete(checkpoint_id, request_timeout=None)` | `bool` | 从接口上删除一个 checkpoint（空间何时释放见 [第 24 章](24-api-semantics.md)）。同样只会返回 `True` |
 | `is_available(request_timeout=None)` | `bool` | checkpoint 接口是否应答（探的是宿主侧服务，不是 guest） |
 | `is_running(request_timeout=None)` | `bool` | `is_available` 的旧名，为兼容保留 |
 
-各方法的默认超时和"不自动重发"的约定见 [第 22 章](22-api-semantics.md)。
+各方法的默认超时和"不自动重发"的约定见 [第 24 章](24-api-semantics.md)。
 
 ### 2.2 `CheckpointInfo`
 
@@ -129,13 +129,13 @@ asyncio.run(main())
 
 对调用方意味着：
 
-- **第一次 checkpoint 必然是 `full`，这是正常的**。每个沙箱只付一次；经原生 pause / resume 换代之后，新一代的第一次也是 `full`（[第 22 章](22-api-semantics.md)）。
+- **第一次 checkpoint 必然是 `full`，这是正常的**。每个沙箱只付一次；经原生 pause / resume 换代之后，新一代的第一次也是 `full`（[第 24 章](24-api-semantics.md)）。
 - **之后仍是 `full`，说明宿主没在跟踪脏页**。功能完全正确、不报错，只是每次都按全量付时间和空间 ——
   所以这种退化只能从这个字段看出来。鲲鹏 950 上 orchestrator 探测到 HDBSS 会自动打开跟踪；
-  没有 HDBSS 的机器默认不跟踪，需要运维显式打开（开关见 [第 24 章](24-configuration-and-capacity.md)）。
-- 极少数失败之后（服务端丢了一段脏页记录，见 [第 22 章](22-api-semantics.md) 的 `chain_broken`），
+  没有 HDBSS 的机器默认不跟踪，需要运维显式打开（开关见 [第 26 章](26-configuration-and-capacity.md)）。
+- 极少数失败之后（服务端丢了一段脏页记录，见 [第 24 章](24-api-semantics.md) 的 `chain_broken`），
   下一次 checkpoint 也会是 `full`，它会起一棵新的树根。
-- `list()` 里报的 `mem_mode` 是这个 checkpoint **被拍下时**的模式；之后服务端整理存储（[第 22 章 §4](22-api-semantics.md#4-删除与空间回收用户视角)）不会改变它。
+- `list()` 里报的 `mem_mode` 是这个 checkpoint **被拍下时**的模式；之后服务端整理存储（[第 24 章 §4](24-api-semantics.md#4-删除与空间回收用户视角)）不会改变它。
 
 业务依赖增量耗时的话，可以在自己的代码里加一道断言：
 
@@ -215,19 +215,19 @@ finally:
 
 - **跨分支跳转的代价**主要取决于两个点之间被改过的页有多少（沿树路径经最近公共祖先汇总），而不是树有多少分支。
 - **删除**一个还有后代依赖的 checkpoint，它只是从 `list()` 里消失，数据由服务端按需保留或合并（compact / fold）；
-  怎样删才能真正释放空间见 [第 22 章](22-api-semantics.md)。
-- 树只属于**这一个沙箱的这一代**：沙箱销毁、orchestrator 重启、经原生 pause / resume 换代，树都随之作废（[第 22 章](22-api-semantics.md)）。
+  怎样删才能真正释放空间见 [第 24 章](24-api-semantics.md)。
+- 树只属于**这一个沙箱的这一代**：沙箱销毁、orchestrator 重启、经原生 pause / resume 换代，树都随之作废（[第 24 章](24-api-semantics.md)）。
 
 ## 6. 出错时
 
 checkpoint 接口的错误按"调用方下一步该做什么"分类，每一种有自己的异常类；
-完整的表、异常类层次、超时与重试约定在 [第 22 章](22-api-semantics.md)。上手阶段最常见的几种：
+完整的表、异常类层次、超时与重试约定在 [第 24 章](24-api-semantics.md)。上手阶段最常见的几种：
 
 | 现象 | 多半是 |
 |---|---|
-| `AuthenticationException` | `E2B_API_KEY` 没设或不对（[第 21 章](21-sdk-quickstart.md)） |
+| `AuthenticationException` | `E2B_API_KEY` 没设或不对（[第 23 章](23-sdk-quickstart.md)） |
 | 连接到了预期之外的服务 | 核对客户现有API地址、沙箱域名解析与TLS配置；不统一要求localhost或明文连接 |
 | `import e2b` 报 `duplicate file name checkpoint/checkpoint.proto` | 检查SDK协议桩是否被不同版本重复安装；内部覆盖层环境的自检见[附录 E §4](E-environment-and-tools.md#4-sdk-覆盖层) |
 | `AttributeError: 'Sandbox' object has no attribute 'checkpoint'` | 当前业务解释器使用的SDK不包含配套checkpoint实现；核对实际导入位置与版本 |
 | `mem_mode` 一直是 `full` | 宿主没开脏页跟踪（[§4](#4-mem_mode这次是全量还是增量)） |
-| restore 之后别的调用抛 `CheckpointInterruptedException` | 那次调用跨越了 restore，被回滚掐断；重连重试即可（[第 22 章](22-api-semantics.md)） |
+| restore 之后别的调用抛 `CheckpointInterruptedException` | 那次调用跨越了 restore，被回滚掐断；重连重试即可（[第 24 章](24-api-semantics.md)） |

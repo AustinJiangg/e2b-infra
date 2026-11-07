@@ -108,7 +108,7 @@ if checkpoints != nil {
 其余一切照旧转发进沙箱 —— 拦截是**加法**，不改变任何既有行为。
 
 第二个分支处理 restore 进行中的其它请求：那时 guest 已暂停、TCP 状态正要退回过去，放进去的请求只会挂到回滚结束再失败，
-所以代理立刻回答，不再挂着。这类回答对调用方意味着什么见 [第 22 章](22-api-semantics.md)。
+所以代理立刻回答，不再挂着。这类回答对调用方意味着什么见 [第 24 章](24-api-semantics.md)。
 
 > 沙箱里其实没有任何东西监听 49984。SDK 的 `is_running()` 探活打的也是这个端口的 `/health`，由宿主应答 ——
 > 所以它探的是**宿主侧服务的活性**，不是 guest 里某个守护进程的活性。`is_available()` 是同一个调用更准确的名字
@@ -148,7 +148,7 @@ service Checkpoint {
 
 `CreateCheckpointResponse.mem_mode` 值得单独说：它存在的唯一理由是**让静默退化可见**。除了沙箱的第一个 checkpoint，
 出现 `full` 就意味着这台宿主没在跟踪脏页 —— 功能照常，只是每次多拷一整份 guest 内存。没有这个字段，这种退化只表现为"有点慢"，
-藏在延迟均值里，可能很久都没人发现（字段含义见 [第 25 章](25-observability.md)）。
+藏在延迟均值里，可能很久都没人发现（字段含义见 [第 27 章](27-observability.md)）。
 
 ## 3. orchestrator 侧的部件
 
@@ -182,7 +182,7 @@ service Checkpoint {
 | `rootfs` | 沙箱 → 磁盘视图账本（合并 header、层清单、污染标志、未入账层） |
 | `layerRefs` | 沙箱 → (层路径 → 引用数)，归零即回收（[第 7 章](07-disk-layering.md)） |
 | `children` | 沙箱 → (条目 id → 子节点数)，O(1) 判"有没有子节点" |
-| `usedBytes` / `layerBytes` | 字节配额的计数（[第 24 章](24-configuration-and-capacity.md)） |
+| `usedBytes` / `layerBytes` | 字节配额的计数（[第 26 章](26-configuration-and-capacity.md)） |
 | `owners` | 沙箱 id → 当前拥有它的 generation（LifecycleID） |
 | `opLocks` | 沙箱 → gate（带超时可放弃的锁） |
 | `compactPending` | 沙箱 → 待合并的候选队列（[第 6 章](06-memory-diff-tree.md)） |
@@ -235,7 +235,7 @@ e2b 支持多种 rootfs 提供方式，只有 NBD + Overlay 那一种能封存�
 
 > **版本必须成对。** orchestrator 与 Firecracker 一起交付。未打补丁的 Firecracker 在 `/snapshot/rollback` 上返回 404，
 > orchestrator 把它翻译成"this firecracker does not support in-place rollback"（`internal/sandbox/fc/rollback.go:69`、:197），
-> 而不是一个含糊的 HTTP 错误。部署时怎么核对配对见 [第 23 章](23-build-and-self-check.md)。
+> 而不是一个含糊的 HTTP 错误。部署时怎么核对配对见 [第 25 章](25-build-and-self-check.md)。
 
 ## 5. 数据面：目录布局
 
@@ -360,7 +360,7 @@ diff := fc.TrackDirtyPagesEnabled() && !broken && !rooting
 | # | 步骤 | 说明 |
 |---|---|---|
 | 9 | 读当前基准与断链标志；三个判据决定全量还是增量 | 全量时 `parentID = ""`，成为一棵新树的根（[第 6 章](06-memory-diff-tree.md)） |
-| 10 | 字节上限过小时每沙箱每代打一次告警 | `warnIfByteLimitTooSmall`（[第 24 章](24-configuration-and-capacity.md)） |
+| 10 | 字节上限过小时每沙箱每代打一次告警 | `warnIfByteLimitTooSmall`（[第 26 章](26-configuration-and-capacity.md)） |
 | 11 | `Prepare`：锁内做代际准入、个数上限、字节上限三项检查；锁外建目录 `ckpt_<UnixNano>`、写 `prepared` 的 manifest | 此时条目**不在账本里**，对 `Get` / `List` 不可见。超限回 429 |
 | 12 | 取 layers 目录、模板 rootfs 的 header（首次封存时给磁盘账本播种）、生成封存层的 uuid 与路径 | |
 
@@ -486,7 +486,7 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced, layerRec
 | 21 | **恢复虚机** | `resume` | 常数 |
 
 冻结窗口长度记在 `frozen`（从 pause 到 resume 之后），**包含第 20 步的等待**。`materialize_disk_read_mb` 与 `fc_rollback_disk_read_mb`
-是「这次是否碰了盘」的旁证，前者是进程级口径，并发时混入其他沙箱的读（[第 25 章](25-observability.md)）。
+是「这次是否碰了盘」的旁证，前者是进程级口径，并发时混入其他沙箱的读（[第 27 章](27-observability.md)）。
 
 ### 8.3 顺序约束二：暂停之后才导出、才物化
 
@@ -567,7 +567,7 @@ Firecracker 在第 18 步要写回的全部页。若在暂停前导出，中间 
 | 派生 | `Mark("frozen", pausedAt)` | 冻结窗口总长 |
 
 `nil` 的 `PhaseTimings` 是可用的空操作：不要分解的调用方传 `nil` 即可，一分钱不花。这让计时能加在热路径上而不必条件编译。
-全部键的定义见 [第 25 章](25-observability.md)。
+全部键的定义见 [第 27 章](27-observability.md)。
 
 ## 11. 顺序约束汇总
 

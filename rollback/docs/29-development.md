@@ -117,7 +117,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 1 | 有没有引入与虚机规格线性相关的新开销？ | [第 3 章](03-goals-and-boundaries.md) |
 | 2 | 有没有重建某个宿主资源？ | [第 3 章](03-goals-and-boundaries.md) |
 | 3 | 新的失败路径在提交点之前还是之后？ | [第 11 章](11-failures-and-invariants.md) |
-| 4 | 会不会静默降级？降级了怎么被发现？ | [第 25 章](25-observability.md) |
+| 4 | 会不会静默降级？降级了怎么被发现？ | [第 27 章](27-observability.md) |
 | 5 | 持全局锁期间有没有做文件 I/O 或 O(条目数) 的扫描？ | [第 12 章](12-state-and-lifecycle.md) |
 | 6 | 依赖"虚机已暂停"吗？调用契约写清楚了吗？ | [第 12 章](12-state-and-lifecycle.md) |
 | 7 | 会不会在冻结窗口里等别的沙箱、等 GC 或等内存回收？ | [第 12 章](12-state-and-lifecycle.md) |
@@ -137,14 +137,14 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 性能 | `run.sh perf`；动了长期行为（删除、合并、回收、锁）要跑并发长测 | 目标机 |
 
 判据讲解见 [第 16 章](16-test-methodology.md)，性能口径见 [第 16 章](16-test-methodology.md)，
-上机步骤见 [第 20 章](20-acceptance.md)。换二进制的日常流程（编译、替换、确认跑的是新的）见
+上机步骤见 [第 22 章](22-acceptance.md)。换二进制的日常流程（编译、替换、确认跑的是新的）见
 `e2b-infra/deploy-docs/08-源码开发与出包流程.md` 第 4 节。
 
 ### 4.2 至少要看的三个信号
 
 改完第一次跑起来，先确认：
 
-1. 启动日志的 `checkpoint capabilities` 行里 `track_dirty_pages` 为 `true` 且理由符合预期，各开关的值与来源是你想要的（[第 25 章](25-observability.md)）；
+1. 启动日志的 `checkpoint capabilities` 行里 `track_dirty_pages` 为 `true` 且理由符合预期，各开关的值与来源是你想要的（[第 27 章](27-observability.md)）；
 2. 第二个 checkpoint 的 `memMode` 是 `incremental`，不是 `full`；
 3. 950 上 `dmesg | grep 'Enable HDBSS success'` 有输出，且 PID 是 Firecracker 的。
 
@@ -156,7 +156,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 失败路径里最值得信任的恰恰是手工到不了的那几条，所以留了两个钩子：
 
 - orchestrator 侧 `CHECKPOINT_FAULT_INJECT`（`internal/checkpoint/faults.go`），逗号分隔的故障名，可加 `:once`，启动时读一次；
-  名字清单见 [第 24 章](24-configuration-and-capacity.md)。合并路径的 `compact_*` 注入点只在单测里用过。
+  名字清单见 [第 26 章](26-configuration-and-capacity.md)。合并路径的 `compact_*` 注入点只在单测里用过。
 - FC 侧 `FC_ROLLBACK_FAULT_INJECT`，只在用 cargo feature `rollback-fault-inject` 构建的二进制里存在，**交付二进制不含**。
 
 生产部署不设这两个变量；是否有故障被武装，看启动能力行的 `fault_inject` 字段。
@@ -165,7 +165,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 代码规模、MR 后增量及当前测试统计见 [附录 D](D-code-size.md)，本节负责代码位置与符号索引。
 
-代码在 当前开发仓库 `KASandbox_0904`：开发分支 `deltabox-dev`，交付分支 `deltabox`（[第 27 章](27-development.md)）。三个组件同仓：
+代码在 当前开发仓库 `KASandbox_0904`：开发分支 `deltabox-dev`，交付分支 `deltabox`（[第 29 章](29-development.md)）。三个组件同仓：
 
 | 组件 | 目录 | 下表路径的前缀 | 单元测试 |
 |---|---|---|---|
@@ -241,8 +241,8 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 | 目录 | 文件 | 讲解 |
 |---|---|---|
-| `950/` | `run.sh`：smoke / func / perf / long 一站式入口 | [第 20 章](20-acceptance.md)、[第 16 章](16-test-methodology.md) |
-| `acceptance/`（单文件脚本互不依赖；`rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py`） | `checkpoint_verify.py`（59 项正确性）、`checkpoint_bench.py`（时机成本与产物实测）、`checkpoint_concurrent.py`（并发 A/B/C/D）、`checkpoint_bench_v2.py`（与进程级快照对照的口径）、`native_snapshot_bench.py`（原生 snapshot 同一张档位表）、`rolling_keep10.py`（滚动保留长跑） | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md)、[第 19 章](19-950-concurrency.md) |
+| `950/` | `run.sh`：smoke / func / perf / long 一站式入口 | [第 22 章](22-acceptance.md)、[第 16 章](16-test-methodology.md) |
+| `acceptance/`（单文件脚本互不依赖；`rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py`） | `checkpoint_verify.py`（59 项正确性）、`checkpoint_bench.py`（时机成本与产物实测）、`checkpoint_concurrent.py`（并发 A/B/C/D）、`checkpoint_bench_v2.py`（与进程级快照对照的口径）、`native_snapshot_bench.py`（原生 snapshot 同一张档位表）、`rolling_keep10.py`（滚动保留长跑） | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md)、[第 21 章](21-concurrency-and-longrun.md) |
 | 仓库根 `benchmark/` 下的 `native_snapshot_tiers.py`（单文件脚本，不依赖本目录） | 原生 pause / resume 每档独立沙箱的分档耗时 | [第 18 章 §9](18-950-performance.md#9-原生-pause--resume-分档实测修复后)、[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱) |
 | `crtest/` | `crtest/cases/t11.py … t41.py`（20 个用例）、`crtest/common.py`、`tests/`（离线单测）、`sdktests/test_checkpoint_errors.py`、`portability/preflight-customer.sh`、`probe950/` | [第 16 章](16-test-methodology.md) |
 | `crtest/bench/` | `bench_tiers.py`、`compliance.py`、`analyze.py`、`serial_restore.py` | [第 16 章](16-test-methodology.md) |
