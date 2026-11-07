@@ -1,6 +1,8 @@
 # 11 · 失败语义与正确性不变量
 
-正确性要求覆盖失败路径。本章定义提交点前后的结果、纪元与账本不变量、断链和污染防护；调用方如何处理错误见第 24 章。
+## 本章目标
+
+正确性要求覆盖失败路径。本章定义提交点前后的结果、纪元与账本不变量、断链和污染防护，并列出改代码时不能破坏的不变量清单。调用方如何处理错误见 [第 24 章](24-api-semantics.md)。
 
 ## 1. 总纲：静默损坏比报错糟得多
 
@@ -11,7 +13,7 @@
 > **宁可拒绝服务，不可返回一个可能已损坏的沙箱。**
 
 第二个原因是**没有兜底**：设计上不提供「回滚失败就杀掉进程、从快照重建」那条路，进程已死、虚机撕裂这些场景划给 e2b 原生 snapshot
-（[第 13 章](13-native-snapshot.md)）。一条路走到黑，就必须把每一种走不通的情况说清楚。
+（[第 13 章](13-native-snapshot.md)）。恢复只有这一条路径，所以必须把每一种走不通的情况说清楚。
 
 ## 2. 提交点：把失败切成两半
 
@@ -52,14 +54,14 @@ pub fn faults_vm(&self) -> bool {
 | 提交点**之后**失败，或 rollback 调用超时 | **撕裂**；此后这一代沙箱的 checkpoint 与 restore 一律被拒，`list` / `delete` 仍可用 | `torn` | 只能销毁重建沙箱 |
 | 回滚成功但 guest 的 envd 在 45 s 内不应答 | 宿主侧已完成，虚机在目标时刻；**不是撕裂** | `guest_unresponsive` | 按业务决定：稍后重试命令，或销毁重建 |
 
-- **撕裂按代记**：标记记在 `Sandbox.LifecycleID` 下（每个 Firecracker 进程一个），不按沙箱 id。同一个 id 经原生 pause/resume 换了新进程之后从干净状态开始
+- **撕裂按代记**：标记记在 `Sandbox.LifecycleID` 下（每个 Firecracker 进程一个），不按沙箱 id。同一个 id 经原生 pause / resume 换了新进程之后从干净状态开始
   （`service.go` — `refuseIfTorn`、`markTorn`）。撕裂时服务端同时标记断链与磁盘账本 poisoned，并**让虚机保持暂停**：它持有回滚写到一半的内容，
   是事后分析唯一的材料；恢复运行会让一个半新半旧的 guest 写它的磁盘。
 - **前两档的关键是恢复虚机**（`internal/sandbox/checkpoint.go:516`）：
 
   ```go
   resumeOnError := func(err error) error {
-      conntrack.join()   // 先等清表完成：放流量回来之前表项必须已删（10 §4.5）
+      conntrack.join()   // 先等清表完成：放流量回来之前表项必须已删（第 10 章 §4.5）
       if resumeErr := fcCall(context.WithoutCancel(ctx), process.ResumeVM); resumeErr != nil {
           err = errors.Join(err, fmt.Errorf("failed to resume VM: %w", resumeErr))
       }
@@ -79,7 +81,7 @@ pub fn faults_vm(&self) -> bool {
   envdRestoreTimeout = 45 * time.Second
   ```
 
-  注释里的 60 s 是 SDK 的**通用**请求超时。两边预算相等时，客户端总是先放弃 —— 于是调用方看到一个光秃秃的读超时，
+  注释里的 60 s 是 SDK 的**通用**请求超时。两边预算相等时，客户端总是先放弃 —— 于是调用方只看到一个读超时，没有原因，
   「回滚成功了，是 guest 没醒过来」这条真正的信息永远到不了他手上。SDK 的 checkpoint 调用另有更长的默认超时（`CHECKPOINT_REQUEST_TIMEOUT`），
   细节与重试策略见 [第 24 章](24-api-semantics.md)。健康的 restore 远在这个上限之内应答，所以 45 s 对 guest 不构成约束，
   **它唯一决定的是由谁来报告这次失败**。
@@ -211,7 +213,7 @@ return e.Dir, nil, nil                                    // 目录放锁后再�
 ```
 
 - `hasChildLocked` 查的是**子节点计数表** `Store.children[sandbox][parentID]`（`store.go:1912`），O(1)，在条目进出账本处维护，
-  不再扫描全部条目。
+  不需要扫描全部条目。
 - 删除路径**不写 index.json**：它默认不存在，只在 `CHECKPOINT_DEBUG_INDEX` 打开时由后台写者至多每 5 s 重写一次（[第 4 章](04-architecture-and-flow.md)）。
 
 ### 7.2 级联回收
@@ -241,21 +243,21 @@ return e.Dir, nil, nil                                    // 目录放锁后再�
 中间那一行为什么按成功应答？因为从调用方的角度删除已经完成：条目从 `list` 里消失了，此时若回错误，调用方重试只会得到 404，
 反而让人以为「第一次没删成、第二次发现已经不在」。反过来，最后一行不能回 404 —— 那会告诉调用方「已经不在了」，而实际上什么都没删。
 祖先与层的删除失败只记日志，不影响应答。对应的单元测试是 `service_test.go` 的 `TestDeleteOfNothingIsNotFound`、
-`TestDeleteThatTookEffectIsASuccessEvenIfItsFilesStay`、`TestDeleteFailureSortsTheThreeOutcomes`。错误总表见 [第 24 章 §8](24-api-semantics.md#8-错误总表)。
+`TestDeleteThatTookEffectIsASuccessEvenIfItsFilesStay`、`TestDeleteFailureSortsTheThreeOutcomes`。错误总表见 [第 24 章](24-api-semantics.md)。
 
 ### 7.4 结尾：合并
 
 最后调用 `runCompaction`（`store.go:2039`，`compact.go:425`）。候选是**隐藏、非基准、已提交、恰有一个子节点**的条目 H；
 做法是把 H 并入它唯一的子节点 C：C 接管 H 的父节点，回滚位图取并集，内容以 C 为准；两者的 rootfs 层在「永远成对出现」时一起合并。
 
-开关与默认值（`CHECKPOINT_COMPACT` 默认开，`CHECKPOINT_COMPACT_MAX_PER_OP` 默认 8）见 [第 26 章 §2.3](26-configuration-and-capacity.md#23-树与存储行为)，合并的机制与证明见 [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)。放在失败语义里要说的是它怎么失败：
+开关与默认值（`CHECKPOINT_COMPACT` 默认开，`CHECKPOINT_COMPACT_MAX_PER_OP` 默认 8）见 [第 26 章](26-configuration-and-capacity.md)，合并的机制与证明见 [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)。放在失败语义里要说的是它怎么失败：
 
-- 一次合并失败时树原样不动，**本轮合并就此结束**，候选排回队尾，等下一次 delete；
+- 一次合并失败时树原样不动，**这次 delete 的合并就此结束**，候选排回队尾，等下一次 delete；
 - 同一候选累计失败 3 次（`compactMaxAttempts`）后放弃，行为等同不合并；它若之后重新成为候选会再入队；
 - 合并**从不**让触发它的 delete 失败。
 
 文件工作全在全局锁外、沙箱操作锁内：先把页写到没人读的位置、以**新文件名**写并集侧车与合并层，最后短暂持锁检查树没变并一次性切换。
-切换之前任何失败都只删掉新文件名，树原样不动。合并在 delete 里同步执行，所以 delete 的延迟随之上升，这是已知项（[附录 C §8.10](C-evolution-and-cases.md#810-删除同步合并delete-变慢)）。
+切换之前任何失败都只删掉新文件名，树原样不动。合并在 delete 里同步执行，所以 delete 的延迟随之上升，这是已知项（[附录 C 的“删除同步合并”案例](C-evolution-and-cases.md)）。
 
 合并追平时，非基准的隐藏条目至少有两个子节点，于是每沙箱条目数有上界 **≤ 2V + 1**（V 是可见条目数），证明见 [第 6 章 §10.4](06-memory-diff-tree.md#104-条目数上界--2v--1)。
 
@@ -286,7 +288,7 @@ restore 在污染期间仍然可用，因为它不依赖当前账本：它用的
 | 2 | 纪元位图 `E_x` 恰好覆盖 `(parent(x), x]` | 回滚集不再是超集 → **漏页** | **是** |
 | 3 | 物化文件覆盖 Firecracker 实际写回的全部页 | 从空洞读到零 → 清零若干页 | 否（Firecracker 覆盖校验在提交点前拒绝） |
 | 4 | 恢复目标与运行中的虚机**同拓扑** | 往不存在的对象写 | 否（`validate_topology`） |
-| 5 | 内存与磁盘在**同一个**暂停窗口内 | guest 看到两个时刻的世界 | 部分 |
+| 5 | 内存与磁盘在**同一个**暂停窗口内 | guest 的内存与磁盘属于两个时刻 | 部分 |
 | 6 | 活跃脏图在**暂停之后**导出 | 同 #3 | 否（同上兜底） |
 | 7 | 提交前条目对 `Get` / `List` **不可见**（`prepared` 条目根本不进账本；磁盘上的 `prepared` manifest 只供事后查看，从不被读回） | 半写完的快照成为恢复目标 | **是** |
 | 8 | 纪元前进后产物必须保留（哪怕隐藏） | 时间线开洞 → 后续回滚漏页 | **是** |
@@ -337,3 +339,14 @@ restore 在污染期间仍然可用，因为它不依赖当前账本：它用的
 | 层引用 | `internal/checkpoint/layer_refs.go` |
 | 账本污染 | `internal/checkpoint/rootfs.go` — `PoisonRootfs`、`SetRootfsToEntry` |
 | envd 超时 | `internal/checkpoint/service.go` — `envdRestoreTimeout` |
+
+## 本章要点
+
+- 第一原则是宁可拒绝服务，不可返回一个可能已损坏的沙箱；设计上没有"回滚失败就重建"的路径。
+- 提交点把 restore 的失败切成两半；调用超时说不清停在哪一侧，按撕裂处理。
+- restore 失败分四档，对应 `chain_broken`、`internal`、`torn`、`guest_unresponsive`，调用方动作各不相同；撕裂按代记。
+- Firecracker 写完快照后纪元就前进了，产物是那一代脏页的唯一副本，所以失败走"隐藏提交 → 标记断链"两级抢救。
+- 隐藏条目在树里、不在 API 里；断链后恢复被拒绝，下一次 checkpoint 强制全量、开一棵新树。
+- 删除分锁内改账本、锁外删文件、最后合并三段；删除已生效而文件没清干净时按成功应答。
+- 账本污染把"既成事实"与"记账失败"分开处理，由一次成功的 restore 清除。
+- 19 条不变量里多数破坏后是静默的；`reason` 决定调用方下一步，`code` 只说明这次调用怎样结束。

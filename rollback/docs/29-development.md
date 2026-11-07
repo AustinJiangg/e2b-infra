@@ -1,6 +1,8 @@
-# 27 · 代码入口、修改指引与开发验证
+# 29 · 代码入口、修改指引与开发验证
 
-当前开发工作树是 KASandbox_0904/deltabox-dev，单元测试保留在开发分支，上机测试工具在 e2b-infra。本章给出源码阅读、按任务修改、不变量检查和验证入口。
+## 本章目标
+
+让接手开发的工程师知道代码在哪、从哪读起、改一类东西要动哪些地方、改完怎么验证。代码讲解基准是 `KASandbox_0904` 的 `deltabox-dev@57a30632c`；单元测试在同一仓库，上机测试工具在 `e2b-infra` 的 `rollback/scripts/`。
 
 ## 1. 代码在哪
 
@@ -8,9 +10,9 @@
 
 | | 在哪 | 装着什么 |
 |---|---|---|
-| **代码** | 当前开发仓库 `KASandbox_0904`。开发分支 **`deltabox-dev`**，开发测试通过后合并进交付分支 **`deltabox`**。首次合入是 openEuler KASandbox 的 [MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)「feat: host-side sandbox checkpoint/restore (ARM64, HDBSS)」 | orchestrator、Firecracker、Python SDK 三个组件同仓 |
+| **代码** | 仓库 `KASandbox_0904`，分支 `deltabox-dev`。首次合入 openEuler KASandbox 的是 [MR !119](https://gitcode.com/openeuler/KASandbox/pull/119)「feat: host-side sandbox checkpoint/restore (ARM64, HDBSS)」 | orchestrator、Firecracker、Python SDK 三个组件同仓 |
 | **手册与测试** | `e2b-infra` 仓库的 `rollback/` | 本手册源文件、验收与补充测试脚本（`rollback/scripts/`） |
-| **内部部署工具** | `e2b-infra` 仓库的 `e2b-infra.spec` 与补丁 `0001-adapted-for-arm-architecture.patch` | 0001 补丁由 `deltabox-dev` 的 orchestrator 侧改动融合进上游源码后生成，做法与脚本见 `e2b-infra/deploy-docs/08-源码开发与出包流程.md` 第 11 节。补丁里剔除了新增的 `_test.go`，单测以 `deltabox-dev` 上的结果为准 |
+| **950 测试部署方式** | `e2b-infra` 仓库的 RPM 与 Nomad 部署材料 | 只用于 950 测试环境；单元测试以 `deltabox-dev` 上的结果为准 |
 
 | 组件 | 目录 | 单元测试 | 怎么跑 |
 |---|---|---|---|
@@ -27,7 +29,7 @@ FC 的 vmm 单测要引导仓库里的测试内核（`src/vmm/src/test_utils/moc
 
 | 交付物 | 是什么 |
 |---|---|
-| **代码** | 手册讲解 `KASandbox_0904` 的 `deltabox-dev`（版本见 [README](README.md)）；`deltabox` 已包含首次 MR 交付，后续开发改动合入交付分支待整理。两阶段关系见 [附录 C](C-evolution-and-cases.md)；`firecracker/`、`packages/`、`py-sdk/` 三个组件同仓 |
+| **代码** | `KASandbox_0904` 的 `firecracker/`、`packages/`、`py-sdk/` 三个组件；手册讲解的版本见 [README](README.md) |
 | **文档** | 本手册，导出为单个 HTML 文件 |
 
 目标平台是 950（带 HDBSS）；920B 是开发环境。**orchestrator 与 Firecracker 必须取自同一版本、配对部署**：
@@ -82,9 +84,9 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 3 | 全程持有 `LockSandbox`，除非它确实不碰每沙箱状态 |
 | 4 | 会暂停虚机的，用 `context.WithoutCancel`，客户端断开不能把虚机留在暂停里 |
 | 5 | 失败要能分级：区分"沙箱还能用"和"沙箱撕裂了" |
-| 6 | 新的拒绝原因要有自己的 `reason`，并在 SDK 的 `errors.py` 映射到异常类；新异常要挂在 `CheckpointException` 下（按需再挂到更具体的父类，像 `CheckpointBytesLimitException` 挂在 `CheckpointTooManyException` 下，让旧代码照样接得住） |
+| 6 | 新的拒绝原因要有自己的 `reason`，并在 SDK 的 `errors.py` 映射到异常类；新异常要挂在 `CheckpointException` 下（按需再挂到更具体的父类，像 `CheckpointBytesLimitException` 挂在 `CheckpointTooManyException` 下，让已有代码照样接得住） |
 | 7 | 重新生成 SDK 桩：`py-sdk/scripts/regen-checkpoint-pb.py` |
-| 8 | 同步 `e2b-infra` 里的 SDK 覆盖层与 `crtest/sdktests/test_checkpoint_errors.py`（它是 SDK 测试的一份拷贝） |
+| 8 | 同步 950 测试部署的 SDK 覆盖层（`e2b-deploy/dep/e2b-sdk-checkpoint/`）与 `crtest/sdktests/test_checkpoint_errors.py`（它是 SDK 测试的一份拷贝） |
 
 ### 2.4 改 Firecracker 侧
 
@@ -136,9 +138,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 正确性与功能 | `rollback/scripts/950/run.sh smoke`、`run.sh func`；动了树语义再跑 `dev/correctness.py ext4` | 目标机 |
 | 性能 | `run.sh perf`；动了长期行为（删除、合并、回收、锁）要跑并发长测 | 目标机 |
 
-判据讲解见 [第 16 章](16-test-methodology.md)，性能口径见 [第 16 章](16-test-methodology.md)，
-上机步骤见 [第 22 章](22-acceptance.md)。换二进制的日常流程（编译、替换、确认跑的是新的）见
-`e2b-infra/deploy-docs/08-源码开发与出包流程.md` 第 4 节。
+判据和性能口径见 [第 16 章](16-test-methodology.md)，上机步骤见 [第 22 章](22-acceptance.md)。
 
 ### 4.2 至少要看的三个信号
 
@@ -163,9 +163,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 ## 5. 代码地图
 
-代码规模、MR 后增量及当前测试统计见 [附录 D](D-code-size.md)，本节负责代码位置与符号索引。
-
-代码在 当前开发仓库 `KASandbox_0904`：开发分支 `deltabox-dev`，交付分支 `deltabox`（[第 29 章](29-development.md)）。三个组件同仓：
+本节是代码位置与符号索引，代码规模见 [附录 D](D-code-size.md)。三个组件同仓（[§1.1](#11-仓库与分支)）：
 
 | 组件 | 目录 | 下表路径的前缀 | 单元测试 |
 |---|---|---|---|
@@ -241,17 +239,17 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 
 | 目录 | 文件 | 讲解 |
 |---|---|---|
-| `950/` | `run.sh`：smoke / func / perf / long 一站式入口 | [第 22 章](22-acceptance.md)、[第 16 章](16-test-methodology.md) |
-| `acceptance/`（单文件脚本互不依赖；`rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py`） | `checkpoint_verify.py`（59 项正确性）、`checkpoint_bench.py`（时机成本与产物实测）、`checkpoint_concurrent.py`（并发 A/B/C/D）、`checkpoint_bench_v2.py`（与进程级快照对照的口径）、`native_snapshot_bench.py`（原生 snapshot 同一张档位表）、`rolling_keep10.py`（滚动保留长跑） | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md)、[第 21 章](21-concurrency-and-longrun.md) |
-| 仓库根 `benchmark/` 下的 `native_snapshot_tiers.py`（单文件脚本，不依赖本目录） | 原生 pause / resume 每档独立沙箱的分档耗时 | [第 18 章 §9](18-950-performance.md#9-原生-pause--resume-分档实测修复后)、[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱) |
-| `crtest/` | `crtest/cases/t11.py … t41.py`（20 个用例）、`crtest/common.py`、`tests/`（离线单测）、`sdktests/test_checkpoint_errors.py`、`portability/preflight-customer.sh`、`probe950/` | [第 16 章](16-test-methodology.md) |
-| `crtest/bench/` | `bench_tiers.py`、`compliance.py`、`analyze.py`、`serial_restore.py` | [第 16 章](16-test-methodology.md) |
-| `dev/`（共享 `lib.py`） | `correctness.py`、`pause_verify.py`、`compat_matrix.py`、`hdbss_evidence.py`（配 `cap_test.c`）、`loop.py`、`timing.py`、`bench-ckpt.py` + `freeze_probe.py`、`probe-ramp.py`、`01-check-host.sh` … `04-verify-runtime.sh`、`run-all.sh` | [第 16 章](16-test-methodology.md)、[第 16 章](16-test-methodology.md) |
+| `950/` | `run.sh`：smoke / func / perf / hdbss / long 一站式入口 | [第 22 章](22-acceptance.md)、[第 16 章](16-test-methodology.md) |
+| `acceptance/`（单文件脚本互不依赖；`rolling_keep10.py` 从同目录导入 `checkpoint_concurrent.py`） | `checkpoint_verify.py`（59 项正确性）、`checkpoint_bench.py`（时机成本与产物实测）、`checkpoint_concurrent.py`（并发 A/B/C/D）、`checkpoint_bench_v2.py`（按建代、恢复、分段与产物三阶段输出的分档基准）、`native_snapshot_bench.py`（原生 snapshot 同一张档位表）、`rolling_keep10.py`（滚动保留长跑） | [第 16 章](16-test-methodology.md)、[第 21 章](21-concurrency-and-longrun.md) |
+| 仓库根 `benchmark/` 下的 `native_snapshot_tiers.py`（单文件脚本，不依赖本目录） | 原生 pause / resume 每档独立沙箱的分档耗时 | [第 19 章](19-native-pause-resume.md)、[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱) |
+| `crtest/` | `crtest/crtest/cases/t11.py … t41.py`（20 个用例）、`crtest/crtest/common.py`、`tests/`（离线单测）、`sdktests/test_checkpoint_errors.py`、`portability/preflight-customer.sh`、`probe950/` | [第 16 章](16-test-methodology.md) |
+| `crtest/bench/` | `bench_tiers.py`、`compliance.py`、`analyze.py`、`serial_restore.py`、`hdbss_bench.py` | [第 16 章](16-test-methodology.md) |
+| `dev/`（共享 `lib.py`） | `correctness.py`、`pause_verify.py`、`compat_matrix.py`、`hdbss_evidence.py`（配 `cap_test.c`）、`loop.py`、`timing.py`、`bench-ckpt.py` + `freeze_probe.py`、`probe-ramp.py`、`01-check-host.sh` … `04-verify-runtime.sh`、`run-all.sh` | [第 16 章](16-test-methodology.md) |
 | `probes/` | `pb2.py` … `pb5.py`、`probe_dirty.py`、`uffdwp_probe.c`：脏页判据的定向探针，不属于验收流程 | —— |
 
 ### 5.5 原生快照的精确增量（原生 pause 路径）
 
-提交 `c42d23e`（4 KiB 写跟踪差分）与 `bc19b45`（自启动以来脏页集），均在 `deltabox-dev@93ccb02` 之内；Firecracker 零改动。
+提交 `c42d23e`（4 KiB 写跟踪差分）与 `bc19b45`（自启动以来脏页集）；Firecracker 零改动。
 下表 `internal/...` 前加 `packages/orchestrator/`。讲解见 [第 14 章](14-native-precise-increment.md)–[第 15 章](15-native-cooperation-and-cost.md)。
 
 | 关注点 | 文件 | 关键符号 |
@@ -272,3 +270,11 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 顺带修的两处 | `internal/sandbox/block/cache.go`、`internal/sandbox/block/chunk.go` | `Cache.coveringBlocks`；`FullFetchChunker.fetchToCache` |
 | 修复前判据在 FC 里的实现（对照） | `firecracker/src/vmm/src/lib.rs`、`firecracker/src/vmm/src/utils/pagemap.rs` | `get_dirty_memory`、`is_page_dirty` |
 | 单元测试 | `internal/sandbox/uffd/{diffmetadata,sinceboot}_test.go`、`internal/sandbox/checkpoint_epoch_test.go`、`internal/sandbox/block/page_test.go`、`internal/sandbox/build/file_slice_test.go`、`packages/shared/pkg/storage/header/finer_diff_test.go` | —— |
+
+## 本章要点
+
+- 读代码从 `service.go`、`sandbox/checkpoint.go`、`store.go`、`rollback.rs` 开始，这四个文件读完整套机制就通了。
+- 加设备、加 API、改 Firecracker、改账本各有步骤表；改账本最危险，先读 [第 11 章](11-failures-and-invariants.md) 的不变量清单。
+- 大多数不变量被破坏后是静默的，改动自查清单第 9 条最重要。
+- 改完跑三层验证：单元与属性测试、正确性与功能、性能；并先确认能力行、第二个 checkpoint 的 `mem_mode`、950 上的 HDBSS 启用日志这三个信号。
+- 故障注入钩子只给开发者，生产部署不设。

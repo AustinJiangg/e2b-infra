@@ -84,7 +84,7 @@ class ToolsTests(unittest.TestCase):
         runtime = self.write("mermaid.js", "/* 测试用图表运行库占位 */")
         config = self.write("book.json", json.dumps({
             "title": "测试手册", "version": "v1.0.0", "date": "2026-10-15",
-            "byline": "测试", "svgs": [],
+            "svgs": [],
         }, ensure_ascii=False))
         outputs = [self.root / "one.html", self.root / "two.html"]
         for output in outputs:
@@ -113,7 +113,7 @@ class ToolsTests(unittest.TestCase):
         runtime = self.write("mermaid.js", "/* 运行库占位 */")
         conf = self.write("book.json", json.dumps({
             "title": "测试手册", "version": "v1", "date": "2026-10-16",
-            "byline": "测试", "svgs": [], **config,
+            "svgs": [], **config,
         }, ensure_ascii=False))
         output = self.root / "book.html"
         result = subprocess.run([

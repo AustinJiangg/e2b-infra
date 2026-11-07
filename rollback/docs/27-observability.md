@@ -1,6 +1,8 @@
-# 25 · 日志、指标与分段计时
+# 27 · 日志、指标与分段计时
 
-本章集中定义能力信息、返回字段、计时键、指标和取证日志。测试结果使用这些字段解释耗时，排障章节按症状引用这里的观察方法。
+## 本章目标
+
+定义 orchestrator 和 Firecracker 报告的能力信息、返回字段、计时键、指标和取证日志，让读者能从一次操作的日志算出时间花在哪一段、判断哪些键受并发影响。测试结果用这些字段解释耗时，[第 28 章](28-troubleshooting.md) 按症状引用这里的观察方法。
 
 ## 1. 数字从哪来
 
@@ -9,7 +11,7 @@
 
 | 位置 | 内容 | 注意 |
 |---|---|---|
-| orchestrator 日志：`created checkpoint` / `restored checkpoint` / `deleted checkpoint` 行的 `timings_ms` | 每次成功操作一行 | 在当前 nomad alloc 的 `logs/start.stdout.<n>`，会轮转 |
+| orchestrator 日志：`created checkpoint` / `restored checkpoint` / `deleted checkpoint` 行的 `timings_ms` | 每次成功操作一行 | 950 测试部署在当前 nomad alloc 的 `logs/start.stdout.<n>`，会轮转 |
 | 失败时的日志：`checkpoint create failed` / `checkpoint restore failed`（WARN） | 失败的那次也有完整分段 | 同上 |
 | `<store>/<sandbox>/<checkpoint>/timings.json` | 这个 checkpoint 的分段，写一次不再动 | store 默认 `/orchestrator/build/checkpoints` |
 | `<store>/<sandbox>/last-restore-timings.json` | 该沙箱**最近一次** restore 的分段（成败都写） | 每次 restore 覆盖，要紧接着读 |
@@ -85,7 +87,7 @@ total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
 | `commit_files` | 临时文件 rename 成最终名 | 外 | |
 | `commit_manifest` | 重写 manifest | 外 | |
 | `commit_lock_wait` | 发布条目等全局锁 | 外 | |
-| `commit_index` | 拿到锁之后发布条目的工作 | 外 | 名字沿用；现在只计锁内这一段，与链深无关（`index.json` 不再在热路径上写） |
+| `commit_index` | 拿到锁之后发布条目的工作 | 外 | 只计锁内这一段，与链深无关；`index.json` 不在热路径上写 |
 
 checkpoint 失败而 Firecracker 已写出快照时，条目会被"救成隐藏条目"，这时分段里也会出现 `commit_lock_wait` / `commit_index`（[第 11 章](11-failures-and-invariants.md)）。
 
@@ -115,13 +117,13 @@ total ≈ disk_view_read + assemble_view_pre + rollback_in_place + wait_envd
 | `revert_mem_write` | 沿祖先链解析每页内容并写回滚内存文件 | ms | 内 | 随回滚量线性增长 |
 | `revert_bitmap_write` | 写回滚位图 | ms | 内 | |
 | `materialize_read_mb` | 本次物化读的 checkpoint 文件字节：活跃脏图与各侧车（按盘上大小）+ 从各内存差分读到的字节 | MB | —— | **只算本次 restore**；含页缓存命中，表示"向输入要了多少"，不表示碰了盘 |
-| `materialize_base_read_mb` | 本次物化从模板内存源读的字节 | MB | —— | 全量根默认开时应为 0；`CHECKPOINT_FULL_ROOT=false` 或老树才会非零 |
-| `materialize_disk_read_mb` | orchestrator **进程** `/proc/self/io` 的 `read_bytes` 在物化前后的差 | MB | —— | **进程级口径**：并发 restore 时混入其他沙箱的读，只有单沙箱运行时才能读成"这次 restore 碰了盘"；页缓存命中不计 |
+| `materialize_base_read_mb` | 本次物化从模板内存源读的字节 | MB | —— | 全量根默认开时应为 0；`CHECKPOINT_FULL_ROOT=false` 时才会非零 |
+| `materialize_disk_read_mb` | orchestrator **进程** `/proc/self/io` 的 `read_bytes` 在物化前后的差 | MB | —— | **整个进程的口径**：并发 restore 时混入其他沙箱的读，只有单沙箱运行时才能读成"这次 restore 碰了盘"；页缓存命中不计 |
 | `fc_rollback` | Firecracker 原地回滚调用（orchestrator 侧计时） | ms | 内 | |
 | `fc_rollback_disk_read_mb` | 该 FC 进程在回滚期间的 `read_bytes` | MB | —— | 读的是刚写出、未 fsync 的回滚文件，非零说明回写抢在了回滚前面 |
 | `fc_validate` … `fc_total` | FC 自报分段（[§4](#4-firecracker-自报的分段)） | ms | 内 | |
 | `fc_vcpu_mmio_drained_count` | 本次回滚里排空在途 MMIO 访问的 vCPU 次数 | 个 | —— | FC 不报时整键缺席 |
-| `assemble_view` | 恒为 0 | ms | —— | 占位键，便于与视图装配还在窗口内的老数据对齐；实际装配看 `assemble_view_pre` |
+| `assemble_view` | 恒为 0 | ms | —— | 占位键，视图装配在窗口外做；实际装配看 `assemble_view_pre` |
 | `reset_view` | 把沙箱的磁盘整体切到目标视图 | ms | 内 | 在提交点之后，失败即撕裂 |
 | `conntrack` | 冻结窗口里**等**后台连接跟踪清理结束的时间（join） | ms | 内 | 常态接近 0；清理比回滚慢时才非零 |
 | `conntrack_bg` | 后台清理自身的时长，从 pause 开始与回滚并行 | ms | 并行 | 宿主 conntrack 表变大时先涨它 |
@@ -181,7 +183,7 @@ restore 调用 Firecracker 的原地回滚接口，它在应答里带回自己�
 
 ## 5. metrics
 
-orchestrator 通过 OpenTelemetry 导出以下指标。**要部署里有 collector 接收才看得到**；单节点离线部署默认没有跑 otel-collector job（`nomad job status` 可见），这时以日志为准。
+orchestrator 通过 OpenTelemetry 导出以下指标。**要部署里有 collector 接收才看得到**；950 测试部署默认没有跑 otel-collector job（`nomad job status` 可见），这时以日志为准。
 
 | 指标 | 类型 | 属性 | 含义 |
 |---|---|---|---|
@@ -231,7 +233,7 @@ INFO  runtime GC pauses  {"gc_cycles": 4, "gc_cycles_cumulative": 68, "stw_stopp
 用它区分两类流截断（机制见 [第 24 章 §11.3](24-api-semantics.md#113-两类流式截断要分清)）：
 
 - **restore 造成的**（既定限制）：同一沙箱先有 `removed from pool` 且 `drop_reason=restore`，随后那条流 `request ended` 带 `aborted_after_headers=true`。
-- **与 restore 无关的**（代理未开 full duplex，已修）：`aborted_after_headers=true`、`abort="net/http: abort Handler"`、`upstream_conn_reused=false`，前后**没有** `drop_reason=restore`。修复后不应再出现；若出现，先确认 orchestrator 与 client-proxy 两个镜像都是修复后的版本。
+- **与 restore 无关的**（代理未开 full duplex，已修）：`aborted_after_headers=true`、`abort="net/http: abort Handler"`、`upstream_conn_reused=false`，前后**没有** `drop_reason=restore`。修复后不应再出现；若出现，先确认 orchestrator 与 client-proxy 都是修复后的版本。
 
 日志量很大，取证完就关。
 
@@ -264,3 +266,11 @@ INFO  runtime GC pauses  {"gc_cycles": 4, "gc_cycles_cumulative": 68, "stw_stopp
 | `runtime GC pauses` | INFO | `CHECKPOINT_RUNTIME_METRICS` 的输出 | [§6](#6-checkpoint_runtime_metrics-输出) |
 | `proxy trace: …` | INFO | `PROXY_TRACE` 的输出 | [§7](#7-proxy_trace) |
 | `httputil: ReverseProxy read error during body copy … use of closed network connection` | WARN | 代理在转发响应体时连接被关；与客户端的 `incomplete chunked read` 对应 | [第 28 章 §5](28-troubleshooting.md#5-restore-后连接挂死或流截断) |
+
+## 本章要点
+
+- 一次调用有三个钟：客户端墙钟、冻结窗口、宿主分阶段。前两个说差了多少，第三个说差在哪。
+- `mem_mode` 是防增量退化的主判据：除了沙箱的第一个 checkpoint 和断链后的那一个，出现 `full` 就有问题。
+- `total` 含排队；`*_lock_wait` 是全局锁等待；`conntrack_host_*` 和 `materialize_disk_read_mb` 受并发影响，读数时要带上这个条件。并发下看 restore 读了多少用 `materialize_read_mb`。
+- metrics 要有 collector 才看得到，没有时以日志为准。
+- `CHECKPOINT_RUNTIME_METRICS`、`PROXY_TRACE` 是取证开关，用完就关。

@@ -1,6 +1,8 @@
-# 22 · 接口语义、错误、超时与并发调用
+# 24 · 接口语义、错误、超时与并发调用
 
-这里是使用方的完整契约：恢复范围、外部副作用、失效条件、删除和回收、异常、超时及多调用方行为。机制原因通过链接回查第二、三篇。
+## 本章目标
+
+给出使用方的完整契约：restore 恢复什么、不恢复什么，checkpoint 何时失效，删除和回收怎样影响占盘，错误、超时和多调用方时的行为。机制原因链接到第二、三篇。
 
 ## 1. restore 回滚回什么
 
@@ -41,7 +43,7 @@ restore 让 guest 的 TCP 状态也回到了 checkpoint 时刻，跨越 restore 
 - **所有跨越 restore 的连接都要重建**：进沙箱的连接（SDK 的命令、文件读写、你自己暴露的服务端口），
   以及沙箱里的程序连到外面的长连接。SDK 自己的调用会重新建连；你在沙箱里起的服务、沙箱里连外部的客户端，要自己处理重连；
 - restore 那一刻还在途的 SDK 调用会被打断，调用方会收到 `CheckpointInterruptedException` 或传输层错误，
-  两种情形的区别见 [第 24 章](24-api-semantics.md)；
+  两种情形的区别见 [§11.2](#112-restore-对在途调用的影响)；
 - **restore 返回之后新建的连接不受影响**，guest 往外新建的连接也不受影响；
 - **同一节点上的其他沙箱不受影响**：宿主侧只删属于这个沙箱的表项，从不整表清空。
 
@@ -52,11 +54,11 @@ restore 让 guest 的 TCP 状态也回到了 checkpoint 时刻，跨越 restore 
 - **墙钟（`CLOCK_REALTIME`）在 restore 返回之前被校回当前时间**。restore 的最后一步是 orchestrator 向 guest 里的 envd 发
   `POST /init`，请求体带宿主的当前时间（`service.go:1315` → `sandbox.go:1316` `waitForEnvd` → `envd.go:104` `initEnvd`，
   时间戳在 `envd.go:48` 填入）。envd 收到后比较自己的墙钟：比宿主早超过 50 ms 或晚超过 5 s，就用 `clock_settime(CLOCK_REALTIME)`
-  设成宿主时间（`packages/envd/internal/api/init.go:172` `SetData`、`:312` `shouldSetSystemTime`，阈值在 `:30-31`）。
+  设成宿主时间（`packages/envd/internal/api/init.go:163` `SetData`、`:312` `shouldSetSystemTime`，阈值在 `:30-31`）。
   这与 e2b 原生 pause / resume 走的是同一条路径。
   由此可知：guest 从回滚后恢复运行，到这次 `/init` 被处理，这段时间里墙钟仍停在 checkpoint 时刻附近；
   这段时间在 restore 调用返回之前，调用方在 restore 返回后发起的命令看到的已是校正后的时间（误差不超过上面的阈值）。
-  如果 envd 始终不应答（restore 以 guest 失联报错，见 [第 24 章](24-api-semantics.md)），墙钟就没有被校正。
+  如果 envd 始终不应答（restore 以 guest 失联报错，见 [§8.1](#81-按-reason)），墙钟就没有被校正。
 
 对业务代码的影响：
 
@@ -82,7 +84,7 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 | orchestrator 重启 | 同上。重启本来就会带走这台机器上的所有沙箱；上一个进程留在盘上的 checkpoint 文件在启动时被清空 |
 | 宿主重启或宕机 | 同上 |
 | 沙箱迁移到别的节点 | checkpoint **不跟随** |
-| 沙箱经原生 `pause` 再 resume（`connect`） | pause 之前的 checkpoint **全部作废**；resume 之后是新的一代，可以照常重新 checkpoint / restore（[§3.1](#31-原生-pause--resume-与-checkpoint-的代际边界)） |
+| 沙箱经原生 pause / resume | pause 之前的 checkpoint **全部作废**；resume 之后是新的一代，可以照常重新 checkpoint / restore（[§3.1](#31-原生-pause--resume-与-checkpoint-的代际边界)） |
 | 单个 checkpoint 被 `delete` | 从接口上消失；数据由服务端按需保留、合并（compact / fold）或回收（[§4](#4-删除与空间回收用户视角)） |
 
 ### 3.1 原生 pause / resume 与 checkpoint 的代际边界
@@ -100,7 +102,7 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 
 ## 4. 删除与空间回收：用户视角
 
-这一节只讲调用方需要知道的规则和该怎么做；删除、隐藏、合并的机制与正确性证明见 [第 6 章](06-memory-diff-tree.md)，
+这一节讲调用方需要知道的规则和该怎么做；删除、隐藏、合并的机制与正确性证明见 [第 6 章](06-memory-diff-tree.md)，
 相关开关与容量规划见 [第 26 章](26-configuration-and-capacity.md)。
 
 ### 4.1 `delete` 做了什么
@@ -128,7 +130,7 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 
 ### 4.3 两种每沙箱上限
 
-运维可以给每个沙箱设两种上限（默认都不设），被拒时的异常与状态码见 [第 24 章](24-api-semantics.md)：
+运维可以给每个沙箱设两种上限（默认都不设），被拒时的异常与状态码见 [§8.1](#81-按-reason)：
 
 | 上限 | 数什么 | 被拒时怎么办 |
 |---|---|---|
@@ -172,13 +174,13 @@ checkpoint 存在**宿主本地**，只在所属沙箱的当前这一代里有�
 ## 6. 其他需要知道的边界
 
 - **操作按沙箱串行**。同一个沙箱上的 checkpoint、restore、delete 在宿主上排队执行，不同沙箱之间互不排队。
-  排队太久会被告知稍后重试。多个调用方共用一个沙箱时的行为见 [第 24 章](24-api-semantics.md)。
+  排队太久会被告知稍后重试。多个调用方共用一个沙箱时的行为见 [§11](#11-多个调用方与并发)。
 - **沙箱要活着**。checkpoint 和 restore 都要求沙箱处于运行状态。
 - **不要直接动宿主上的 checkpoint 目录**。手工删除会打断后代的恢复链；删除一律走 `delete`。
   备份这个目录也保不住 checkpoint（[§3](#3-checkpoint-什么时候失效)）。
 - **checkpoint ID 只在所属沙箱的这一代里有意义**，拿到别的沙箱上用是 `not_found`。
 - **restore 失败的绝大多数情形下沙箱保持原状继续可用**；唯一的例外是"撕裂"，那时只能销毁重建。
-  各种失败的含义与处理见 [第 24 章](24-api-semantics.md)。
+  各种失败的含义与处理见 [§8](#8-错误总表)。
 
 ## 7. 错误怎么到达调用方
 
@@ -190,9 +192,9 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
 - `message`：给人读的说明，SDK 把它作为异常文本原样带出。
 
 同一个 `code` 下面可能是要求完全不同动作的几种失败（例如 `internal` 下有"guest 没回来"、"磁盘账本不可信"和一般失败），
-所以 **SDK 先按 `reason` 选异常类**；服务端版本太老、没有 `reason` 时才退回按 `code` 选，那时只能分到更粗的类（[§8.2](#82-没有-reason-时老服务端)）。
+所以 **SDK 先按 `reason` 选异常类**；旧版服务端没有 `reason` 时才退回按 `code` 选，那时只能分到更粗的类（[§8.2](#82-没有-reason-时旧版服务端)）。
 
-每个 checkpoint 异常都带三个属性：`reason`（服务端给的原因；老服务端没给时取该类的默认值）、
+每个 checkpoint 异常都带三个属性：`reason`（服务端给的原因；旧版服务端没给时取该类的默认值）、
 `checkpoint_id`（这次调用点名的 checkpoint，没有则为 `None`）、`sandbox_id`。
 
 ## 8. 错误总表
@@ -211,15 +213,15 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
 | `sandbox_restored` | 409 / `aborted` | `CheckpointInterruptedException` | **不是** checkpoint 接口自己的错误：是 restore 发生时，对同一沙箱的**其他**经代理进沙箱的调用（命令、文件读写等）收到的（[§11](#11-多个调用方与并发)） | 沙箱已回到 checkpoint 那一刻，沙箱里的服务没坏 | 重新连接、重试这次调用。它在被打断前是否已在 guest 里生效无从得知 —— 但回滚反正已经把 checkpoint 之后的一切撤销了 |
 | `disk_full` | 507 / `resource_exhausted` | `CheckpointDiskFullException` | checkpoint / restore | 无影响：服务端在动手之前查产物盘余量，不足就拒绝；沙箱照常运行，已有 checkpoint 完好 | 这是**宿主**的问题：删本沙箱的 checkpoint 通常腾不出足够空间，要请运维清理产物盘（[第 28 章](28-troubleshooting.md)）。清理之后可重试；紧循环重试只会重复同一个拒绝 |
 | `too_many_checkpoints` | 429 / `resource_exhausted` | `CheckpointTooManyException` | checkpoint | 无影响：本沙箱可见的 checkpoint 个数到了每沙箱上限，检查在写任何东西之前 | 调用方自己能解决：`list()` → `delete()` 掉任意一个不再需要的 → 再 checkpoint |
-| `checkpoint_bytes_limit` | 429 / `resource_exhausted` | `CheckpointBytesLimitException`（`CheckpointTooManyException` 的子类） | checkpoint | 无影响：本沙箱全部 checkpoint 的占盘到了每沙箱字节上限，检查在写任何东西之前。**restore 从不被这个上限拒绝** | 删**最旧**的 checkpoint（或 restore 到较早的点再删掉之后那一支）；删最新的那个几乎不释放空间（[第 24 章 §4.4](24-api-semantics.md#44-在字节上限下删哪个才能释放空间)）。异常文本里写明了当前占用、上限、删了没用的那个 checkpoint ID 和下限 |
+| `checkpoint_bytes_limit` | 429 / `resource_exhausted` | `CheckpointBytesLimitException`（`CheckpointTooManyException` 的子类） | checkpoint | 无影响：本沙箱全部 checkpoint 的占盘到了每沙箱字节上限，检查在写任何东西之前。**restore 从不被这个上限拒绝** | 删**最旧**的 checkpoint（或 restore 到较早的点再删掉之后那一支）；删最新的那个几乎不释放空间（[§4.4](#44-在字节上限下删哪个才能释放空间)）。异常文本里写明了当前占用、上限、删了没用的那个 checkpoint ID 和下限 |
 | `internal` | 500 / `internal` | `CheckpointException`（基类） | checkpoint / restore / delete | 服务端没有更具体的说法；checkpoint 失败时虚机已恢复运行，restore 在提交点之前失败时沙箱保持原状态（错误文本会写明），delete 回它时什么都没删（下面的补充） | 可以稍后重试或换一个目标；持续出现时记录 `str(e)` 与 `e.reason`，请运维查 orchestrator 日志 |
-| `not_found` | 404 / `not_found` | `NotFoundException`（SDK 既有异常） | 全部四个 | 沙箱或 checkpoint 不存在。也包括：排队期间沙箱被删除、沙箱经原生 pause / resume 换了一代（旧 checkpoint 作废，[第 24 章 §3.1](24-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）、拿别的沙箱的 checkpoint ID 来用 | 核对 ID 与沙箱；换代之后要重新 checkpoint |
-| `unauthenticated` | 401 / `unauthenticated` | `AuthenticationException`（SDK 既有异常） | 全部四个 | —— | checkpoint 接口用沙箱自己的 traffic access token 鉴权；用 `Sandbox.create` / `Sandbox.connect` 拿到的对象会自动带上。确认覆盖层是当前版本（[第 23 章](23-sdk-quickstart.md)） |
+| `not_found` | 404 / `not_found` | `NotFoundException`（SDK 既有异常） | 全部四个 | 沙箱或 checkpoint 不存在。也包括：排队期间沙箱被删除、沙箱经原生 pause / resume 换了一代（旧 checkpoint 作废，[§3.1](#31-原生-pause--resume-与-checkpoint-的代际边界)）、拿别的沙箱的 checkpoint ID 来用 | 核对 ID 与沙箱；换代之后要重新 checkpoint |
+| `unauthenticated` | 401 / `unauthenticated` | `AuthenticationException`（SDK 既有异常） | 全部四个 | —— | checkpoint 接口用沙箱自己的 traffic access token 鉴权；用 `Sandbox.create` / `Sandbox.connect` 拿到的对象会自动带上。确认 SDK 与服务端配套（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
 | `invalid_argument` | 400 / `invalid_argument` | `InvalidArgumentException`（SDK 既有异常） | checkpoint / restore / delete | —— | 修正请求（例如请求体解析不了，或 `checkpoint_id` 为空、格式不对） |
 
 补充：
 
-- 未知的接口路径回 404，`code` 是 `unimplemented`，SDK 把它报成通用的 `SandboxException`；只有覆盖层与服务端版本不配时才会遇到。
+- 未知的接口路径回 404，`code` 是 `unimplemented`，SDK 把它报成通用的 `SandboxException`；只有 SDK 与服务端版本不配时才会遇到。
 - `delete` 按实际发生了什么作答（`service.go:1451` 调 `deleteFailure`，`:1482`）：
   - **checkpoint 不存在** → 404 `not_found`，SDK 抛 `NotFoundException`。包括没有这个 ID、已经删过（重发的 delete 就落在这里）、已被隐藏、
     是上一代沙箱的 ID；错误文本仍是 `checkpoint <id> not found`。服务端按 `ErrCheckpointNotFound` 判定，不靠匹配字符串。
@@ -233,7 +235,7 @@ checkpoint 的四个 RPC（checkpoint / restore / list / delete，SDK 方法名�
   `refused a checkpoint operation`，带 `reason` 和判定用的数字，运维据此区分是哪一个限额。
   限额怎么配见 [第 26 章](26-configuration-and-capacity.md)，日志字段见 [第 27 章](27-observability.md)。
 
-### 8.2 没有 `reason` 时（老服务端）
+### 8.2 没有 `reason` 时（旧版服务端）
 
 | Connect `code` | SDK 异常类 |
 |---|---|
@@ -266,7 +268,7 @@ SandboxException
 - `CheckpointBytesLimitException` 是 `CheckpointTooManyException` 的**子类**：两个上限的解法都是"删了再来"，
   所以按个数上限写的"删掉旧的再重试"代码不改也能接住字节上限；它单独成类，是为了让调用方和运维分清是哪个上限拒绝的，
   也因为字节上限下**删哪个**很重要（删最旧的，不要删最新的）。
-- `except CheckpointException` 接得住全部 checkpoint 专属失败；`except SandboxException` 的老代码也接得住，只是分不出该做什么。
+- `except CheckpointException` 接得住全部 checkpoint 专属失败；`except SandboxException` 的已有代码也接得住，只是分不出该做什么。
 - `NotFoundException`、`AuthenticationException`、`InvalidArgumentException` 沿用 SDK 原有的类，不在这棵树下。
 
 推荐的处理骨架：
@@ -324,13 +326,13 @@ def checkpoint_with_retry(sbx, name=None, attempts=5):
 
 ### 10.2 服务端不取消
 
-客户端超时或断线只说明调用方没有收到完整结果。create与restore使用独立于请求取消的服务端上下文，可能继续执行，也可能尚未完成或已返回错误；客户端不能仅凭超时判断成功或失败。
+客户端超时或断线只说明调用方没有收到完整结果。`create` 与 `restore` 使用独立于请求取消的服务端上下文，可能继续执行，也可能尚未完成或已返回错误；客户端不能仅凭超时判断成功或失败。
 
 | 操作 | 结果不确定时的核对方法与限制 |
 |---|---|
-| create | 对照调用前后的`list()`、应用记录及服务端完成日志寻找新条目。`list`不排队，暂时没有新条目不能证明操作已结束；当前协议没有客户端幂等键，直接重发可能再生成一个checkpoint |
-| restore | `list()`只列保存的checkpoint，不报告当前恢复目标，也不等待restore结束。需结合服务端恢复完成/失败记录及业务状态判据核实；仅看到目标仍在列表中不能证明已恢复 |
-| delete | 对照条目可见性和服务端记录；条目不可见不等于物理数据已全部回收，重发还可能返回`not_found` |
+| `create` | 对照调用前后的 `list()`、应用记录及服务端完成日志寻找新条目。`list`不排队，暂时没有新条目不能证明操作已结束；当前协议没有客户端幂等键，直接重发可能再生成一个checkpoint |
+| `restore` | `list()` 只列保存的 checkpoint，不报告当前恢复目标，也不等待restore结束。需结合服务端恢复完成/失败记录及业务状态判据核实；仅看到目标仍在列表中不能证明已恢复 |
+| `delete` | 对照条目可见性和服务端记录；条目不可见不等于物理数据已全部回收，重发还可能返回`not_found` |
 
 结果尚不明确时避免叠加新的变更请求。取得服务端完成状态后，再根据业务语义决定是否继续或重发；本接口没有把一次超时请求自动转换成可安全重试的事务。
 
@@ -343,7 +345,7 @@ checkpoint 的四个 RPC 一律**不重发**（传输层重试次数为 0），�
 - 重发的 restore 会把 guest 再回滚一次；
 - 重发的 delete 会得到 `not_found`。
 
-连接中途断开时，SDK把错误交给调用方。`list`可以用于读取已保存条目；create、restore、delete的结果核对分别遵循上节约束，不能统一用一次`list`推断操作已经结束。
+连接中途断开时，SDK把错误交给调用方。`list` 可以用于读取已保存条目；`create`、`restore`、`delete` 的结果核对分别遵循上节约束，不能统一用一次 `list` 推断操作已经结束。
 
 ## 11. 多个调用方与并发
 
@@ -383,7 +385,16 @@ restore 一开始就会丢掉进这个沙箱的所有在途连接（沙箱马上
 | 什么时候出现 | 流式调用进行中，同一沙箱被 restore（[§11.2](#112-restore-对在途调用的影响)） | 没有任何 restore，流式命令偶尔在开头几毫秒被切断 |
 | 性质 | **既定限制**，行为确定：只要撞上就会被截 | **缺陷，已修复** |
 | 原因 | 响应头已经写出，只能切断连接 | 代理没有为 HTTP/1 请求开启 full duplex：handler 一写响应头，Go 标准库就把请求体关掉，正在转发这个请求的上游连接随之被判为已死、被关闭 |
-| 现状 | 保留；按 [§11.2](#112-restore-对在途调用的影响) 处理 | 代理 handler 已开启 full duplex（提交 `baae30b`）。orchestrator 的沙箱代理与 client-proxy 共用这份代理代码，两者都已修复 |
+| 现状 | 保留；按 [§11.2](#112-restore-对在途调用的影响) 处理 | 代理 handler 已开启 full duplex（提交 `baae30b`）。orchestrator 的沙箱代理与 client-proxy 共用这份代理代码，两边都要带上这个修复 |
 
-如果在**没有 restore** 的情况下仍然看到偶发的流式截断，先请运维确认部署的 orchestrator 和 client-proxy 都已包含上述修复，
+如果在**没有 restore** 的情况下仍然看到偶发的流式截断，先确认部署的 orchestrator 和 client-proxy 都已包含上述修复，
 排查方法见 [第 28 章](28-troubleshooting.md)；orchestrator 的代理连接日志开关见 [第 27 章](27-observability.md)。
+
+## 本章要点
+
+- restore 原地回到 checkpoint 那一刻：内存、vCPU、设备逻辑状态、整个根文件系统、进程都回去；外部世界、跨越 restore 的 TCP 连接不回去；单调时钟倒退，墙钟在 restore 返回前校回当前时间。
+- checkpoint 只在沙箱当前这一代、当前宿主上有效。原生 pause 会让它们全部作废，方向只能是先 checkpoint、后原生 pause。
+- 被删的 checkpoint 仍可能被后代依赖，只隐藏不释放；删当前基准几乎不释放空间，字节上限下删最旧的或删掉一整支。
+- 错误按 `reason` 分类：`torn` 只能重建；`chain_broken` 先 checkpoint；`rootfs_poisoned` 先 restore；`busy` 可重试；`disk_full` 找运维。
+- 四个 RPC 不自动重发，服务端不因客户端超时而取消。超时不说明成败，要结合服务端记录核对。
+- 同沙箱操作串行；restore 会打断同一沙箱的在途调用，响应头已写出的流只能表现为连接截断。

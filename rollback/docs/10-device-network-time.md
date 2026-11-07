@@ -1,6 +1,8 @@
 # 10 · 设备、网络与时间状态
 
-原地回滚保留宿主对象，因此必须显式处理由旧 guest 状态推导出的缓存、队列、连接和时间。本章解释当前处理机制，完整历史调查案例见附录 C。
+## 本章目标
+
+原地回滚保留宿主对象，因此必须显式处理由旧 guest 状态推导出的缓存、队列、连接和时间。本章解释当前的处理机制，并给出一张检查表，供加新设备或改回滚路径时逐条核对。调查过程与实测对比见 [附录 C](C-evolution-and-cases.md)。
 
 ## 1. 为什么会有「特有」的问题
 
@@ -90,7 +92,7 @@ self.rx_buffer.used_bytes = used_bytes;
 
 ## 3. VMGenID 的次序
 
-VMGenID 是一个 ACPI 设备，在 guest 物理内存里放一个 128 位代号；代号变化意味着「你被从快照恢复了」，
+VMGenID 在 guest 物理内存里放一个 128 位代号（aarch64 上由设备树节点 `microsoft,vmgenid` 声明，`create_vmgenid_node`，`firecracker/src/vmm/src/arch/aarch64/fdt.rs:265`）；代号变化意味着「你被从快照恢复了」，
 guest 据此重新播种随机数生成器等依赖时间单调的东西。**它就在 guest 内存里**，所以若在阶段 4（内存写回）之前刷新：
 
 ```
@@ -114,7 +116,7 @@ guest 醒来看到的是它熟悉的代号，不知道时间被回拨了。修�
 
 ### 4.1 现象
 
-回滚成功，能发新连接，但**跨越回滚的那些连接全部挂死** —— 不是 RST、不是超时报错，发出去的包石沉大海。
+回滚成功，能发新连接，但**跨越回滚的那些连接全部挂死** —— 不是 RST、不是超时报错，发出去的包收不到任何回应。
 挂死比失败难查得多，因为没有任何错误信息。
 
 ### 4.2 根因
@@ -135,13 +137,13 @@ guest 的内存回到了连接建立之前（或另一个阶段），**宿主内
 
 两半都用常驻的 netfilter netlink socket：每个 slot 一个命名空间内的 socket，建网络时打开；宿主一个，归清扫器所有。
 restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket 要等 nf_tables 的工作队列排空，恰好在网络池给新命名空间装规则时很慢
-（`conntrack_handles.go` 包注释）。socket 出错时丢弃，命名空间一侧退回「进入命名空间、临时开 socket」的旧路径。
+（`conntrack_handles.go` 包注释）。socket 出错时丢弃，命名空间一侧退回「进入命名空间、临时开 socket」的路径。
 
 ### 4.4 宿主表怎么删：每批一次整表扫描，按代价模型选路
 
-宿主表的删除由一个进程级的**清扫器**串行完成（`conntrack_sweeper.go`）。三件事决定了它的形状：
+宿主表的删除由每个 orchestrator 进程一个的**清扫器**串行完成（`conntrack_sweeper.go`）。三件事决定了它的形状：
 
-**① 攒批：一次遍历服务所有在等的 slot。** 内核的 conntrack dump 无论回多少条都要走完全部哈希桶，而且内核不会并行做两次 dump；
+**① 合批：一次遍历服务所有在等的 slot。** 内核的 conntrack dump 无论回多少条都要走完全部哈希桶，而且内核不会并行做两次 dump；
 并发 restore 各扫各的只会互相排队。所以请求进一个队列，清扫器取出当时所有在等的请求组成一批，扫一次，逐个应答
 （`loop`，`conntrack_sweeper.go:121`）。**扫描开始之后到达的请求排进下一批**：dump 按桶推进，可能已经走过新请求那条表项所在的桶，
 所以一个请求只能由它发出**之后**才开始的遍历来服务。最坏情况下一个请求等「在途的那次 + 自己那次」两次清扫。
@@ -161,8 +163,8 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 整表路径 =               walk + scan_per_entry     × 表项数
 ```
 
-代码里的常数：`walk` = 4.6 ms（一次 dump 不带任何数据的固定代价），`scan_per_entry` = 1.0 µs/条，
-`filtered_per_entry` = 0.17 µs/条（鲲鹏 920、6.6 内核、262144 桶上实测）。解出来的交叉点：
+代码里的常数：`walk`（`conntrackDumpWalkMs`）= 4.6 ms，一次 dump 不带任何数据的固定代价；`scan_per_entry`（`conntrackScanPerEntryMs`）= 1.0 µs/条；
+`filtered_per_entry`（`conntrackFilteredPerEntryMs`）= 0.17 µs/条（920B、6.6 内核、262144 桶上实测）。解出来的交叉点：
 
 | 本批地址数 | 过滤路径更便宜的条件 |
 |---|---|
@@ -175,13 +177,13 @@ restore 路径上不开也不关 socket —— 关闭 netfilter netlink socket �
 
 过滤路径还有两道保护（`deleteFilteredHostConntrack`，`conntrack_filter.go:250`）：内核回来的每一条在删除前**再核对一次地址**
 —— 不认识 `CTA_FILTER` 的老内核会把同一个请求答成整张表，不核对就删会打断节点上所有沙箱；内核拒绝过滤请求时
-（`EINVAL`、`EOPNOTSUPP` 等）进程级记住，此后一律走整表路径。
+（`EINVAL`、`EOPNOTSUPP` 等）清扫器在本进程内记住这一点，此后一律走整表路径。
 
 每批的开销分解进 restore 的计时：`conntrack_host_queue`（等在途清扫）、`conntrack_host_sweep`（覆盖本次的那次清扫）、
 `conntrack_host_batch_count`、`conntrack_host_entries_count`。定义见 [第 27 章](27-observability.md)；
-并发与长跑下宿主表的增长、攒批与改算法前后的对比见 [附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)。
+并发与长跑下宿主表的增长、合批与改算法前后的对比见 [附录 C 的“conntrack 清理”案例](C-evolution-and-cases.md)。
 
-注意这个代价与**整张宿主表**成正比，不是与本沙箱或全部沙箱的条目数成正比：宿主表里还有本机其他进程的连接，920B 长跑里约 95% 的条目与沙箱无关（lo:80 的 `TIME_WAIT`、本机 DNS）。宿主上其他流量一多，restore 的 `conntrack_bg` 就跟着变长，数据与根因见 [附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)。
+注意这个代价与**整张宿主表**成正比，不是与本沙箱或全部沙箱的条目数成正比：宿主表里还有本机其他进程的连接，920B 长跑里约 95% 的条目与沙箱无关（lo:80 的 `TIME_WAIT`、本机 DNS）。宿主上其他流量一多，restore 的 `conntrack_bg` 就跟着变长，数据与根因见 [附录 C 的“conntrack 清理”案例](C-evolution-and-cases.md)。
 
 ### 4.5 时机：pause 后启动、与回滚并行、resume 前 join
 
@@ -227,8 +229,7 @@ if s.dropConnections != nil {
 ### 4.7 对使用方的结论
 
 restore 会作废该沙箱上**全部跨越回滚的 TCP 连接**，同节点其他沙箱不受影响，restore 之后新建的连接不受影响。
-面向使用方的完整说明在 [第 24 章](24-api-semantics.md)，调用方看到的错误形态（unary 的 409、流式的传输层错误）在
-[第 24 章](24-api-semantics.md)。
+面向使用方的完整说明与调用方看到的错误形态（unary 的 409、流式的传输层错误）在 [第 24 章](24-api-semantics.md)。
 
 ## 5. 时间
 
@@ -247,7 +248,7 @@ envd 初始化会把墙钟校回当前时间（`service.go` — `finishRestore`�
 err := waitForEnvd(ctx)   // 即 sbx.WaitForEnvdAfterRestore(ctx, envdRestoreTimeout)
 ```
 
-这与 e2b 原生 pause/resume 路径的行为一致，不是本方案特有的语义。
+这与 e2b 原生 pause / resume 路径的行为一致，不是本方案特有的语义。
 
 **对验收判据的影响。**「恢复后心跳进程还在跑」不能用「时间戳在推进」或「tick 速率正常」判：墙钟在恢复瞬间跳变，
 单调时钟被拨回，基于它的速率会得到荒谬的值。验收脚本的活性判据因此只断言**心跳计数在增长**，不对时间做任何假设
@@ -307,10 +308,21 @@ avail / used 是按设备读环的方式从已回滚的 guest 内存里读出来
 | VMGenID、队列页重新标脏 | `rollback.rs` — 阶段 8、阶段 9 |
 | 队列诊断日志 | `rollback.rs` — `log_queue_diagnostics` |
 | 清表入口、两半并行 | `packages/orchestrator/internal/sandbox/network/conntrack.go` — `FlushConntrack`、`flushNamespaceConntrack`、`deleteHostConntrack`、`hostConntrackCount` |
-| 攒批与选路 | 同目录 `conntrack_sweeper.go` — `loop`、`run`、`sweepUsesFilter`、`deleteHostConntrackBatch` |
+| 合批与选路 | 同目录 `conntrack_sweeper.go` — `loop`、`run`、`sweepUsesFilter`、`deleteHostConntrackBatch` |
 | 整表原始扫描 | 同目录 `conntrack_scan.go` — `deleteHostConntrackByRawScan`、`origTupleIPv4Raw` |
 | 内核过滤路径 | 同目录 `conntrack_filter.go` — `newFilteredDumpRequest`、`deleteFilteredHostConntrack` |
 | 常驻 socket | 同目录 `conntrack_handles.go` |
 | 调用时机与计时 | `internal/sandbox/checkpoint.go` — `RollbackInPlace`；`internal/sandbox/conntrack_flush.go` — `startConntrackFlush`、`join`、`recordConntrackReport` |
 | 代理连接池丢弃 | `internal/checkpoint/service.go` — `beginRestore`、`SetConnectionDropper` |
 | 等 envd 与墙钟校回 | 同上 — `finishRestore`、`envdRestoreTimeout` |
+
+## 本章要点
+
+- 原地路线特有两类问题：从活对象推导、又不在快照里的状态；宿主上记得 guest 的状态。
+- RX 描述符缓存必须从已回滚的 avail 环重新解析，否则 guest 报 `id N is not a head!`，RX 永久卡死；清理要原地做，因为 VMM 线程的 seccomp 没有放行 `memfd_create`。
+- 任何经由 guest 内存传递的通知都必须写在内存回滚之后，目前只有 VMGenID。
+- conntrack 两张表分开清：命名空间内整表 flush，宿主表只删本 slot 地址的表项，由清扫器合批、按代价模型选路。
+- 清表从 pause 之后开始、与回滚并行、在 resume 之前 join；代理连接池在 restore 一开始就丢弃。
+- 回滚后单调时钟倒退，墙钟由 envd 校回；验收的活性判据只看心跳计数，不对时间做假设。
+- 设备运行期写 guest 内存的页要在阶段 9 之后重新标脏。
+- 这类问题表现为挂死且现场随沙箱消失，所以回滚后逐设备记录队列位置。

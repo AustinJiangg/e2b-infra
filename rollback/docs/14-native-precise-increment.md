@@ -1,6 +1,8 @@
 # 14 · 精确增量的设计与实现
 
-原生快照内存导出量同时受判据、存储粒度和恢复取源方式影响。本章保留必要的原因分析，再完整解释 4 KiB 精确增量与 2 MiB 恢复拼接；调查与试验历史见附录 C。
+## 本章目标
+
+原生快照的内存导出量同时受判据、存储粒度和恢复取源方式影响。本章先走一遍原生 pause 的内存路径，分析修复前为什么不精确，再完整解释 4 KiB 精确增量与 2 MiB 恢复拼接，以及它与 checkpoint 叠加时的累积位图和退路。调查与试验过程见 [附录 C](C-evolution-and-cases.md)。
 
 ## 1. 先把原生 pause 的内存侧走一遍
 
@@ -44,7 +46,7 @@ e2b 的模板默认开大页，所以修复前每一代都是 2 MiB。
 
 ### 1.3 填：uffd 按 guest 页缺页
 
-恢复时 `ResumeSandbox` 新建一个 Firecracker 进程，guest 内存交给 userfaultfd（uffd）托管（机制见 [第 2 章 §5.3](02-background.md#53-内存是按需拉取的)）。
+恢复时 `ResumeSandbox` 新建一个 Firecracker 进程，guest 内存交给 userfaultfd（uffd）托管（机制见 [第 2 章](02-background.md)）。
 guest 第一次碰某一页，内核发一个缺页事件给 orchestrator，orchestrator 按 header 找到内容，用 `UFFDIO_COPY` 把整页填进去。
 这里的"页"是 **guest 页**：guest 内存用 hugetlbfs 的 2 MiB 大页背衬，一次缺页就是 2 MiB，`UFFDIO_COPY` 也必须给满 2 MiB。
 
@@ -89,7 +91,7 @@ ARM 适配基线上，arm64 的 6.6 内核没有 uffd 写保护，`faultPage` �
 
 ### 3.2 两个放大叠在一起：每代新进程，换入即脏
 
-"驻留即脏"单独看还不至于让每一代都导出几百 MiB。它与原生路径的另一个特性叠在一起，才成了 [附录 C §10](C-evolution-and-cases.md#10-现象改-12-mib导出-148-mib) 看到的数：
+"驻留即脏"单独看还不至于让每一代都导出几百 MiB。它与原生路径的另一个特性叠在一起，才成了 [附录 C 的“改 12 MiB，导出 148 MiB”案例](C-evolution-and-cases.md) 看到的数：
 
 1. **每一代都是一个新的 Firecracker 进程。** 原生 `Checkpoint` RPC（SDK 的 `create_snapshot`）拍完快照会停掉旧进程、从新快照拉起一个新的；
    `Pause` 之后的 resume 同样是新进程（[第 13 章 §1](13-native-snapshot.md#1-两个-rpc)）。新进程的 guest 内存一开始是空的，guest 一跑起来，
@@ -97,20 +99,20 @@ ARM 适配基线上，arm64 的 6.6 内核没有 uffd 写保护，`faultPage` �
 2. **换入即被判脏**（[§3.1](#31-判据在-arm-上塌缩成驻留即脏)）。只要换入，就驻留；只要驻留，就算脏。
 
 于是每一代增量的**下限约等于这一代 guest 碰过的全部页**，与改了多少无关。guest 读一遍 192 MiB 的文件缓存，这 192 MiB 就进了下一次导出；
-guest 什么都不做，内核自己的活动也会碰到上百 MiB（[附录 C §10](C-evolution-and-cases.md#10-现象改-12-mib导出-148-mib) 表里"刚建好"那一行）。
+guest 什么都不做，内核自己的活动也会碰到上百 MiB（[附录 C 的“改 12 MiB，导出 148 MiB”案例](C-evolution-and-cases.md) 表里"刚建好"那一行）。
 
 这件事对测量口径有直接影响。原生快照的基准脚本（`native_snapshot_bench.py`）在每一档恢复后都会把负载完整读一遍来验证内容。
 这一读本身就让负载的全部页换入、被判脏，于是修复前六档导出的 memfile 恒在 440 MiB 左右，几乎不随档位变化
-（数据见 [附录 B §13](B-920b-results.md#13-体积修复前后)）。"验证内容"这个动作本身就在放大被测量。
+（数据见 [第 20 章](20-920b-performance.md)）。"验证内容"这个动作本身就在放大被测量。
 [第 5 章 §5.3](05-dirty-tracking-and-hdbss.md#53-与改动量无关的下限) 从成本模型的角度讲过同一个下限。
 
 值得注意的是，这个判据虽然浪费，但**方向是安全的**：一个被写过的页一定已经驻留在 guest 内存里（写之前要先缺页填进来），
-所以"驻留"是"写过"的超集。它只会多导，不会少导。后面会看到，这个性质让"驻留判据"成为所有退路的落脚点（[第 14 章 §10](#10-退路什么时候回到驻留判据)）。
+所以"驻留"是"写过"的超集。它只会多导，不会少导。后面会看到，这个性质让"驻留判据"成为所有退路的落脚点（[§10](#10-退路什么时候回到驻留判据)）。
 
 ### 3.3 x86 上为什么没有这个问题
 
 x86 上换入的是干净页：读缺页填进来的页保留了写保护位，不算脏。所以同样是"每代新进程、工作集重新换入"，x86 的增量仍然只含写过的页。
-**这个下限是 ARM 适配基线特有的退化，不是 e2b 的设计问题。** 本部分讲的修复，是把 ARM 这条线补回到 x86 本来就有的精确程度，
+**这个下限是 ARM 适配基线特有的退化，不是 e2b 的设计问题。** 本章讲的修复，是把 ARM 这条线补回到 x86 本来就有的精确程度，
 并没有超越 x86 原生。
 
 ## 4. 只换判据够不够：2 MiB 归并的地板
@@ -120,7 +122,7 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 正确的位图就在旁边，最直接的修法是：① 换成写跟踪位图，② 和 ③ 不动。
 
 这能省多少？`rollback/scripts/probes/pb4.py` 算的就是这个：把 4 KiB 粒度的写跟踪位图按 2 MiB 归并（一个 2 MiB 块里只要有一个 4 KiB 页写过，
-整块就算要导出），看导出量能降到多少。920B 上修复前的摘录如下（完整见 [附录 B §13](B-920b-results.md#13-体积修复前后)）：
+整块就算要导出），看导出量能降到多少。920B（KVM 写保护，修复前，2026-09-10 前后）的摘录如下（完整见 [第 20 章](20-920b-performance.md)）：
 
 | 场景 | 修复前导出 | 只换判据（2 MiB 归并） | 4 KiB 真值 |
 |---|---|---|---|
@@ -133,9 +135,9 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 
 看"空转"那一行：写跟踪只有 4.1 MiB，归并后却是 134 MiB，放大了三十多倍。原因是这 4 MiB 不是连成一片的，
 它们散在 2 GiB 的 guest 物理地址空间里：内核的页表更新、slab 分配、定时器与调度器的记账、日志缓冲，各自落在不同的物理页上。
-4.1 MiB 大约是 1050 个 4 KiB 页，落进了约 67 个不同的 2 MiB 块（134 ÷ 2），平均每块只有十几个页真被写过，剩下的四百多个页是"陪绑"导出的。
+4.1 MiB 大约是 1050 个 4 KiB 页，落进了约 67 个不同的 2 MiB 块（134 ÷ 2），平均每块只有十几个页真被写过，剩下的四百多个页只因同在一块而被一起导出。
 
-这就是**只换判据能到的地板**：只要 guest 还活着，每一代就有一百多 MiB 的"本底散写"，归并到 2 MiB 之后约 130 MiB，与改动量无关。
+这就是**只换判据能到的地板**：只要 guest 还活着，每一代就有几 MiB 的"本底散写"，归并到 2 MiB 之后约 130 MiB，与改动量无关。
 
 所以"只换判据"治好的是"读算脏"：对读多写少的负载收益很大（只读 192 MiB 那一行从 366 降到 148），
 对写多的负载只省个位数百分比（写 192 MiB 那一行从 382 降到 358），而且**永远到不了写入量**。要精确，② 和 ③ 必须动。
@@ -153,7 +155,7 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 
 有一个办法能让三层天然都是 4 KiB：模板构建时关掉大页（`huge_pages=false`）。那样 guest 页是 4 KiB，`MemfilePageSize` 返回 4 KiB，
 硬检查自然通过。代价是 guest 失去 2 MiB 大页的 TLB 收益，恢复时缺页次数乘 512：一个 400 MiB 的工作集，原来约 200 次缺页，
-关大页后约 10 万次，每一次都要经 orchestrator 往返。这条路线可以验证"精确增量"的数字，但不适合交付，[第 14 章 §7](#7-两条路线) 会把它作为路线 A 与正式方案对比。
+关大页后约 10 万次，每一次都要经 orchestrator 往返。这条路线可以验证"精确增量"的数字，但不适合交付，[§7](#7-两条路线) 会把它作为路线 A 与正式方案对比。
 
 ## 5. 本方案为什么天生精确，而这个做法学不过来
 
@@ -173,11 +175,11 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 > **在保留映射链和 2 MiB 缺页的前提下，怎么让存储粒度降到 4 KiB？**
 
 答案是：① 换成写跟踪位图；② 按 4 KiB 存；③ 缺页时把一个 2 MiB guest 页的 512 个 4 KiB 子页从映射链上逐个取来、拼成一整页再填。
-三层的具体实现接下来在本章§7～§10展开。
+三层的具体实现在 [§7](#7-两条路线)～[§10](#10-退路什么时候回到驻留判据) 展开。
 
 ## 6. 改判据之前要先立的规矩：宁可多导，不可少导
 
-在进入改法之前，先把一条贯穿本章后续实现与第15章的规矩立起来。
+在进入改法之前，先立一条贯穿本章后续实现与 [第 15 章](15-native-cooperation-and-cost.md) 的规矩。
 
 原生 pause 导出的内存差分是**相对模板（或上一代快照）**的。恢复时，没有被导出的页一律从父代读。所以：
 
@@ -187,8 +189,8 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 
 两个方向的代价完全不对称。所以任何判据改动都必须满足：**新判据导出的页集合是"真正写过的页"的超集。** 修复前的驻留判据满足这一点（[§3.2](#32-两个放大叠在一起每代新进程换入即脏)），
 只是超得太多。改成写跟踪位图之后，要论证它仍然是超集：写跟踪位图覆盖了哪些写、漏了哪些写，漏掉的那些由谁补上。
-[第 14 章](14-native-precise-increment.md) 会逐项论证这件事；其中最不直观的一项，是沙箱做过 checkpoint 或 restore 之后，写跟踪位图会被清零，
-必须另外补回（[第 14 章 §9](#9-与-checkpoint-叠加累积位图)）。
+[§8.1](#81-①-判换成写跟踪位图) 会逐项论证这件事；其中最不直观的一项，是沙箱做过 checkpoint 或 restore 之后，写跟踪位图会被清零，
+必须另外补回（[§9](#9-与-checkpoint-叠加累积位图)）。
 
 ## 7. 两条路线
 
@@ -221,7 +223,7 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 ### 8.1 ① 判：换成写跟踪位图
 
 `Uffd.DiffMetadata`（`packages/orchestrator/internal/sandbox/uffd/uffd.go:267`）不再直接调 `f.DirtyMemory`（`GET /memory/dirty`），
-而是在门都通过时调 `f.TrackedDirtyMemory`（`packages/orchestrator/internal/sandbox/fc/memory.go:59`）：
+而是在 [§10](#10-退路什么时候回到驻留判据) 的检查都通过时调 `f.TrackedDirtyMemory`（`packages/orchestrator/internal/sandbox/fc/memory.go:59`）：
 
 1. 发 `PUT /snapshot/save-dirty-bitmap`，让 Firecracker 把当前的写跟踪位图以 FCDB 格式写到一个临时文件（格式见 [第 8 章 §5](08-firecracker-contract.md#5-fcdb-位图格式)）；
 2. `ReadDirtyBitmapFile`（:88）解析这个文件，得到一个按页的位集合和页大小（4 KiB）；
@@ -246,7 +248,7 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 - Firecracker 用户态位图：Firecracker 自己写 guest 内存的地方（virtio 队列、网卡收包缓冲），这些写不经过 Stage-2，由 Firecracker 自己标。
 
 **哪些页不在位图里，而且不该在？** orchestrator 经 uffd **填**进去的页。它们是"读"意义上的换入，内容等于映射链里已有的内容，不用再存一份。
-这正是 [第 14 章 §3](#3-修复前为什么不精确判据与两个放大) 里"换入即脏"的反面：新判据天然不把换入当成写。
+这正是 [§3](#3-修复前为什么不精确判据与两个放大) 里"换入即脏"的反面：新判据天然不把换入当成写。
 
 **被换出到 swap 的页呢？** 写跟踪位图与驻留无关，写过的页即使被换出，位也还在；导出时 `process_vm_readv` 读 Firecracker 进程的地址空间，
 会把换出页读回来。所以这方面新判据至少不比驻留判据差。
@@ -360,12 +362,12 @@ flowchart TD
 恢复时它们从父代读回旧内容：guest 内存由两个时刻拼成。restore 写回的那批页更隐蔽：它们确实改变了 guest 内存（相对模板），
 却不在任何一份 KVM 日志里。
 
-后果是 [第 14 章 §6](#6-改判据之前要先立的规矩宁可多导不可少导) 说的最坏情形：pause 报成功，快照照常上传；
+后果是 [§6](#6-改判据之前要先立的规矩宁可多导不可少导) 说的最坏情形：pause 报成功，快照照常上传；
 resume 之后 guest 内核在几十毫秒内崩溃（实测形态是 `BUG: Bad rss-counter state` 之后连串的链表损坏与内核 panic）。
 如果运气更"好"一点，内核没有立刻崩，那就是一个能跑、但数据已经错乱的沙箱。
 
 这里的设计教训值得写下来：[§8.1](#81-①-判换成写跟踪位图) 改判据时，"位图 = 这一代启动以来写过的页"被当成了显然成立的前提，而它只对从不 checkpoint 的沙箱成立。
-**两个各自正确的机制叠加时，要重新检查每一个前提。** 这个缺陷由专门的用例（crtest T39，见 [第 16 章 §12](16-test-methodology.md#12-验证五类证据)）发现并守住。
+**两个各自正确的机制叠加时，要重新检查每一个前提。** 这个缺陷由专门的用例（crtest T39，见 [第 16 章](16-test-methodology.md)）发现并守住。
 
 ### 9.2 做法：把即将被忘掉的位图收进一个每虚机的集合
 
@@ -377,22 +379,22 @@ Firecracker 每次清位图时，被清掉的恰好是"即将被忘掉的页"，
 
 | 时机 | 并入什么 | 为什么是它 | 位置 |
 |---|---|---|---|
-| 增量 checkpoint 之后 | 快照写出的侧车位图 | 侧车恰好列出这次写进差分、随后被清掉的页 | `createEpoch.afterSnapshot`（:180），调用在 :289 |
-| 全量 checkpoint 之前 | 拍之前先用 `save-dirty-bitmap` 导出的活跃脏图 | 全量的侧车是全 1，不能用（见下） | `createEpoch.beforeSnapshot`（:160），调用在 :258-261 |
-| checkpoint 超时 | 仍然尝试并入侧车 | 超时的快照可能已经写完并清了位图 | :278 |
-| restore 回滚之前 | 回滚前导出的活跃脏图 | 上次 checkpoint 以来写过、即将被回滚和清零的页 | :539 |
-| restore 物化之后 | 回滚集位图 | Firecracker 即将经不记日志的映射写回的页 | :584 |
+| 增量 checkpoint 之后 | 快照写出的侧车位图 | 侧车恰好列出这次写进差分、随后被清掉的页 | `createEpoch.afterSnapshot`（:180），调用在 :291 |
+| 全量 checkpoint 之前 | 拍之前先用 `save-dirty-bitmap` 导出的活跃脏图 | 全量的侧车是全 1，不能用（见下） | `createEpoch.beforeSnapshot`（:160），调用在 :261-263 |
+| checkpoint 超时 | 仍然尝试并入侧车 | 超时的快照可能已经写完并清了位图 | :280 |
+| restore 回滚之前 | 回滚前导出的活跃脏图 | 上次 checkpoint 以来写过、即将被回滚和清零的页 | :541 |
+| restore 物化之后 | 回滚集位图 | Firecracker 即将经不记日志的映射写回的页 | :586 |
 
 **全量 checkpoint 为什么是例外。** 全量快照的侧车说"每一页"。这对"内存文件里有哪些页"是对的，对"guest 写过哪些页"毫无意义。
 如果把它并进集合，这个沙箱之后每一次原生 pause 都会导出整份 guest 内存；而沙箱的第一次 checkpoint 总是全量的，等于每个用过 checkpoint 的沙箱都中招。
 所以全量 checkpoint 改为在拍快照**之前**、虚机已暂停时，先导出一次活跃脏图：`save-dirty-bitmap` 把 KVM 日志折进用户态位图、**不清零**，
 对第一次 checkpoint 而言，这张图正是"启动以来写过的页"。代价是冻结窗口里多一次位图导出（每 GiB guest 内存 32 KiB 的位图），而且只在全量 checkpoint 时发生。
-这一步失败时退而求其次：拍完之后并入全 1 的侧车，多导，但不会少导（`createEpoch` 的注释，:126-146）。
+这一步失败时退而求其次：拍完之后并入全 1 的侧车，多导，但不会少导（`createEpoch` 的注释，:127-146）。
 
 **restore 为什么两份都要并。** 活跃脏图是"上次 checkpoint 以来写过的页"，回滚会把它们改回去、然后清零，所以要记下；
 回滚集位图是"Firecracker 即将写回的页"，这些写不进任何日志，所以也要记下。回滚集其实包含了活跃脏图，也包含了树路径上各代的纪元位图，
 而那些纪元位图大多在 checkpoint 时已经并过。重复并入无害（并集是幂等的），但不能省：全量根的"全 1"纪元没有侧车可并，
-集合曾经不可信期间拍的纪元也不在集合里（:570-583 的注释）。
+集合曾经不可信期间拍的纪元也不在集合里（:574-585 的注释）。
 
 ### 9.3 并入的规则：对不上就标"不可信"
 
@@ -440,9 +442,9 @@ pause 日志会写明这次导出多少页、依据是哪一种、集合里有�
 ## 10. 退路：什么时候回到驻留判据
 
 写跟踪位图只有在"这一代从启动起就武装了跟踪、而且没有被清掉而未补回的部分"时才完整。任何一个条件不满足，就回到修复前的驻留判据
-（`residentDiffMetadata`，uffd.go:351）。它是所有退路的落脚点，因为它**不会漏掉写过的页**（驻留是写过的超集，见 [第 14 章 §3.2](#32-两个放大叠在一起每代新进程换入即脏)）。
+（`residentDiffMetadata`，uffd.go:351）。它是所有退路的落脚点，因为它**不会漏掉写过的页**（驻留是写过的超集，见 [§3.2](#32-两个放大叠在一起每代新进程换入即脏)）。
 
-`Uffd.diffMetadata` 按顺序检查四道门：
+`Uffd.diffMetadata` 按顺序做四项检查：
 
 | # | 条件 | 为什么不能用写跟踪位图 | 日志 | 位置 |
 |---|---|---|---|---|
@@ -451,17 +453,17 @@ pause 日志会写明这次导出多少页、依据是哪一种、集合里有�
 | 3 | Firecracker 没有 `save-dirty-bitmap` 端点 | 拿不到位图 | warn：`firecracker has no dirty-tracking bitmap, falling back to resident-page criterion` | :294-299 |
 | 4 | 集合并进写跟踪位图时页大小对不上 | 同 2 | warn：`... could not be added to the tracked one ...` | :308-314 |
 
-第 1 道门对应的开关是 `FC_TRACK_DIRTY_PAGES`，判定在 `fc/dirtytracking.go`：没设置时跟硬件走（探到 KVM 能力 502，也就是 HDBSS，就开，否则关；
+第 1 项对应的开关是 `FC_TRACK_DIRTY_PAGES`，判定在 `fc/dirtytracking.go`：没设置时跟硬件走（探到 KVM 能力 502，也就是 HDBSS，就开，否则关；
 `hostDefaultTrackDirtyPages`，:92），设置了就按 `strconv.ParseBool` 解析，解析不了则忽略并跟硬件走（`decideTrackDirtyPages`，:68）。
 这是整个 orchestrator 一个值，与 checkpoint 用的是同一个开关；为什么默认值跟着硬件走见 [第 5 章 §4.7](05-dirty-tracking-and-hdbss.md#47-默认值为什么跟着硬件走)，
-开关总表见 [第 26 章 §2.1](26-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
+开关总表见 [第 26 章](26-configuration-and-capacity.md)。
 
-第 3 道门里"没有端点"的判定（`fc/rollback.go:264-271`）：Firecracker 回 404，或者回 400 且正文是上游 Firecracker 对未知路由的固定报错
+第 3 项里"没有端点"的判定（`fc/rollback.go:270-275`）：Firecracker 回 404，或者回 400 且正文是上游 Firecracker 对未知路由的固定报错
 `Invalid request method and/or path`，就包成 `ErrDirtyTrackingUnavailable`（`fc/memory.go:29`、:60-63）。其他错误不走退路，直接让 pause 失败：
 端点存在却失败，说明出了别的问题，不应该悄悄换判据。
 
 **为什么是退回驻留判据，而不是拒绝 pause？** 因为退路导出的是一个更大的超集，功能完全正确，只是多花时间和空间；而拒绝 pause 会让一个本来能正常离场的沙箱离不了场。
-两种错误的代价不对称，[第 14 章 §6](#6-改判据之前要先立的规矩宁可多导不可少导) 已经说过。
+两种错误的代价不对称，[§6](#6-改判据之前要先立的规矩宁可多导不可少导) 已经说过。
 
 **退路用的块大小。** 驻留判据按当前 header 的块大小取（`DiffMetadata` 传的是 `u.memfile.BlockSize()`，uffd.go:268）。于是分两种情况：
 
@@ -471,11 +473,11 @@ pause 日志会写明这次导出多少页、依据是哪一种、集合里有�
 
 ## 11. 代码位置
 
-对应提交：KASandbox_0904 `deltabox-dev` 上的 `c42d23e`（4 KiB 写跟踪差分）与 `bc19b45`（累积位图）。
+对应提交：`c42d23e`（4 KiB 写跟踪差分）与 `bc19b45`（累积位图）。
 
 | 关注点 | 位置 |
 |---|---|
-| 判据选择与四道门 | `packages/orchestrator/internal/sandbox/uffd/uffd.go` — `DiffMetadata`（:267）、`diffMetadata`（:271）、`residentDiffMetadata`（:351） |
+| 判据选择与四项检查 | `packages/orchestrator/internal/sandbox/uffd/uffd.go` — `DiffMetadata`（:267）、`diffMetadata`（:271）、`residentDiffMetadata`（:351） |
 | 位图落盘与解析 | `packages/orchestrator/internal/sandbox/fc/memory.go` — `TrackedDirtyMemory`（:59）、`ReadDirtyBitmapFile`（:88）、`ExportMemory`（:116） |
 | 端点缺失的判定 | `packages/orchestrator/internal/sandbox/fc/rollback.go` — `saveDirtyBitmap`（:225）、`isMissingRoute`（:284） |
 | 跟踪开关 | `packages/orchestrator/internal/sandbox/fc/dirtytracking.go` — `decideTrackDirtyPages`（:68）、`TrackDirtyPagesEnabled`（:124） |
@@ -486,7 +488,18 @@ pause 日志会写明这次导出多少页、依据是哪一种、集合里有�
 | 预取器 | `packages/orchestrator/internal/sandbox/uffd/prefetch/prefetcher.go:207` |
 | 顺带修的两处 | `packages/orchestrator/internal/sandbox/block/cache.go` — `coveringBlocks`（:365）；`block/chunk.go` — `fetchToCache`（:213） |
 | 自启动以来脏页集 | `packages/orchestrator/internal/sandbox/uffd/sinceboot.go` — `DirtySinceBoot`（:42）、`MergeBitmap`（:95）、`UnionInto`（:182） |
-| 并入时机 | `packages/orchestrator/internal/sandbox/checkpoint.go` — `accumulateDirtyBitmap`（:109）、`createEpoch`（:147）、restore 两处（:539、:584） |
+| 并入时机 | `packages/orchestrator/internal/sandbox/checkpoint.go` — `accumulateDirtyBitmap`（:109）、`createEpoch`（:147）、restore 两处（:541、:586） |
 | pause 汇总日志 | `packages/orchestrator/internal/sandbox/sandbox.go:972-996` |
 | Firecracker 清位图的地方 | `firecracker/src/vmm/src/vstate/memory.rs:308-312`；`vstate/vm.rs:519-522`；`rollback.rs:445-452`；`save_dirty_bitmap`（`rollback.rs:796`） |
 | 单测 | `uffd/diffmetadata_test.go`、`uffd/sinceboot_test.go`、`sandbox/checkpoint_epoch_test.go`、`block/page_test.go`、`build/file_slice_test.go`、`shared/pkg/storage/header/finer_diff_test.go` |
+
+## 本章要点
+
+- 原生内存增量分判、存、填三层：① 决定读算不算脏，② 和 ③ 决定最小能存多细，两件事要分开改。
+- 修复前的"脏页位图"就是驻留页集合；与每代新进程叠加后，每一代增量的下限约等于这一代碰过的全部页。
+- 只换判据治好"读算脏"，但 2 MiB 归并有地板，到不了写入量。
+- 交付路线是保留大页：① 换成写跟踪位图；② header 块降到 4 KiB，父代映射不用重写；③ 缺页仍按 2 MiB，内容按三级取源（`Slice`、`SliceContiguous`、`ReadAt` 拼接）。
+- 任何判据改动都必须导出写过的页的超集：多导只费时间和空间，少导会毁掉恢复出来的沙箱。
+- Firecracker 的位图在 checkpoint 与 restore 时清零，restore 写回又不进 KVM 日志，所以 orchestrator 维护"自启动以来脏页集"，pause 时并回。
+- 集合不可信、跟踪关闭、端点缺失时一律退回驻留判据，功能正确，只是多导。
+- 从不 checkpoint 的沙箱不受累积机制影响，导出的页集合逐位相同。

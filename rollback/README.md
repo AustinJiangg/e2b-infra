@@ -4,14 +4,14 @@
 
 ## 当前手册
 
-当前手册版本为 **v0.5.10（2026-10-21）**：六篇、28章、五个文字附录及一个内嵌配图附录，950为实测主线，920B详细数据和历史修复分别进入附录。
+当前手册版本为 **v1.0.0（2026-11-06）**：六篇、30章、五个文字附录及一个内嵌配图附录。950为实测主线，920B性能与平台差异在第20章，920B详细数据和工程修复案例在附录。
 
 - [手册首页与完整目录](docs/README.md)
 - [交付范围、版本与阅读方法](docs/01-delivery-and-reading.md)
-- [950功能结果](docs/17-functional-verification.md)、[性能与HDBSS](docs/18-950-performance.md)、[并发与持续运行](docs/21-concurrency-and-longrun.md)
+- [功能结果](docs/17-functional-verification.md)、[950性能与HDBSS](docs/18-950-performance.md)、[原生pause / resume分档](docs/19-native-pause-resume.md)、[920B性能与平台差异](docs/20-920b-performance.md)、[并发与长跑](docs/21-concurrency-and-longrun.md)、[验收与结论边界](docs/22-acceptance.md)
 - [配置与容量](docs/26-configuration-and-capacity.md)、[测试环境与工具](docs/E-environment-and-tools.md)
-- [920B详细结果](docs/B-920b-results.md)、[版本演进与工程修复案例](docs/C-evolution-and-cases.md)
-- [本次迁移与检查记录](migration/README.md)
+- [920B详细结果](docs/B-920b-results.md)、[工程修复案例](docs/C-evolution-and-cases.md)
+- [迁移与检查记录](migration/README.md)
 - [950 测试结果摘要](evidence/950/README.md)、[阶段收尾与后续事项](milestones/2026-10-17-sandbox.md)
 - [面向客户与管理者的价值解读文章](articles/sandbox-rollback.md)、[文章构建与阅读说明](articles/README.md)
 
@@ -28,7 +28,7 @@ bash rollback/tools/build.sh
 
 输出为`rollback/dist/checkpoint-restore-docs.html`，内含分组目录、正文、附录、Mermaid运行库及矢量图，可离线打开。版本与日期由[`book.json`](book.json)维护，分篇和章序由[`contents.json`](contents.json)维护。
 
-本地重建不会提交、推送、创建标签或更新Release。当前手册发布版本为 `docs-v0.5.10`，附件提供可离线阅读的 HTML。历史阶段归档 `docs-v0.5.6` 保持原样；本次为手册修订，不代表新增服务器测试结果。
+本地重建不会提交、推送、创建标签或更新Release。历史阶段归档 `docs-v0.5.6` 保持原样。
 
 ## 内部资料分工
 

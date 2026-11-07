@@ -1,6 +1,8 @@
 # 08 · Firecracker 接口契约
 
-orchestrator 与 Firecracker 依靠扩展接口、位图格式和明确的暂停条件协作。本章定义两侧必须共同遵守的契约，内部回滚阶段见第 9 章。
+## 本章目标
+
+orchestrator 与 Firecracker 依靠扩展接口、位图格式和明确的暂停条件协作。本章定义两侧必须共同遵守的契约：三处接口扩展各解决什么问题、错误怎样分级、FCDB 位图格式、版本配对与 seccomp 约束。回滚的内部阶段见 [第 9 章](09-in-place-rollback.md)。
 
 ## 1. 为什么要分叉
 
@@ -83,7 +85,7 @@ pub struct CreateSnapshotParams {
 那就在拍快照**之前**先取？也不行：KVM 的取图是破坏性的（[第 5 章 §3.1](05-dirty-tracking-and-hdbss.md#31-破坏性读)），
 取走之后内核那一半就清零了，`dump_dirty` 再去取就拿不到这些页，它们不会被写进差分文件。
 
-**唯一正确的位置是 `dump_dirty` 内部**：它遍历"KVM 位图 ∪ 用户态位图"、决定哪些页写进文件的同时，顺手把这些页攒成一个 merged 位图返回，
+**唯一正确的位置是 `dump_dirty` 内部**：它遍历"KVM 位图 ∪ 用户态位图"、决定哪些页写进文件的同时，同时把这些页合成一个 merged 位图返回，
 由 `snapshot_memory_to_file`（`vstate/vm.rs:463`）写成侧车：
 
 ```rust
@@ -125,10 +127,10 @@ bitmap_file.write_all(&data)?;   // 侧车：同样不 sync
 理由有三层：
 
 1. 读这两个文件的只有**同一台宿主上**的 orchestrator（以及随后按回滚集读回的同一个 Firecracker），走同一份 page cache，写返回即可见；
-2. checkpoint 本来就不承诺活过 orchestrator 进程（[第 12 章 §5](12-state-and-lifecycle.md#5-原子提交与持久性)），fsync 买到的"活过宿主崩溃"没有人用得上；
+2. checkpoint 本来就不承诺活过 orchestrator 进程（[第 12 章 §5](12-state-and-lifecycle.md#5-原子提交与持久性)），fsync 提供的"活过宿主崩溃"没有人用得上；
 3. 而 fsync 的代价是实打实的：ext4 的日志提交是整个文件系统的串行点，暂停窗口里的每一次 fsync 都要等别的沙箱的回写。
 
-侧车仍然写在它所描述的内存文件之后，但两者都不 sync，这个先后顺序已经不承载持久性含义，只是写代码的自然顺序。
+侧车写在它所描述的内存文件之后，但两者都不 sync，所以这个先后顺序不承载持久性含义。
 
 snapfile 分两种情况，由 `persist.rs:232` `snapfile_must_be_durable` 判定：请求带 `mem_file_path`（checkpoint 路径）→ 不 sync；
 不带（e2b 原生 pause，snapfile 要进持久化存储、活过本进程）→ 保留上游的 `sync_all()`（`persist.rs:258-262`）。
@@ -158,7 +160,7 @@ pub struct RollbackResponse {
 ### 3.1 `resume_vm: false`
 
 orchestrator 传的永远是 `false`（`internal/sandbox/fc/rollback.go:93-99`）。原因是**磁盘视图还没换**：Firecracker 返回时，
-内存已经在目标时刻，磁盘还在当前时刻，这时恢复运行会让 guest 看到一个撕裂的世界 —— 它按目标时刻的文件系统元数据去读当前时刻的块。
+内存已经在目标时刻，磁盘还在当前时刻，这时恢复运行，guest 会按目标时刻的文件系统元数据去读当前时刻的块，内存与磁盘属于两个时刻。
 
 恢复由 orchestrator 在换完磁盘视图、清完 conntrack 之后自己做（[第 4 章 §8.2](04-architecture-and-flow.md#82-冻结窗口)）。参数保留 `true` 这个选项，
 是为了让端点能独立使用（例如手工排查时只回滚内存）。
@@ -204,7 +206,7 @@ orchestrator 传的永远是 `false`（`internal/sandbox/fc/rollback.go:93-99`�
 
 Firecracker 侧：`RollbackError::faults_vm()`（`rollback.rs:85-101`）决定哪些变体在提交点之后；`api_server/parsed_request.rs:203-235`
 对这些变体回 500，`api_server/mod.rs:205-206` 组出 `{"fault_message": ..., "fault": true}`；单测 `request/snapshot.rs:446`
-`test_rollback_error_response` 钉住线上格式。
+`test_rollback_error_response` 固定线上格式。
 
 orchestrator 侧 `classifyRollbackFailure`（`internal/sandbox/fc/rollback.go:185`）**先看 `fault` 字段，不看文案**：
 
@@ -384,8 +386,7 @@ if r := numPages % 64; r != 0 {
 
 ## 6. 版本配对
 
-**orchestrator 与 Firecracker 必须成对交付。** 两者出自同一个代码仓库的同一个版本（`packages/` 与 `firecracker/`，代码基准见 [README](README.md)）；
-按 rpm 部署时分别对应 `0001-adapted-for-arm-architecture.patch` 与 `firecracker.arm`（部署前核对见 [第 25 章](25-build-and-self-check.md)）。
+**orchestrator 与 Firecracker 必须成对交付。** 两者出自同一个代码仓库的同一个版本（`packages/` 与 `firecracker/`，代码基准见 [README](README.md)），部署前核对见 [第 25 章](25-build-and-self-check.md)。
 
 配错的后果：
 
@@ -399,7 +400,7 @@ if r := numPages % 64; r != 0 {
 socket 前面若是别的东西则回 404。两个客户端（`rollbackSnapshot`、`saveDirtyBitmap`）都把这两种应答识别为"缺路由"，
 而不是一次普通的失败（`fc/rollback.go:194-200`、:270-275）。
 
-第一行是**好的失败**：立刻、明确、指名道姓。这是刻意的设计 —— 分叉的端点用新路径，而不是给既有端点加参数，
+第一行是**好的失败**：立刻发生、原因明确、指出缺的是哪个路由。这是刻意的设计 —— 分叉的端点用新路径，而不是给既有端点加参数，
 正是为了让"不支持"表现为路由不存在，而不是一个被旧二进制悄悄忽略的字段。
 
 ## 7. seccomp
@@ -435,3 +436,13 @@ Firecracker 给每个线程装独立的 seccomp 过滤器（`firecracker/resourc
 | 线格式测试 | `internal/checkpoint/bitmap_test.go` — `TestBitmapWireFormat`、`TestBitmapRejectsMalformed` |
 | OpenAPI 描述 | `firecracker/src/firecracker/swagger/firecracker.yaml` |
 | seccomp 白名单 | `firecracker/resources/seccomp/aarch64-unknown-linux-musl.json` |
+
+## 本章要点
+
+- 分叉只有三处接口扩展，外加 HDBSS 启用与 seccomp 放行，不改变任何既有语义；语义在 orchestrator，机械动作在 Firecracker。
+- `dirty_bitmap_path` 必须在写快照的同一次调用里落地：之后位图已清，之前取图又是破坏性的。
+- `PUT /snapshot/rollback` 由 orchestrator 传 `resume_vm: false`，因为磁盘视图还没换；提交点之前回 400，之后回 500 且带 `"fault": true`，错误分类看字段不看文案。
+- `PUT /snapshot/save-dirty-bitmap` 要求虚机暂停，不清位图；它让 orchestrator 事先知道 Firecracker 会写回哪些页，稀疏物化文件才成立。
+- FCDB 是两个进程之间唯一的二进制格式，页索引是内存快照文件偏移除以页大小，不是 guest 物理地址，内存布局的知识全部留在 Firecracker 里。
+- orchestrator 与 Firecracker 必须成对交付，缺路由时明确失败。
+- 回滚路径新增系统调用必须同步检查 seccomp 白名单，运行期能做的事比初始化期少。

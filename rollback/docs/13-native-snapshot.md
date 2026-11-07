@@ -1,6 +1,8 @@
 # 13 · 原生快照的机制与成本
 
-原生 pause/resume 服务于保存和重建沙箱，与活沙箱原地回滚承担不同任务。本章先完整解释原生路径，为精确增量改造和两类快照的配合建立基础。
+## 本章目标
+
+原生 pause / resume 服务于保存和重建沙箱，与活沙箱原地回滚承担不同任务。本章完整解释原生路径的两个 RPC、打快照与恢复的步骤、成本结构和它适合的场景，为 [第 14 章](14-native-precise-increment.md) 的精确增量改造和 [第 15 章](15-native-cooperation-and-cost.md) 的配合关系建立基础。
 
 ## 1. 两个 RPC
 
@@ -21,12 +23,12 @@
 | `ExecutionID` | 一次"执行"的标识，给 API、路由目录、分析用 | **不变** |
 | `LifecycleID` | 一个 Firecracker 进程实例的标识 | **换新** |
 
-`LifecycleID` 换新的理由写在代码注释里（`sandboxes.go:488-491`）：老沙箱的清理协程用自己的 `LifecycleID`
+`LifecycleID` 换新的理由写在代码注释里（`sandboxes.go:489-492`）：老沙箱的清理协程用自己的 `LifecycleID`
 调 `RemoveByLifecycleID` 删表项，新沙箱若沿用同一个 id 就会被误删。
 
 > 所以"snapshot 之后沙箱 id 不变"成立，但**底下已经是一个全新的 Firecracker 进程**：
 > 新进程要重建 KVM VM、vCPU、GIC、设备、tap、UFFD，然后靠缺页把工作集换回内存。
-> 这也是原生成本与虚机规格挂钩的根源 —— 它每次都在"重建"（[第 2 章 §6.4](02-background.md#64-恢复的两种形态重建与原地回写) 的第一种形态）。
+> 这也是原生成本与虚机规格挂钩的根源 —— 它每次都在"重建"（[第 2 章](02-background.md) 的第一种形态）。
 
 ## 2. 打快照：`Sandbox.Pause` 的步骤
 
@@ -57,7 +59,7 @@ m.ToFile(metadataFileLink.Path())                                   //   写元�
 
 ### 3.1 判据：UFFD 的写保护位
 
-内存由 UFFD 托管（[第 2 章 §5.3](02-background.md#53-内存是按需拉取的)）。上游 x86 的做法是在填页时区分读和写：
+内存由 UFFD 托管（[第 2 章](02-background.md)）。上游 x86 的做法是在填页时区分读和写：
 
 - 因**读**缺页而填的页 → 带 `UFFDIO_COPY_MODE_WP`，页仍是写保护的；
 - 因**写**缺页而填的页 → 不带，页可写；
@@ -86,7 +88,7 @@ ARM 适配版把填页时带写保护位的那几行注释掉了（`internal/san
 
 **本书交付的代码里，原生 pause 的这条判据已经修复**：跟踪开着时，`Uffd.DiffMetadata`（`internal/sandbox/uffd/uffd.go`）
 改用 Firecracker 的写跟踪位图按 4 KiB 页判脏（做过 checkpoint 的沙箱还要并入"自启动以来脏页集"），跟踪关着、集合不可信或 Firecracker 没有导出端点时，才退回按常驻页判（[第 14 章 §10](14-native-precise-increment.md#10-退路什么时候回到驻留判据)）。为什么"只换判据"还不够、
-存储和缺页填充两层还要怎么改、代价与验证，**第三篇（[第 14 章](14-native-precise-increment.md)–[第 15 章](15-native-cooperation-and-cost.md)）专门讲**。
+存储和缺页填充两层还要怎么改、代价与验证，由 [第 14 章](14-native-precise-increment.md)、[第 15 章](15-native-cooperation-and-cost.md) 专门讲。
 本章讲的是修复前的机制，它仍是理解原生成本模型的基础。
 
 ### 3.3 搬运：从进程地址空间拷出
@@ -193,15 +195,10 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 | 恢复 · 换页 | **虚机工作集**（强） |
 | 上传 / 下载 | 增量大小 + 网络 |
 
-一句话：**原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。** 即使内存判据修成精确的（第三篇），
+一句话：**原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。** 即使内存判据修成精确的（[第 14 章](14-native-precise-increment.md)），
 "每次打快照都停掉沙箱、每次恢复都重建进程并换回工作集"这两项不变 —— 它们来自"沙箱离场"这个语义本身。
 
-修复后的分档实测（950 见 [第 18 章 §9](18-950-performance.md#9-原生-pause--resume-分档实测修复后)，920B 见 [附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱)）量化了这句话：
-
-| 950，客户端墙钟 p50 | 0 MiB 档 | 256 MiB 档 | 规律 |
-|---|---|---|---|
-| pause | 251.9 ms | 429.9 ms | 约 246 ms 固定开销 + 每 MiB 导出量约 0.52 ms（按六档 p50 拟合） |
-| resume | 109.3 ms | 120.7 ms | 与档位基本无关 |
+修复后的分档实测见 [第 19 章](19-native-pause-resume.md)：pause 由一段与改动量无关的固定开销主导，resume 与档位基本无关。分档数字与判定都以该章为准。
 
 下面两节按阶段说明这些时间花在哪里。拆分来自 920B（`kvm-wp`，产物在 tmpfs）的单样本跟踪，用来说明结构；950 没有做同样的逐段测量，各段数值不能直接套到 950。
 
@@ -255,11 +252,11 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 
 这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 耗时**不随档位变化**。
 
-成本只是推迟了。950 上恢复后第一次读 192 MiB 内存负载需要 702.6 ms，快照前同一读法 590.9 ms，多出约 112 ms 不计入 resume 耗时，而由 guest 里第一个访问这些页的程序承担。
+成本只是推迟了。950 上（2026-11-06，256 MiB 档，`hdbss`，存储 `Local`，见 [第 19 章](19-native-pause-resume.md)）恢复后第一次读 192 MiB 内存负载需要 702.6 ms，快照前同一读法 590.9 ms，多出约 112 ms 不计入 resume 耗时，而由 guest 里第一个访问这些页的程序承担。
 
 ### 6.3 与 checkpoint / restore 的差别
 
-本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（[第 9 章](09-in-place-rollback.md)）。§6.1、§6.2 里进程退出、KVM 销毁、NBD 断开、进程启动、加载 `snapfile` 这些固定步骤都不会发生，所以 950 上 0 MiB 档 checkpoint / restore 墙钟 p50 是 17.2 / 22.4 ms。
+本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（[第 9 章](09-in-place-rollback.md)）。§6.1、§6.2 里进程退出、KVM 销毁、NBD 断开、进程启动、加载 `snapfile` 这些固定步骤都不会发生，所以这部分固定开销不计入 checkpoint / restore。举一个量级：950 上（2026-10-13，混合负载 0 MiB 档，墙钟 p50，见 [第 18 章](18-950-performance.md)）checkpoint / restore 是 17.2 / 22.4 ms。
 
 这不是"原生实现得慢"：原生要产出能离开这个进程、这台宿主的自足快照，停掉并重建进程是这个目标的一部分（[§7](#7-它擅长什么)）。
 
@@ -276,7 +273,6 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 | 低频使用 | 一个沙箱一两次，固定开销摊得开 |
 
 它**不擅长**的恰好是本方案的目标场景：高频、低延迟、沙箱不能中断。这不是实现缺陷，是**成本模型和场景不匹配**。
-所以本书从头到尾不说"原生方案有缺陷"，只说"它的成本模型不适合这个场景"。
 
 ## 8. 代码位置
 
@@ -290,3 +286,13 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 | 空块剔除、header 与映射 | `packages/shared/pkg/storage/header/metadata.go` — `DiffMetadataBuilder.Process`、`ToDiffHeader` |
 | 恢复 | `internal/sandbox/sandbox.go` — `Factory.ResumeSandbox` |
 | Firecracker 的驻留判据 | `firecracker/src/vmm/src/lib.rs` — `get_dirty_memory` |
+
+## 本章要点
+
+- `Pause` 打快照后停掉沙箱，`Checkpoint` RPC 打快照后再从新快照拉起一个新进程；`SandboxID` 与 `ExecutionID` 不变，`LifecycleID` 换新。
+- 内存增量由内存后端判脏、用 `process_vm_readv` 拷出，存成紧凑差分加链式 header。
+- ARM 适配基线上判据塌缩成"常驻即脏"，基准代码已在跟踪开着时改用写跟踪位图，细节在 [第 14 章](14-native-precise-increment.md)。
+- 导出磁盘增量的参数之一就是关掉沙箱：写层摘出后 Overlay 作废，所以必须停沙箱。
+- 恢复新建 Firecracker 进程，工作集靠缺页换回；这部分成本不进 resume 耗时，由 guest 里第一个访问这些页的程序承担。
+- 原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。分档数字见 [第 19 章](19-native-pause-resume.md)。
+- 这套设计适合跨节点迁移、长期持久化、崩溃恢复和沙箱离场，不适合高频、低延迟、不能中断的回退。

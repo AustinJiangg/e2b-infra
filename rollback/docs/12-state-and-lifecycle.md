@@ -1,6 +1,8 @@
 # 12 · 状态、并发、持久性与生命周期
 
-本章先说明状态归属、锁和请求生命周期，再推导 checkpoint 对活虚机、模板与宿主资源的依赖。生命周期边界与持久性取舍在同一处解释。
+## 本章目标
+
+本章先说明状态归属、锁和请求生命周期，再推导 checkpoint 对活虚机、模板与宿主资源的依赖。读完本章应当能说清：三类状态各由谁保护；两把锁的层级与理由；刻意不 fsync 承诺了什么、不承诺什么；同节点沙箱通过哪些共享资源互相影响；为什么 checkpoint 绑定沙箱生命周期，补齐它要付什么。
 
 ## 1. 三类状态
 
@@ -10,7 +12,7 @@
 | **活体对象** | `Overlay`、`Cache`、层栈、Firecracker 进程、NBD 设备 | 各自的锁 + **虚机暂停** | 随进程消失 |
 | **文件产物** | 内存差分、位图侧车、snapfile、层文件与 `.meta`、header、manifest | 无锁；靠**按沙箱串行** + 原子提交 | 留在盘上，下次启动被清空 |
 
-第三行是一个关键取舍：文件留着，但没有代码去加载它们（[第 12 章](12-state-and-lifecycle.md)）。所以「崩溃后的一致性恢复」这个问题在这里不存在
+第三行是一个关键取舍：文件留着，但没有代码去加载它们（[§13.3](#133-账本不从磁盘加载)）。所以「崩溃后的一致性恢复」这个问题在这里不存在
 —— orchestrator 重启会带走它上面的所有沙箱，checkpoint 跟着一起走。
 
 这让并发模型简单了很多：**不需要考虑崩溃后的一致性恢复**（没有日志、没有重放、没有启动时的对账），只需要保证进程活着的时候不出错。
@@ -51,7 +53,7 @@ live, err := readDirtyBitmap(liveBitmapPath)
 
 - 单个 checkpoint 的目录、被级联回收的祖先目录、隐藏条目的 snapfile 与 header、计数归零的层文件：放锁后直接删除；
 - **整个沙箱的目录树**（沙箱被移除，或新一代接管同一个 id 时丢弃上一代的树）：锁内先 `rename` 成 store 根下的 `.trash-<uuid>`
-  （`dropStateLocked`，`store.go:894`），放锁后再删这个 trash 目录。rename 是 O(1) 的，放锁那一刻原路径就空出来了；
+  （`dropStateLocked`，`store.go:880`），放锁后再删这个 trash 目录。rename 是 O(1) 的，放锁那一刻原路径就空出来了；
   若放锁后原地删，会与同 id 的下一代在同一路径上 `MkdirAll` 竞争。rename 本身失败时才退回锁内原地删 —— 慢总比竞争好。
 
 放锁后删为什么安全（`reclaim` 类型的注释逐条论证）：被收集的对象已经离开账本，任何查找都不会再把它交给别人；checkpoint 目录按准备时刻命名
@@ -93,10 +95,10 @@ func (s *Store) LockSandboxWithin(sandboxID string, wait time.Duration) (func(),
 
 **注意顺序**：`gate()` 返回前已放掉 `Store.mu`，然后才去等沙箱锁。反过来（持着全局锁去等）会让一个进行中的 checkpoint 把全局账本锁一直占着。
 
-排队有上限：持锁方可能卡在一个永不返回的调用上（NBD flush、不再应答的 Firecracker），无限排队只会让每个等待者各占一条连接、最后得到一个光秃秃的读超时。
+排队有上限：持锁方可能卡在一个永不返回的调用上（NBD flush、不再应答的 Firecracker），无限排队只会让每个等待者各占一条连接、最后只得到一个不说明原因的读超时。
 所以应答客户端的路径都用限时版本 `LockSandboxWithin`，等满 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 就回 busy（[第 26 章](26-configuration-and-capacity.md)、[第 24 章](24-api-semantics.md)）。
 沙箱插入 / 移除的回调也用限时版本，超时只告警、照常继续；不限时的 `LockSandbox` 留给不面向客户端的内部路径。
-沙箱被移除后这把锁**不删**：同一个 id 经 pause/resume 会回来，两代共享同一个目录树，必须由同一把锁串行。
+沙箱被移除后这把锁**不删**：同一个 id 经 pause / resume 会回来，两代共享同一个目录树，必须由同一把锁串行。
 
 ### 2.3 层级与理由
 
@@ -161,7 +163,7 @@ NBD dispatcher 手里那个 `*Overlay` 指针**从头到尾没变过**，它不�
 | `save-dirty-bitmap`、`rollback` | 虚机暂停 | Firecracker 端点自己检查 `VmState::Paused` |
 | 清 conntrack | 虚机暂停（没有 guest 流量） | 调用方 |
 
-分工：**锁**处理「另一个 goroutine 在改同一个字段」；**暂停**处理「guest 还在产生新 I/O」；**刷屏障**处理「内核手里还攥着已接受的写」。
+分工：**锁**处理「另一个 goroutine 在改同一个字段」；**暂停**处理「guest 还在产生新 I/O」；**刷屏障**处理「内核块层已接受、尚未下发的写」。
 三者缺一不可，而**只有第一个能靠代码自己保证**，后两个是调用契约，所以相关函数的文档注释都以「The VM must be paused」开头。
 
 > 当外部世界（guest、内核）也在改状态时，锁只能保护你自己的数据结构，剩下的要靠**让外部世界停下来**。
@@ -191,9 +193,9 @@ POSIX 保证同目录内的 rename 是原子的：要么旧名要么新名，不
 | **不承诺** | checkpoint 活过 orchestrator 进程：账本只在进程内存里；`NewStore` 启动时先 `os.RemoveAll` 整个 store 根目录、再 `MkdirAll` 重建 | `store.go:535-542` |
 | **不承诺** | checkpoint 活过宿主崩溃或掉电：目录里可能留下残缺文件，但没有任何东西会去读它，且下次启动即被清空 | 同上 |
 
-**为什么不做 fsync 是对的**：fsync 能买到的只有「活过宿主崩溃」，而引用这些文件的账本本来就活不过进程；一致性不欠 flush 任何东西，因为读写走同一份 page cache。
+**为什么不做 fsync 是对的**：fsync 能提供的只有「活过宿主崩溃」，而引用这些文件的账本本来就活不过进程；一致性不欠 flush 任何东西，因为读写走同一份 page cache。
 而 fsync 的代价落在并发上：ext4 的日志提交是整个文件系统的串行点，多个沙箱同时 checkpoint 时每个 fsync 都要等别的沙箱的回写，暂停窗口内的那几次尤其贵。
-将来若要做可持久化的 checkpoint，这些 fsync 需要按事务顺序（数据先于账本）整体加回来，并同时解决账本重建与沙箱重建（[第 12 章 §15](12-state-and-lifecycle.md#15-补齐需要什么)）。
+将来若要做可持久化的 checkpoint，这些 fsync 需要按事务顺序（数据先于账本）整体加回来，并同时解决账本重建与沙箱重建（[§15](#15-补齐需要什么)）。
 
 对使用方的含义：checkpoint 是「这台宿主、这个 orchestrator 进程、这一代沙箱」之内的回滚点，**不是备份**。orchestrator 升级或重启、宿主重启之后，
 之前的 checkpoint ID 全部失效（对它们 restore 得到 404）；要跨重启、跨宿主保存沙箱状态，用 e2b 原生的 pause / snapshot。
@@ -263,7 +265,7 @@ defer cleanup()      // 删掉 revert_mem.tmp 与 revert_bitmap.tmp
 
 **① 全局账本锁。** [§2.1](#21-storemu保护账本持锁不做-io) 的规则就是为此：任何在 `Store.mu` 下做的慢事，都会出现在别的沙箱 restore 的 `materialize_lock_wait` 里。
 
-**② 宿主 conntrack 表。** 全节点一张，宿主侧清扫每批遍历整张表，表越大越贵；表有多大主要由宿主上与沙箱无关的流量决定（920B 长跑里约 95% 是非沙箱条目，[附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)），restore 越频繁，排队越长。清扫器攒批与选路见 [第 10 章](10-device-network-time.md)。
+**② 宿主 conntrack 表。** 全节点一张，宿主侧清扫每批遍历整张表，表越大越贵；表有多大主要由宿主上与沙箱无关的流量决定（920B 长跑里约 95% 是非沙箱条目，[附录 C 的“conntrack 清理”案例](C-evolution-and-cases.md)），restore 越频繁，排队越长。清扫器合批与选路见 [第 10 章](10-device-network-time.md)。
 
 **③ memory cgroup 与 Go GC 的长暂停。** 这是最隐蔽的一条：一个沙箱的 I/O 可以把另一个沙箱 restore 的冻结窗口拉长，而两者在账本上毫无关系。
 它由三个事实串起来，缺一个都不会发生。
@@ -282,7 +284,7 @@ defer cleanup()      // 删掉 revert_mem.tmp 与 revert_bitmap.tmp
   （cgroup v2 以 `memory_hugetlb_accounting` 选项挂载时例外，该选项默认关）。
 
 checkpoint / restore 越频繁，page cache 越多；负载一高这个 cgroup 就被填满，之后内核在 cgroup 内**持续回收**。
-配额怎么取、改哪几个文件，见部署文档 [`12-orchestrator资源配额调优.md`](../../deploy-docs/12-orchestrator资源配额调优.md)。
+配额怎么取、改哪几个文件，见 950 测试部署文档 [`12-orchestrator资源配额调优.md`](../../deploy-docs/12-orchestrator资源配额调优.md)。
 
 *事实二：orchestrator 在用户态拷贝文件映射，缺页会睡在回收里，而这时它的 P 无法被抢占。*
 orchestrator 的块设备层用 `MAP_SHARED` 文件映射读写层文件（[第 7 章](07-disk-layering.md)）。goroutine 在映射上做 `copy` 时，缺页发生在**用户态指令**上：
@@ -316,11 +318,11 @@ GC 的 STW 阶段要等所有处于 `_Prunning` 的 P 响应抢占。只要有�
 **取证**：`CHECKPOINT_RUNTIME_METRICS=true` 时 orchestrator 每 10 s 记一行 runtime/metrics 的 STW 直方图（等 P 停下的 `stopping`、总暂停 `total`、GC 周期数）
 （`internal/runtimemetrics/runtimemetrics.go`），正是上面那条判据所需的两半。开关见 [第 26 章](26-configuration-and-capacity.md)，字段见 [第 27 章](27-observability.md)。
 
-缓解前后长跑下的 STW 分布、长暂停次数与最大值，以及 cgroup 回收的取证数据，见 [附录 C §8.4](C-evolution-and-cases.md#84-gc-长暂停落进别的沙箱的冻结窗口)。
+缓解前后长跑下的 STW 分布、长暂停次数与最大值，以及 cgroup 回收的取证数据，见 [附录 C 的“GC 长暂停”案例](C-evolution-and-cases.md)。
 
 ## 9. 单元测试守着哪些性质
 
-`packages/orchestrator/internal/checkpoint/*_test.go` 里与本篇和 [第 11 章](11-failures-and-invariants.md) 对应的测试：
+`packages/orchestrator/internal/checkpoint/*_test.go` 里与本章和 [第 11 章](11-failures-and-invariants.md) 对应的测试：
 
 | 测试 | 守什么 |
 |---|---|
@@ -343,21 +345,11 @@ GC 的 STW 阶段要等所有处于 `_Prunning` 的 P 响应抢占。只要有�
 
 测试体系的全貌见 [第 16 章](16-test-methodology.md)。
 
-## 10. 代码位置
+## 10. 从进程内并发到生命周期边界
 
-| 关注点 | 位置 |
-|---|---|
-| 两把锁 | `packages/orchestrator/internal/checkpoint/store.go` — `Store.mu`、`opLocks`、`gate`、`LockSandboxWithin`、`LockSandbox` |
-| 锁外删除 | 同上 — `reclaim`、`dropStateLocked`、`trashPrefix` |
-| 子节点计数 | 同上 — `hasChildLocked`、`addChildLocked`、`removeChildLocked` |
-| 原子提交与启动清空 | 同上 — `commitFiles`、`writeManifest`、`publishLocked`、`NewStore`；`firecracker/src/vmm/src/persist.rs` — `snapfile_must_be_durable` |
-| 两态可见性、路径校验 | 同上 — `Prepare`、`Get`、`validateID` |
-| 指针替换 | `internal/sandbox/block/overlay.go` — `mu`、`ReadAt`、`Seal`、`ResetView` |
-| 暂停契约 | `internal/sandbox/rootfs/nbd.go` — `SealLayer`、`ResetView` |
-| 请求解耦、无条件恢复 | `internal/checkpoint/service.go` — `context.WithoutCancel`；`internal/sandbox/checkpoint.go` — `pauseVM`、`CheckpointToFiles` 的 `defer` |
-| 缺页预填 | `internal/sandbox/block/populate.go` — `populateMapped`、`probePopulate` |
-| STW 取证 | `internal/runtimemetrics/runtimemetrics.go` |
-| 共享 cgroup 的成因 | `internal/sandbox/fc/process.go`（`CLONE_INTO_CGROUP` 被注释掉处） |
+前面九节回答的是"进程活着的时候怎样不出错"。它们能这样简化，靠的是 [§1](#1-三类状态) 的那个前提：账本不跨进程，checkpoint 不离开活沙箱。
+
+下面七节把这个前提本身讲清楚：[§11](#11-前提产物在哪什么时候消失) 说明产物在什么时候消失；[§12](#12-一个思想实验把目录完整拷走) 与 [§13](#13-四层依赖) 用一次"把目录拷走再恢复"的推演，列出 checkpoint 依赖的四层东西；[§14](#14-内存那一半其实已经自足)、[§15](#15-补齐需要什么) 说明哪些已经具备、补齐其余部分要付什么；[§16](#16-这是取舍不是缺陷) 给出取舍的结论；[§17](#17-推论绑定生命周期之后空间仍然要管) 说明绑定生命周期之后空间仍然要管。
 
 ## 11. 前提：产物在哪、什么时候消失
 
@@ -368,19 +360,19 @@ GC 的 STW 阶段要等所有处于 `_Prunning` 的 P 响应抢占。只要有�
 
 | 触发 | 代码事实 |
 |---|---|
-| 沙箱从 orchestrator 的沙箱表中移除 | `Service.OnRemove`（`service.go:355`）取该沙箱的操作锁后调 `Store.RemoveSandbox`：锁内把整个沙箱目录改名为 `.trash-<uuid>` 并从账本摘掉全部状态，放锁后删除（`store.go:2153`、`:894`） |
+| 沙箱从 orchestrator 的沙箱表中移除 | `Service.OnRemove`（`service.go:355`）取该沙箱的操作锁后调 `Store.RemoveSandbox`：锁内把整个沙箱目录改名为 `.trash-<uuid>` 并从账本摘掉全部状态，放锁后删除（`store.go:2153`、`:880`） |
 | 同一个 id 的新一代接管 | `admitLocked` / `AdoptSandbox` 丢弃上一代留下的全部状态，同样先改名再删（`store.go:820`、`:2202`） |
 | orchestrator 启动 | `NewStore` 先 `os.RemoveAll` 整个 store 根目录，再 `MkdirAll` 重建（`store.go:535-542`） |
 
 ### 11.1 代际边界的规则
 
-`RemoveSandbox` 与原生 pause/resume 之间有一条规则，是理解整篇的钥匙：
+`RemoveSandbox` 与原生 pause / resume 之间有一条规则，本章后面的推导都以它为前提：
 
 - **「代」是 `Sandbox.LifecycleID`**，每换一个 Firecracker 进程就换一次。原生 resume 以**同一个沙箱 id** 现建一个新的 Firecracker 进程，所以是新的一代。
 - 账本记录的是「**哪一代**拥有挂在这个 id 下的状态」（`store.go` 包注释、`owners`）：
   - 属主那一代继续用；
   - 本节点当前正在跑的新一代**接管**这个 id，并丢掉上一代的差分 —— 已经没有进程可以回滚到它们上面；
-  - 其余的请求（排队期间被新一代超越的迟到请求）明确拒绝，不留半吊子状态。
+  - 其余的请求（排队期间被新一代超越的迟到请求）明确拒绝，不留下不完整的状态。
 - 读路径（`List`、`Get`、`Delete`）按同一个归属判定：新一代看不到上一代的条目，对旧 id 的 restore 得到 `not_found`；新一代可以照常从零开始 checkpoint，第一次是一棵新的全量根。
 - 移除也按代：`OnRemove` 是异步触发、再等操作锁的，可能在 resume 已经把新一代放回来**之后**才到达。`RemoveSandbox` 发现 id 已被当前正在运行的那一代持有时什么也不做，
   **迟到的移除不会带走活沙箱的状态**。
@@ -413,7 +405,7 @@ func NewStore(root string) (*Store, error) {
 
 ### 12.2 第二步：即使账本能重建，也没有沙箱可回滚
 
-假设补上加载逻辑（信息是够的，见 [§13.3](#133-账本不从磁盘加载)）。下一道门是 `ServeCheckpoint` 的第一行（`service.go:405`）：
+假设补上加载逻辑（信息是够的，见 [§13.3](#133-账本不从磁盘加载)）。下一个检查是 `ServeCheckpoint` 的第一行（`service.go:405`）：
 
 ```go
 sbx, ok := s.sandboxes.Get(sandboxID)
@@ -489,7 +481,7 @@ for _, layer := range layers {
 
 父指针在、模式在、层清单在 —— 同一个进程存活期间，理论上足以重建条目树（推论）。**缺的是读取它的代码**，以及那些只在内存里的派生状态
 （子节点计数、层引用计数、字节计数、合并（compact / fold）队列、代际归属）的重建。要跨进程、跨崩溃则还缺一样：这些文件都不 fsync，启动时又整目录清空
-（[第 12 章](12-state-and-lifecycle.md)），落盘的完整性本身不在承诺之内。
+（[§5.1](#51-原子发布刻意不-fsync)），落盘的完整性本身不在承诺之内。
 
 这是取舍而非疏忽：让账本跨重启存活，就要处理一整类新问题 ——
 
@@ -497,7 +489,7 @@ for _, layer := range layers {
 - 与已消失沙箱的对账：沙箱没了但目录还在，谁负责清？
 - 格式版本迁移：`manifest.json` 的结构变了怎么办？
 
-而这些问题**只在「checkpoint 能脱离沙箱」的前提下才有意义**。前提不成立，问题就不存在 —— 这正是 [第 12 章 §1](12-state-and-lifecycle.md#1-三类状态) 说的「并发模型少了一整类问题」。
+而这些问题**只在「checkpoint 能脱离沙箱」的前提下才有意义**。前提不成立，问题就不存在 —— 这正是 [§1](#1-三类状态) 说的「并发模型少了一整类问题」。
 
 ### 13.4 缺运行时环境
 
@@ -556,7 +548,7 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 而是节点上每个沙箱往稀疏映射里的写都可能失败。更隐蔽的是，调用方删掉的 checkpoint 并不一定释放空间 —— 仍被后代依赖的条目只会被隐藏，
 「保留最新 N 个、删最旧」这种常见用法恰好每次都删掉下一个的父节点，隐藏条目与它们的层会一直累积。
 
-所以现行实现有四层机制，各管一段（各自的开关、默认值与取值建议只在 [第 26 章 §2](26-configuration-and-capacity.md#2-开关总表) 与 [第 26 章 §4](26-configuration-and-capacity.md#4-容量规划) 定义）：
+所以实现里有四层机制，各管一段（各自的开关、默认值与取值建议只在 [第 26 章](26-configuration-and-capacity.md) 定义）：
 
 - **节点级水位**：产物盘可用空间不足时，checkpoint 与 restore 在动手之前被拒，把「节点写满」变成调用方能处理的应答；
 - **每沙箱个数上限**：只数可见的 checkpoint；
@@ -566,16 +558,16 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 几条推论：
 
 - **个数上限不足以控制字节**：隐藏条目不计入个数，而一个 checkpoint 的大小从几页到一整份 guest 内存不等。合并把隐藏条目的数量压到有界，字节上限才管得住总量。
-- **字节上限有一个下限**：删到只剩基准时，基准是一棵约一份 guest 内存大小的全量根，上限再小就删什么都回不来。下限的推导与告警阈值见 [第 26 章 §4.4](26-configuration-and-capacity.md#44-字节上限怎么选)。
+- **字节上限有一个下限**：删到只剩基准时，基准是一棵约一份 guest 内存大小的全量根，上限再小就删什么都回不来。下限的推导与告警阈值见 [第 26 章](26-configuration-and-capacity.md)。
 - **怎么删才释放空间**取决于合并能释放什么：删基准几乎不释放；删较老的非基准条目会触发合并，释放两者重叠的那部分页。
-  给使用方的操作建议在 [第 24 章 §4.4](24-api-semantics.md#44-在字节上限下删哪个才能释放空间)。
+  给使用方的操作建议在 [第 24 章](24-api-semantics.md)。
 - **脏页跟踪关闭时不合并**：每个 checkpoint 都是全量根，没有「只有一个子节点的隐藏条目」，层照样累积。这是设计边界，交付环境都开着跟踪。
 
 开关的取值与容量规划见 [第 26 章](26-configuration-and-capacity.md)，删除与合并的机制见 [第 6 章](06-memory-diff-tree.md)、[第 11 章](11-failures-and-invariants.md)。
 
 ## 18. 代码位置
 
-| 本篇提到的行为 | 位置 |
+| 关注点 | 位置 |
 |---|---|
 | 沙箱移除、代际接管 | `packages/orchestrator/internal/checkpoint/service.go` — `OnRemove`、`OnInsert`；`store.go` — `RemoveSandbox`、`AdoptSandbox`、`admitLocked`、`dropStateLocked` |
 | 启动清空、不从磁盘加载 | `store.go` — `NewStore` 及包注释 |
@@ -585,3 +577,26 @@ Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络�
 | 磁盘视图从模板底座起步 | 同上 — `AssembleView` |
 | 回滚集与内容解析、全量根 | `store.go` — `MaterializeRevert`、`entryBitmap`；`service.go` — `fullRootEnabled` |
 | 空间管理 | `service.go` — `minFreeBytes`、`refuseIfDiskFull`、`warnIfByteLimitTooSmall`；`store.go` — `atCheckpointLimitLocked`；`quota.go`；`compact.go`；`layer_refs.go` |
+| 两把锁 | `packages/orchestrator/internal/checkpoint/store.go` — `Store.mu`、`opLocks`、`gate`、`LockSandboxWithin`、`LockSandbox` |
+| 锁外删除 | 同上 — `reclaim`、`dropStateLocked`、`trashPrefix` |
+| 子节点计数 | 同上 — `hasChildLocked`、`addChildLocked`、`removeChildLocked` |
+| 原子提交与启动清空 | 同上 — `commitFiles`、`writeManifest`、`publishLocked`、`NewStore`；`firecracker/src/vmm/src/persist.rs` — `snapfile_must_be_durable` |
+| 两态可见性、路径校验 | 同上 — `Prepare`、`Get`、`validateID` |
+| 指针替换 | `internal/sandbox/block/overlay.go` — `mu`、`ReadAt`、`Seal`、`ResetView` |
+| 暂停契约 | `internal/sandbox/rootfs/nbd.go` — `SealLayer`、`ResetView` |
+| 请求解耦、无条件恢复 | `internal/checkpoint/service.go` — `context.WithoutCancel`；`internal/sandbox/checkpoint.go` — `pauseVM`、`CheckpointToFiles` 的 `defer` |
+| 缺页预填 | `internal/sandbox/block/populate.go` — `populateMapped`、`probePopulate` |
+| STW 取证 | `internal/runtimemetrics/runtimemetrics.go` |
+| 共享 cgroup 的成因 | `internal/sandbox/fc/process.go`（`CLONE_INTO_CGROUP` 被注释掉处） |
+
+## 本章要点
+
+- 账本只在进程内存里，文件产物留在盘上但没有代码加载，所以不需要崩溃一致性恢复，只需要保证进程活着时不出错。
+- 锁只有一个方向：`opLocks[sandbox]` 全程持有，`Store.mu` 短时间持有且持锁不做文件 I/O；沙箱操作全程串行，不同沙箱可以并行。
+- `Overlay.mu` 负责替换与追加的原子性；锁、虚机暂停、NBD 刷屏障三者各管一类并发，后两者是调用契约。
+- 发布靠 temp + rename 保证原子，刻意不 fsync；checkpoint 不承诺活过 orchestrator 进程或宿主崩溃，它不是备份。
+- 操作不受请求生命周期约束，恢复虚机是唯一无论如何都要执行的清理，例外只有撕裂。
+- 同节点沙箱通过全局账本锁、宿主 conntrack 表、memory cgroup 与 Go GC 长暂停互相影响，这些影响延迟，不影响正确性。
+- "代"是 `Sandbox.LifecycleID`，账本按代记账：原生 resume 之后上一代的产物全部丢弃，迟到的移除不会带走活沙箱的状态。
+- checkpoint 依赖活体恢复机制、模板底座、进程内账本和运行时资源四层；内存一半已经自足，补齐其余部分的终点就是原生 snapshot。
+- 绑定生命周期解决了沙箱离开后的空间回收，沙箱活着时的空间由水位、个数上限、字节上限和合并共同管理。

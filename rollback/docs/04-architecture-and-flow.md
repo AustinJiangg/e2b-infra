@@ -1,6 +1,8 @@
 # 04 · 总体架构与端到端流程
 
-从组件边界开始，依次走完一次 checkpoint 和一次 restore。这里建立完整调用顺序；脏页、内存树、磁盘视图与 Firecracker 内部状态的详细机制分别在后续章节展开。
+## 本章目标
+
+从组件边界开始，依次走完一次 checkpoint 和一次 restore，建立完整的调用顺序。读完本章应当能说清：每一层负责什么、不负责什么；一个发往沙箱地址的请求为什么由宿主应答；冻结窗口里有哪些步骤、代价与什么成正比；哪些顺序约束不能改。脏页、内存树、磁盘视图与 Firecracker 内部状态的详细机制在后续各章展开。
 
 ## 1. 四个层次
 
@@ -129,9 +131,9 @@ e2b 的沙箱通过一个统一的入口暴露：请求的 Host 头里带着端�
 
 ### 2.5 换来了什么
 
-沙箱内**不需要安装任何代理程序**。对比另一条自然路线 —— 在 guest 里跑一个 agent 去 checkpoint 进程树（[第 3 章 §8.1](03-goals-and-boundaries.md#81-在-guest-里跑一个-agentcriu-路线)）——
-那要处理 agent 的分发与版本、它自己的权限、它在 checkpoint 时刻的状态，以及"agent 自己怎么被 checkpoint"。
-宿主侧方案把这些全部消掉了：**guest 完全不知道自己被 checkpoint 过**（VMGenID 那一次通知除外，见 [第 10 章](10-device-network-time.md)）。
+沙箱内**不需要安装任何代理程序**。暂停虚机、写快照、封存磁盘层、原地回滚都由宿主上的 orchestrator 与 Firecracker 完成，
+guest 里没有为 checkpoint 运行的组件，也就没有这类组件的分发、版本配套和权限问题。
+**guest 完全不知道自己被 checkpoint 过**（VMGenID 那一次通知除外，见 [第 10 章](10-device-network-time.md)）。
 
 ### 2.6 API 面
 
@@ -273,7 +275,7 @@ store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`packages/orchestra
 | `layer-<uuid>` | **guest**（经 NBD 写进去的写层文件，改名而来）；层合并时 orchestrator 补块 | 运行中的沙箱 + restore 重开 | **引用计数归零**（最后一个列它的视图和活账本都放手）或**被合并**时；否则随沙箱 |
 | `layer-<uuid>.meta` | orchestrator | orchestrator（重开层、层合并） | 与层文件同时 |
 | `manifest.json` | orchestrator | 无人（事后排查） | 随条目目录 |
-| `index.json` | 后台写者，每沙箱最多每 5 s 一次（`store.go:118`、:2282） | 无人（事后排查） | 随沙箱目录 |
+| `index.json` | 后台写者，每沙箱最多每 5 s 一次（`store.go:118`、:2287） | 无人（事后排查） | 随沙箱目录 |
 | `timings.json` / `last-restore-timings.json` | orchestrator | 基准脚本 | 随目录 |
 | `mem_bitmap.tmp.live` | Firecracker（全量捕获前导出活跃脏图） | orchestrator | 用完即删（`internal/sandbox/checkpoint.go:173`） |
 | `live_bitmap.tmp` / `revert_mem.tmp` / `revert_bitmap.tmp` | Firecracker / orchestrator | orchestrator / Firecracker | 一次 restore 结束即删，无论成败 |
@@ -340,13 +342,13 @@ sequenceDiagram
 
 | # | 步骤 | 说明 |
 |---|---|---|
-| 1 | SDK 发 `POST /checkpoint.Checkpoint/CreateCheckpoint` 到沙箱地址的 49984 端口 | 代理识别端口与路径后改道给 `ServeCheckpoint`，不进沙箱（[第 4 章](04-architecture-and-flow.md)） |
+| 1 | SDK 发 `POST /checkpoint.Checkpoint/CreateCheckpoint` 到沙箱地址的 49984 端口 | 代理识别端口与路径后改道给 `ServeCheckpoint`，不进沙箱（[§2.2](#22-拦截)） |
 | 2 | 取沙箱对象；不存在 → 404 | `service.go:405` |
 | 3 | 校验 `e2b-traffic-access-token` | 拦截点在代理自己的校验之下，所以服务自己再做一遍 |
 | 4 | `ctx = context.WithoutCancel(r.Context())` | 客户端放弃不能让虚机停在暂停态（[第 12 章](12-state-and-lifecycle.md)） |
 | 5 | `refuseIfTorn`：这一代沙箱已撕裂则拒绝 | [第 11 章](11-failures-and-invariants.md) |
 | 6 | `LockSandboxWithin`：取沙箱操作锁，排队超过 `CHECKPOINT_LOCK_WAIT_TIMEOUT` 回 busy | 全程持有 |
-| 7 | `refuseIfGone`：锁内再确认沙箱还在、还是同一代 | 排队期间沙箱可能被 kill 或经原生 pause/resume 换了一代 |
+| 7 | `refuseIfGone`：锁内再确认沙箱还在、还是同一代 | 排队期间沙箱可能被 kill 或经原生 pause / resume 换了一代 |
 | 8 | `refuseIfDiskFull`：产物盘可用空间低于水位则拒绝 | 在锁内做，两个并发 checkpoint 不会看到同一份空闲空间 |
 
 ### 7.2 决定与准备（窗口外）
@@ -403,13 +405,13 @@ timings.Mark("seal", sealStart)
 | 13 | **暂停虚机** | `pause` | 常数 |
 | 14 | （仅全量）`save-dirty-bitmap` 导出活跃脏页，折进「开机以来写过的页」集合 | `save_live_bitmap` | 内存 / 64 的位图导出 |
 | 15 | 写快照：vmstate + 稀疏内存差分 + 位图侧车，**一次调用** | `snapshot` | 本代脏页数（全量时是整份内存） |
-| 16 | 封存写层：刷屏障（NBD `BLKFLSBUF`）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针 | `seal` | **常数**，不搬数据、不等落盘（[第 7 章](07-disk-layering.md)） |
+| 16 | 封存写层：刷屏障（NBD `BLKFLSBUF`）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针 | `seal` | 不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（[第 7 章](07-disk-layering.md)） |
 | 17 | **恢复虚机**（`defer`，无条件） | `resume` | 常数 |
 | 18 | 封存层文件移入 store 的 layers 目录（`defer`，登记在 resume 之前，所以在它之后执行） | `seal_move` | 同一文件系统是一次 rename；跨文件系统是一次拷贝，所以放到窗口外 |
 
 冻结窗口长度记在 `frozen`（pause 到 resume）。第 14 步只在全量时做：增量快照写出的侧车恰好就是 Firecracker 随即清掉的那批页；
 全量快照的侧车是「全 1」，对「开机以来写过哪些页」毫无信息量，所以在拍之前先要一份活跃位图。这个集合服务于
-checkpoint 之后的原生 pause，见第三篇的 [第 14 章 §9](14-native-precise-increment.md#9-与-checkpoint-叠加累积位图)。
+checkpoint 之后的原生 pause，见 [第 14 章 §9](14-native-precise-increment.md#9-与-checkpoint-叠加累积位图)。
 
 **恢复虚机是无条件的**：快照失败、封存失败、调用方已经放弃，虚机都要跑起来（`checkpoint.go:249-258`）。
 一个所有人都以为在运行、实际停着的沙箱，比一个失败的快照糟得多。注意 `ResumeVM` 外面又套了一层 `WithoutCancel`：即使外层 ctx 因为别的原因被取消，
@@ -468,7 +470,7 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced, layerRec
 | 13 | `beginRestore`：打开 restore 窗口，丢弃代理到该沙箱的连接池 | | 窗口内到达的请求被告知回头重试（[第 10 章](10-device-network-time.md)） |
 
 第 12 步能挪到窗口外，是因为它读的全是不可变的东西（已封存的层文件和 sidecar），而同沙箱的操作已被操作锁串行，
-没有人能在它背后再封一层：此刻装配与暂停后装配等价。计时键 `assemble_view` 仍保留在分解里、恒为 0，便于与旧数据对齐。
+没有人能在它背后再封一层：此刻装配与暂停后装配等价。计时键 `assemble_view` 在分解里恒为 0（`internal/sandbox/checkpoint.go:680`），装配耗时记在 `assemble_view_pre`。
 
 ### 8.2 冻结窗口
 
@@ -486,7 +488,7 @@ func (s *Service) failCreate(ctx, entry, memMode string, epochAdvanced, layerRec
 | 21 | **恢复虚机** | `resume` | 常数 |
 
 冻结窗口长度记在 `frozen`（从 pause 到 resume 之后），**包含第 20 步的等待**。`materialize_disk_read_mb` 与 `fc_rollback_disk_read_mb`
-是「这次是否碰了盘」的旁证，前者是进程级口径，并发时混入其他沙箱的读（[第 27 章](27-observability.md)）。
+是「这次是否碰了盘」的旁证，前者按整个 orchestrator 进程统计，并发时混入其他沙箱的读（[第 27 章](27-observability.md)）。
 
 ### 8.3 顺序约束二：暂停之后才导出、才物化
 
@@ -529,7 +531,7 @@ Firecracker 在第 18 步要写回的全部页。若在暂停前导出，中间 
 | pause / resume | 常数 |
 | （仅全量）导出活跃位图 | 内存 / 64 的位图，很小 |
 | 写快照 | **本代脏页数**；全量时是整份内存 |
-| 封存写层 | **常数**：刷屏障 + 几次指针写；层文件移入 store 在窗口外 |
+| 封存写层 | 不搬运数据：刷屏障 + 新建空写层 + 按本层块数登记归属 + 指针切换；层文件移入 store 在窗口外 |
 
 **restore**：
 
@@ -586,7 +588,7 @@ Firecracker 在第 18 步要写回的全部页。若在暂停前导出，中间 
 
 **这八条里，破坏之后能立刻报错的只有第 2 条（靠 Firecracker 的覆盖校验兜底）**；第 1 条可能以 guest 文件系统报错的形式露头，
 其余都是静默的：连接挂死没有错误信息，漏页、错父节点、guest 不知道时间被回拨，都要等到某个进程读到错误内容才会显形。
-这就是为什么第二篇的 [第 11 章](11-failures-and-invariants.md) 要把不变量单列成清单。
+这就是 [第 11 章](11-failures-and-invariants.md) 把不变量单列成清单的原因。
 
 ## 12. 代码位置
 
@@ -600,3 +602,13 @@ Firecracker 在第 18 步要写回的全部页。若在暂停前导出，中间 
 | 准备、提交、物化 | `internal/checkpoint/store.go` — `Prepare`、`Commit`、`MaterializeRevert`；`rootfs.go` — `AppendLayer`、`DiskViewForEntry`、`SetRootfsToEntry` |
 | 封存与换视图 | `internal/sandbox/rootfs/nbd.go` — `SealLayer`、`ResetView`；`rootfs.go` — `SealedLayer.MoveInto` |
 | 分阶段计时 | `internal/sandbox/phasetimings.go` |
+
+## 本章要点
+
+- SDK 把请求发到沙箱的 49984 端口，orchestrator 的代理在转发前截下，由宿主完成全部工作，guest 内不需要任何代理程序。
+- 语义只在一处：账本（Store）知道树和回滚集，Firecracker 只接收位图和文件，两侧靠接口契约协作。
+- 账本只在 orchestrator 进程内存里，启动时清空 store 根目录，从不读盘恢复。
+- checkpoint 的冻结窗口是 pause、（全量时）导出活跃脏图、写快照、封存写层、resume；封存层文件移入 store 在窗口外。
+- restore 的冻结窗口是 pause、导出活跃脏图、物化、Firecracker 九阶段回滚、切换磁盘视图、等 conntrack 清理、resume；磁盘视图在窗口外装配好。
+- 恢复虚机是无条件的，操作不受请求生命周期约束；账本跟着状态走，不跟着 RPC 的成败走。
+- 顺序约束破坏后多数是静默的，改编排代码前先对照 [§11](#11-顺序约束汇总)。

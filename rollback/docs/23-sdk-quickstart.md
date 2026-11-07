@@ -1,16 +1,18 @@
-# 21 · SDK 快速上手
+# 23 · SDK 快速上手
 
-默认 E2B 服务、本特性及配套 SDK 已按客户方式准备好。本章直接使用接口示例解释创建、回滚、列出和删除，不展开服务部署和 SDK 安装流程。
+## 本章目标
+
+用可运行的 Python 示例走通 checkpoint、restore、list、delete，看懂 `mem_mode` 和树形历史，并知道出错时去哪里查。这里假定 E2B 服务、本特性和配套 SDK 已经就绪，不展开服务部署和 SDK 安装流程。
 
 ## 1. 运行示例的前提
 
-确认现有服务包含本特性，业务解释器可导入配套 SDK，且已具备创建沙箱和访问沙箱地址的连接配置。示例默认模板别名 `base`；客户可替换为自己的可用模板。
+确认现有服务包含本特性，业务解释器可导入配套 SDK，且已具备创建沙箱和访问沙箱地址的连接配置。示例默认模板别名 `base`，可替换为自己的可用模板。
 
 ```python
 from e2b import Sandbox, CheckpointInfo
 ```
 
-沿用客户现有的 API 地址、沙箱域名、鉴权和 TLS 设置。环境变量 `E2B_API_KEY`、`E2B_API_URL`、`E2B_DOMAIN` 与 `E2B_HTTP_SSL` 应与实际部署一致；本章不要求采用内部测试机的 localhost、明文连接或 `/root/.e2b/config.json`。
+沿用现有的 API 地址、沙箱域名、鉴权和 TLS 设置。环境变量 `E2B_API_KEY`、`E2B_API_URL`、`E2B_DOMAIN` 与 `E2B_HTTP_SSL` 应与实际部署一致；本章不要求采用测试机的 localhost、明文连接或 `/root/.e2b/config.json`。
 
 服务端能力检查见[第 25 章](25-build-and-self-check.md)，错误处理见[第 24 章](24-api-semantics.md)。
 
@@ -77,9 +79,9 @@ finally:
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `create(name=None, request_timeout=None)` | `CheckpointInfo` | 做一次 checkpoint。`name` 只是给人看的标签，不要求唯一；ID 由服务端生成 |
+| `create(name=None, request_timeout=None)` | `CheckpointInfo` | 做一次 checkpoint（方法名沿用接口）。`name` 只是给人看的标签，不要求唯一；ID 由服务端生成 |
 | `restore(checkpoint_id, request_timeout=None)` | `bool` | 把沙箱原地回滚到该 checkpoint。**只会返回 `True`**，失败一律抛异常，不要拿返回值做分支 |
-| `list(request_timeout=None)` | `List[CheckpointInfo]` | 本沙箱当前这一代的全部可见 checkpoint，按创建时间从旧到新 |
+| `list(request_timeout=None)` | `List[CheckpointInfo]` | 本沙箱当前这一代的全部可见 checkpoint，从旧到新 |
 | `delete(checkpoint_id, request_timeout=None)` | `bool` | 从接口上删除一个 checkpoint（空间何时释放见 [第 24 章](24-api-semantics.md)）。同样只会返回 `True` |
 | `is_available(request_timeout=None)` | `bool` | checkpoint 接口是否应答（探的是宿主侧服务，不是 guest） |
 | `is_running(request_timeout=None)` | `bool` | `is_available` 的旧名，为兼容保留 |
@@ -92,7 +94,7 @@ finally:
 |---|---|---|
 | `checkpoint_id` | `str` | 唯一 ID，`restore` / `delete` 用它 |
 | `name` | `Optional[str]` | 做 checkpoint 时给的名字；没给为 `None` |
-| `created_at` | `Optional[int]` | 创建时刻，Unix 秒。**只有 `list()` 返回的对象带这个值**；`create()` 返回的对象里是 `None` |
+| `created_at` | `Optional[int]` | 拍下时刻，Unix 秒。**只有 `list()` 返回的对象带这个值**；`create()` 返回的对象里是 `None` |
 | `mem_mode` | `Optional[str]` | `"full"` 或 `"incremental"`，见 [§4](#4-mem_mode这次是全量还是增量)；服务端不上报时为 `None` |
 
 `CheckpointInfo` 里**没有父节点字段**：接口上看到的是一张按时间排序的平表。需要按树来管理历史时，由调用方自己记下
@@ -147,7 +149,7 @@ def checkpoint_expect_incremental(sbx, name=None, first=False):
     return ck
 ```
 
-`mem_mode` 为 `None` 时说明服务端版本太老、不上报这个字段，此时不要据此判断。
+`mem_mode` 为 `None` 时说明服务端不上报这个字段，此时不要据此判断。
 耗时量级见 [第 18 章](18-950-performance.md)。
 
 ## 5. 树形历史
@@ -211,7 +213,7 @@ finally:
     sbx.kill()
 ```
 
-几条用户视角的规则：
+几条调用方要知道的规则：
 
 - **跨分支跳转的代价**主要取决于两个点之间被改过的页有多少（沿树路径经最近公共祖先汇总），而不是树有多少分支。
 - **删除**一个还有后代依赖的 checkpoint，它只是从 `list()` 里消失，数据由服务端按需保留或合并（compact / fold）；
@@ -225,9 +227,17 @@ checkpoint 接口的错误按"调用方下一步该做什么"分类，每一种�
 
 | 现象 | 多半是 |
 |---|---|
-| `AuthenticationException` | `E2B_API_KEY` 没设或不对（[第 23 章](23-sdk-quickstart.md)） |
-| 连接到了预期之外的服务 | 核对客户现有API地址、沙箱域名解析与TLS配置；不统一要求localhost或明文连接 |
-| `import e2b` 报 `duplicate file name checkpoint/checkpoint.proto` | 检查SDK协议桩是否被不同版本重复安装；内部覆盖层环境的自检见[附录 E §4](E-environment-and-tools.md#4-sdk-覆盖层) |
-| `AttributeError: 'Sandbox' object has no attribute 'checkpoint'` | 当前业务解释器使用的SDK不包含配套checkpoint实现；核对实际导入位置与版本 |
+| `AuthenticationException` | `E2B_API_KEY` 没设或不对（[§1](#1-运行示例的前提)） |
+| 连接到了预期之外的服务 | 核对现有 API 地址、沙箱域名解析与 TLS 配置；不统一要求 localhost 或明文连接 |
+| `import e2b` 报 `duplicate file name checkpoint/checkpoint.proto` | 检查 SDK 协议桩是否被不同版本重复安装；950 测试部署的 SDK 覆盖层自检见 [附录 E §4](E-environment-and-tools.md#4-sdk-覆盖层) |
+| `AttributeError: 'Sandbox' object has no attribute 'checkpoint'` | 当前业务解释器使用的 SDK 不包含配套 checkpoint 实现；核对实际导入位置与版本 |
 | `mem_mode` 一直是 `full` | 宿主没开脏页跟踪（[§4](#4-mem_mode这次是全量还是增量)） |
 | restore 之后别的调用抛 `CheckpointInterruptedException` | 那次调用跨越了 restore，被回滚掐断；重连重试即可（[第 24 章](24-api-semantics.md)） |
+
+## 本章要点
+
+- 接口都挂在 `sandbox.checkpoint` 下：`create`（做 checkpoint）、`restore`、`list`、`delete`，异步版方法同名。
+- restore 不剪枝，比目标新的 checkpoint 仍可前滚过去；任意两个 checkpoint 之间可以直接跳。
+- 第一次 checkpoint 是 `full`，之后应为 `incremental`。之后仍是 `full` 说明宿主没跟踪脏页或刚断过链，功能正确但成本是全量的。
+- checkpoint 只属于这个沙箱的这一代，沙箱销毁、orchestrator 重启、原生 pause / resume 之后都作废。
+- 错误按“下一步该做什么”分类，完整的表在 [第 24 章](24-api-semantics.md)。

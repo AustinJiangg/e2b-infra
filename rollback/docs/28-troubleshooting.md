@@ -1,6 +1,10 @@
-# 26 · 按症状排障
+# 28 · 按症状排障
 
-每个条目按症状、观察位置和处置方式组织。涉及内部 Nomad/RPM 路径的命令说明其环境归属；客户应换用实际服务管理方式和路径。
+## 本章目标
+
+从看到的症状出发，找到要看的字段和日志，判断原因，决定处置方式。每个条目按**症状、看哪里、原因、怎么处置**组织，没有单独原因段的条目，原因写在表里。
+
+涉及 `template-manager`、Nomad、RPM 和 `/opt/e2b-infra` 的命令采用 950 测试部署的约定，其他部署换成实际的服务管理方式和路径。
 
 ## 1. 增量退化成全量
 
@@ -27,11 +31,13 @@
 
 ## 2. checkpoint 被拒（507 / 429）
 
+**症状**：checkpoint 返回 507 或 429；产物盘余量不足时 restore 也返回 507。
+
 **看哪里**：WARN `refused a checkpoint operation`，字段 `reason` 说是哪道闸，其余字段是判定用的数字（[第 27 章 §3.5](27-observability.md#35-日志行上-timings-之外的字段)）。
 
 | `reason` | 状态码 | 谁能解决 | 处置 |
 |---|---|---|---|
-| `disk_full` | 507 | **运维**。checkpoint 和 restore 都会被拒 | 先 `df -h /orchestrator/build`，再找大户：`du -sh /orchestrator/build/checkpoints/* \| sort -h \| tail`；让占用大的用户删旧 checkpoint 或销毁不用的沙箱（checkpoint 随沙箱销毁删除）。确认能力行 `compact` 为 `true`、`track_dirty_pages` 为 `true`（否则隐藏条目或全量层会一直累积，[第 26 章 §4.5](26-configuration-and-capacity.md#45-合并让保留最新-n-个收敛)）。不要把 `CHECKPOINT_MIN_FREE_BYTES` 设成 `0` 来"解决"：盘真写满时受影响的是全节点 |
+| `disk_full` | 507 | **运维**。checkpoint 和 restore 都会被拒 | 先 `df -h /orchestrator/build`，再找占用最大的沙箱：`du -sh /orchestrator/build/checkpoints/* \| sort -h \| tail`；让占用大的用户删旧 checkpoint 或销毁不用的沙箱（checkpoint 随沙箱销毁删除）。确认能力行 `compact` 为 `true`、`track_dirty_pages` 为 `true`（否则隐藏条目或全量层会一直累积，[第 26 章 §4.5](26-configuration-and-capacity.md#45-合并让保留最新-n-个收敛)）。不要把 `CHECKPOINT_MIN_FREE_BYTES` 设成 `0` 来"解决"：盘真写满时受影响的是全节点 |
 | `too_many_checkpoints` | 429 | 调用方 | `list` → `delete` 不需要的。确实需要更多就调大 `CHECKPOINT_MAX_PER_SANDBOX` |
 | `checkpoint_bytes_limit` | 429 | 调用方，前提是上限合理 | 删**最旧的**，或 restore 到较早的点再删掉之后那一支；删基准（日志的 `base_checkpoint_id`）几乎不释放。若 `max_checkpoint_bytes_per_sandbox` 小于 `floor_bytes` 加开销，或日志里有 ERROR `the checkpoint byte limit is below this sandbox's guest memory plus overhead`，删什么都回不来，只能调大上限（下限推导见 [第 26 章 §4.4](26-configuration-and-capacity.md#44-字节上限怎么选)） |
 
@@ -66,13 +72,13 @@
 
 ## 5. restore 后连接挂死或流截断
 
-先分清是哪一种：
+**症状**：连接在 restore 前后挂住或被 RST，流式调用中途截断，或 restore 之后 guest 里的命令变慢。先分清是哪一种：
 
 | 现象 | 原因 | 处置 |
 |---|---|---|
 | restore **之前**建立的 TCP 连接在 restore 之后挂住或被 RST | **预期行为**：restore 作废该沙箱全部跨越回滚的连接（guest 的 TCP 状态回到了过去，宿主也清了 conntrack 与代理连接池） | 客户端重连。restore 之后新建的连接不受影响 |
 | restore 发生时，同一沙箱上**正在进行的**流式调用报 `incomplete chunked read` / `RemoteProtocolError`；unary 调用收到 409 `sandbox_restored` | **既定限制**：响应头已发出的流只能被切断 | 调用方把"流式调用中途的传输层错误 + 同时发生过 restore"当作被回滚打断，按需重发 |
-| **没有任何 restore**，流式命令偶发截断；orchestrator 或 client-proxy 日志有 WARN `httputil: ReverseProxy read error during body copy … use of closed network connection` | 代理未开 HTTP/1 full duplex 的老问题，已修 | 确认 orchestrator 与 client-proxy **两个**都是修复后的版本：client-proxy 镜像（`docker images \| grep client-proxy` 的创建时间）应与 RPM 同一次构建（`rpm -qi e2b-infra \| grep 'Build Date'`） |
+| **没有任何 restore**，流式命令偶发截断；orchestrator 或 client-proxy 日志有 WARN `httputil: ReverseProxy read error during body copy … use of closed network connection` | 代理未开 HTTP/1 full duplex，已修复（[第 24 章 §11.3](24-api-semantics.md#113-两类流式截断要分清)） | 确认 orchestrator 与 client-proxy **两个**都是修复后的版本。950 测试部署里 client-proxy 镜像（`docker images \| grep client-proxy` 的创建时间）应与 RPM 同一次构建（`rpm -qi e2b-infra \| grep 'Build Date'`） |
 | restore 之后 guest 里的命令卡几秒 | 宿主侧 netns 泄漏导致网络路径变慢（[§9](#9-网络槽位netns泄漏)），或 guest 侧回滚后的中断状态 | 先数 netns，再核对 FC sha |
 
 **取证**：设 `PROXY_TRACE=1` 重启后复现，按 [第 27 章 §7](27-observability.md#7-proxy_trace) 区分两类截断，取证完就关。
@@ -99,7 +105,7 @@
 | `materialize_read_mb`、`revert_mem_write`、`fc_memory` | 回滚量变大 | guest 后台写让每次要回滚的页真实变多，是工作量，不是缺陷 |
 | `conntrack_bg`、`conntrack_host_entries_count` | 宿主连接表变大 | 见 [§10](#10-conntrack-占了冻结窗口)、[§14](#14-restore-随宿主上其他流量变慢) |
 
-**怎么处置**：确认版本；必要时让业务定期重建长寿沙箱。原理：[第 7 章 §7](07-disk-layering.md#7-实现细节读取索引装配成本与落盘)。
+**怎么处置**：确认版本；必要时让业务定期重建长期存活的沙箱。原理：[第 7 章 §7](07-disk-layering.md#7-实现细节读取索引装配成本与落盘)。
 
 ## 8. GC 长停顿与 memory cgroup 回收
 
@@ -136,13 +142,13 @@ iptables -t nat -S | wc -l
 
 **原因**：orchestrator **每重启一次就漏掉约一整池（约 300 个）槽位**，连同 veth 与 iptables 规则；新进程既不回收也不复用它们。这是 ARM 适配所基于的上游 `2026.09` 的问题，上游在 `2026.27` 补上了开机回收，本项目不单独移植，随基线升级解决。
 
-**怎么处置**（内部RPM部署）：
+**怎么处置**（950 测试部署）：
 
 ```bash
 bash /opt/e2b-infra/build.sh --recycle-netns
 ```
 
-它优雅停 `template-manager-system` → 清 netns / veth / iptables（只匹配 `ns-<n>`、`e2bv-<n>` 和槽位地址池内的 `/32` MASQUERADE，跳过仍有进程的槽位）→ 再拉起。**会带走全部沙箱与 checkpoint**。
+它优雅停 `template-manager-system` → 清 netns / veth / iptables（只匹配沙箱的 netns、veth 和槽位地址池内的 `/32` MASQUERADE，跳过仍有进程的槽位）→ 再拉起。**会带走全部沙箱与 checkpoint**。
 跑的是自建二进制时不要直接用它（它按 RPM 的样子把 job 拉回来），只取清理那一步，见 [`deploy-docs/06-日常运维手册.md`](../../deploy-docs/06-日常运维手册.md) §8.1。
 清完之后等 netns 数连续几分钟不变再做性能测试。
 
@@ -174,24 +180,24 @@ for p in $(pidof firecracker); do readlink /proc/$p/exe; done | sort | uniq -c
 tr '\0' '\n' < /proc/$(pidof -s template-manager)/environ | grep FIRECRACKER_VERSIONS_DIR
 ```
 
-**怎么处置**：核对客户当前模板记录的FC版本、`FIRECRACKER_VERSIONS_DIR`和运行中`/proc/<pid>/exe`，替换模板实际选择的构建产物。该变量可按部署需要配置；修改后仅对新创建的FC进程生效。
+**怎么处置**：核对当前模板记录的 FC 版本、`FIRECRACKER_VERSIONS_DIR` 和运行中的 `/proc/<pid>/exe`，替换模板实际选择的构建产物。该变量可按部署需要配置；修改后只对新创建的 FC 进程生效。
 
-内部测试中模板查找键是`v1.13.1`，对应FC自报上游基线`v1.12.1`，这只是该环境的例子。不能据此要求所有客户使用同一目录，也不能只看版本字符串判断功能身份。原理见[第 25 章 §4](25-build-and-self-check.md#4-版本配对)。
+950 测试部署的模板查找键是 `v1.13.1`，对应 FC 自报上游基线 `v1.12.1`，这只是该环境的例子，不是所有环境都用同一目录；也不能只看版本字符串判断功能身份。原理见 [第 25 章 §4](25-build-and-self-check.md#4-版本配对)。
 
 ## 12. SDK 自检失败
 
-**症状**：业务解释器没有`sb.checkpoint`，协议桩冲突、接口报`unimplemented`，或者旧验收工具缺少增量判据。
+**症状**：业务解释器没有 `sb.checkpoint`，协议桩冲突、接口报 `unimplemented`，或者旧验收工具缺少增量判据。
 
 ```bash
 python3 -c 'import sys, e2b; print(sys.executable, e2b.__file__)'
 python3 -c 'from e2b import Sandbox, CheckpointInfo; print(Sandbox.checkpoint)'
 ```
 
-核对业务实际使用的解释器、KASandbox中配套SDK实现、返回字段和服务端版本。不要用系统解释器的安装状态代替业务环境。
+核对业务实际使用的解释器、KASandbox 中配套 SDK 实现、返回字段和服务端版本。不要用系统解释器的安装状态代替业务环境。
 
-只有采用内部覆盖层部署时，才额外检查`e2b==2.20.0`版本锁、覆盖层与`patch_e2b.py`的顺序及`install.py --check`；相关记录见[附录 E §4](E-environment-and-tools.md#4-sdk-覆盖层)。客户直接构建配套SDK时不以是否安装这层内部工具判断功能是否存在。
+采用 950 测试部署的 SDK 覆盖层时，再检查 `e2b==2.20.0` 版本锁、覆盖层与 `patch_e2b.py` 的顺序及 `install.py --check`（[附录 E §4](E-environment-and-tools.md#4-sdk-覆盖层)）。直接构建配套 SDK 时不需要这层工具。
 
-异常与协议语义见[第 24 章](24-api-semantics.md)。
+异常与协议语义见 [第 24 章](24-api-semantics.md)。
 
 ## 13. 其他错误的运维视角
 
@@ -219,19 +225,19 @@ awk '{p=$3; st=(p=="tcp")?$6:"-"; s=""; d=""; dp=""
   c[sb" "p" "st" dport="dp" "a]++} END{for(x in c) print c[x], x}' /proc/net/nf_conntrack | sort -rn | head -10
 ```
 
-`10.13.x.y` 是槽位地址、`10.14.x.y` 是 veth 地址（`.env` 里的地址池；上游默认是 10.11/10.12，同机有 AgentENV 时改用了 10.13/10.14，见部署指南 §0.6）。
+awk 里的 `10.13`、`10.14` 是 950 测试部署 `.env` 里的地址池：`10.13.x.y` 是槽位地址（`SANDBOXES_HOST_NETWORK_CIDR`），`10.14.x.y` 是 veth 地址（`SANDBOXES_VRT_NETWORK_CIDR`）。代码默认值是 `10.11.0.0/16`、`10.12.0.0/16`，运行时按实际配置替换。
 
 **原因**：宿主侧清扫每批做一次整表 dump，代价约 4.6 ms + 1 µs / 条（实测更高），与**整张宿主表**成正比，不管表里是不是沙箱的连接。
 920B 长跑里表的约 95% 与沙箱无关：宿主本机访问 lo:80 的短连接留下的 `TIME_WAIT`，和本机 DNS 查询；滚动负载跑到第二个小时，
 本机 DNS 的 `ASSURED` 条目会堆积，把表从约 1.9 万推到约 2.4 万条，restore p50 随之多约 9 ms（堆积的机制是推断）。
 
-**怎么处置**：不影响正确性。减少宿主上与沙箱无关的短连接和 DNS 查询量；当前没有开关。按 ct mark 让内核只交回沙箱条目的改法（方案 A）已设计，
-用户 09-30 决定暂不实施。原理：[第 10 章 §4.4](10-device-network-time.md#44-宿主表怎么删每批一次整表扫描按代价模型选路)；数据与根因：[附录 C §8.6](C-evolution-and-cases.md#86-conntrack-清理占了冻结窗口)。
+**怎么处置**：不影响正确性。减少宿主上与沙箱无关的短连接和 DNS 查询量；当前没有开关。按 ct mark 让内核只交回沙箱条目的改法已设计，暂不实施。
+原理：[第 10 章 §4.4](10-device-network-time.md#44-宿主表怎么删每批一次整表扫描按代价模型选路)；数据与根因：[附录 C §3.6](C-evolution-and-cases.md#36-conntrack-清理占了冻结窗口)。
 
 ## 15. client-proxy 日志暴涨、guest 访问 hyperloop 不通
 
 **症状**：有沙箱在跑时 client-proxy 日志暴涨，满是 WARN `invalid host` 且 `"host": "192.0.2.1"`（每条带多行调用栈）；
-16 个沙箱的长跑里约每秒 900 条，两小时约 9.1 GB。guest 里访问 `http://192.0.2.1/`（hyperloop）拿不到 hyperloop 的应答。
+920B 上 16 个沙箱的长跑里约每秒 900 条，两小时约 9.1 GB。guest 里访问 `http://192.0.2.1/`（hyperloop）拿不到 hyperloop 的应答。
 
 **看哪里**（只读）：
 
@@ -241,9 +247,17 @@ c=$(docker ps -q --filter ancestor="$(docker ps --format '{{.Image}}' | grep -m1
 docker logs --since 60s "$c" 2>&1 | grep -c 'invalid host'
 ```
 
-第一条命令里如果不带 `-i`、也不带 `--dst-type LOCAL` 的 `--dport 80 -j REDIRECT --to-ports 3002` 排在各槽位的 `-d 192.0.2.1/32 -i veth-<n> … --to-ports 5010` 前面，就是这一条（老部署；现在的 `build.sh -s` 只装带 `--dst-type LOCAL` 的那条，见下）。
+第一条命令里如果不带 `-i`、也不带 `--dst-type LOCAL` 的 `--dport 80 -j REDIRECT --to-ports 3002` 排在各槽位的 `-d 192.0.2.1/32 -i <槽位 veth> … --to-ports 5010` 前面，就是这一条。槽位 veth 的名字按部署而定：代码基准是 `veth-<n>`，950 测试部署是 `e2bv-<n>`。
 
-**原因**：部署脚本装的 80 → 3002 转发不限入口网卡，排在 hyperloop 规则前面，guest 发往 hyperloop 的连接被转给了 client-proxy（[附录 C §13.1](C-evolution-and-cases.md#131-80-端口的转发规则劫持-hyperloop-请求)）。
+**原因**：部署脚本装的 80 → 3002 转发不限入口网卡时，排在 hyperloop 规则前面，guest 发往 hyperloop 的连接被转给了 client-proxy（[附录 C §6](C-evolution-and-cases.md#6-80-端口的转发规则劫持-hyperloop-请求)）。
 
-**怎么处置**：checkpoint / restore 不受影响。已修复：`build.sh -s` 现在把这条规则限定为 `-m addrtype --dst-type LOCAL`，并先删掉老的那条；老部署重跑一次 `build.sh -s` 即可，详见 [附录 C §13.1](C-evolution-and-cases.md#131-80-端口的转发规则劫持-hyperloop-请求)。
+**怎么处置**：checkpoint / restore 不受影响。950 测试部署的 `build.sh -s` 把这条规则限定为 `-m addrtype --dst-type LOCAL`，并先删掉不带限定的那条；已装好的节点重跑一次 `build.sh -s` 即可。其他部署脚本按同样方式限定这条规则，详见 [附录 C §6](C-evolution-and-cases.md#6-80-端口的转发规则劫持-hyperloop-请求)。
 日志量大时注意 client-proxy 所在盘的余量。
+
+## 本章要点
+
+- 先看能力文件或能力行，再看 `timings_ms` 分段，最后才看别的。分段缺哪个键，说明失败停在哪一步。
+- `torn` 没有修复手段，只能销毁重建；`guest_unresponsive` 时回滚已经完成，不是撕裂。
+- restore 变慢先分清是回滚量变大（工作量）、视图块数增长、conntrack 清扫，还是 GC 停顿，各有对应的键。
+- 宿主表清扫的代价跟整张宿主 conntrack 表走，不跟沙箱条目走。
+- orchestrator 每重启一次漏约一池网络槽位，做性能测试前先数 netns。

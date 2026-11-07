@@ -1,12 +1,14 @@
-# 24 · 配置与容量规划
+# 26 · 配置与容量规划
 
-配置语义和容量模型在本章集中维护。950 的实测取值与来源另有环境记录；未设置、默认值和运行时探测结果分别说明，避免把一台测试机的设置当作所有环境的要求。
+## 本章目标
+
+集中说明全部环境变量的读取方、默认值、解析规则和生效方式，解释启动能力行与能力文件，并给出产物盘、数量上限和字节上限的规划方法。950 的实测取值见 [附录 E](E-environment-and-tools.md)，一台测试机的设置不是所有环境的要求。
 
 ## 1. 开关怎么读、怎么生效
 
 - 全部是**进程环境变量**。`CHECKPOINT_*`、`FC_TRACK_DIRTY_PAGES`、`PROXY_TRACE` 由 orchestrator 读；`FC_HDBSS_*`、`FC_ROLLBACK_FAULT_INJECT` 由 Firecracker 读，
-  Firecracker 由 orchestrator 拉起、继承它的环境。客户应在自己的服务管理方式中向 orchestrator 传入环境，并确保子进程继承。**内部 950/RPM 部署**将它们写入 Nomad job `template-manager-system` 的 `env {}`（模板为 `/opt/e2b-infra/nomad/template-manager.hcl`）。
-- 进程环境在启动时就定了，**改动后须按读取时机重启对应服务；内部 Nomad 部署重启该 job**（[§5](#5-改一个开关操作步骤)）。Firecracker 读的变量只对重启之后新起的虚机生效。
+  Firecracker 由 orchestrator 拉起、继承它的环境。要在服务管理配置里向 orchestrator 传入环境，并确保子进程继承。**950 测试部署**将它们写入 Nomad job `template-manager-system` 的 `env {}`（模板为 `/opt/e2b-infra/nomad/template-manager.hcl`）。
+- 进程环境在启动时就定了，**改动后须按读取时机重启对应服务；950 测试部署重启该 job**（[§5](#5-改一个开关操作步骤)）。Firecracker 读的变量只对重启之后新起的虚机生效。
 - 写错的值**不会**让节点不带保护地跑：数值和时长解析不了就回落默认值并打一条 WARN（`ignoring unusable … in the environment` 一类）；布尔值见各行的"解析"一列，
   **各开关的布尔写法并不统一**，照表写。
 - 生效值与来源（`env` / `default`）大部分打在启动能力行里，也写在能力文件里（[§3](#3-启动能力行)）。能力行里没有的，表里注明了别的核对办法。
@@ -19,7 +21,7 @@
 |---|---|---|---|---|---|
 | `FC_TRACK_DIRTY_PAGES` | orchestrator，启动时一次 | 未设 = 跟随硬件：探到 KVM 能力 502（HDBSS）则开，否则关 | Go `strconv.ParseBool`：`1/t/T/TRUE/true/True` 开，`0/f/F/FALSE/false/False` 关。其他值（`yes`、`on`、空串、拼错）**忽略**，按未设处理，并打 WARN `FC_TRACK_DIRTY_PAGES="…" is not a boolean and was ignored` | 第 ① 层：虚机启动时是否武装脏页跟踪。关着时每次 checkpoint 都是全量。950 不设；无 HDBSS 而要增量的机器设 `true`（走 KVM 写保护，[第 25 章 §2](25-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)） | `track_dirty_pages`、`track_dirty_pages_reason` |
 | `FC_HDBSS_ORDER` | Firecracker，每台虚机构建时 | `1`（每 vCPU 8 KiB） | 按无符号整数解析，解析不了或未设都取 `1`；值原样交给内核，内核不接受则 HDBSS 启用失败 | 每 vCPU HDBSS 缓冲区大小的编码（`n` → 4 KiB × 2^n）。950已有默认order 1的写密集测量；不同order的收益比较未实测；测它的入口是 `run.sh hdbss --orders …`（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)） | 无；FC 日志 `HDBSS enabled (buffer order …)`，950 上 `dmesg` 的 `Enable HDBSS success, HDBSS buffer size: …` |
-| `FC_HDBSS_REQUIRED` | Firecracker，每台虚机构建且已武装脏页跟踪时 | 关 | **只认 `true` 和 `1`**，其余（含 `TRUE`）一律为关 | 已武装跟踪时，开：HDBSS启用失败则虚机构建失败；关：退回KVM写保护。未武装时直接为`off`，该变量不会强行开启跟踪；内部测试未设置 | FC后端、启用日志及沙箱创建结果；不在orchestrator能力行中 |
+| `FC_HDBSS_REQUIRED` | Firecracker，每台虚机构建且已武装脏页跟踪时 | 关 | **只认 `true` 和 `1`**，其余（含 `TRUE`）一律为关 | 已武装跟踪时，开：HDBSS启用失败则虚机构建失败；关：退回KVM写保护。未武装时直接为 `off`，该变量不会强行开启跟踪；950 测试部署未设置 | FC后端、启用日志及沙箱创建结果；不在orchestrator能力行中 |
 
 ### 2.2 限额与超时
 
@@ -94,27 +96,26 @@ orchestrator 启动时打一行 INFO `checkpoint capabilities`，同样的键和
 
 ### 3.1 能力文件
 
-能力行只打一次，负载下 alloc 日志几分钟就把它轮转掉，那时运维和 `run.sh smoke` 都查不到节点按什么跑。所以从 deltabox-dev `93ccb02` 起，
+能力行只打一次，负载下 alloc 日志几分钟就把它轮转掉，那时运维和 `run.sh smoke` 都查不到节点按什么跑。所以
 orchestrator 启动时把同样的内容再写进一个文件（`internal/checkpoint/capabilities_file.go`，由 `main.go` 的 `reportCheckpointCapabilities` 调用）：
 
 - **位置**：`${DEFAULT_CACHE_DIR}/checkpoint-capabilities.json`，默认 `/orchestrator/build/checkpoint-capabilities.json`。它在 store 根（`${DEFAULT_CACHE_DIR}/checkpoints`）的**父目录**，
-  不在 store 根里，因为 store 根每次启动都被清空。RPM 部署不设 `DEFAULT_CACHE_DIR` 与 `ORCHESTRATOR_BASE_PATH`，就是默认位置。
+  不在 store 根里，因为 store 根每次启动都被清空。950 测试部署不设 `DEFAULT_CACHE_DIR` 与 `ORCHESTRATOR_BASE_PATH`，就是默认位置。
 - **内容**：一个 JSON 对象，两格缩进、键按字母序，权限 `0644`。上表的键与值全部在内，按能力行同一套编码写出，所以时长同样是 `"1m0s"` 这种写法、不是纳秒数。
   另多 4 个键，说明是谁写的：
 
   | 键 | 含义 |
   |---|---|
-  | `pid` | 写这个文件的 orchestrator 进程号（RPM 部署里是 `template-manager` 进程） |
+  | `pid` | 写这个文件的 orchestrator 进程号（950 测试部署里是 `template-manager` 进程） |
   | `started_at` | 该进程的启动时间，RFC3339 |
   | `version` | orchestrator 的版本号（`main.go` 的 `version`） |
-  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。早期 RPM 记录为空，950 的 2026-10-15 smoke 自报 `4853232`（[第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收)）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
+  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。950 的 2026-10-15 smoke 自报 `4853232`（[第 17 章](17-functional-verification.md)）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
 
 - **何时写**：每次启动写一次，先写同目录下的临时文件、再改名覆盖旧文件，读到的要么是上次启动的整份、要么是这次的整份。
   写成功打 INFO `capabilities file written`（字段 `path`）；写失败只打 WARN `failed to write the capabilities file; the log line above is the only copy`，启动照常。
   这两行的措辞刻意不含 `checkpoint capabilities`，按这个关键字 grep 能力行不会误中。
 - **是不是当前的**：文件一直留到下次启动才被替换，进程停了它还在。**`pid` 等于正在运行的进程**才算数；对不上就是以前那次启动留下的，回到能力行。
   同一个 `DEFAULT_CACHE_DIR` 上起了多个 orchestrator 进程时，后启动的覆盖先启动的。
-- 此前的版本不写这个文件，这时只有能力行。
 
 ## 4. 容量规划
 
@@ -124,7 +125,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 
 - **树根**：每沙箱第一个 checkpoint 是全量，约 M（`CHECKPOINT_FULL_ROOT=false` 时没有这一份）。
 - **每个增量**：约等于本代写过的内存页（稀疏文件，只占写过的页）+ 本代写盘封成的一层。
-- **隐藏条目**：删除中间节点时，被后代依赖的会被隐藏而不是删掉；开合并时隐藏条目数 ≤ 可见数 + 1（[第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)），所以占盘随可见 checkpoint 数有界（不合并时隐藏条目怎样无界积累，见 [附录 C §8.8](C-evolution-and-cases.md#88-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
+- **隐藏条目**：删除中间节点时，被后代依赖的会被隐藏而不是删掉；开合并时隐藏条目数 ≤ 可见数 + 1（[第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)），所以占盘随可见 checkpoint 数有界（不合并时隐藏条目怎样无界积累，见 [附录 C §3.8](C-evolution-and-cases.md#38-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
 - **restore 的临时文件**：物化的回滚内存最多一份 guest 内存，restore 结束即删。
 
 ### 4.2 节点产物盘怎么估
@@ -163,12 +164,12 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 - 两个增量改的页互不相交时，合并释放为 0；最旧的是全量根、而子节点改了大部分内存时，合并释放接近一份 guest 内存。
 - 拒绝时 WARN 行 `refused a checkpoint operation` 带 `checkpoint_bytes_held`、`max_checkpoint_bytes_per_sandbox`、`base_checkpoint_id`、`floor_bytes`、`floor_bytes_source`；
   删除行 `deleted checkpoint` 带 `sandbox_checkpoint_bytes` 与 `freed_bytes`（含合并效果）。注意 delete 的 `compact_mb` 是合并**写入**量，不是释放量。
-- 交付件里默认关；是否默认开、开多大还没定。
+- 默认关；是否默认开、开多大还没定。
 
 ### 4.5 合并让"保留最新 N 个"收敛
 
 客户端"保留最新 N 个、删最旧"时，每次删的都是下一个的父节点：不合并的话它只能被隐藏，隐藏条目、目录数、链深和占盘随时间线性增长，最终写满节点；
-开合并后每个被隐藏的节点并进它唯一的子节点，合并处理跟上时条目数稳定在2N+1以内，消除隐藏历史的无界积累；实际占盘仍由保留数据、视图覆盖和写入模式决定（920B 开与不开合并的对照见 [附录 C §8.8](C-evolution-and-cases.md#88-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
+开合并后每个被隐藏的节点并进它唯一的子节点，合并处理跟上时条目数稳定在2N+1以内，消除隐藏历史的无界积累；实际占盘仍由保留数据、视图覆盖和写入模式决定（920B 开与不开合并的对照见 [附录 C §3.8](C-evolution-and-cases.md#38-隐藏-checkpoint-无上界积累磁盘随时间线性增长)）。
 代价是 delete 里同步做合并、delete 变慢（已知项，[第 22 章 §7](22-acceptance.md#7-已知项与缺口)）。**生产不要关 `CHECKPOINT_COMPACT`。**
 
 **脏页跟踪关着时合并不起作用**：每个 checkpoint 都是全量根，没有"隐藏且只有一个子节点"的条目，层照样累积。无 HDBSS 又不开跟踪的节点，必须靠数量上限与字节上限兜住。
@@ -183,13 +184,21 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
 
 ## 5. 改一个开关：操作步骤
 
-配置先按本章总表确认读取方、取值和生效时机，再使用客户自己的服务管理流程更新进程环境。
+配置先按本章总表确认读取方、取值和生效时机，再用实际的服务管理流程更新进程环境。
 
 1. 记录当前运行身份、能力文件与有效配置；明确改动目标及默认行为。
 2. 将变量写入实际服务配置，确保 Firecracker 所需变量会传给由 orchestrator 创建的子进程。
 3. 按读取时机重启对应服务或创建新的沙箱。重启会销毁该节点上的活沙箱及其 checkpoint，需先安排业务。
 4. 比较新进程的能力文件、`_source` 和启动 WARN；仅检查配置文件或进程环境不能证明解析后的结果。
 5. 对 HDBSS 另检查新 FC 的后端、order 日志和内核证据，再运行最小正确性和增量检查。
-6. 记录本轮变更后的实际取值、版本和自检结果；检查客户升级流程能否保留这些设置。
+6. 记录变更后的实际取值、版本和自检结果；检查升级流程能否保留这些设置。
 
-内部 950 测试采用 Nomad job 的 `env {}` 传入变量。完整的 job 修改、RPM 重建和部署操作继续在[内部部署资料](../../deploy-docs/08-源码开发与出包流程.md)中维护；本特性不要求客户采用同一种部署方式。
+950 测试部署用 Nomad job 的 `env {}` 传入变量；本特性不要求采用同一种部署方式。
+
+## 本章要点
+
+- 全部开关都是进程环境变量，改动后要重启对应服务；各开关的布尔写法不统一，照表写。
+- 配置是否生效看能力文件和能力行的 `_source`，不看配置文件。`CHECKPOINT_FULL_ROOT`、`CHECKPOINT_RUNTIME_METRICS`、`FC_HDBSS_*` 不在能力行里。
+- 故障注入变量只供测试，生产节点的 `fault_inject` 必须为空。
+- 字节上限至少取 2 × 最大 guest 内存 + 256 MiB；产物盘余量按水位闸、各沙箱占用和写层一起估。
+- 保持 `CHECKPOINT_COMPACT` 默认开：关掉后“保留最新 N 个”的用法会无界积累隐藏条目。脏页跟踪关着时合并不起作用，要靠上限兜住。

@@ -1,6 +1,8 @@
 # 附录 A · 术语、协议与文件格式参考
 
-本附录用于查阅术语、协议、文件格式和不变量速查；实现推导与代码阅读顺序分别见第二、三篇和第 29 章。
+## 本章目标
+
+提供术语、文件格式、接口和不变量的速查。实现推导与代码阅读顺序分别见第二、三篇和 [第 29 章](29-development.md)。
 
 ## 1. 术语表
 
@@ -8,7 +10,7 @@
 
 | 术语 | 英文 / 标识 | 一句话 | 详见 |
 |---|---|---|---|
-| **checkpoint** | checkpoint | 沙箱某一时刻的状态记录，也指拍它的操作（与 restore 成对）。接口名里叫 `CreateCheckpoint` | [第 23 章](23-sdk-quickstart.md)、[第 6 章](06-memory-diff-tree.md) |
+| **checkpoint** | checkpoint | 沙箱某一时刻的状态记录，也指拍它的操作（与 restore 成对）。RPC 名是 `CreateCheckpoint`，SDK 方法名是 `create` | [第 23 章](23-sdk-quickstart.md)、[第 6 章](06-memory-diff-tree.md) |
 | **restore / 回滚** | restore / rollback | 把活着的沙箱原地退回某个 checkpoint，沙箱 ID 与 FC 进程不变 | [第 9 章](09-in-place-rollback.md) |
 | **纪元** | epoch | 两次"脏页跟踪被重置"之间的时间段 | [第 6 章](06-memory-diff-tree.md) |
 | **纪元位图 / 侧车** | `E_x`、`mem_bitmap`、sidecar | 记录一个纪元里写过哪些页 | [第 6 章](06-memory-diff-tree.md)、[第 8 章](08-firecracker-contract.md) |
@@ -61,7 +63,7 @@
 | **envd** | guest 里执行命令、读写文件的守护进程 | [第 2 章](02-background.md) |
 | **orchestrator** | 宿主上管沙箱生命周期、网络、存储、代理的进程 | [第 4 章](04-architecture-and-flow.md) |
 | **client-proxy** | 集群入口代理，把客户端请求转给所在节点的 orchestrator | [第 4 章](04-architecture-and-flow.md) |
-| **hyperloop** | orchestrator 在宿主上给每个沙箱提供的 HTTP 服务，guest 经 `192.0.2.1:80` 访问（宿主侧端口 5010）；部署脚本的 80 → 3002 转发目前劫持了这条链路 | [附录 C §13.1](C-evolution-and-cases.md#131-80-端口的转发规则劫持-hyperloop-请求) |
+| **hyperloop** | orchestrator 在宿主上给每个沙箱提供的 HTTP 服务，guest 经 `192.0.2.1:80` 访问（宿主侧端口 5010）；不限入口网卡的 80 → 3002 转发规则会劫持这条链路 | [附录 C §6](C-evolution-and-cases.md#6-80-端口的转发规则劫持-hyperloop-请求) |
 | **SandboxID / ExecutionID / LifecycleID** | 三个不同层次的身份标识 | [第 13 章](13-native-snapshot.md) |
 
 ### 1.4 测试与测量
@@ -83,7 +85,7 @@
 
 ### 1.5 原生快照的精确增量
 
-这一组术语属于 e2b 原生 pause 路径上的独立修复（第三篇），不是本方案 checkpoint / restore 的一部分；写法以 [第 14 章](14-native-precise-increment.md)–[第 15 章](15-native-cooperation-and-cost.md) 为准。
+这一组术语属于 e2b 原生 pause 路径上的修复（第三篇），不是 checkpoint / restore 的一部分；写法以 [第 14 章](14-native-precise-increment.md)–[第 15 章](15-native-cooperation-and-cost.md) 为准。
 
 | 术语 | 英文 / 标识 | 一句话 | 详见 |
 |---|---|---|---|
@@ -150,5 +152,12 @@ Firecracker 的三处扩展：`CreateSnapshotParams.dirty_bitmap_path`（已有�
 ## 4. 不变量速查
 
 全书的不变量共 19 条，**编号、定义、破坏后果和是否静默只在 [第 11 章 §9](11-failures-and-invariants.md#9-不变量清单) 列出**，其他篇引用时都用那里的编号。
-改代码前过一遍那张表；其中 #15–#19 是合并、full 根回滚因子、子节点计数表、层引用计数与字节计数这几项新机制带来的，
-属性测试怎么守它们见 [第 16 章](16-test-methodology.md)。
+改代码前过一遍那张表；其中 #15–#19 对应合并、full 根回滚因子、子节点计数表、层引用计数与字节计数，
+属性测试怎么检查它们见 [第 16 章](16-test-methodology.md)。
+
+## 本章要点
+
+- 术语以本附录和对应章节为准：checkpoint 与 restore 成对，RPC 和 SDK 里的 `create` 只是接口名。
+- 每个 checkpoint 一个 `ckpt_<UnixNano>/` 目录，沙箱级封存层在 `layers/`；`manifest.json`、`index.json` 只供事后查看，没有代码读回。
+- FCDB 位图的页索引是内存文件偏移 ÷ 页大小，不是 guest 物理地址。
+- 不变量的编号和定义只在 [第 11 章 §9](11-failures-and-invariants.md#9-不变量清单)。

@@ -1,6 +1,8 @@
 # 05 · 脏页跟踪与 HDBSS
 
-增量的前提是准确知道哪些页被写过。本章集中解释跟踪判据、KVM 日志语义、后端探测与 HDBSS 启用；配置项和 950 实测设置分别见第 26 章与附录 E。
+## 本章目标
+
+增量的前提是准确知道哪些页被写过。本章解释三种跟踪判据、KVM 脏页日志的语义、后端探测与 HDBSS 启用，并定义"读也算脏"这个判据差异。读完本章应当能说清：要不要记脏页与用什么方式记是两层决定；HDBSS 需要哪些前提；为什么降级是静默的，又怎样让它可见。配置项和 950 实测设置分别见 [第 26 章](26-configuration-and-capacity.md) 与 [附录 E](E-environment-and-tools.md)。
 
 ## 1. 脏页跟踪的作用
 
@@ -85,7 +87,7 @@ KVM 遍历 HDBSS buffer，逐条 kvm_vcpu_mark_page_dirty()
 VMM 调用 KVM_GET_DIRTY_LOG
 ```
 
-关键在于**没有写保护，也就没有为标脏而生的 VM-Exit**。CPU 顺手记一笔，等到 vCPU 因为别的原因退出时，内核再把 buffer 里的记录
+关键在于**没有写保护，也就没有为标脏而生的 VM-Exit**。CPU 直接写入一条记录，等到 vCPU 因为别的原因退出时，内核再把 buffer 里的记录
 汇总进标准位图（下表：VM-Exit 时刷新 buffer，dirty-log 同步时也会处理）。打快照、回滚前都先暂停虚机，暂停本身就让每个 vCPU 退出 `KVM_RUN`，
 所以即使一个几乎不产生 VM-Exit 的纯计算 guest，在"暂停之后取图"那一刻 buffer 里的记录也已经汇总进位图。
 
@@ -97,7 +99,7 @@ VMM 调用 KVM_GET_DIRTY_LOG
 
 第三条是好事也是坏事：代码不用为两条路径分叉，**但降级完全静默**，只能从延迟和能力上报里看出来（[§4.6](#46-能力上报) 专门处理这一点）。
 
-还有一个推论：每个 vCPU 一个 buffer，有容量上限。buffer 写满会触发额外的处理，写密集负载下这部分开销可能把收益吃掉一部分（[§4.5](#45-buffer-大小)）。
+还有一个推论：每个 vCPU 一个 buffer，有容量上限。buffer 写满会触发额外的处理，写密集负载下这部分开销可能抵消一部分收益（[§4.5](#45-buffer-大小)）。
 
 内核侧实现位置（OLK 6.6）：
 
@@ -181,7 +183,7 @@ Firecracker 侧其实有两份脏页记录：
   **不报错，测试照样通过，测的却不是增量。**
 - **第二层退回软件路径** → 结果一模一样（都是 `KVM_GET_DIRTY_LOG` 位图），只是每个干净页首次写多一次 VM-Exit。**只有延迟能看出来。**
 
-开关的取值与默认值见 [第 26 章 §2.1](26-configuration-and-capacity.md#21-脏页跟踪与-hdbss)，三种机器上各该怎么设见 [第 25 章 §2](25-build-and-self-check.md#2-先分清两层要不要记脏页用什么方式记)。
+开关的取值与默认值见 [第 26 章](26-configuration-and-capacity.md)，三种机器上各该怎么设见 [第 25 章](25-build-and-self-check.md)。
 
 ### 4.2 两侧各做一件事
 
@@ -201,7 +203,7 @@ func hardwareDirtyTracking() bool {
 `KVM_CHECK_EXTENSION` **只查询**：不建 VM、不启用任何东西；没有 `/dev/kvm` 的机器上安全地返回 false。
 判定逻辑在 `decideTrackDirtyPages`（:68）：变量未设置时跟硬件走；能被 `strconv.ParseBool` 解析就照办；解析不了则忽略并跟硬件走。
 这个决策是**整个 orchestrator 一个值**（包级变量，启动时算一次），不是每沙箱一个。做成"按沙箱按需武装"需要在创建沙箱时就知道它会不会打
-checkpoint，而目前的 API 里没有这个信息；这是一个明确的可扩展点（[第 30 章 §2](30-status-and-directions.md#2-候选开发方向)）。
+checkpoint，而目前的 API 里没有这个信息；这是一个明确的可扩展点（[第 30 章](30-status-and-directions.md)）。
 
 **Firecracker** 在 `Vm::setup_dirty_tracking()`（`vstate/vm.rs:206`）里真正武装：region 没有 bitmap 就是 `off`；
 aarch64 上调 `enable_hdbss(order)`（`arch/aarch64/vm.rs:66`，对 VM fd 做 `KVM_ENABLE_CAP`，cap 502）。成功记为 `hdbss`；
@@ -257,7 +259,7 @@ HDBSS **不会被快照继承**：从快照恢复会创建新的 KVM VM 和新�
 | 冷启动 | `build_microvm_for_boot` | `builder.rs:199`，调用在 :239 |
 | **从快照加载** | `build_microvm_from_snapshot` | `builder.rs:414`，调用在 :438 |
 
-第二条是关键：e2b 的用户沙箱一律由快照加载而来（[第 2 章 §5.2](02-background.md#52-用户沙箱是恢复出来的)），只改 machine-config、只管冷启动路径，等于完全没开。
+第二条是关键：e2b 的用户沙箱一律由快照加载而来（[第 2 章](02-background.md)），只改 machine-config、只管冷启动路径，等于完全没开。
 
 ### 4.5 buffer 大小
 
@@ -268,7 +270,7 @@ HDBSS **不会被快照继承**：从快照恢复会创建新的 KVM VM 和新�
 | 每 vCPU buffer | 8 KiB | 16 KiB | 32 KiB | 64 KiB | 128 KiB | 256 KiB | 512 KiB | 1 MiB | 2 MiB |
 
 默认 1（8 KiB，也是内核默认，`vstate/vm.rs:220-225`，由 `FC_HDBSS_ORDER` 覆盖）。一条记录 8 字节，8 KiB 约 1000 条，
-也就是约 4 MiB 的脏页覆盖量（4 KiB 页）。写密集负载下 buffer 会填满、触发额外处理，极端情况下可能吃掉"省掉写保护陷出"的一部分收益。
+也就是约 4 MiB 的脏页覆盖量（4 KiB 页）。写密集负载下 buffer 会填满、触发额外处理，极端情况下可能抵消"省掉写保护陷出"的一部分收益。
 编码 9 能容纳约 26 万条，但要为**每个 vCPU** 分配 2 MiB **连续物理内存**，在长期运行、内存碎片化的宿主上不是免费的。
 
 ### 4.6 能力上报
@@ -294,7 +296,7 @@ HDBSS **不会被快照继承**：从快照恢复会创建新的 KVM VM 和新�
 | 有 HDBSS | 几乎为零 | 无所谓，默认开 |
 | 无 HDBSS | 每个干净页首次写一次 VM-Exit | 纯亏损，默认关 |
 
-一台 950 上，能做增量 checkpoint 的沙箱开箱就在做；一台无 HDBSS 的机器上，不打 checkpoint 的沙箱不用为别人的功能买单。
+一台 950 上，能做增量 checkpoint 的沙箱开箱就在做；一台无 HDBSS 的机器上，不打 checkpoint 的沙箱不承担这项开销。
 在没有 HDBSS 的机器上不设变量，checkpoint 照样能做，只是每次都是全量；要得到增量，显式设 `FC_TRACK_DIRTY_PAGES=true`
 （退化为 KVM 写保护，仍是增量）。
 
@@ -363,8 +365,7 @@ for page_idx in 0..nr_pages {
 不计入增量。所以这个下限是 ARM 适配基线特有的，不是 e2b 的设计问题。
 
 **原生路径上的这个问题在本书交付的代码里已经修复**：原生 pause 在跟踪开着时改用 Firecracker 的写跟踪位图判脏。
-但"只换判据"并不能把原生增量降到写入量，还要改存储粒度和缺页填充 —— 为什么，以及怎么改，是第三篇的内容：
-诊断见 [第 14 章](14-native-precise-increment.md)，改法见 [第 14 章](14-native-precise-increment.md)。本章只负责定义"读也算脏"这个判据差异本身。
+但"只换判据"并不能把原生增量降到写入量，还要改存储粒度和缺页填充。诊断与改法都在 [第 14 章](14-native-precise-increment.md)，本章只定义"读也算脏"这个判据差异本身。
 
 ### 5.4 本方案怎么绕开
 
@@ -385,13 +386,13 @@ for page_idx in 0..nr_pages {
 
 ### 6.2 HDBSS 的 buffer 与溢出
 
-HDBSS 把"每页一次 VM-Exit"换成了"CPU 顺手记一笔 + 定期汇总"，代价转移到 buffer 溢出处理（[§4.5](#45-buffer-大小)）。
+HDBSS 把"每页一次 VM-Exit"换成了"CPU 写一条记录 + 定期汇总"，代价转移到 buffer 溢出处理（[§4.5](#45-buffer-大小)）。
 `FC_HDBSS_ORDER` 就是为这件事准备的。950 在 2026-10-13 已完成**默认 order 1** 的启用证据与写密集实测；
-结果、条件与来源集中在 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)。它确认默认值实际启用，
+结果、条件与来源集中在 [第 18 章](18-950-performance.md)。它确认默认值实际启用，
 也记录了额外首写代价；不能把硬件标脏理解成所有写入或快照都零开销。
 
-本轮没有扫描其他 order，所以 buffer 大小之间的性能比较仍是缺口。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`，
-逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)）。
+其他 order 尚未扫描，buffer 大小之间的性能比较仍是缺口。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`，
+逐个 order 量冷写 / 热写耗时、每页 KVM 退出数、增量 checkpoint 耗时与差分大小（[第 22 章](22-acceptance.md)）。
 冷/热比不是单独的开关判据：写者的 cache、TLB、调度和后台活动也影响两遍耗时，需与能力、自报、启用日志和退出计数一起判断。
 
 ### 6.3 什么时候不该开
@@ -404,3 +405,13 @@ HDBSS 把"每页一次 VM-Exit"换成了"CPU 顺手记一笔 + 定期汇总"，�
 | 要做回滚的生产部署 | 开，并设 `FC_HDBSS_REQUIRED=true`：**宁可启动失败，也不要静默走软件路径** |
 
 最后一条值得强调：静默降级是这套系统里**最难发现的故障模式**。功能全对、测试全过、只是慢 —— 而且慢的幅度取决于负载，不容易触发告警。
+
+## 本章要点
+
+- 脏页位图漏记一页就是静默损坏，多记只是浪费，所以方向是宁可多记、不可漏记。
+- 本方案取 KVM 脏页日志：有 HDBSS 用硬件记录，没有就退回 KVM 写保护，两者给上层的是同一个位图。
+- `KVM_GET_DIRTY_LOG` 是破坏性读，所以每条路径都先把位图折回用户态，再做可能失败的事。
+- Firecracker 自己写 guest 内存不经过 Stage-2，由用户态位图记录，写快照时取两份位图的并集。
+- 第一层决定要不要记脏页（`FC_TRACK_DIRTY_PAGES`，默认跟硬件走），第二层决定用什么方式记（Firecracker 运行时探测）。
+- HDBSS 的最大陷阱是 `KVM_ENABLE_CAP` 必须在 vCPU 创建之后调用，顺序错了不报错，只是一条脏页都记不到；引导和快照加载两条路径都要武装。
+- "读也算脏"是 ARM 适配基线的退化，不是 x86 原生的问题；本方案不经过 uffd 判据，所以不受影响。

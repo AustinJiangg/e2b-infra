@@ -9,7 +9,7 @@
 | 文件 | 用途 |
 |---|---|
 | `../contents.json` | 分篇、章序与文字附录清单；构建时检查遗漏和重复 |
-| `../book.json` | 书名、版本、日期、署名、配图和仓库链接基准 |
+| `../book.json` | 书名、版本、日期、配图和仓库链接基准 |
 | `build.sh` | 统一入口：先校验链接与图表，再生成 HTML |
 | `build_docs_html.py` | 单文件HTML生成器，按分篇清单生成分组目录与当前章小节导航 |
 | `build_article.py`、`build_article_chart.mjs` | 独立价值解读文章生成器；配图内嵌，D3 从正文表格生成实测曲线，入口见[文章说明](../articles/README.md) |

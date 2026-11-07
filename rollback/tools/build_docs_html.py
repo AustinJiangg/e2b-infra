@@ -11,7 +11,6 @@
     title           (--title)            书名，用在 <title> 与侧栏标题。必填
     version         (--version)          版本号，如 v0.1.0。必填
     date            (--date)             日期，如 2026-10-09。必填
-    byline          (--byline)           作者 / 署名行。必填（保留命令行配置兼容）
     stats           (--stats)            构建日志的"N 篇 · 约 X 万字"。不给就自动算：篇数 = docs 目录里参与打包的
                                          文件数（不含 README.md），字数 = 这些文件里的汉字个数
     gh_repo         (--gh-repo)          手册以外的相对链接改写到的仓库地址，如 https://github.com/<组织>/<仓库>
@@ -49,7 +48,7 @@ ap.add_argument('diagrams_dir', help='SVG 所在目录；没有配图附录时�
 ap.add_argument('mermaid_js')
 ap.add_argument('out')
 ap.add_argument('--config', help='每本书的 JSON 配置，键见文件头说明')
-for _opt in ('title', 'version', 'date', 'byline', 'stats', 'gh-repo', 'git-ref', 'repo-docs-path',
+for _opt in ('title', 'version', 'date', 'stats', 'gh-repo', 'git-ref', 'repo-docs-path',
              'appendix-title', 'appendix-intro'):
     ap.add_argument('--' + _opt)
 ap.add_argument('--svg', action='append', metavar='文件=图题', help='可重复；给了就取代配置里的 svgs')
@@ -58,7 +57,7 @@ args = ap.parse_args()
 DOCS_DIR, DIAG_DIR, MERMAID_JS, OUT = args.docs_dir, args.diagrams_dir, args.mermaid_js, args.out
 
 CFG = json.load(open(args.config, encoding='utf-8')) if args.config else {}
-_unknown = set(CFG) - {'title', 'version', 'date', 'byline', 'stats', 'gh_repo', 'git_ref', 'repo_docs_path',
+_unknown = set(CFG) - {'title', 'version', 'date', 'stats', 'gh_repo', 'git_ref', 'repo_docs_path',
                        'svgs', 'appendix_title', 'appendix_intro', 'unpublished', 'contents'}
 if _unknown:
     sys.exit(f'{args.config}: 不认识的键 {sorted(_unknown)}')
@@ -76,7 +75,6 @@ def opt(name, default=None, required=False):
 DOC_TITLE = opt('title', required=True)
 DOC_VERSION = opt('version', required=True)
 DOC_DATE = opt('date', required=True)
-DOC_AUTHOR = opt('byline', required=True)
 # 手册以外的仓库链接改写到 GH_REPO，钉在 DOC_GIT_REF 这个提交上（发版时改成对应提交）
 GH_REPO = opt('gh_repo', '')
 DOC_GIT_REF = args.git_ref if args.git_ref is not None else os.environ.get('DOC_GIT_REF', CFG.get('git_ref', ''))

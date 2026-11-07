@@ -1,25 +1,27 @@
 # 附录 E · 测试环境、轮次与工具索引
 
-本附录记录实测环境和工具来源。/opt/e2b-infra、Nomad job、RPM 和覆盖层属于内部测试部署方式；客户可以用自己的方式提供同样的功能前提。
+## 本章目标
+
+记录实测环境、结果留档方法和各轮次的来源，让读者能判断一个数字来自什么条件。`/opt/e2b-infra`、Nomad job、RPM 和 SDK 覆盖层是 950 测试部署方式，其他部署可以用自己的方式提供同样的功能前提。
 
 ## 1. 950 的实际环境与特性配置
 
-| 条件或配置 | 已有证据 | 对客户的含义 |
+| 条件或配置 | 已有证据 | 含义 |
 |---|---|---|
-| 系统 | 950，`slot6`，aarch64；2026-10-13 宿主内核 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | 平台前提见第 25 章，具体型号和拓扑只采用实际回传值 |
+| 系统 | 950，`slot6`，aarch64；2026-10-13 宿主内核 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | 平台前提见 [第 25 章](25-build-and-self-check.md)，具体型号和拓扑只采用实际回传值 |
 | 内存产物 | perf 两遍首次全量均为 2048 MiB；实际模板其他字段按各轮记录 | 不从 920B 模板推定 950 未留档字段 |
-| 存储 | `/orchestrator/build/checkpoints`、ext4；下层介质在 perf 轮未核实 | 客户路径可不同，需满足文件系统与同盘条件 |
+| 存储 | `/orchestrator/build/checkpoints`、ext4；下层介质在 perf 轮未核实 | 路径可不同，需满足文件系统与同盘条件 |
 | `FC_TRACK_DIRTY_PAGES` | 默认未设置时，orchestrator 探测 KVM 能力 502；smoke 能力文件实际记录见第 17 章 | 以启动能力与结果核对是否启用，不仅查看环境变量 |
 | HDBSS 后端 | perf/func 等日志自报 `hdbss`，专项另有内核与 FC 启用证据 | 能力探测、FC 自报与数据面证据分别核对 |
-| `FC_HDBSS_ORDER` | HDBSS 专项默认 order 1；本轮未扫描其他 order | 默认和可选值查第 26 章，不把未测 order 写成已验证 |
+| `FC_HDBSS_ORDER` | HDBSS 专项默认 order 1；未扫描其他 order | 默认和可选值查第 26 章，不把未测 order 写成已验证 |
 | 2026-10-15 smoke有效配置 | `track_dirty_pages=true`（硬件能力502）；`compact=true`、最多合并8个；`debug_index=false`；数量/字节上限均0；最低余量4294967296字节；`fault_inject=[]` | 这是该次能力文件记录，不追认更早perf/func；对应配置语义查第26章 |
-| 内部部署 | `/opt/e2b-infra`、RPM、Nomad、SDK 覆盖层 | 只说明测试环境，不要求客户采用此安装方法 |
+| 950 测试部署方式 | `/opt/e2b-infra`、RPM、Nomad、SDK 覆盖层 | 只说明测试环境，不要求采用此安装方法 |
 
 配置总表在[第 26 章](26-configuration-and-capacity.md)。perf、HDBSS、func 和 smoke 的身份分别在各自结果中记录，不能互相追认。
 
 ## 2. 测试环境与沙箱规格
 
-以下是920B历史轮次的模板和内部构建约定。950以各轮实际留档字段为准；未记录的字段不能从此表补填，规格变化时性能需重采：
+以下是 920B 历史轮次的模板约定。950 以各轮实际留档字段为准；未记录的字段不能从此表补填，规格变化时性能需重采：
 
 | 项 | 值 | 怎么核对 |
 |---|---|---|
@@ -95,34 +97,42 @@ cat "$OUT/00-context.md"
 
 ## 4. SDK 覆盖层
 
-本节仅说明内部测试采用的SDK覆盖层。使用实际安装该SDK的解释器；完整安装流程仍在辅助仓库维护，客户可采用自己的配套SDK构建。
+本节说明 950 测试部署采用的 SDK 覆盖层。使用实际安装该 SDK 的解释器；也可以直接构建配套 SDK，不需要这层工具。
 
 ```bash
 python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 ```
 
 期望看到 `payload 的 21 个文件都在位` 和 `自检通过（干净子进程）：…`。异常族的判据是"原有 8 个子类都在，且 reason 映射表里每一项都是 `CheckpointException` 的子类"——
-现在是基类加 9 个子类共 10 个（新增 `CheckpointBytesLimitException`，[第 24 章](24-api-semantics.md)）。
+现在是基类加 9 个子类共 10 个（[第 24 章 §9](24-api-semantics.md#9-异常类层次)）。
 
 ## 5. 轮次与结果来源索引
 
 | 轮次 | 时间 | 手册位置 | 当前归档范围 |
 |---|---|---|---|
-| 950 perf | 2026-10-13 16:11 | 第 18、19 章 | 分档、串行 restore、A/B 短时并发文本；JSON/JSONL 与部分身份待补 |
-| 950 func | 2026-10-13 16:30 | 第 17、19 章 | 默认功能用例、SDK 异常、混合短稳态与恢复后立即请求文本 |
+| 950 perf | 2026-10-13 16:11 | 第 18、21 章 | 分档、串行 restore、A/B 短时并发文本；JSON/JSONL 与部分身份待补 |
+| 950 func | 2026-10-13 16:30 | 第 17、21 章 | 默认功能用例、SDK 异常、混合短稳态与恢复后立即请求文本 |
 | 950 HDBSS | 2026-10-13 16:52 | 第 18 章 | 默认 order 1、三级证据、写密集负载与该轮二进制哈希 |
 | 950 smoke | 2026-10-15 12:13 | 第 17 章 | 5 项通过、能力文件、SDK 自检、FC 路径哈希和 59 项正确性 |
+| 950 原生分档 | 2026-11-06 | 第 19 章 | 原生 pause / resume 六档，每档 15 个 repeat、3 个 first，共 108 样本；身份与原始 JSON 已回传 |
 | 920B 历史与开发验证 | 对应各轮原始日期 | 附录 B | 功能、分档、原生增量、并发、小时级长测和部署后回归 |
 
-脚本与环境材料保留在辅助仓库；五轮 950 测试的结论见[结果摘要](../evidence/950/README.md)，原始日志仅保留在本地 `rollback/scripts/950/results/`，其余未入库报告保留在测试工作区。主要条件、数据与判据已经进入本 HTML，辅助仓库地址不替代证据。
+脚本与环境材料保留在工具仓库；950 各轮测试的结论见 [结果摘要](../evidence/950/README.md)（其中 2026-10-13 的 smoke 一轮有 1 项 FAIL，保留原记录），原始日志仅保留在本地 `rollback/scripts/950/results/`。主要条件、数据与判据已经进入本手册。
 
-## 6. 内部 RPM 的路径示例
+## 6. RPM 部署的路径示例
 
-以下是920B历史RPM部署的路径映射和哈希核对示例，不能作为950或客户新构建产物的预期身份。950各轮实际哈希见第17、18章。
+以下是 920B 上 RPM 部署的路径映射和哈希核对示例，不是 950 或新构建产物的预期身份。950 各轮实际哈希见第 17、18 章。
 
-| 组件 | 内部产物 → 历史安装位置 | 核对 |
+| 组件 | 产物 → 安装位置 | 核对 |
 |---|---|---|
 | orchestrator | RPM → `/opt/e2b-infra/bin/orchestrator`，再由部署拷到 `/usr/bin/template-manager`（nomad job `template-manager-system` 实际执行的就是它）与 `/usr/bin/orchestrator` | 三个文件 sha256 相同；运行中的进程 `readlink /proc/$(pidof -s template-manager)/exe` 指向 `/usr/bin/template-manager` |
 | Firecracker | `firecracker.arm` → `/opt/e2b-infra/bin/firecracker` → `init-client.sh` 拷到 `/fc-versions/v1.13.1/firecracker` | 两处 sha256 都是 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9` |
 | guest 内核 | `/fc-kernels/vmlinux-6.1.158/vmlinux.bin` | 文件存在；缺了建模板必失败 |
-| Python SDK | KASandbox `py-sdk/` 中的配套 SDK；内部测试采用 `e2b==2.20.0` 加覆盖层 | 确认 checkpoint 接口与异常类型；内部覆盖层另用 `install.py --check`（[附录 E §4](E-environment-and-tools.md#4-sdk-覆盖层)） |
+| Python SDK | KASandbox `py-sdk/` 中的配套 SDK；950 测试部署采用 `e2b==2.20.0` 加覆盖层 | 确认 checkpoint 接口与异常类型；覆盖层另用 `install.py --check`（[§4](#4-sdk-覆盖层)） |
+
+## 本章要点
+
+- 950 的条件以各轮实际回传的字段为准，perf、HDBSS、func、smoke 的身份互不追认；920B 模板的规格不能补填到 950。
+- 全量 checkpoint 的代价随内存规格变化，增量只跟本代脏页量有关，所以模板规格是条件标签的一部分。
+- 每个结果目录配 `00-context.md`，回传时带 `SUMMARY.md`、条件记录和 FAIL 项的日志。
+- 项数要照抄：59 还是 57 差的是增量判据是否生效。

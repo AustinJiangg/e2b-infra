@@ -1,10 +1,14 @@
-# 23 · 构建、部署前提与能力自检
+# 25 · 构建、部署前提与能力自检
 
-客户已有 E2B 并使用自己的部署流程。本章简明说明本特性的源码与组件配对、平台条件和能力检查；950 的内部打包安装方式作为环境参考记录在附录 E。
+## 本章目标
+
+说明本特性的三个组件怎样配对，运行需要哪些平台条件，以及上线后怎样确认节点跑的是这一套、脏页跟踪是否生效。部署流程沿用已有的方式；950 测试部署方式（RPM、Nomad）作为环境参考记录在 [附录 E](E-environment-and-tools.md)。
+
+本章的命令里涉及 `template-manager`、Nomad alloc 和 `/opt/e2b-infra` 的部分采用 950 测试部署的约定，其他部署替换为实际的进程名、日志位置和工具路径。
 
 ## 1. 源码构建与组件配对范围
 
-三个组件均从已选定的 KASandbox 提交取得，采用客户自己的构建、打包和部署方式。orchestrator 通过扩展接口调用 Firecracker，SDK 与服务端按同一协议配对。
+三个组件均从已选定的 KASandbox 提交取得，构建、打包和部署方式不限。orchestrator 通过扩展接口调用 Firecracker，SDK 与服务端按同一协议配对。
 
 | 组件 | 源码位置 | 本特性核对点 |
 |---|---|---|
@@ -12,7 +16,7 @@
 | Firecracker | `firecracker/` | rollback、save-dirty-bitmap、位图格式和 ARM64 seccomp；现有构建入口为 `make build` / `scripts/build.sh` |
 | Python SDK | `py-sdk/` | `Sandbox.checkpoint`、异步实现、异常和协议桩 |
 
-构建工具链与运行依赖沿用仓库要求。记录实际源码 SHA 与构建产物 sha256；不能仅凭目录名或 `firecracker --version` 判断功能版本。内部 RPM、Nomad job 和 SDK 覆盖层只是一种测试部署方式，见[附录 E](E-environment-and-tools.md)。
+构建工具链与运行依赖沿用仓库要求。记录实际源码 SHA 与构建产物 sha256；不能仅凭目录名或 `firecracker --version` 判断功能版本。RPM、Nomad job 和 SDK 覆盖层是 950 测试部署方式，见 [附录 E](E-environment-and-tools.md)。
 
 ## 2. 先分清两层：要不要记脏页、用什么方式记
 
@@ -33,13 +37,13 @@
 | 没有 HDBSS 的机器，不设 | 不设 | 关；每次 checkpoint 全量（`mem_mode="full"`），功能正确；启动日志有 `dirty page tracking is off` 的 WARN | `off` |
 | 没有 HDBSS、要增量（例如 920B 开发机） | **显式 `true`** | 开，走 KVM 写保护；checkpoint 为增量 | `kvm-wp` |
 
-内部部署模板（`e2b-deploy/dep/template-manager.hcl`）**有意不传**这个变量：950 上不需要。
+950 测试部署的 job 模板（`e2b-deploy/dep/template-manager.hcl`）**不传**这个变量：950 上不需要。
 没有 HDBSS 的机器不设时默认关，是因为软件写保护要让每个干净页的第一次写入陷出一次，对从不做 checkpoint 的沙箱是净亏（原理见 [第 5 章](05-dirty-tracking-and-hdbss.md)）。
 取值只认 Go `strconv.ParseBool` 的写法，`yes`、`on` 之类会被忽略并打 WARN，详见 [第 26 章 §2.1](26-configuration-and-capacity.md#21-脏页跟踪与-hdbss)。
 
 ## 3. 平台前提
 
-以下检查同时包含 ARM64 实现前提和内部测试环境设置。NBD 数量、大页容量及服务路径按客户负载与部署确定，不能把内部的 512 个 NBD 或固定目录当作所有环境的必需取值。逐项核对。"怎么查"一列的命令都是只读的。
+以下检查同时包含 ARM64 实现前提和测试环境设置。NBD 数量、大页容量及服务路径按实际负载与部署确定，测试环境的 512 个 NBD 和固定目录不是所有环境的必需取值。逐项核对。"怎么查"一列的命令都是只读的。
 
 | # | 前提 | 怎么查 | 不满足时 |
 |---|---|---|---|
@@ -48,7 +52,7 @@
 | 3 | `/dev/kvm` 存在且 root 可读写；KVM 跑在 VHE 模式 | `ls -l /dev/kvm`；`dmesg \| grep -Ei 'kvm.*VHE mode initialized'` | 沙箱起不来；非 VHE 时 HDBSS 启用会被内核拒绝 |
 | 4 | **HDBSS**：内核编了 `CONFIG_ARM64_HDBSS=y`，并且 CPU 支持 KVM 能力502；仅有内核配置不足 | 核对内核配置、当前能力文件的 `track_dirty_pages` 与原因，以及实际FC后端；辅助预检可真开探针 | 若未探到能力且未显式开跟踪，则为`off`，checkpoint全量；只有已武装跟踪而FC启用HDBSS失败时，才按`FC_HDBSS_REQUIRED`决定拒绝或退回`kvm-wp` |
 | 5 | GICv3 | `preflight-customer.sh` 第 2 节 | v2 未实测 |
-| 6 | NBD 模块可用，vermagic 与运行内核一致，设备数量满足并发需求；内部测试设 `nbds_max=512` | `lsmod \| grep -w nbd`；`cat /sys/module/nbd/parameters/nbds_max`（内部测试为512） | 沙箱根盘走 NBD，没有它沙箱起不来。按客户的内核模块管理流程配置 |
+| 6 | NBD 模块可用，vermagic 与运行内核一致，设备数量满足并发需求；测试环境设 `nbds_max=512` | `lsmod \| grep -w nbd`；`cat /sys/module/nbd/parameters/nbds_max`（测试环境为 512） | 沙箱根盘走 NBD，没有它沙箱起不来 |
 | 7 | `tun` 模块与 `/dev/net/tun` | `ls -d /sys/module/tun /dev/net/tun` | 沙箱网卡起不来。`preflight-customer.sh` 对 `vhost_net` 只给 INFO：当前 Firecracker 网卡在用户态实现、直接读写 tap，不依赖它 |
 | 8 | `net.ipv4.ip_forward=1`，**且在创建槽位 netns 之前生效**（槽位 netns 在创建时继承这个值） | `sysctl -n net.ipv4.ip_forward` | 建模板在等 envd 那一步 60 s 超时。已经装完才发现要重建整池槽位，按实际槽位管理流程重建 |
 | 9 | 2 MiB 大页：guest 内存走 hugetlb，`init-client.sh` 启动时预留一部分，其余走 overcommit | `grep -i huge /proc/meminfo`；`cat /proc/sys/vm/nr_overcommit_hugepages` | 沙箱数被大页数卡住 |
@@ -56,7 +60,7 @@
 | 11 | 产物盘与沙箱缓存盘（`/orchestrator/sandbox`，活写层所在）是**同一个文件系统** | `findmnt -no SOURCE --target /orchestrator/build; findmnt -no SOURCE --target /orchestrator/sandbox` 两行相同 | 封层从 rename 退化为拷贝，checkpoint 变慢 |
 | 12 | 产物盘余量：按 [第 26 章 §4](26-configuration-and-capacity.md#4-容量规划) 估；服务端另有水位闸，低于 max(4 GiB, 2 × guest 内存) 时拒绝 checkpoint 与 restore | `df -h /orchestrator/build` | 507 `disk_full` |
 
-把 2–11 项一次查完的脚本是 `rollback/scripts/crtest/portability/preflight-customer.sh`（零依赖、只读，退出码 = FAIL 项数），在 clone 下来的 e2b-infra 仓库根目录执行：
+把 2–11 项一次查完的脚本是 `rollback/scripts/crtest/portability/preflight-customer.sh`（零依赖、只读，退出码 = FAIL 项数），在工具仓库根目录执行：
 
 ```bash
 bash rollback/scripts/crtest/portability/preflight-customer.sh
@@ -66,7 +70,7 @@ bash rollback/scripts/crtest/portability/preflight-customer.sh
 
 ## 4. 版本配对
 
-orchestrator、Firecracker 和 Python SDK 从选定的 KASandbox 版本配对。guest 内核与模板格式应满足实际平台要求；客户可以沿用自己的部署路径和服务管理方式。
+orchestrator、Firecracker 和 Python SDK 从选定的 KASandbox 版本配对。guest 内核与模板格式应满足实际平台要求；部署路径和服务管理方式不限。
 
 | 组件 | 要核对的内容 |
 |---|---|
@@ -75,9 +79,9 @@ orchestrator、Firecracker 和 Python SDK 从选定的 KASandbox 版本配对。
 | guest内核与模板 | 内核、设备拓扑和模板版本与当前运行方式匹配 |
 | SDK | `Sandbox.checkpoint`、同步/异步接口、返回字段和异常与服务端协议配套 |
 
-orchestrator按 `$FIRECRACKER_VERSIONS_DIR/<模板记录的FC版本>/firecracker` 选择文件。内部测试的模板查找键是 `v1.13.1`，二进制自报上游基线版本为 `1.12.1`；两种字符串均不能单独证明包含本特性。客户核对自己模板实际选择的路径和构建哈希，不固定替换一个与模板无关的目录。
+orchestrator按 `$FIRECRACKER_VERSIONS_DIR/<模板记录的FC版本>/firecracker` 选择文件。950 测试部署的模板查找键是 `v1.13.1`，二进制自报上游基线版本为 `1.12.1`；两种字符串均不能单独证明包含本特性。要核对的是模板实际选择的路径和构建哈希，不要替换一个与模板无关的目录。
 
-950的2026-10-15 smoke已核对选定路径、回滚接口、部署产物哈希与功能；详见[第 17 章 §4](17-functional-verification.md#4-950-smoke部署预检与正确性验收)。能力文件自报的`commit=4853232`仍需与源码/内部RPM对应核实，不代替二进制哈希。历史RPM路径样例在[附录 E §6](E-environment-and-tools.md#6-内部-rpm-的路径示例)。
+950的2026-10-15 smoke已核对选定路径、回滚接口、部署产物哈希与功能；详见[第 17 章](17-functional-verification.md)。能力文件自报的 `commit=4853232` 仍需与源码、RPM 对应核实，不代替二进制哈希。RPM 路径样例在 [附录 E §6](E-environment-and-tools.md#6-rpm-部署的路径示例)。
 
 | 配法 | 表现 |
 |---|---|
@@ -89,7 +93,7 @@ orchestrator按 `$FIRECRACKER_VERSIONS_DIR/<模板记录的FC版本>/firecracker
 
 ## 5. 二进制是不是这一套
 
-记录当前运行的 orchestrator 和 Firecracker 的执行路径与 sha256，再与客户选定的构建产物核对。以下用内部进程名 `template-manager` 举例；采用其他进程名时替换为实际 PID：
+记录当前运行的 orchestrator 和 Firecracker 的执行路径与 sha256，再与选定的构建产物核对。以下用 950 测试部署的进程名 `template-manager` 举例：
 
 ```bash
 ORCH_PID=$(pidof -s template-manager)
@@ -105,10 +109,8 @@ done
 
 ## 6. orchestrator 自报的能力
 
-以下涉及 `template-manager`、Nomad alloc 或辅助脚本的命令采用内部950环境约定；客户替换为实际进程、日志与工具路径。
-
 orchestrator 启动时打一行 `checkpoint capabilities`，说清脏页跟踪开没开、为什么，以及各项限额的生效值和来源（字段逐个解释在 [第 26 章 §3](26-configuration-and-capacity.md#3-启动能力行)）。
-从 deltabox-dev `93ccb02` 起，同样的内容还写进**能力文件** `checkpoint-capabilities.json`：在 `DEFAULT_CACHE_DIR` 下（默认 `/orchestrator/build/`，即 store 根的父目录），
+同样的内容还写进**能力文件** `checkpoint-capabilities.json`：在 `DEFAULT_CACHE_DIR` 下（默认 `/orchestrator/build/`，即 store 根的父目录），
 另带 `pid`、`started_at`、`version`、`commit` 四个键（[第 26 章 §3.1](26-configuration-and-capacity.md#31-能力文件)）。
 日志行在当前 alloc 的 `start.stdout.<n>` 里，**会轮转**（负载下几分钟就把启动行滚掉）；能力文件不会，下次启动时整份替换。
 
@@ -122,7 +124,7 @@ F=${C:-${B:-/orchestrator}/build}/checkpoint-capabilities.json
 grep -qE "^  \"pid\": $p,?\$" "$F" 2>/dev/null && cat "$F" || echo "没有 $F，或它不是当前进程写的：看下面的日志行"
 ```
 
-没有能力文件（此前的版本不写）或 `pid` 对不上时，看日志行，部署后立刻抓一次留档。两条 WARN 只在日志里，能力文件里没有，所以第二条 grep 无论如何都要跑：
+没有能力文件或 `pid` 对不上时，看日志行，部署后立刻抓一次留档。两条 WARN 只在日志里，能力文件里没有，所以第二条 grep 无论如何都要跑：
 
 ```bash
 p=$(pidof -s template-manager)
@@ -146,13 +148,9 @@ tr '\0' '\n' < /proc/$(pidof -s template-manager)/environ | grep -E '^(CHECKPOIN
 
 ## 7. 宿主预检
 
-以下涉及 `template-manager`、Nomad alloc 或辅助脚本的命令采用内部950环境约定；客户替换为实际进程、日志与工具路径。
-
-[§3](#3-平台前提) 那条 `preflight-customer.sh`，`FAIL 0`。
+跑 [§3](#3-平台前提) 的 `preflight-customer.sh`，要求 `FAIL 0`。
 
 ## 8. 网络槽位水位基线
-
-以下涉及 `template-manager`、Nomad alloc 或辅助脚本的命令采用内部950环境约定；客户替换为实际进程、日志与工具路径。
 
 ```bash
 ip netns list | grep -cE '^ns-[0-9]+$'
@@ -162,8 +160,6 @@ ip netns list | grep -cE '^ns-[0-9]+$'
 刚启动时这个数还在涨（暖池填充），**做任何性能测试前等它连续几分钟不变**。
 
 ## 9. 增量真的生效
-
-以下涉及 `template-manager`、Nomad alloc 或辅助脚本的命令采用内部950环境约定；客户替换为实际进程、日志与工具路径。
 
 这一步要建沙箱，用 [第 22 章](22-acceptance.md) 的 `run.sh smoke` 一次做完。smoke 里的 `checkpoint_verify.py` 开头打印
 `脏页后端 : …`——这是 Firecracker 自己报的第 ② 层（950 应为 HDBSS，显式开启的无 HDBSS 机器为 KVM 写保护），能力行只能回答第 ① 层。
@@ -179,3 +175,11 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'created checkpoint' | grep -o 
 # 950：内核确认给 Firecracker 开了 HDBSS（方括号里是 FC 的 pid）
 dmesg | grep 'Enable HDBSS success' | tail -3
 ```
+
+## 本章要点
+
+- orchestrator、Firecracker、SDK 必须来自同一版本；用运行路径和 sha256 核对身份，版本字符串不算证据。
+- “要不要记脏页”由 orchestrator 启动时决定，“用什么记”由 Firecracker 探测决定。950 不设 `FC_TRACK_DIRTY_PAGES`；没有 HDBSS 而要增量的机器显式设 `true`。
+- 平台前提用 `preflight-customer.sh` 一次查完；产物盘是 ext4，且与沙箱缓存盘同一文件系统。
+- 能力文件的 `pid` 必须是当前进程才算数；`track_dirty_pages` 为 `true`、`fault_inject` 为 `[]` 是上线前要看的两项。
+- 增量是否真的生效看三个独立证据：脏页后端、`mem_mode` 统计、950 上的 `Enable HDBSS success`。

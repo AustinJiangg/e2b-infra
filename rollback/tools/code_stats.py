@@ -328,8 +328,8 @@ def render_blocks(report):
     if "sdk_provenance" in report:
         source = report["sdk_provenance"]
         lines = ["| 来源阶段（同一交付历史） | SDK 运行时有效行：新增 / 删除 / 净增 | SDK 运行时物理行净增 | SDK 协议 / 构建支撑有效行净增 |", "|---|---:|---:|---:|"]
-        for key, label in (("foundation", "phz 原始 SDK 引入"), ("mr_adaptation", "本方 MR 前适配"),
-                           ("after_mr", "本方 MR 后完善"), ("own_current", "本方后续合计（后两阶段的端点复算，不重复相加）")):
+        for key, label in (("foundation", "原始 SDK 引入"), ("mr_adaptation", "MR 前适配"),
+                           ("after_mr", "MR 后完善"), ("own_current", "后续合计（后两阶段的端点复算，不重复相加）")):
             stage = source["stages"][key]
             lines.append(f"| {label} | {delta(stage['runtime'])} | {number(stage['runtime']['physical']['net'])} | {number(stage['support']['sloc']['net'])} |")
         stages = source["stages"]
