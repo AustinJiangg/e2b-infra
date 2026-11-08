@@ -66,6 +66,7 @@
     "B-extending.md",
     "C-issue-resolution.md",
     "D-restore-slowness-case.md",
-    "E-regression-case.md"
+    "E-regression-case.md",
+    "F-code-size.md"
   ]
 }
