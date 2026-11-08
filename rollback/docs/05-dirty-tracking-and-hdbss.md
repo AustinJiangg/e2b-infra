@@ -386,6 +386,35 @@ HDBSS 把"每页一次 VM-Exit"换成了"CPU 写一条记录 + 定期汇总"，�
 
 最后一条值得强调：静默降级是这套系统里**最难发现的故障模式**。功能全对、测试全过、只是慢 —— 而且慢的幅度取决于负载，不容易触发告警。
 
+### 6.4 开跟踪后 Stage-2 不再用大页
+
+大页要分两层看。
+
+**宿主侧不变。** guest 内存在宿主上由 hugetlbfs 的 2 MiB 大页背衬（模板默认开大页，`MemfilePageSize` 返回 2 MiB，`packages/orchestrator/internal/template/build/config/config.go:69`）。
+开不开脏页跟踪，宿主都按 2 MiB 分配，UFFD 缺页也按 2 MiB 填（[第 14 章 §1](14-native-precise-increment.md)）。
+
+**Stage-2 变成 4 KiB。** Firecracker 打开 `track_dirty_pages` 时，在注册 memslot 时就带上 `KVM_MEM_LOG_DIRTY_PAGES`（`firecracker/src/vmm/src/vstate/vm.rs:270`）。
+对开着脏页日志的 memslot，KVM 在 Stage-2 缺页时强制按 4 KiB 建映射，不再用 2 MiB 块（`arch/arm64/kvm/mmu.c` 的 `user_mem_abort`）：
+
+```c
+if (logging_active) {
+	force_pte = true;
+	vma_shift = PAGE_SHIFT;
+}
+```
+
+上游 v6.6 与 openEuler 的 OLK-6.6 分支（核对时分支头为 `5078a3a`）这一段相同。HDBSS 在同一个函数里只多做一件事：给页表项加上 DBM 位
+（`if (kvm->enable_hdbss && logging_active) prot |= KVM_PGTABLE_PROT_DBM;`），不改映射粒度。
+所以这一点与后端无关：KVM 写保护和 HDBSS 都一样，只要开着跟踪，Stage-2 就只有 4 KiB 映射。memslot 从注册起就带着脏页日志，guest 第一次访问就是按 4 KiB 建的。
+
+后果有两面：
+
+- **记账粒度是 4 KiB。** 位图一位对应一个 4 KiB 页，差分树按 4 KiB 存取（[第 6 章](06-memory-diff-tree.md)），这是精确增量的前提。
+- **guest 访存失去 Stage-2 的大页收益。** 同样 2 MiB 内存要 512 个 Stage-2 页表项，TLB 能覆盖的范围缩小到 1/512。本方案没有单独测过这部分运行时代价：
+  [第 18 章](18-950-performance.md)、[第 20 章](20-920b-performance.md) 的数字都是开着跟踪测的，已经包含它，但没有同机不开跟踪的对照。
+
+不开跟踪（`FC_TRACK_DIRTY_PAGES=false`）时 Stage-2 可以用 2 MiB 块，代价是每次 checkpoint 都是全量（[§6.3](#63-什么时候不该开)）。
+
 ## 本章要点
 
 - 脏页位图漏记一页就是静默损坏，多记只是浪费，所以方向是宁可多记、不可漏记。
@@ -393,5 +422,6 @@ HDBSS 把"每页一次 VM-Exit"换成了"CPU 写一条记录 + 定期汇总"，�
 - `KVM_GET_DIRTY_LOG` 是破坏性读，所以每条路径都先把位图折回用户态，再做可能失败的事。
 - Firecracker 自己写 guest 内存不经过 Stage-2，由用户态位图记录，写快照时取两份位图的并集。
 - 第一层决定要不要记脏页（`FC_TRACK_DIRTY_PAGES`，默认跟硬件走），第二层决定用什么方式记（Firecracker 运行时探测）。
+- 开着脏页跟踪时 KVM 把 Stage-2 强制按 4 KiB 映射，写保护和 HDBSS 都一样；宿主侧仍是 hugetlbfs 2 MiB，失去的是 Stage-2 的大页收益，没有单独测过。
 - HDBSS 的最大陷阱是 `KVM_ENABLE_CAP` 必须在 vCPU 创建之后调用，顺序错了不报错，只是一条脏页都记不到；引导和快照加载两条路径都要武装。
 - "读也算脏"是 ARM 适配基线的退化，不是 x86 原生的问题；本方案不经过 uffd 判据，所以不受影响。

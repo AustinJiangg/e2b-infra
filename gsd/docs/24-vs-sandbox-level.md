@@ -88,6 +88,7 @@
 | **实现层次** | 宿主：orchestrator（接口、编排、账本）加分叉的 Firecracker（原地回滚、脏页位图） | guest：gsd 守护进程加 CRIU 加 guest 内核补丁；orchestrator 只在建模板时参与 |
 | **沙箱里要装什么** | 什么都不装 | gsd、CRIU 4.x、开机脚本 `overlay-init`，由模板构建注入（[06](06-guest-boot-and-injection.md)） |
 | **内存脏页跟踪** | 宿主侧，按 4 KiB 记账。有硬件脏页跟踪（HDBSS）的平台自动启用；没有时用 KVM 的软件写保护，需显式打开；都不用时每次都是全量 | guest 内核的 soft-dirty，按页表项记账，要求透明大页为 `never`（[03](03-criu-and-incremental-memory.md)） |
+| **对大页的影响** | 开着跟踪时 KVM 把 Stage-2 强制按 4 KiB 映射，失去 Stage-2 的大页收益；宿主侧仍是 hugetlbfs 2 MiB（[沙箱级手册第 5 章 §6.4](../../rollback/docs/05-dirty-tracking-and-hdbss.md#64-开跟踪后-stage-2-不再用大页)） | 宿主不开脏页跟踪，Stage-2 可以用 2 MiB 块；guest 内部要求透明大页为 `never` |
 | **内存产物** | 每代一份稀疏的差分文件加一份脏页位图，组织成一棵差分树 | 每棵进程树每个 checkpoint 一个 CRIU 镜像目录，增量镜像用 `parent` 链接指向父镜像 |
 | **文件产物** | 块级：磁盘写层原地封存成只读层，换上新的空写层 | 文件级：overlay 的可写层原地沉成只读层，换上新的空可写层（[07](07-overlay-hot-switch.md)） |
 | **存储位置** | 宿主本地盘 | 镜像在 guest 内 2 GiB 的内存文件系统里（占沙箱内存），层在 guest 的根盘上（[04](04-goals-and-tradeoffs.md)） |
