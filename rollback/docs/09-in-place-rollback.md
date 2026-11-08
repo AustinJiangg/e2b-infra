@@ -13,12 +13,7 @@
 
 这是 Firecracker 的标准恢复路径，也是 e2b 原生 resume 用的那条（[第 13 章](13-native-snapshot.md)）：
 
-```
-新建进程 → 建 KVM VM → 建 vCPU → 建 GIC → 建 virtio 设备
-        → 注册 eventfd / irqfd / ioeventfd → 建 tap → 挂 UFFD
-        → 加载 vmstate → 恢复 vCPU 与设备 → 运行
-        → guest 逐页缺页，把工作集换回内存
-```
+![冷重建与原地回滚：哪些对象保留、哪些重建](img/09-1-冷重建与原地回滚.svg)
 
 每一项都要重新付一遍。最后那一步尤其贵：新进程的 guest 内存映射是空的，**恢复后的头几秒里，guest 的每一次内存访问都可能是一次缺页**，
 要经用户态 handler 从快照文件（或对象存储）取回。guest 的工作集越大，这段换页时间越长，而且它发生在 resume 之后，
@@ -367,18 +362,7 @@ vmm.mmio_device_manager.for_each_virtio_device(|_, _, _, dev| {
 
 ## 5. 失败模型
 
-```
-         ┌── 阶段 1 校验失败 ──────┐
-         ├── 阶段 2 静默失败 ──────┤  虚机原封不动
-         ├── 阶段 3 取图 / 覆盖失败 ┤  HTTP 400；orchestrator 恢复运行，沙箱继续可用
-         │                         │
- ═══════════════ 提交点 ═══════════════
-         │                         │
-         ├── 阶段 4 内存失败 ──────┐
-         ├── 阶段 5 vCPU 失败 ─────┤  Faulted；HTTP 500 且响应体 "fault": true
-         ├── 阶段 6 GIC 失败 ──────┤  拒绝 resume 与 snapshot
-         └── 阶段 7–9 设备失败 ────┘  只能重建沙箱
-```
+![九个阶段与提交点两侧的失败结果](img/09-2-九个阶段与失败模型.svg)
 
 orchestrator 侧（`internal/sandbox/checkpoint.go` — `RollbackInPlace`）对应地：
 

@@ -23,55 +23,9 @@
 
 ## 1. 时序全图
 
-```mermaid
-sequenceDiagram
-    participant S as Python SDK
-    participant P as 宿主代理
-    participant G as gsd
-    participant C as CRIU
-    participant K as guest 内核
-    participant U as 用户进程树
+![一次 checkpoint 的跨组件时序](img/13-1-checkpoint时序.svg)
 
-    Note over S,U: 一次 checkpoint
-    S->>P: CreateCheckpoint 发往沙箱的 49984 端口
-    P->>G: 按端口原样转发
-    G->>K: 读 MMDS 校验 access token
-    G->>G: 排队取操作锁 然后检查健康状态
-    G->>K: 扫描 proc 找根并记录各进程状态
-    G->>G: 多树预检与容量预检
-    Note over G,U: 以上什么都没动
-    loop 每棵树按根进程号升序
-        G->>C: criu dump 带 leave-stopped
-        C->>U: 冻结 写镜像 清 soft-dirty 留在停止状态
-        C-->>G: 退出码
-    end
-    Note over G,U: 全部树停着
-    G->>K: 把 upper 改名成层 再发 ckpt 模式的 ioctl
-    G->>K: 对停着的进程写 clear_refs
-    G->>U: SIGCONT
-    Note over G,U: 用户进程恢复运行
-    G->>G: 量镜像大小 更新增量父镜像 条目入池 写 state.json
-    G-->>S: checkpoint_id 与 timings
-
-    Note over S,U: 一次 restore
-    S->>P: RestoreCheckpoint
-    P->>G: 按端口原样转发
-    G->>K: 读 MMDS 校验 access token
-    G->>G: 排队取操作锁 检查健康状态 查条目
-    G->>G: 检查镜像与父链 建好新的 upper 与 work
-    G->>K: 扫描 proc 列出全部用户进程
-    Note over G,U: 以上什么都没动
-    G->>U: 先 SIGSTOP 冻住 清点 再 SIGKILL 并等退出
-    Note over G,U: 提交点 之后的失败都是 DataLoss
-    G->>K: restore 模式的 ioctl 切回目标层栈
-    loop 目标里的每棵树按 dump 时的顺序
-        G->>C: criu restore 带 restore-detached
-        C->>U: 按原进程号重建 写回内存 重新打开文件
-        C-->>G: 退出码与根进程号
-    end
-    G->>G: 重建增量父镜像 解除 degraded 写 state.json
-    G-->>S: success 与 timings
-```
+![一次 restore 的跨组件时序](img/13-2-restore时序.svg)
 
 图里宿主代理只出现在最外圈：它转发请求和响应，对中间的每一步一无所知（[05](05-architecture.md)）。Firecracker 根本不在图上——整个过程中虚机没有被暂停过。
 
@@ -257,14 +211,7 @@ SDK 把它转成字典，放在 `create()` 返回值的 `timings` 属性和 `Che
 
 设三棵树的根进程号从小到大是 A、B、C，各自的 dump 耗时是 dA、dB、dC。时间线：
 
-```
-        |<-- dA -->|<-- dB -->|<-- dC -->|<- 下沉 + clear_refs ->|
-A       冻结........停着.......................................... 放开
-B       运行........冻结........停着.............................. 放开
-C       运行........运行........冻结........停着.................. 放开
-                   ^                                             ^
-                   tFirstStopped                                 SIGCONT
-```
+![三棵树各自冻结、停着、放开的时间线](img/13-3-多树冻结区间.svg)
 
 - `criu_dump_ms` = dA + dB + dC。
 - `stopped_ms` = 从 A dump 完算起 = dB + dC + 下沉 + `clear_refs`。也就是"其余各棵的 dump 时间之和"再加一点零头。

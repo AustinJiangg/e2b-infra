@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="848" viewBox="0 0 1600 848" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="848" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">三个时钟：客户端墙钟 ⊃ 冻结窗口 ⊃ 宿主分阶段，fc_* 来自 Firecracker 自报</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">三个时钟回答三个不同的问题。示意图，各段长度不按比例；格子里是 PhaseTimings 的键。</text>
+<rect x="48.0" y="119.0" width="30.0" height="18.0" rx="5" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="88.0" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">orchestrator 自己计时：窗口内</text>
+<rect x="329.8" y="119.0" width="30.0" height="18.0" rx="5" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="369.8" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">窗口外</text>
+<rect x="446.3" y="119.0" width="30.0" height="18.0" rx="5" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="486.3" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">派生：Mark("frozen", pausedAt)</text>
+<rect x="737.4" y="119.0" width="30.0" height="18.0" rx="5" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="777.4" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">Firecracker 回报（SetUs）</text>
+<rect x="1001.1" y="119.0" width="30.0" height="18.0" rx="5" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1041.1" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">窗口外的步骤，不是计时键</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">checkpoint</text>
+<text x="225.5" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">第 14 步 save_live_bitmap 只在全量时有</text>
+<text x="48.0" y="236.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">客户端墙钟</text>
+<text x="48.0" y="255.0" font-size="12.5" fill="#888780" text-anchor="start">调用方等了多久</text>
+<text x="48.0" y="306.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">冻结窗口 frozen</text>
+<text x="48.0" y="325.0" font-size="12.5" fill="#888780" text-anchor="start">业务停了多久</text>
+<text x="48.0" y="376.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">宿主分阶段 timings</text>
+<text x="48.0" y="395.0" font-size="12.5" fill="#888780" text-anchor="start">停的这段时间花在哪</text>
+<rect x="278.0" y="220.0" width="1274.0" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="915.0" y="243.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">SDK 调用耗时</text>
+<text x="324.0" y="242.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">网络往返</text>
+<text x="1506.0" y="242.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">网络往返</text>
+<rect x="566.0" y="290.0" width="526.6" height="36.0" rx="6" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="829.3" y="313.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="middle">frozen：业务实际感受到的停顿</text>
+<text x="468.0" y="312.5" font-size="12.5" fill="#888780" text-anchor="middle">窗口外</text>
+<text x="1276.3" y="312.5" font-size="12.5" fill="#888780" text-anchor="middle">窗口外</text>
+<rect x="371.5" y="360.0" width="193.0" height="36.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.1" stroke-dasharray="5 4"/>
+<text x="468.0" y="382.5" font-size="13" fill="#888780" text-anchor="middle">鉴权、取锁、Prepare</text>
+<rect x="567.5" y="360.0" width="75.8" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="605.4" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">pause</text>
+<rect x="646.3" y="360.0" width="180.6" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="736.6" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">save_live_bitmap</text>
+<rect x="829.8" y="360.0" width="103.7" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="881.7" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">snapshot</text>
+<rect x="936.6" y="360.0" width="66.5" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="969.8" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">seal</text>
+<rect x="1006.0" y="360.0" width="85.1" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1048.6" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">resume</text>
+<rect x="1094.1" y="360.0" width="114.2" height="36.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1151.2" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">seal_move</text>
+<rect x="1211.3" y="360.0" width="142.1" height="36.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1282.4" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">append_layer</text>
+<rect x="1356.5" y="360.0" width="102.0" height="36.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1407.5" y="382.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">commit_*</text>
+<line x1="566.0" y1="284.0" x2="566.0" y2="402.0" stroke="#D85A30" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="1092.6" y1="284.0" x2="1092.6" y2="402.0" stroke="#D85A30" stroke-width="1.2" stroke-dasharray="4 3"/>
+<circle cx="63" cy="442" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="447.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="449.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">restore</text>
+<rect x="190.9" y="432.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="227.9" y="448.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="280.9" y="448.0" font-size="14.5" fill="#888780" text-anchor="start">fc_rollback 里 Firecracker 再分段自报，下面列的是其中几个键</text>
+<text x="48.0" y="500.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">客户端墙钟</text>
+<text x="48.0" y="519.0" font-size="12.5" fill="#888780" text-anchor="start">调用方等了多久</text>
+<text x="48.0" y="570.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">冻结窗口 frozen</text>
+<text x="48.0" y="589.0" font-size="12.5" fill="#888780" text-anchor="start">业务停了多久</text>
+<text x="48.0" y="640.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">宿主分阶段 timings</text>
+<text x="48.0" y="659.0" font-size="12.5" fill="#888780" text-anchor="start">停的这段时间花在哪</text>
+<text x="48.0" y="734.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">fc_*</text>
+<text x="48.0" y="753.0" font-size="12.5" fill="#888780" text-anchor="start">Firecracker 自报，微秒</text>
+<rect x="278.0" y="484.0" width="1274.0" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="915.0" y="507.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">SDK 调用耗时</text>
+<text x="324.0" y="506.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">网络往返</text>
+<text x="1506.0" y="506.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">网络往返</text>
+<rect x="661.4" y="554.0" width="703.2" height="36.0" rx="6" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1013.0" y="577.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="middle">frozen：业务实际感受到的停顿</text>
+<text x="515.7" y="576.5" font-size="12.5" fill="#888780" text-anchor="middle">窗口外</text>
+<text x="1412.3" y="576.5" font-size="12.5" fill="#888780" text-anchor="middle">窗口外</text>
+<rect x="371.5" y="624.0" width="131.3" height="36.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="437.2" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">disk_view_read</text>
+<rect x="505.8" y="624.0" width="154.1" height="36.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="582.9" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">assemble_view_pre</text>
+<rect x="662.9" y="624.0" width="61.2" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="693.5" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">pause</text>
+<rect x="727.0" y="624.0" width="146.5" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="800.3" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">save_live_bitmap</text>
+<rect x="876.5" y="624.0" width="106.6" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="929.9" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">materialize</text>
+<rect x="986.2" y="624.0" width="107.6" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1040.0" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">fc_rollback</text>
+<rect x="1096.8" y="624.0" width="100.0" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1146.8" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">reset_view</text>
+<rect x="1199.8" y="624.0" width="91.5" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1245.6" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">conntrack</text>
+<rect x="1294.3" y="624.0" width="68.7" height="36.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1328.7" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">resume</text>
+<rect x="1366.0" y="624.0" width="92.5" height="36.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.1"/>
+<text x="1412.3" y="646.5" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">wait_envd</text>
+<line x1="661.4" y1="548.0" x2="661.4" y2="666.0" stroke="#D85A30" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="1364.5" y1="548.0" x2="1364.5" y2="666.0" stroke="#D85A30" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="459.5" y="718.0" width="212.3" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="565.6" y="740.5" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">fc_validate</text>
+<rect x="674.8" y="718.0" width="182.8" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="766.1" y="740.5" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">fc_memory</text>
+<rect x="860.5" y="718.0" width="168.0" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="944.5" y="740.5" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">fc_vcpus</text>
+<rect x="1031.5" y="718.0" width="138.5" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="1100.8" y="740.5" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">fc_gic</text>
+<rect x="1173.0" y="718.0" width="197.5" height="36.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="1271.7" y="740.5" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">fc_devices</text>
+<line x1="984.7" y1="660.0" x2="458.0" y2="718.0" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="1095.3" y1="660.0" x2="1372.0" y2="718.0" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="48" y1="790" x2="1552" y2="790" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="816.0" font-size="13" fill="#888780" text-anchor="start">注：键默认单位是毫秒，以 _mb 结尾的是 MB，以 _count 结尾的是计数；全部键的定义见第 27 章。排查时先看哪个时钟异常，就知道该往哪一层找。</text>
+</svg>

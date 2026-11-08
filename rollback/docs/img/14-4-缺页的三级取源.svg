@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1016" viewBox="0 0 1600 1016" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#D85A30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1016" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一次 2 MiB 缺页的三级取源：能零拷贝就零拷贝，跨代的块才按 4 KiB 拼</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">faultPage 与预取器共用 block.ReadPage(ctx, src, off, pageSize)，它返回一整页内容和一个 release 函数。缺页单位仍是 2 MiB，变的只是这 2 MiB 从哪里取。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">执行顺序</text>
+<line x1="192.0" y1="125.0" x2="232.0" y2="125.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="242.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">要分配缓冲并拷贝</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">按源的形态分三级</text>
+<rect x="270.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="307.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="360.0" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">block/page.go:63</text>
+<rect x="48.0" y="204.0" width="1504.0" height="718.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="220.0" y="224.0" width="422.7" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="431.3" y="252.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">第一级</text>
+<text x="431.3" y="274.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">块等于页：与修复前同一条路</text>
+<rect x="664.7" y="224.0" width="422.7" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="876.0" y="252.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">第二级</text>
+<text x="876.0" y="274.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">一条映射覆盖整页</text>
+<rect x="1109.3" y="224.0" width="422.7" height="62.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="1320.7" y="252.0" font-size="19" fill="#712B13" font-weight="600" text-anchor="middle">第三级</text>
+<text x="1320.7" y="274.0" font-size="13.5" fill="#993C1D" text-anchor="middle">跨代的块</text>
+<text x="68.0" y="333.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">触发</text>
+<rect x="220.0" y="302.0" width="1312.0" height="52.0" rx="10" fill="#FFFFFF" stroke="#888780" stroke-width="1.2"/>
+<text x="876.0" y="334.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">uffd 缺页：offset，pageSize = 2 MiB</text>
+<text x="68.0" y="421.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">判断</text>
+<rect x="220.0" y="384.0" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="431.3" y="409.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">源的 BlockSize == pageSize</text>
+<text x="431.3" y="436.2" font-size="13" fill="#5F5E5A" text-anchor="middle">是：旧的 2 MiB 快照</text>
+<line x1="431.3" y1="356.0" x2="431.3" y2="379.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="664.7" y="384.0" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="409.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">SliceContiguous(off, 2 MiB) 为真</text>
+<text x="876.0" y="436.2" font-size="13" fill="#5F5E5A" text-anchor="middle">BlockSize ≠ pageSize；整块同代，或整块是空洞</text>
+<line x1="876.0" y1="356.0" x2="876.0" y2="379.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1109.3" y="384.0" width="422.7" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1320.7" y="409.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">SliceContiguous(off, 2 MiB) 为假</text>
+<text x="1320.7" y="436.2" font-size="13" fill="#993C1D" text-anchor="middle">BlockSize ≠ pageSize；这 2 MiB 里混着几代</text>
+<line x1="1320.7" y1="356.0" x2="1320.7" y2="379.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="68.0" y="539.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">怎么取</text>
+<rect x="220.0" y="479.5" width="422.7" height="109.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="431.3" y="526.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">src.Slice(off, 2 MiB)</text>
+<text x="431.3" y="553.4" font-size="13" fill="#5F5E5A" text-anchor="middle">page.go:66-71；行为与修复前逐字节相同</text>
+<line x1="431.3" y1="451.5" x2="431.3" y2="474.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="664.7" y="479.5" width="422.7" height="109.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="516.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">返回那一代 mmap 缓存里的切片</text>
+<text x="876.0" y="543.4" font-size="13" fill="#5F5E5A" text-anchor="middle">page.go:77-89；空洞返回共享的全零大页</text>
+<text x="876.0" y="563.4" font-size="13" fill="#5F5E5A" text-anchor="middle">header.EmptyHugePage</text>
+<line x1="876.0" y1="451.5" x2="876.0" y2="474.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1109.3" y="479.5" width="422.7" height="109.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1320.7" y="504.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">从 sync.Pool 取 2 MiB 缓冲，src.ReadAt 沿映射链</text>
+<text x="1320.7" y="528.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">逐段拼满</text>
+<text x="1320.7" y="555.2" font-size="13" fill="#993C1D" text-anchor="middle">page.go:91-109；空洞段由 ReadAt 自己清零；字节数不等于页大</text>
+<text x="1320.7" y="575.2" font-size="13" fill="#993C1D" text-anchor="middle">小直接报错</text>
+<line x1="1320.7" y1="451.5" x2="1320.7" y2="474.5" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="68.0" y="656.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">填页</text>
+<rect x="220.0" y="618.5" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="431.3" y="656.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">UFFDIO_COPY 2 MiB</text>
+<line x1="431.3" y1="590.5" x2="431.3" y2="613.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="664.7" y="618.5" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="656.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">UFFDIO_COPY 2 MiB</text>
+<line x1="876.0" y1="590.5" x2="876.0" y2="613.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1109.3" y="618.5" width="422.7" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1320.7" y="643.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">UFFDIO_COPY 2 MiB</text>
+<text x="1320.7" y="670.7" font-size="13" fill="#993C1D" text-anchor="middle">完成后 release() 把缓冲还回池</text>
+<line x1="1320.7" y1="590.5" x2="1320.7" y2="613.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="68" y1="716.0" x2="1532" y2="716.0" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="750.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">对比小结</text>
+<rect x="62.0" y="768.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="796.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">拷贝</text>
+<text x="431.3" y="796.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">零拷贝</text>
+<text x="876.0" y="796.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">零拷贝</text>
+<text x="1320.7" y="796.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">一次 2 MiB 拷贝</text>
+<text x="68.0" y="840.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">映射查表</text>
+<text x="431.3" y="840.0" font-size="15" fill="#2C2C2A" text-anchor="middle">不多付</text>
+<text x="876.0" y="840.0" font-size="15" fill="#2C2C2A" text-anchor="middle">查一次映射</text>
+<text x="1320.7" y="840.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">最多 512 次</text>
+<rect x="62.0" y="856.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="884.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">多少缺页走这里</text>
+<text x="431.3" y="884.0" font-size="15" fill="#2C2C2A" text-anchor="middle">从旧的 2 MiB 快照起沙箱时</text>
+<text x="876.0" y="884.0" font-size="15" fill="#2C2C2A" text-anchor="middle">大多数缺页</text>
+<text x="1320.7" y="884.0" font-size="15" fill="#2C2C2A" text-anchor="middle">只有跨代的块</text>
+<line x1="48" y1="958.0" x2="1552" y2="958.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="984.0" font-size="13" fill="#888780" text-anchor="start">注：template.Storage 也补了 SliceContiguous（sandbox/template/storage.go:155），让 ReadPage 能透过模板存储这一层问到“是否整页同源”。</text>
+</svg>

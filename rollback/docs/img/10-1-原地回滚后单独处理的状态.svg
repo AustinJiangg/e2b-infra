@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1244" viewBox="0 0 1600 1244" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-async" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#1D9E75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#D85A30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1244" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">原地回滚改的是活对象：六类状态要在 restore 里单独处理</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">重建路线从快照构造新设备对象，这些问题不存在。原地路线保留宿主对象，从活对象推导、又不在快照里的状态，以及宿主上记得 guest 的状态都留了下来，而且是按被丢弃的时间线推导的（§1）。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">执行顺序</text>
+<line x1="192.0" y1="125.0" x2="232.0" y2="125.0" stroke="#1D9E75" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ar-async)"/>
+<text x="242.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">后台并行</text>
+<line x1="336.0" y1="125.0" x2="376.0" y2="125.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="386.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">不处理时的后果</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">每类状态：不处理会怎样、谁处理、怎么处理</text>
+<rect x="510.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="547.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="52.0" y="226.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">状态</text>
+<text x="348.0" y="226.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">不处理会怎样</text>
+<text x="768.0" y="226.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">谁处理 · 在哪一步</text>
+<text x="1044.0" y="226.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">怎么处理</text>
+<rect x="48.0" y="242.0" width="276.0" height="96.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="186.0" y="282.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">§2 网络 RX 描述符缓存</text>
+<text x="186.0" y="309.7" font-size="13" fill="#5F5E5A" text-anchor="middle">rx_buffer.parsed_descriptors</text>
+<rect x="348.0" y="242.0" width="380.0" height="96.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="538.0" y="284.5" font-size="13.5" fill="#993C1D" text-anchor="middle">仍按被丢弃的时间线解析；guest 报 id N is not a</text>
+<text x="538.0" y="305.5" font-size="13.5" fill="#993C1D" text-anchor="middle">head!，RX 永久卡死</text>
+<line x1="328.0" y1="290.0" x2="342.0" y2="290.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="768.0" y="242.0" width="236.0" height="96.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="886.0" y="282.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Firecracker</text>
+<text x="886.0" y="309.4" font-size="13" fill="#5F5E5A" text-anchor="middle">阶段 7 · apply_net_rx_cache</text>
+<line x1="732.0" y1="290.0" x2="762.0" y2="290.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1044.0" y="242.0" width="508.0" height="96.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1298.0" y="270.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">原地 clear()，next_avail 退回已解析的条数，从已回滚的 avail 环</text>
+<text x="1298.0" y="293.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">重新解析</text>
+<text x="1298.0" y="320.7" font-size="13" fill="#0F6E56" text-anchor="middle">不新建 RxBuffers：VMM 线程的 seccomp 没有放行 memfd_create</text>
+<line x1="1008.0" y1="290.0" x2="1038.0" y2="290.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="360.0" width="276.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="186.0" y="389.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">§3 VMGenID 代号</text>
+<text x="186.0" y="416.7" font-size="13" fill="#5F5E5A" text-anchor="middle">guest 内存里的 128 位代号</text>
+<rect x="348.0" y="360.0" width="380.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="538.0" y="391.5" font-size="13.5" fill="#993C1D" text-anchor="middle">若在内存回滚前写，会被目标时刻的旧值覆盖；guest 不</text>
+<text x="538.0" y="412.5" font-size="13.5" fill="#993C1D" text-anchor="middle">知道时间被回拨</text>
+<line x1="328.0" y1="397.0" x2="342.0" y2="397.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="768.0" y="360.0" width="236.0" height="74.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="886.0" y="389.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Firecracker</text>
+<text x="886.0" y="416.4" font-size="13" fill="#5F5E5A" text-anchor="middle">阶段 8 · 内存写回之后</text>
+<line x1="732.0" y1="397.0" x2="762.0" y2="397.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1044.0" y="360.0" width="508.0" height="74.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1298.0" y="402.4" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">写入新代号，不是快照里的那个</text>
+<line x1="1008.0" y1="397.0" x2="1038.0" y2="397.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="456.0" width="276.0" height="93.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="186.0" y="495.3" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">§4 连接跟踪表 conntrack</text>
+<text x="186.0" y="522.2" font-size="13" fill="#5F5E5A" text-anchor="middle">命名空间内的表、宿主的表</text>
+<rect x="348.0" y="456.0" width="380.0" height="93.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="538.0" y="497.0" font-size="13.5" fill="#993C1D" text-anchor="middle">跨越回滚的连接序号在内核看来倒退，包被丢弃；连接挂</text>
+<text x="538.0" y="518.0" font-size="13.5" fill="#993C1D" text-anchor="middle">死，没有报错</text>
+<line x1="328.0" y1="502.5" x2="342.0" y2="502.5" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="768.0" y="456.0" width="236.0" height="93.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="886.0" y="495.1" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">orchestrator</text>
+<text x="886.0" y="521.9" font-size="13" fill="#5F5E5A" text-anchor="middle">pause 后启动，resume 前 join</text>
+<line x1="732.0" y1="502.5" x2="762.0" y2="502.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1044.0" y="456.0" width="508.0" height="93.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1298.0" y="484.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">命名空间内整表 flush；宿主表只删本 slot 地址的表项</text>
+<text x="1298.0" y="511.7" font-size="13" fill="#0F6E56" text-anchor="middle">宿主表项按原始元组任一端是 slot 地址认定；清扫器合批扫描，按代价模型选整</text>
+<text x="1298.0" y="531.7" font-size="13" fill="#0F6E56" text-anchor="middle">表扫描或内核过滤</text>
+<line x1="1008.0" y1="502.5" x2="1038.0" y2="502.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="571.0" width="276.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="186.0" y="600.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">§4.6 代理的连接池</text>
+<text x="186.0" y="627.7" font-size="13" fill="#5F5E5A" text-anchor="middle">代理对每个沙箱维护的连接</text>
+<rect x="348.0" y="571.0" width="380.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="538.0" y="613.0" font-size="13.5" fill="#993C1D" text-anchor="middle">池里还开着的连接，对端（guest 里的服务）已经不记得</text>
+<line x1="328.0" y1="608.0" x2="342.0" y2="608.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="768.0" y="571.0" width="236.0" height="74.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="886.0" y="600.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">orchestrator</text>
+<text x="886.0" y="627.4" font-size="13" fill="#5F5E5A" text-anchor="middle">beginRestore · 暂停虚机之前</text>
+<line x1="732.0" y1="608.0" x2="762.0" y2="608.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1044.0" y="571.0" width="508.0" height="74.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1298.0" y="600.4" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">丢弃本沙箱的连接；unary 调用被改判成 409 sandbox_restored</text>
+<text x="1298.0" y="627.2" font-size="13" fill="#0F6E56" text-anchor="middle">丢弃失败只记 WARN</text>
+<line x1="1008.0" y1="608.0" x2="1038.0" y2="608.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="667.0" width="276.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="186.0" y="696.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">§5 时间</text>
+<text x="186.0" y="723.7" font-size="13" fill="#5F5E5A" text-anchor="middle">单调时钟与墙钟</text>
+<rect x="348.0" y="667.0" width="380.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="538.0" y="698.5" font-size="13.5" fill="#993C1D" text-anchor="middle">单调时钟随计时器寄存器在阶段 5 回到快照时刻；墙钟留</text>
+<text x="538.0" y="719.5" font-size="13.5" fill="#993C1D" text-anchor="middle">在过去，时间戳全错</text>
+<line x1="328.0" y1="704.0" x2="342.0" y2="704.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="768.0" y="667.0" width="236.0" height="74.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="886.0" y="696.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">envd</text>
+<text x="886.0" y="723.4" font-size="13" fill="#5F5E5A" text-anchor="middle">finishRestore 等它应答</text>
+<line x1="732.0" y1="704.0" x2="762.0" y2="704.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1044.0" y="667.0" width="508.0" height="74.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1298.0" y="696.4" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">单调时钟保持回拨；envd 初始化把墙钟校回当前时间</text>
+<text x="1298.0" y="723.2" font-size="13" fill="#0F6E56" text-anchor="middle">回拨是快照语义的一部分；验收的活性判据只看心跳计数增长</text>
+<line x1="1008.0" y1="704.0" x2="1038.0" y2="704.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="763.0" width="276.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="186.0" y="792.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">§6 队列页的脏标记</text>
+<text x="186.0" y="819.7" font-size="13" fill="#5F5E5A" text-anchor="middle">virtio 队列的环页</text>
+<rect x="348.0" y="763.0" width="380.0" height="74.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="538.0" y="794.5" font-size="13.5" fill="#993C1D" text-anchor="middle">Firecracker 自己写环页，不经过 Stage-2；阶段 9 清</text>
+<text x="538.0" y="815.5" font-size="13.5" fill="#993C1D" text-anchor="middle">空位图后下一代 Diff 会漏掉它们</text>
+<line x1="328.0" y1="800.0" x2="342.0" y2="800.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="768.0" y="763.0" width="236.0" height="74.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="886.0" y="792.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Firecracker</text>
+<text x="886.0" y="819.4" font-size="13" fill="#5F5E5A" text-anchor="middle">阶段 9 · 清空位图之后</text>
+<line x1="732.0" y1="800.0" x2="762.0" y2="800.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1044.0" y="763.0" width="508.0" height="74.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1298.0" y="805.4" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">立刻对已激活设备调 mark_queue_memory_dirty</text>
+<line x1="1008.0" y1="800.0" x2="1038.0" y2="800.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<circle cx="63" cy="883" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="888.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="890.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">它们落在一次 restore 的哪一步</text>
+<text x="403.4" y="889.0" font-size="14.5" fill="#888780" text-anchor="start">两条次序约束：通知写在内存回滚之后；表项在流量放回来之前清完</text>
+<rect x="48.0" y="915.0" width="165.2" height="127.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="926.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="110.6" y="941.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="130.6" y="985.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">丢弃代理连接池</text>
+<text x="130.6" y="1012.7" font-size="13" fill="#5F5E5A" text-anchor="middle">beginRestore</text>
+<line x1="216.2" y1="978.5" x2="234.2" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="239.2" y="915.0" width="165.2" height="127.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="251.2" y="926.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="301.8" y="941.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="321.9" y="985.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">暂停虚机</text>
+<text x="321.9" y="1012.7" font-size="13" fill="#5F5E5A" text-anchor="middle">pause</text>
+<line x1="407.5" y1="978.5" x2="425.5" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="430.5" y="915.0" width="165.2" height="127.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="442.5" y="926.0" width="95.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="490.3" y="941.5" font-size="12" fill="#0F6E56" font-weight="500" text-anchor="middle">Firecracker</text>
+<text x="513.1" y="975.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">阶段 4～5</text>
+<text x="513.1" y="1002.7" font-size="13" fill="#0F6E56" text-anchor="middle">内存写回；vCPU 恢</text>
+<text x="513.1" y="1022.7" font-size="13" fill="#0F6E56" text-anchor="middle">复，单调时钟回拨</text>
+<line x1="598.8" y1="978.5" x2="616.8" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="621.8" y="915.0" width="165.2" height="127.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="633.8" y="926.0" width="95.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="681.6" y="941.5" font-size="12" fill="#0F6E56" font-weight="500" text-anchor="middle">Firecracker</text>
+<text x="704.4" y="985.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">阶段 7</text>
+<text x="704.4" y="1012.7" font-size="13" fill="#0F6E56" text-anchor="middle">写回设备与 RX 缓存</text>
+<line x1="790.0" y1="978.5" x2="808.0" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="813.0" y="915.0" width="165.2" height="127.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="825.0" y="926.0" width="95.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="872.8" y="941.5" font-size="12" fill="#0F6E56" font-weight="500" text-anchor="middle">Firecracker</text>
+<text x="895.6" y="985.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">阶段 8</text>
+<text x="895.6" y="1012.7" font-size="13" fill="#0F6E56" text-anchor="middle">写入新 VMGenID</text>
+<line x1="981.2" y1="978.5" x2="999.2" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1004.2" y="915.0" width="165.2" height="127.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="1016.2" y="926.0" width="95.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="1064.1" y="941.5" font-size="12" fill="#0F6E56" font-weight="500" text-anchor="middle">Firecracker</text>
+<text x="1086.9" y="985.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">阶段 9</text>
+<text x="1086.9" y="1012.7" font-size="13" fill="#0F6E56" text-anchor="middle">清位图，标脏队列页</text>
+<line x1="1172.5" y1="978.5" x2="1190.5" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1195.5" y="915.0" width="165.2" height="127.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1207.5" y="926.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1258.1" y="941.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="1278.1" y="985.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">join 后 resume</text>
+<text x="1278.1" y="1012.7" font-size="13" fill="#5F5E5A" text-anchor="middle">表项在流量放回前清完</text>
+<line x1="1363.8" y1="978.5" x2="1381.8" y2="978.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1386.8" y="915.0" width="165.2" height="127.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1398.8" y="926.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1449.3" y="941.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="1469.4" y="985.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">等 envd 应答</text>
+<text x="1469.4" y="1012.7" font-size="13" fill="#5F5E5A" text-anchor="middle">墙钟校回当前</text>
+<rect x="430.5" y="1086.0" width="751.0" height="64.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="806.0" y="1110.4" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">后台清理 conntrack（startConntrackFlush）</text>
+<text x="806.0" y="1137.2" font-size="13" fill="#0F6E56" text-anchor="middle">与导出位图、物化、Firecracker 回滚、ResetView 并行；命名空间表 flush 与宿主表清扫之间也并行</text>
+<path d="M321.9 1044.0 L321.9 1118.0 L424.5 1118.0" fill="none" stroke="#1D9E75" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ar-async)"/>
+<path d="M1183.5 1118.0 L1278.1 1118.0 L1278.1 1048.0" fill="none" stroke="#1D9E75" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ar-async)"/>
+<line x1="48" y1="1186" x2="1552" y2="1186" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1212.0" font-size="13" fill="#888780" text-anchor="start">注：阶段编号沿用第 9 章的九个阶段。加新设备、改回滚路径时逐条核对的检查表见本章 §8。</text>
+</svg>

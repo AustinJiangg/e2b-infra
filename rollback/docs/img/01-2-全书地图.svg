@@ -1,0 +1,220 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1532" viewBox="0 0 1600 1532" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1532" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">全书地图：六篇 30 章加 5 个附录，按目标选读其中一段</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">篇章划分与首页、侧栏一致。上半部分是各篇包含哪些章，下半部分是第 01 章 §7 给出的六条阅读路径。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">阅读顺序</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">六篇与附录</text>
+<text x="210.0" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">章名以各章标题为准</text>
+<rect x="48.0" y="210.0" width="485.3" height="301.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="48.0" y="210.0" width="485.3" height="46.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="66.0" y="239.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第一篇  导论与基础</text>
+<text x="515.3" y="239.0" font-size="13" fill="#5F5E5A" text-anchor="end">第 01～03 章</text>
+<text x="70.0" y="280.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">01</text>
+<text x="104.0" y="280.0" font-size="14" fill="#2C2C2A" text-anchor="start">项目、交付范围与阅读方法</text>
+<text x="70.0" y="305.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">02</text>
+<text x="104.0" y="305.0" font-size="14" fill="#2C2C2A" text-anchor="start">沙箱、microVM 与快照基础</text>
+<text x="70.0" y="330.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">03</text>
+<text x="104.0" y="330.0" font-size="14" fill="#2C2C2A" text-anchor="start">设计目标、能力边界与方案选择</text>
+<rect x="557.3" y="210.0" width="485.3" height="301.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="557.3" y="210.0" width="485.3" height="46.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="575.3" y="239.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第二篇  核心设计与实现</text>
+<text x="1024.7" y="239.0" font-size="13" fill="#5F5E5A" text-anchor="end">第 04～12 章</text>
+<text x="579.3" y="280.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">04</text>
+<text x="613.3" y="280.0" font-size="14" fill="#2C2C2A" text-anchor="start">总体架构与端到端流程</text>
+<text x="579.3" y="305.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">05</text>
+<text x="613.3" y="305.0" font-size="14" fill="#2C2C2A" text-anchor="start">脏页跟踪与 HDBSS</text>
+<text x="579.3" y="330.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">06</text>
+<text x="613.3" y="330.0" font-size="14" fill="#2C2C2A" text-anchor="start">内存差分树</text>
+<text x="579.3" y="355.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">07</text>
+<text x="613.3" y="355.0" font-size="14" fill="#2C2C2A" text-anchor="start">磁盘分层与回收</text>
+<text x="579.3" y="380.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">08</text>
+<text x="613.3" y="380.0" font-size="14" fill="#2C2C2A" text-anchor="start">Firecracker 接口契约</text>
+<text x="579.3" y="405.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">09</text>
+<text x="613.3" y="405.0" font-size="14" fill="#2C2C2A" text-anchor="start">进程内原地回滚</text>
+<text x="579.3" y="430.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">10</text>
+<text x="613.3" y="430.0" font-size="14" fill="#2C2C2A" text-anchor="start">设备、网络与时间状态</text>
+<text x="579.3" y="455.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">11</text>
+<text x="613.3" y="455.0" font-size="14" fill="#2C2C2A" text-anchor="start">失败语义与正确性不变量</text>
+<text x="579.3" y="480.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">12</text>
+<text x="613.3" y="480.0" font-size="14" fill="#2C2C2A" text-anchor="start">状态、并发、持久性与生命周期</text>
+<rect x="1066.7" y="210.0" width="485.3" height="301.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1066.7" y="210.0" width="485.3" height="46.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1084.7" y="239.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第三篇  原生快照与精确增量</text>
+<text x="1534.0" y="239.0" font-size="13" fill="#5F5E5A" text-anchor="end">第 13～15 章</text>
+<text x="1088.7" y="280.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">13</text>
+<text x="1122.7" y="280.0" font-size="14" fill="#2C2C2A" text-anchor="start">原生快照的机制与成本</text>
+<text x="1088.7" y="305.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">14</text>
+<text x="1122.7" y="305.0" font-size="14" fill="#2C2C2A" text-anchor="start">精确增量的设计与实现</text>
+<text x="1088.7" y="330.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">15</text>
+<text x="1122.7" y="330.0" font-size="14" fill="#2C2C2A" text-anchor="start">两种快照的分工、配合与代价</text>
+<rect x="48.0" y="535.0" width="485.3" height="251.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="48.0" y="535.0" width="485.3" height="46.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="66.0" y="564.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第四篇  验证、实测与验收</text>
+<text x="515.3" y="564.0" font-size="13" fill="#5F5E5A" text-anchor="end">第 16～22 章</text>
+<text x="70.0" y="605.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">16</text>
+<text x="104.0" y="605.0" font-size="14" fill="#2C2C2A" text-anchor="start">测试体系、环境与测量口径</text>
+<text x="70.0" y="630.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">17</text>
+<text x="104.0" y="630.0" font-size="14" fill="#2C2C2A" text-anchor="start">功能正确性与覆盖范围</text>
+<text x="70.0" y="655.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">18</text>
+<text x="104.0" y="655.0" font-size="14" fill="#2C2C2A" text-anchor="start">950 性能分档与 HDBSS 实测</text>
+<text x="70.0" y="680.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">19</text>
+<text x="104.0" y="680.0" font-size="14" fill="#2C2C2A" text-anchor="start">原生 pause / resume 分档实测</text>
+<text x="70.0" y="705.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">20</text>
+<text x="104.0" y="705.0" font-size="14" fill="#2C2C2A" text-anchor="start">920B 性能与平台差异</text>
+<text x="70.0" y="730.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">21</text>
+<text x="104.0" y="730.0" font-size="14" fill="#2C2C2A" text-anchor="start">并发与长跑</text>
+<text x="70.0" y="755.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">22</text>
+<text x="104.0" y="755.0" font-size="14" fill="#2C2C2A" text-anchor="start">验收流程、结果判读与结论边界</text>
+<rect x="557.3" y="535.0" width="485.3" height="251.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="557.3" y="535.0" width="485.3" height="46.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="575.3" y="564.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第五篇  使用、部署与运维</text>
+<text x="1024.7" y="564.0" font-size="13" fill="#5F5E5A" text-anchor="end">第 23～28 章</text>
+<text x="579.3" y="605.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">23</text>
+<text x="613.3" y="605.0" font-size="14" fill="#2C2C2A" text-anchor="start">SDK 快速上手</text>
+<text x="579.3" y="630.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">24</text>
+<text x="613.3" y="630.0" font-size="14" fill="#2C2C2A" text-anchor="start">接口语义、错误、超时与并发调用</text>
+<text x="579.3" y="655.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">25</text>
+<text x="613.3" y="655.0" font-size="14" fill="#2C2C2A" text-anchor="start">构建、部署前提与能力自检</text>
+<text x="579.3" y="680.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">26</text>
+<text x="613.3" y="680.0" font-size="14" fill="#2C2C2A" text-anchor="start">配置与容量规划</text>
+<text x="579.3" y="705.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">27</text>
+<text x="613.3" y="705.0" font-size="14" fill="#2C2C2A" text-anchor="start">日志、指标与分段计时</text>
+<text x="579.3" y="730.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">28</text>
+<text x="613.3" y="730.0" font-size="14" fill="#2C2C2A" text-anchor="start">按症状排障</text>
+<rect x="1066.7" y="535.0" width="485.3" height="251.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1066.7" y="535.0" width="485.3" height="46.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1084.7" y="564.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第六篇  接手开发与后续方向</text>
+<text x="1534.0" y="564.0" font-size="13" fill="#5F5E5A" text-anchor="end">第 29～30 章</text>
+<text x="1088.7" y="605.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">29</text>
+<text x="1122.7" y="605.0" font-size="14" fill="#2C2C2A" text-anchor="start">代码入口、修改指引与开发验证</text>
+<text x="1088.7" y="630.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">30</text>
+<text x="1122.7" y="630.0" font-size="14" fill="#2C2C2A" text-anchor="start">现状与方向</text>
+<rect x="48.0" y="810.0" width="1504.0" height="58.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="66.0" y="845.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">附录</text>
+<text x="134.0" y="845.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">A</text>
+<text x="154.0" y="845.0" font-size="14" fill="#2C2C2A" text-anchor="start">术语、协议与文件格式参考</text>
+<text x="415.2" y="845.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">B</text>
+<text x="435.2" y="845.0" font-size="14" fill="#2C2C2A" text-anchor="start">920B 测试明细</text>
+<text x="696.4" y="845.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">C</text>
+<text x="716.4" y="845.0" font-size="14" fill="#2C2C2A" text-anchor="start">工程修复案例</text>
+<text x="977.6" y="845.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">D</text>
+<text x="997.6" y="845.0" font-size="14" fill="#2C2C2A" text-anchor="start">代码规模与统计口径</text>
+<text x="1258.8" y="845.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="start">E</text>
+<text x="1278.8" y="845.0" font-size="14" fill="#2C2C2A" text-anchor="start">测试环境、轮次与工具索引</text>
+<circle cx="63" cy="914" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="919.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="921.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">按目标的阅读路径</text>
+<rect x="270.0" y="904.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="307.0" y="920.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="360.0" y="920.0" font-size="14.5" fill="#888780" text-anchor="start">第 01 章 §7 的表</text>
+<rect x="48.0" y="937.0" width="1504.0" height="85.0" rx="8" fill="#F7F6F2" stroke="none" stroke-width="0"/>
+<text x="66.0" y="984.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">完整学习</text>
+<rect x="238.0" y="946.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.4" y="971.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第一篇</text>
+<text x="353.4" y="998.7" font-size="13" fill="#5F5E5A" text-anchor="middle">导论与基础</text>
+<line x1="472.8" y1="979.5" x2="502.8" y2="979.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="508.8" y="946.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="624.2" y="971.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第二篇</text>
+<text x="624.2" y="998.7" font-size="13" fill="#5F5E5A" text-anchor="middle">核心设计与实现</text>
+<line x1="743.6" y1="979.5" x2="773.6" y2="979.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="779.6" y="946.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="895.0" y="971.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第三篇</text>
+<text x="895.0" y="998.7" font-size="13" fill="#5F5E5A" text-anchor="middle">原生快照与精确增量</text>
+<line x1="1014.4" y1="979.5" x2="1044.4" y2="979.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1050.4" y="946.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1165.8" y="971.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第四篇</text>
+<text x="1165.8" y="998.7" font-size="13" fill="#5F5E5A" text-anchor="middle">验证、实测与验收</text>
+<line x1="1285.2" y1="979.5" x2="1315.2" y2="979.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1321.2" y="946.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1436.6" y="971.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">结合第五篇实践</text>
+<text x="1436.6" y="998.7" font-size="13" fill="#5F5E5A" text-anchor="middle">使用、部署与运维</text>
+<text x="66.0" y="1069.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">评审与验收</text>
+<rect x="238.0" y="1031.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.4" y="1056.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 01、03 章</text>
+<text x="353.4" y="1083.7" font-size="13" fill="#5F5E5A" text-anchor="middle">本章；设计目标与能力边界</text>
+<line x1="472.8" y1="1064.5" x2="502.8" y2="1064.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="508.8" y="1031.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="624.2" y="1056.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 16～22 章</text>
+<text x="624.2" y="1083.7" font-size="13" fill="#5F5E5A" text-anchor="middle">验证、实测与验收</text>
+<line x1="743.6" y1="1064.5" x2="773.6" y2="1064.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="779.6" y="1031.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="895.0" y="1056.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">按证据回查</text>
+<text x="895.0" y="1083.7" font-size="13" fill="#5F5E5A" text-anchor="middle">机制章节和附录 B</text>
+<rect x="48.0" y="1107.0" width="1504.0" height="85.0" rx="8" fill="#F7F6F2" stroke="none" stroke-width="0"/>
+<text x="66.0" y="1154.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">理解原生精确增量</text>
+<rect x="238.0" y="1116.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.4" y="1141.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 02 章 第 5、6 节</text>
+<text x="353.4" y="1168.7" font-size="13" fill="#5F5E5A" text-anchor="middle">e2b 沙箱模型；快照基本原理</text>
+<line x1="472.8" y1="1149.5" x2="502.8" y2="1149.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="508.8" y="1116.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="624.2" y="1141.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 13 章</text>
+<text x="624.2" y="1168.7" font-size="13" fill="#5F5E5A" text-anchor="middle">原生快照的机制与成本</text>
+<line x1="743.6" y1="1149.5" x2="773.6" y2="1149.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="779.6" y="1116.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="895.0" y="1141.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 14 章</text>
+<text x="895.0" y="1168.7" font-size="13" fill="#5F5E5A" text-anchor="middle">精确增量的设计与实现</text>
+<line x1="1014.4" y1="1149.5" x2="1044.4" y2="1149.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1050.4" y="1116.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1165.8" y="1141.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 15 章</text>
+<text x="1165.8" y="1168.7" font-size="13" fill="#5F5E5A" text-anchor="middle">两种快照的分工、配合与代价</text>
+<line x1="1285.2" y1="1149.5" x2="1315.2" y2="1149.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1321.2" y="1116.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1436.6" y="1141.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 19 章</text>
+<text x="1436.6" y="1168.7" font-size="13" fill="#5F5E5A" text-anchor="middle">原生 pause / resume 分档实测</text>
+<text x="66.0" y="1239.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">使用接口</text>
+<rect x="238.0" y="1201.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.4" y="1226.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 23 章</text>
+<text x="353.4" y="1253.7" font-size="13" fill="#5F5E5A" text-anchor="middle">SDK 快速上手</text>
+<line x1="472.8" y1="1234.5" x2="502.8" y2="1234.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="508.8" y="1201.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="624.2" y="1226.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 24 章</text>
+<text x="624.2" y="1253.7" font-size="13" fill="#5F5E5A" text-anchor="middle">接口语义、错误、超时与并发调用</text>
+<line x1="743.6" y1="1234.5" x2="773.6" y2="1234.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="779.6" y="1201.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="895.0" y="1226.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 26 章</text>
+<text x="895.0" y="1253.7" font-size="13" fill="#5F5E5A" text-anchor="middle">相关配置</text>
+<line x1="1014.4" y1="1234.5" x2="1044.4" y2="1234.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1050.4" y="1201.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1165.8" y="1226.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 28 章</text>
+<text x="1165.8" y="1253.7" font-size="13" fill="#5F5E5A" text-anchor="middle">按症状排障</text>
+<rect x="48.0" y="1277.0" width="1504.0" height="85.0" rx="8" fill="#F7F6F2" stroke="none" stroke-width="0"/>
+<text x="66.0" y="1324.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">配置与诊断</text>
+<rect x="238.0" y="1286.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.4" y="1311.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 25～28 章</text>
+<text x="353.4" y="1338.7" font-size="13" fill="#5F5E5A" text-anchor="middle">自检、配置、日志、排障</text>
+<line x1="472.8" y1="1319.5" x2="502.8" y2="1319.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="508.8" y="1286.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="624.2" y="1311.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 18 章</text>
+<text x="624.2" y="1338.7" font-size="13" fill="#5F5E5A" text-anchor="middle">实测条件</text>
+<line x1="743.6" y1="1319.5" x2="773.6" y2="1319.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="779.6" y="1286.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="895.0" y="1311.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">附录 E</text>
+<text x="895.0" y="1338.7" font-size="13" fill="#5F5E5A" text-anchor="middle">测试环境、轮次与工具索引</text>
+<text x="66.0" y="1409.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">接手开发</text>
+<rect x="238.0" y="1371.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.4" y="1396.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 04 章</text>
+<text x="353.4" y="1423.7" font-size="13" fill="#5F5E5A" text-anchor="middle">总体架构与端到端流程</text>
+<line x1="472.8" y1="1404.5" x2="502.8" y2="1404.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="508.8" y="1371.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="624.2" y="1409.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">对应机制章节</text>
+<line x1="743.6" y1="1404.5" x2="773.6" y2="1404.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="779.6" y="1371.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="895.0" y="1396.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 29 章</text>
+<text x="895.0" y="1423.7" font-size="13" fill="#5F5E5A" text-anchor="middle">代码入口、修改指引与开发验证</text>
+<line x1="1014.4" y1="1404.5" x2="1044.4" y2="1404.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1050.4" y="1371.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1165.8" y="1396.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">第 30 章</text>
+<text x="1165.8" y="1423.7" font-size="13" fill="#5F5E5A" text-anchor="middle">现状与方向</text>
+<line x1="1285.2" y1="1404.5" x2="1315.2" y2="1404.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1321.2" y="1371.0" width="230.8" height="67.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1436.6" y="1396.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">附录 C</text>
+<text x="1436.6" y="1423.7" font-size="13" fill="#5F5E5A" text-anchor="middle">工程修复案例</text>
+<line x1="48" y1="1474" x2="1552" y2="1474" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1500.0" font-size="13" fill="#888780" text-anchor="start">注：正文从当前机制出发；附录 B 保存 920B 详细结果，附录 C 保存工程修复案例。</text>
+</svg>

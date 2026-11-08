@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1162" viewBox="0 0 1600 1162" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-back" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#0F6E56" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1162" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一次 checkpoint 的时序：冻结窗口里只有暂停、写快照、封存写层、恢复</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">编号对应 §7 的步骤表；右列是写进 timings.json 的计时键。Firecracker 进程全程不重建，封存层移入 store 和提交都在窗口外。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">调用</text>
+<line x1="165.0" y1="125.0" x2="205.0" y2="125.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="215.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">返回调用方</text>
+<rect x="75.0" y="150.0" width="170.0" height="58.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="160.0" y="172.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">Python SDK</text>
+<text x="160.0" y="198.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">调用方</text>
+<rect x="455.0" y="150.0" width="170.0" height="58.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="540.0" y="172.0" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">orchestrator</text>
+<text x="540.0" y="198.5" font-size="12.5" fill="#0F6E56" text-anchor="middle">Checkpoint Service</text>
+<rect x="845.0" y="150.0" width="170.0" height="58.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="930.0" y="172.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">Firecracker</text>
+<text x="930.0" y="198.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">同一个进程</text>
+<rect x="1165.0" y="150.0" width="170.0" height="58.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1250.0" y="172.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">宿主本地存储</text>
+<text x="1250.0" y="198.5" font-size="12.5" fill="#5F5E5A" text-anchor="middle">store 根</text>
+<text x="1356.0" y="184.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">计时键</text>
+<rect x="102.0" y="365.0" width="1238.0" height="389.0" rx="10" fill="#FDF3EF" stroke="#E8A68C" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="116.0" y="387.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">冻结窗口（frozen：pause 到 resume）</text>
+<line x1="160.0" y1="208.0" x2="160.0" y2="1068.0" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="4 4"/>
+<line x1="540.0" y1="208.0" x2="540.0" y2="1068.0" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="4 4"/>
+<line x1="930.0" y1="208.0" x2="930.0" y2="1068.0" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="4 4"/>
+<line x1="1250.0" y1="208.0" x2="1250.0" y2="1068.0" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="4 4"/>
+<rect x="48.0" y="244.0" width="23.5" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="59.7" y="259.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">1</text>
+<line x1="164.0" y1="264.0" x2="534.0" y2="264.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="350.0" y="255.0" font-size="14" fill="#2C2C2A" text-anchor="middle">CreateCheckpoint（端口 49984，宿主拦截）</text>
+<rect x="48.0" y="308.5" width="43.4" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="69.7" y="324.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">2–12</text>
+<rect x="250.0" y="284.0" width="580.0" height="71.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="540.0" y="311.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">进入服务、决定与准备（窗口外）</text>
+<text x="540.0" y="338.7" font-size="13" fill="#0F6E56" text-anchor="middle">鉴权 → 取沙箱操作锁 → 水位检查 → 决定全量 / 增量 → Prepare（个数与字节配额）</text>
+<rect x="48.0" y="381.0" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="396.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">13</text>
+<text x="1356.0" y="396.5" font-size="12.5" fill="#888780" text-anchor="start">pause</text>
+<line x1="544.0" y1="401.0" x2="924.0" y2="401.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="735.0" y="392.0" font-size="14" fill="#2C2C2A" text-anchor="middle">暂停虚机</text>
+<rect x="48.0" y="423.0" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="438.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">14</text>
+<text x="1356.0" y="438.5" font-size="12.5" fill="#888780" text-anchor="start">save_live_bitmap</text>
+<line x1="544.0" y1="443.0" x2="924.0" y2="443.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="735.0" y="434.0" font-size="14" fill="#2C2C2A" text-anchor="middle">（仅全量）导出活跃脏页位图</text>
+<rect x="48.0" y="475.0" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="490.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">15</text>
+<text x="1356.0" y="490.5" font-size="12.5" fill="#888780" text-anchor="start">snapshot</text>
+<line x1="544.0" y1="505.0" x2="924.0" y2="505.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="735.0" y="476.0" font-size="14" fill="#2C2C2A" text-anchor="middle">写快照（一次调用）</text>
+<text x="735.0" y="496.0" font-size="14" fill="#2C2C2A" text-anchor="middle">vmstate + 稀疏内存差分 + 位图侧车</text>
+<line x1="934.0" y1="567.0" x2="1244.0" y2="567.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="1090.0" y="538.0" font-size="14" fill="#2C2C2A" text-anchor="middle">写出 snapfile、mem_diff、</text>
+<text x="1090.0" y="558.0" font-size="14" fill="#2C2C2A" text-anchor="middle">mem_bitmap（先写成 .tmp）</text>
+<line x1="102.0" y1="599.0" x2="1340.0" y2="599.0" stroke="#D85A30" stroke-width="1.6" stroke-dasharray="7 4"/>
+<rect x="116.0" y="587.0" width="336.7" height="24.0" rx="12" fill="#FAECE7" stroke="#D85A30" stroke-width="0.9"/>
+<text x="284.3" y="604.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">纪元前进：此后失败不能简单删目录，走 failCreate</text>
+<rect x="48.0" y="651.5" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="667.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">16</text>
+<text x="1356.0" y="667.0" font-size="12.5" fill="#888780" text-anchor="start">seal</text>
+<rect x="250.0" y="627.0" width="580.0" height="71.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="540.0" y="654.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">封存写层</text>
+<text x="540.0" y="681.7" font-size="13" fill="#0F6E56" text-anchor="middle">刷屏障 → 写层就地封存为只读层，挂上新的空写层；不搬运数据</text>
+<rect x="48.0" y="716.0" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="731.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">17</text>
+<text x="1356.0" y="731.5" font-size="12.5" fill="#888780" text-anchor="start">resume</text>
+<line x1="544.0" y1="736.0" x2="924.0" y2="736.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="735.0" y="727.0" font-size="14" fill="#2C2C2A" text-anchor="middle">恢复虚机（defer，无条件）</text>
+<rect x="48.0" y="770.0" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="785.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">18</text>
+<text x="1356.0" y="785.5" font-size="12.5" fill="#888780" text-anchor="start">seal_move</text>
+<line x1="544.0" y1="790.0" x2="1244.0" y2="790.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="895.0" y="781.0" font-size="14" fill="#2C2C2A" text-anchor="middle">封存层文件移入 store 的 layers 目录</text>
+<rect x="48.0" y="834.5" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="850.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">19</text>
+<text x="1356.0" y="841.5" font-size="12.5" fill="#888780" text-anchor="start">append_layer、</text>
+<text x="1356.0" y="858.5" font-size="12.5" fill="#888780" text-anchor="start">append_lock_wait</text>
+<rect x="250.0" y="810.0" width="580.0" height="71.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="540.0" y="837.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">AppendLayer</text>
+<text x="540.0" y="864.7" font-size="13" fill="#0F6E56" text-anchor="middle">锁内把新层折进合并映射；锁外写层 sidecar 与本条目的 rootfs.header</text>
+<rect x="48.0" y="921.5" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="937.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">20</text>
+<text x="1356.0" y="911.5" font-size="12.5" fill="#888780" text-anchor="start">commit_files、</text>
+<text x="1356.0" y="928.5" font-size="12.5" fill="#888780" text-anchor="start">commit_manifest、</text>
+<text x="1356.0" y="945.5" font-size="12.5" fill="#888780" text-anchor="start">commit_lock_wait、</text>
+<text x="1356.0" y="962.5" font-size="12.5" fill="#888780" text-anchor="start">commit_index</text>
+<rect x="250.0" y="897.0" width="580.0" height="71.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="540.0" y="924.9" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">Commit</text>
+<text x="540.0" y="951.7" font-size="13" fill="#0F6E56" text-anchor="middle">rename 到位（不 fsync）→ manifest 翻成 committed → 锁内发布，基准 ← 本条目</text>
+<line x1="102.0" y1="996.0" x2="1340.0" y2="996.0" stroke="#E24B4A" stroke-width="1.6" stroke-dasharray="7 4"/>
+<rect x="116.0" y="984.0" width="356.9" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.9"/>
+<text x="294.5" y="1001.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">提交：条目从 prepared 变为 committed，可见、可恢复</text>
+<rect x="48.0" y="1026.0" width="31.0" height="22.0" rx="11" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.8"/>
+<text x="63.5" y="1041.5" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">21</text>
+<text x="1356.0" y="1041.5" font-size="12.5" fill="#888780" text-anchor="start">total</text>
+<line x1="536.0" y1="1046.0" x2="166.0" y2="1046.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="350.0" y="1037.0" font-size="14" fill="#2C2C2A" text-anchor="middle">{checkpointId, memMode}</text>
+<line x1="48" y1="1104" x2="1552" y2="1104" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1130.0" font-size="13" fill="#888780" text-anchor="start">注：第 14 步只在全量时做。seal_move 登记在 resume 之前、按 defer 的倒序在它之后执行，所以落在窗口外；跨文件系统时它是一次拷贝。第 15 步成功后的三层降级见 §7.6。</text>
+</svg>

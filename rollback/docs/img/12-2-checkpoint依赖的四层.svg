@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="993" viewBox="0 0 1600 993" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#D85A30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="993" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一个 checkpoint 依赖四层东西：三层随进程消失，磁盘那一半离开模板读不全</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">账本、活着的 Firecracker 进程和它的宿主资源都活不过这一代沙箱或 orchestrator 进程；磁盘产物只是相对模板的增量。把目录完整拷走，也恢复不出来。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">触发后这一层消失</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">产物消失的三条代码路径</text>
+<text x="330.0" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">§11；三者互不相干，任一发生即触发</text>
+<rect x="48.0" y="206.0" width="482.7" height="130.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="217.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="110.6" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="289.3" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">沙箱从沙箱表中移除</text>
+<text x="289.3" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">OnRemove 取操作锁后 RemoveSandbox：锁内改名为</text>
+<text x="289.3" y="317.0" font-size="14" fill="#5F5E5A" text-anchor="middle">.trash-&lt;uuid&gt;、摘掉全部状态，放锁后删除</text>
+<rect x="558.7" y="206.0" width="482.7" height="130.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="570.7" y="217.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="621.2" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="800.0" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">同一个 id 的新一代接管</text>
+<text x="800.0" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">原生 resume 起新的 Firecracker 进程（新 LifecycleID）；</text>
+<text x="800.0" y="317.0" font-size="14" fill="#5F5E5A" text-anchor="middle">admitLocked / AdoptSandbox 丢弃上一代的全部状态</text>
+<rect x="1069.3" y="206.0" width="482.7" height="130.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1081.3" y="217.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1131.9" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="1310.7" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">orchestrator 启动</text>
+<text x="1310.7" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">NewStore 先 os.RemoveAll 整个 store 根目录，再 MkdirAll 重</text>
+<text x="1310.7" y="317.0" font-size="14" fill="#5F5E5A" text-anchor="middle">建；不读任何 manifest</text>
+<circle cx="63" cy="382.5" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="388.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="389.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">四层依赖，各自什么时候没了</text>
+<rect x="370.0" y="372.5" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="407.0" y="388.5" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="460.0" y="388.5" font-size="14.5" fill="#888780" text-anchor="start">§13</text>
+<rect x="48.0" y="408.5" width="1504.0" height="434.5" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="200.0" y="428.5" width="316.5" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="358.2" y="456.5" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">① 活体恢复机制</text>
+<text x="358.2" y="478.5" font-size="13.5" fill="#0F6E56" text-anchor="middle">只有原地回滚一条路</text>
+<rect x="538.5" y="428.5" width="316.5" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="696.8" y="456.5" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">② 模板底座</text>
+<text x="696.8" y="478.5" font-size="13.5" fill="#0F6E56" text-anchor="middle">磁盘产物不自足</text>
+<rect x="877.0" y="428.5" width="316.5" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="1035.2" y="456.5" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">③ 进程内账本</text>
+<text x="1035.2" y="478.5" font-size="13.5" fill="#0F6E56" text-anchor="middle">不从磁盘加载</text>
+<rect x="1215.5" y="428.5" width="316.5" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="1373.8" y="456.5" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">④ 运行时资源</text>
+<text x="1373.8" y="478.5" font-size="13.5" fill="#0F6E56" text-anchor="middle">一个都不重建</text>
+<text x="68.0" y="554.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">是什么</text>
+<rect x="200.0" y="506.5" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="358.2" y="531.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">活着的 Firecracker 进程</text>
+<text x="358.2" y="558.7" font-size="13" fill="#0F6E56" text-anchor="middle">RollbackInPlace 写既有的 KVM fd、GIC、</text>
+<text x="358.2" y="578.7" font-size="13" fill="#0F6E56" text-anchor="middle">virtio 对象</text>
+<rect x="538.5" y="506.5" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="696.8" y="541.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">模板 rootfs</text>
+<text x="696.8" y="568.7" font-size="13" fill="#0F6E56" text-anchor="middle">AssembleView 永远以它为底，再叠封存层</text>
+<rect x="877.0" y="506.5" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1035.2" y="541.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">Store 的各张表</text>
+<text x="1035.2" y="568.7" font-size="13" fill="#0F6E56" text-anchor="middle">条目、基准、子节点计数、层引用、代际归属</text>
+<rect x="1215.5" y="506.5" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1373.8" y="531.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">宿主上的活体资源</text>
+<text x="1373.8" y="558.7" font-size="13" fill="#0F6E56" text-anchor="middle">KVM fd、eventfd、irqfd / ioeventfd、</text>
+<text x="1373.8" y="578.7" font-size="13" fill="#0F6E56" text-anchor="middle">tap、网络槽位、NBD 设备</text>
+<text x="68.0" y="661.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">为什么离不开</text>
+<text x="68.0" y="680.8" font-size="12.5" fill="#888780" text-anchor="start">restore 时</text>
+<rect x="200.0" y="622.0" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="358.2" y="647.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">回滚集含当前状态</text>
+<text x="358.2" y="674.2" font-size="13" fill="#0F6E56" text-anchor="middle">回滚集 = 纪元位图并集 ∪ 当前活跃脏页；端点要</text>
+<text x="358.2" y="694.2" font-size="13" fill="#0F6E56" text-anchor="middle">求 Paused、拓扑与运行中虚机一致</text>
+<rect x="538.5" y="622.0" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="696.8" y="647.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">封存层只含写过的块</text>
+<text x="696.8" y="674.2" font-size="13" fill="#0F6E56" text-anchor="middle">没写过的块要回模板取；header 的底座项也指向</text>
+<text x="696.8" y="694.2" font-size="13" fill="#0F6E56" text-anchor="middle">模板的 build</text>
+<rect x="877.0" y="622.0" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1035.2" y="657.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">API 只认账本</text>
+<text x="1035.2" y="684.2" font-size="13" fill="#0F6E56" text-anchor="middle">账本里没有，List 返回空、Get 找不到条目</text>
+<rect x="1215.5" y="622.0" width="316.5" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1373.8" y="657.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">原地回滚不重建它们</text>
+<text x="1373.8" y="684.2" font-size="13" fill="#0F6E56" text-anchor="middle">这是它快的原因，也是它离不开沙箱的原因</text>
+<text x="68.0" y="785.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">什么时候没了</text>
+<rect x="200.0" y="737.5" width="316.5" height="85.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="358.2" y="762.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">这一代 Firecracker 进程结束</text>
+<text x="358.2" y="789.7" font-size="13" fill="#993C1D" text-anchor="middle">沙箱被移除；原生 pause 停掉进程，resume 起</text>
+<text x="358.2" y="809.7" font-size="13" fill="#993C1D" text-anchor="middle">的是新一代</text>
+<line x1="358.2" y1="709.5" x2="358.2" y2="732.5" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="538.5" y="737.5" width="316.5" height="85.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="696.8" y="762.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">脱离模板就读不全</text>
+<text x="696.8" y="789.7" font-size="13" fill="#5F5E5A" text-anchor="middle">原地回滚时沙箱活着，模板必然在位；拷走目录</text>
+<text x="696.8" y="809.7" font-size="13" fill="#5F5E5A" text-anchor="middle">换个沙箱，模板必须在位且是同一个</text>
+<rect x="877.0" y="737.5" width="316.5" height="85.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1035.2" y="762.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">orchestrator 进程退出</text>
+<text x="1035.2" y="789.7" font-size="13" fill="#993C1D" text-anchor="middle">启动即清空；这个沙箱的那部分在移除、新一代</text>
+<text x="1035.2" y="809.7" font-size="13" fill="#993C1D" text-anchor="middle">接管时先丢</text>
+<line x1="1035.2" y1="709.5" x2="1035.2" y2="732.5" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="1215.5" y="737.5" width="316.5" height="85.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1373.8" y="762.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">这一代 Firecracker 进程结束</text>
+<text x="1373.8" y="789.7" font-size="13" fill="#993C1D" text-anchor="middle">与 ① 同时；orchestrator 重启也会带走它上面</text>
+<text x="1373.8" y="809.7" font-size="13" fill="#993C1D" text-anchor="middle">的所有沙箱</text>
+<line x1="1373.8" y1="709.5" x2="1373.8" y2="732.5" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<rect x="48.0" y="859.0" width="1504.0" height="40.0" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="800.0" y="885.0" font-size="14.5" fill="#085041" font-weight="600" text-anchor="middle">内存那一半已经自足：CHECKPOINT_FULL_ROOT 默认开启，树根是一次全量捕获，内容解析遇全量条目即终止、不回落模板 memfile。真正的数据缺口只有磁盘那一半</text>
+<line x1="48" y1="935.0" x2="1552" y2="935.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="961.0" font-size="13" fill="#888780" text-anchor="start">注：把四层补齐（磁盘层栈压平、账本从 manifest 重建、产物 fsync、新起进程从文件加载）之后得到的，就是 e2b 原生 snapshot 的定义，同时会逐项丢掉零拷贝封存、原地回滚的收益（§15）。</text>
+</svg>

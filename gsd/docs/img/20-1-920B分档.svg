@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1246" viewBox="0 0 1400 1246" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="1246" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">920B 分档：restore 与增量 checkpoint 的服务端 total_ms 随档位变化</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">新 920B，2026-10-16 与 2026-11-06 两轮，每轮每档 3 个样本，取中位数；2 vCPU / 2048 MB，THP never，每轮 18 次恢复校验全部正确。每档新建沙箱、只分配本档负载，进程大小</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">与改动量同时变化。</text>
+<line x1="48.0" y1="140.0" x2="74.0" y2="140.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="82.0" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">2026-10-16</text>
+<line x1="190.2" y1="140.0" x2="216.2" y2="140.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="224.2" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">2026-11-06</text>
+<circle cx="63" cy="202" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="207.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="209.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">restore</text>
+<text x="190.9" y="208.0" font-size="14.5" fill="#888780" text-anchor="start">回到本档全量基点；横轴是总改动量，按档位等距排列</text>
+<line x1="298.0" y1="534.0" x2="1312.0" y2="534.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="538.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="298.0" y1="478.0" x2="1312.0" y2="478.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="482.5" font-size="12.5" fill="#888780" text-anchor="end">25</text>
+<line x1="298.0" y1="422.0" x2="1312.0" y2="422.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="426.5" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="298.0" y1="366.0" x2="1312.0" y2="366.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="370.5" font-size="12.5" fill="#888780" text-anchor="end">75</text>
+<line x1="298.0" y1="310.0" x2="1312.0" y2="310.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="314.5" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="298.0" y1="254.0" x2="1312.0" y2="254.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="258.5" font-size="12.5" fill="#888780" text-anchor="end">125</text>
+<text x="288.0" y="242.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="382.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">0 MiB</text>
+<text x="551.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 MiB</text>
+<text x="720.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">32 MiB</text>
+<text x="889.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">64 MiB</text>
+<text x="1058.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">128 MiB</text>
+<text x="1227.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">256 MiB</text>
+<polyline points="382.5,513.6 551.5,500.8 720.5,489.6 889.5,464.3 1058.5,416.2 1227.5,323.7" fill="none" stroke="#BA7517" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="513.6" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="500.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="489.6" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="464.3" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="416.2" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="323.7" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="382.5,514.7 551.5,499.3 720.5,490.5 889.5,466.1 1058.5,418.6 1227.5,322.8" fill="none" stroke="#BA7517" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="382.5" cy="514.7" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="499.3" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="490.5" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="466.1" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="418.6" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="322.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<text x="382.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 0 / 0</text>
+<text x="551.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 12 / 4</text>
+<text x="720.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 24 / 8</text>
+<text x="889.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 48 / 16</text>
+<text x="1058.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 96 / 32</text>
+<text x="1227.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 192 / 64</text>
+<line x1="48.0" y1="592.0" x2="1312.0" y2="592.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="617.0" x2="70.0" y2="617.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="78.0" y="622.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="start">2026-10-16</text>
+<text x="382.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">9.1</text>
+<text x="551.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">14.8</text>
+<text x="720.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">19.8</text>
+<text x="889.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">31.1</text>
+<text x="1058.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">52.6</text>
+<text x="1227.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">93.9</text>
+<line x1="48.0" y1="643.0" x2="70.0" y2="643.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="78.0" y="648.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="start">2026-11-06</text>
+<text x="382.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">8.6</text>
+<text x="551.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">15.5</text>
+<text x="720.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">19.4</text>
+<text x="889.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">30.3</text>
+<text x="1058.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">51.5</text>
+<text x="1227.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">94.3</text>
+<circle cx="63" cy="700" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="705.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="707.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">增量 checkpoint</text>
+<text x="271.8" y="706.0" font-size="14.5" fill="#888780" text-anchor="start">改写本档负载之后；横轴是总改动量，按档位等距排列</text>
+<line x1="298.0" y1="1032.0" x2="1312.0" y2="1032.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="1036.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="298.0" y1="976.0" x2="1312.0" y2="976.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="980.5" font-size="12.5" fill="#888780" text-anchor="end">25</text>
+<line x1="298.0" y1="920.0" x2="1312.0" y2="920.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="924.5" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="298.0" y1="864.0" x2="1312.0" y2="864.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="868.5" font-size="12.5" fill="#888780" text-anchor="end">75</text>
+<line x1="298.0" y1="808.0" x2="1312.0" y2="808.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="812.5" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="298.0" y1="752.0" x2="1312.0" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="756.5" font-size="12.5" fill="#888780" text-anchor="end">125</text>
+<text x="288.0" y="740.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="382.5" y="1058.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">0 MiB</text>
+<text x="551.5" y="1058.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 MiB</text>
+<text x="720.5" y="1058.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">32 MiB</text>
+<text x="889.5" y="1058.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">64 MiB</text>
+<text x="1058.5" y="1058.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">128 MiB</text>
+<text x="1227.5" y="1058.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">256 MiB</text>
+<polyline points="382.5,1008.3 551.5,991.5 720.5,974.0 889.5,947.8 1058.5,898.0 1227.5,794.1" fill="none" stroke="#BA7517" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="1008.3" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="991.5" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="974.0" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="947.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="898.0" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="794.1" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="382.5,1010.7 551.5,975.6 720.5,976.2 889.5,942.4 1058.5,887.3 1227.5,768.1" fill="none" stroke="#BA7517" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="382.5" cy="1010.7" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="975.6" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="976.2" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="942.4" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="887.3" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="768.1" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<text x="382.5" y="1078.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 0 / 0</text>
+<text x="551.5" y="1078.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 12 / 4</text>
+<text x="720.5" y="1078.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 24 / 8</text>
+<text x="889.5" y="1078.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 48 / 16</text>
+<text x="1058.5" y="1078.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 96 / 32</text>
+<text x="1227.5" y="1078.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 192 / 64</text>
+<line x1="48.0" y1="1090.0" x2="1312.0" y2="1090.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="1115.0" x2="70.0" y2="1115.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="78.0" y="1120.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="start">2026-10-16</text>
+<text x="382.5" y="1120.0" font-size="13.5" fill="#633806" text-anchor="middle">10.6</text>
+<text x="551.5" y="1120.0" font-size="13.5" fill="#633806" text-anchor="middle">18.1</text>
+<text x="720.5" y="1120.0" font-size="13.5" fill="#633806" text-anchor="middle">25.9</text>
+<text x="889.5" y="1120.0" font-size="13.5" fill="#633806" text-anchor="middle">37.6</text>
+<text x="1058.5" y="1120.0" font-size="13.5" fill="#633806" text-anchor="middle">59.8</text>
+<text x="1227.5" y="1120.0" font-size="13.5" fill="#633806" text-anchor="middle">106.2</text>
+<line x1="48.0" y1="1141.0" x2="70.0" y2="1141.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="78.0" y="1146.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="start">2026-11-06</text>
+<text x="382.5" y="1146.0" font-size="13.5" fill="#633806" text-anchor="middle">9.5</text>
+<text x="551.5" y="1146.0" font-size="13.5" fill="#633806" text-anchor="middle">25.2</text>
+<text x="720.5" y="1146.0" font-size="13.5" fill="#633806" text-anchor="middle">24.9</text>
+<text x="889.5" y="1146.0" font-size="13.5" fill="#633806" text-anchor="middle">40.0</text>
+<text x="1058.5" y="1146.0" font-size="13.5" fill="#633806" text-anchor="middle">64.6</text>
+<text x="1227.5" y="1146.0" font-size="13.5" fill="#633806" text-anchor="middle">117.8</text>
+<line x1="48" y1="1188" x2="1352" y2="1188" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1214.0" font-size="13" fill="#888780" text-anchor="start">注：单位 ms，gsd 自报的服务端 total_ms，不含客户端到 gsd 的往返。全量基点和各档 RSS 单列在正文表中，未画。固定进程大小时的情形见 §4（图 20-3）。</text>
+</svg>

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="734" viewBox="0 0 1400 734" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="734" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">视图装配改位图后：第 50–60 min 的 restore p50 从 141.9 降到 84.1 ms</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">920B，滚动保留 10，同一负载的前 60 min。纵轴是每 10 min 一段的服务端 restore total p50（ms）。long9 是视图装配优化之前的版本；long10 改了位图；long11 是热路径相同的</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">RPM 部署版本。</text>
+<line x1="48.0" y1="140.0" x2="74.0" y2="140.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="82.0" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">long9（3539c45df）</text>
+<line x1="255.2" y1="140.0" x2="281.2" y2="140.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="289.2" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">long10（8ea5322bf）</text>
+<line x1="470.6" y1="140.0" x2="496.6" y2="140.0" stroke="#1D9E75" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="504.6" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">long11（93ccb02）</text>
+<line x1="288.0" y1="520.0" x2="1302.0" y2="520.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="524.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="288.0" y1="413.8" x2="1302.0" y2="413.8" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="418.2" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="288.0" y1="307.5" x2="1302.0" y2="307.5" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="312.0" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="288.0" y1="201.2" x2="1302.0" y2="201.2" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="205.8" font-size="12.5" fill="#888780" text-anchor="end">150</text>
+<text x="278.0" y="168.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="372.5" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">0-10</text>
+<text x="541.5" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">10-20</text>
+<text x="710.5" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">20-30</text>
+<text x="879.5" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">30-40</text>
+<text x="1048.5" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">40-50</text>
+<text x="1217.5" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">50-60</text>
+<polyline points="372.5,326.8 541.5,287.9 710.5,256.7 879.5,236.1 1048.5,226.3 1217.5,218.5" fill="none" stroke="#D85A30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="372.5" cy="326.8" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="541.5" cy="287.9" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="710.5" cy="256.7" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="879.5" cy="236.1" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="226.3" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1217.5" cy="218.5" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="372.5,369.1 541.5,353.0 710.5,346.4 879.5,345.5 1048.5,343.2 1217.5,341.3" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="372.5" cy="369.1" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="541.5" cy="353.0" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="710.5" cy="346.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="879.5" cy="345.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="343.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1217.5" cy="341.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="372.5,364.7 541.5,352.6 710.5,348.5 879.5,344.7 1048.5,340.9 1217.5,339.0" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="372.5" cy="364.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="541.5" cy="352.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="710.5" cy="348.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="879.5" cy="344.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="340.9" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1217.5" cy="339.0" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<line x1="288.0" y1="552.0" x2="1302.0" y2="552.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="577.0" x2="70.0" y2="577.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="78.0" y="582.0" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="start">long9（3539c45df）</text>
+<text x="372.5" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">90.9</text>
+<text x="541.5" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">109.2</text>
+<text x="710.5" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">123.9</text>
+<text x="879.5" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">133.6</text>
+<text x="1048.5" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">138.2</text>
+<text x="1217.5" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">141.9</text>
+<line x1="48.0" y1="603.0" x2="70.0" y2="603.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="78.0" y="608.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">long10（8ea5322bf）</text>
+<text x="372.5" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">71.0</text>
+<text x="541.5" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">78.6</text>
+<text x="710.5" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">81.7</text>
+<text x="879.5" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">82.1</text>
+<text x="1048.5" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">83.2</text>
+<text x="1217.5" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">84.1</text>
+<line x1="48.0" y1="629.0" x2="70.0" y2="629.0" stroke="#1D9E75" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="78.0" y="634.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">long11（93ccb02）</text>
+<text x="372.5" y="634.0" font-size="13.5" fill="#085041" text-anchor="middle">73.1</text>
+<text x="541.5" y="634.0" font-size="13.5" fill="#085041" text-anchor="middle">78.8</text>
+<text x="710.5" y="634.0" font-size="13.5" fill="#085041" text-anchor="middle">80.7</text>
+<text x="879.5" y="634.0" font-size="13.5" fill="#085041" text-anchor="middle">82.5</text>
+<text x="1048.5" y="634.0" font-size="13.5" fill="#085041" text-anchor="middle">84.3</text>
+<text x="1217.5" y="634.0" font-size="13.5" fill="#085041" text-anchor="middle">85.2</text>
+<line x1="48" y1="676" x2="1352" y2="676" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="702.0" font-size="13" fill="#888780" text-anchor="start">注：横轴单位 min。long10 的块数比 long9 同窗还略多，restore 却一直更快。对块数回归，restore total 的斜率从 1.138（long9 前 60 min）降到 0.268 ms / 千块；long11 与 long10 逐段只差 0.2–2.1 ms。</text>
+</svg>

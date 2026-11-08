@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1056" viewBox="0 0 1600 1056" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1056" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">快照的两个基本动作：一次暂停内保存，冷恢复要重建整台虚机</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">保存时内存、磁盘、vCPU / 设备状态必须是同一瞬间的镜像；从快照冷恢复则要从新建进程开始，一步步把整台虚机建回来。</text>
+<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">保存：三样东西在一次暂停内完成</text>
+<text x="410.0" y="150.0" font-size="14.5" fill="#888780" text-anchor="start">暂停的这段时间叫冻结窗口</text>
+<rect x="328.0" y="178.0" width="944.0" height="130.0" rx="12" fill="#FAECE7" stroke="#D85A30" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="346.0" y="205.0" font-size="15" fill="#712B13" font-weight="600" text-anchor="start">冻结窗口（freeze window）</text>
+<text x="558.7" y="205.0" font-size="13" fill="#993C1D" text-anchor="start">guest 内业务直接感受到的停顿</text>
+<rect x="348.0" y="222.0" width="285.3" height="64.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="490.7" y="259.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">保存内存</text>
+<rect x="657.3" y="222.0" width="285.3" height="64.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="259.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">保存磁盘</text>
+<rect x="966.7" y="222.0" width="285.3" height="64.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1109.3" y="259.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">保存 vCPU / 设备状态</text>
+<rect x="48.0" y="222.0" width="220.0" height="64.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="158.0" y="259.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">暂停虚机</text>
+<rect x="1332.0" y="222.0" width="220.0" height="64.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1442.0" y="259.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">恢复虚机</text>
+<line x1="272.0" y1="254.0" x2="342.0" y2="254.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1258.0" y1="254.0" x2="1326.0" y2="254.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="324.0" width="1504.0" height="40.0" rx="8" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="800.0" y="350.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">三者是同一瞬间的镜像：guest 尚未刷盘的数据留在内存镜像里，位置完全正确</text>
+<rect x="48.0" y="380.0" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="800.0" y="406.0" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">反例：内存在 T1、磁盘在 T2 保存，中间 guest 继续跑 → 恢复后文件系统日志、页缓存、inode 与磁盘对不上，可能报文件系统损坏，也可能静默读到错的数据</text>
+<circle cx="63" cy="466" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="471.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="473.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">冷恢复：新建一个进程去加载</text>
+<rect x="370.0" y="456.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="407.0" y="472.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="460.0" y="472.0" font-size="14.5" fill="#888780" text-anchor="start">上游 Firecracker 的 PUT /snapshot/load 和 e2b 原生的 resume 都是这种做法</text>
+<text x="48.0" y="539.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">建虚机</text>
+<rect x="198.0" y="504.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="317.4" y="539.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">新建进程</text>
+<rect x="476.8" y="504.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="596.2" y="539.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">建 KVM VM</text>
+<line x1="440.8" y1="534.0" x2="470.8" y2="534.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="755.6" y="504.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="875.0" y="539.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">建 vCPU</text>
+<line x1="719.6" y1="534.0" x2="749.6" y2="534.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1034.4" y="504.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1153.8" y="539.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">建中断控制器</text>
+<line x1="998.4" y1="534.0" x2="1028.4" y2="534.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1313.2" y="504.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1432.6" y="539.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">建设备</text>
+<line x1="1277.2" y1="534.0" x2="1307.2" y2="534.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="48.0" y="645.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">接上宿主资源</text>
+<rect x="198.0" y="610.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="317.4" y="645.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">注册各种 fd</text>
+<rect x="476.8" y="610.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="596.2" y="645.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">建网卡</text>
+<line x1="440.8" y1="640.0" x2="470.8" y2="640.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="755.6" y="610.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="875.0" y="645.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">挂内存后端</text>
+<line x1="719.6" y1="640.0" x2="749.6" y2="640.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<path d="M1432.6 566.0 L1432.6 587.0 L317.4 587.0 L317.4 605.0" fill="none" stroke="#5F5E5A" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ar-flow)"/>
+<text x="48.0" y="751.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">装入快照状态</text>
+<rect x="198.0" y="716.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="317.4" y="751.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">加载 vmstate</text>
+<rect x="476.8" y="716.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="596.2" y="751.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">恢复寄存器与设备状态</text>
+<line x1="440.8" y1="746.0" x2="470.8" y2="746.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="755.6" y="716.0" width="238.8" height="60.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="875.0" y="751.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">跑起来</text>
+<line x1="719.6" y1="746.0" x2="749.6" y2="746.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<path d="M875.0 672.0 L875.0 693.0 L317.4 693.0 L317.4 711.0" fill="none" stroke="#5F5E5A" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ar-flow)"/>
+<text x="48.0" y="869.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">运行之后</text>
+<rect x="198.0" y="822.0" width="238.8" height="84.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="317.4" y="869.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">guest 开始运行</text>
+<rect x="476.8" y="822.0" width="238.8" height="84.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="596.2" y="856.4" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">缺页</text>
+<text x="596.2" y="884.3" font-size="14" fill="#993C1D" text-anchor="middle">UFFD handler 把这一页填进来</text>
+<line x1="440.8" y1="864.0" x2="470.8" y2="864.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="755.6" y="822.0" width="238.8" height="84.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="875.0" y="856.4" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">逐页把工作集换回内存</text>
+<text x="875.0" y="884.3" font-size="14" fill="#993C1D" text-anchor="middle">一段时间内持续缺页</text>
+<line x1="719.6" y1="864.0" x2="749.6" y2="864.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<path d="M875.0 778.0 L875.0 799.0 L317.4 799.0 L317.4 817.0" fill="none" stroke="#5F5E5A" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ar-flow)"/>
+<rect x="48.0" y="922.0" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="800.0" y="948.0" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">成本 = 建一台虚机的固定开销 + 把工作集换回内存；后者与虚机规格成正比，与“回退了多少”完全无关</text>
+<line x1="48" y1="998" x2="1552" y2="998" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1024.0" font-size="13" fill="#888780" text-anchor="start">注：本方案的 restore 是另一种形态 —— 原地回写：虚机暂停 → 把变了的页写回活着的内存映射 → 把 vCPU / 设备状态写回既有对象 → 恢复运行，一个宿主资源都不重建（§6.4）。</text>
+</svg>

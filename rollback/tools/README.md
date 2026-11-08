@@ -1,25 +1,24 @@
 # 手册生成与校验工具
 
-本目录用于把 `rollback/docs/` 与 `rollback/diagrams/` 生成为一个可离线打开的 HTML。工具、配置和依赖清单均位于本仓库，不再依赖工作区的 `tmp/`，也不需要安装整个 Slidev 工程。
+本目录用于把 `rollback/docs/`（以及 `gsd/docs/`）生成为一个可离线打开的 HTML，并存放两本手册配图的画图脚本。工具、配置和依赖清单均位于本仓库，不再依赖工作区的 `tmp/`，也不需要安装整个 Slidev 工程。
 
-这是 **WSL / 文档制作机器**上的工具，不是 RPM 或沙箱运行依赖，无需在 950 上安装 Node.js 来运行快照测试。
+这是 **WSL / 文档制作机器**上的工具，不是 RPM 或沙箱运行依赖。生成手册只需要 Python；Node.js 只有独立文章（`build_article.py`）用到。
 
 ## 文件
 
 | 文件 | 用途 |
 |---|---|
 | `../contents.json` | 分篇、章序与文字附录清单；构建时检查遗漏和重复 |
-| `../book.json` | 书名、版本、日期、配图和仓库链接基准 |
-| `build.sh` | 统一入口：先校验链接与图表，再生成 HTML |
-| `build_docs_html.py` | 单文件HTML生成器，按分篇清单生成分组目录与当前章小节导航 |
+| `../book.json` | 书名、版本、日期和仓库链接基准，键见 `build_book.py` 文件头 |
+| `build.sh` | 统一入口：先校验链接，再生成 HTML 并检查产物 |
+| `build_book.py` | 手册构建：按分篇清单排目录、把手册外链接改写成 GitHub 地址、拒绝 Mermaid 代码块，调用 `site/` 排版，最后检查产物（生成器警告、未解析链接、未内嵌图片、页内跳转目标都须为 0） |
+| `site/` | 排版生成器，复制自 md-docs-site skill，不在这里修改，来源见 `site/README.md` |
+| `figures/` | 两本手册配图的画图脚本，用法见 [`figures/README.md`](figures/README.md) |
 | `build_article.py`、`build_article_chart.mjs` | 独立价值解读文章生成器；配图内嵌，D3 从正文表格生成实测曲线，入口见[文章说明](../articles/README.md) |
-| `diagram_viewer.js`、`diagram_viewer.css` | 图表全屏预览、过渡、滚轮/双指缩放与拖动；构建时内嵌到HTML，无需随交付件单独发送 |
 | `mdlinks.py` | 检查相对链接与标题锚点；缺失文件、错误锚点均失败 |
-| `mdmermaid.mjs`、`mermaid_env.mjs` | 用 Mermaid 解析所有图表；依赖未装好时返回失败 |
 | `requirements.txt` | 固定 Python 依赖版本 |
-| `package.json`、`package-lock.json` | 独立的 Mermaid / jsdom 依赖及完整锁文件 |
-| `test_tools.py` | 链接、目录清单、导航结构、转义与生成器回归测试 |
-| `test_reader.mjs` | 在离线DOM中执行产物脚本，检查明暗切换与选择保存、页内目标、目录展开和手机端收起及图表放大、缩放与拖动交互 |
+| `package.json`、`package-lock.json` | 独立文章用的 Node 依赖锁文件；生成手册不需要 |
+| `test_tools.py` | 链接、目录清单、导航顺序、图片内嵌、手册外链接改写、Mermaid 拒绝、转义与可重现的回归测试 |
 | `code_stats.py`、`test_code_stats.py` | 固定提交的功能增量统计、Rust 测试拆分、有效行识别与回归检查 |
 | `../stats/code_stats_scope.json` | 固定 SHA、逐文件分类及副本排除规则 |
 | `../stats/code-volume.json` | 已复核的统计归档；导读与附录 D 表格共用的数据来源 |
@@ -28,13 +27,14 @@
 
 ## 安装依赖
 
-在 `e2b-infra` 仓库根目录执行。需要 Bash、Python 3.10+（含 venv / pip），以及满足 `package.json` 要求的 Node.js；已验证环境为 Python 3.12、Node.js 24.20。
+在 `e2b-infra` 仓库根目录执行。需要 Bash、Python 3.10+（含 venv / pip）；已验证环境为 Python 3.12。只有构建独立文章时才需要满足 `package.json` 要求的 Node.js。
 
 ```bash
 python3 -m venv rollback/tools/.venv
 rollback/tools/.venv/bin/python -m pip install -r rollback/tools/requirements.txt
-npm ci --prefix rollback/tools --ignore-scripts --no-audit --no-fund
 ```
+
+构建独立文章时再装 Node 依赖：`npm ci --prefix rollback/tools --ignore-scripts --no-audit --no-fund`。
 
 安装依赖时需要访问 Python / npm 包源，或者由使用者提前准备离线依赖。工具入库不等于所有第三方依赖都内置；`node_modules/`、虚拟环境和生成的 HTML 仍不入库。
 
@@ -43,7 +43,7 @@ npm ci --prefix rollback/tools --ignore-scripts --no-audit --no-fund
 在仓库根目录执行：
 
 ```bash
-# 只检查 Markdown 链接和 全部Mermaid图，不改动 HTML
+# 检查 Markdown 链接，并试生成一遍、检查产物，不留下 HTML
 DOCS_PYTHON="$PWD/rollback/tools/.venv/bin/python" bash rollback/tools/build.sh --check
 
 # 构建到新路径，适合核对后再决定是否替换本地产物
@@ -56,15 +56,13 @@ DOCS_PYTHON="$PWD/rollback/tools/.venv/bin/python" bash rollback/tools/build.sh
 rollback/tools/.venv/bin/python rollback/tools/test_tools.py
 rollback/tools/.venv/bin/python rollback/tools/test_code_stats.py
 
-# 对实际生成的HTML检查分组目录、当前章高亮和全部页内跳转
-node rollback/tools/test_reader.mjs rollback/dist/checkpoint-restore-docs.html
 ```
 
 若现有 `python3` 已安装 `requirements.txt` 中的依赖，可以省略 `DOCS_PYTHON`。脚本按自身位置解析输入，从其他当前目录调用也不依赖工作区的目录布局。
 
-生成器仍支持单独调用，可用 `python3 rollback/tools/build_docs_html.py --help` 查看参数。
+构建也可以单独调用：`python3 rollback/tools/build_book.py rollback /tmp/checkpoint-restore-docs.html`，参数和 `book.json` 的键见该文件头。
 
-gsd 手册复用本目录的生成器、校验器和依赖，不另维护工具副本：
+gsd 手册复用本目录的生成器、校验器、画图脚本和依赖，不另维护工具副本：
 
 ```bash
 bash rollback/tools/build.sh --book gsd --check

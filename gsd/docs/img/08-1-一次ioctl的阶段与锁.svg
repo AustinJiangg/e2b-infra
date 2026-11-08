@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1722" viewBox="0 0 1600 1722" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1722" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一次热切层 ioctl：会失败的都在提交点之前，提交点之后不再失败</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">主体是 ovl_do_ioctl_checkpoint，外面的 ovl_ioctl_checkpoint 负责权限检查和串行化。左边是各段的失败语义，右边竖条是每把锁从拿到到放开的范围。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">按顺序执行</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">阶段与锁</text>
+<rect x="190.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="227.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="280.0" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">提交点之前失败时，文件系统的状态一个字节都没变</text>
+<rect x="298.0" y="220.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="242.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">ckpt_mutex 加锁：同一时刻只有一个切换</text>
+<text x="648.0" y="269.4" font-size="13" fill="#5F5E5A" text-anchor="middle">先查 CAP_SYS_ADMIN，再以可被信号打断的方式拿锁</text>
+<line x1="648.0" y1="282.0" x2="648.0" y2="296.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="300.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="322.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">解析选项串，拒绝 index 目录</text>
+<text x="648.0" y="349.4" font-size="13" fill="#5F5E5A" text-anchor="middle">index=on 或 nfs_export=on 时返回 -EOPNOTSUPP</text>
+<line x1="648.0" y1="362.0" x2="648.0" y2="376.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="380.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="402.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">为新 upper 和各 lower 建私有 mount 和 trap</text>
+<text x="648.0" y="429.4" font-size="13" fill="#5F5E5A" text-anchor="middle">新 upper 与当前 upper 不在同一文件系统时返回 -EXDEV</text>
+<line x1="648.0" y1="442.0" x2="648.0" y2="456.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="460.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="482.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">分配新的根 entry 和退役记录</text>
+<text x="648.0" y="509.4" font-size="13" fill="#5F5E5A" text-anchor="middle">退役记录是 struct ovl_layer_set</text>
+<line x1="648.0" y1="522.0" x2="648.0" y2="536.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="540.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="562.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">在新 upper 上建好 work 目录和它的 trap</text>
+<text x="648.0" y="589.4" font-size="13" fill="#5F5E5A" text-anchor="middle">ovl_ckpt_create_workdir 借临时 ovl_fs 建；失败返回 -ENOMEM</text>
+<line x1="648.0" y1="602.0" x2="648.0" y2="616.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="620.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="655.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">switch_sem 写锁：等所有 overlay 操作退出</text>
+<line x1="648.0" y1="682.0" x2="648.0" y2="696.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="700.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="735.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">清掉没人用的 dentry</text>
+<line x1="648.0" y1="762.0" x2="648.0" y2="776.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="780.0" width="700.0" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="648.0" y="802.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">建计划：最后一个可能失败的步骤</text>
+<text x="648.0" y="829.4" font-size="13" fill="#5F5E5A" text-anchor="middle">为每个受影响的 inode 拿住引用、预先分配新 ovl_entry（§4.3）</text>
+<rect x="48.0" y="220.0" width="220.0" height="620.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1"/>
+<text x="64.0" y="254.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">提交点之前</text>
+<text x="64.0" y="284.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">每一步都可能失败。</text>
+<text x="64.0" y="310.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">失败时 ofs 没被碰过，没有东</text>
+<text x="64.0" y="330.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">西需要回滚，清理只释放这次</text>
+<text x="64.0" y="350.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">ioctl 自己分配的对象。</text>
+<line x1="648.0" y1="842.0" x2="648.0" y2="868.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="48" y1="884" x2="1552" y2="884" stroke="#2C2C2A" stroke-width="2.2"/>
+<rect x="609.5" y="869.0" width="77.0" height="30.0" rx="15" fill="#2C2C2A" stroke="#2C2C2A" stroke-width="1.2"/>
+<text x="648.0" y="889.5" font-size="15" fill="#FFFFFF" font-weight="600" text-anchor="middle">提交点</text>
+<line x1="648.0" y1="900.0" x2="648.0" y2="924.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="928.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="963.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">丢弃 whiteout 缓存，换 work 目录的 trap</text>
+<line x1="648.0" y1="990.0" x2="648.0" y2="1004.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1008.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1030.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">在 seqlock 内发布 layers、numlayer、checkpoint_gen</text>
+<text x="648.0" y="1057.4" font-size="13" fill="#534AB7" text-anchor="middle">读者用 ovl_layers_snapshot() 成组读到这三个值</text>
+<line x1="648.0" y1="1070.0" x2="648.0" y2="1084.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1088.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1123.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">按计划改写每个缓存的 inode 和 dentry</text>
+<line x1="648.0" y1="1150.0" x2="648.0" y2="1164.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1168.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1203.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">换 work 目录和根 entry</text>
+<line x1="648.0" y1="1230.0" x2="648.0" y2="1244.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1248.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1270.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">checkpoint 时搬走仍以写方式打开的文件</text>
+<text x="648.0" y="1297.4" font-size="13" fill="#534AB7" text-anchor="middle">见 §5</text>
+<line x1="648.0" y1="1310.0" x2="648.0" y2="1324.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1328.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1363.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">缓存对象的层指针改指新数组，无人引用的旧数组摘下</text>
+<line x1="648.0" y1="1390.0" x2="648.0" y2="1404.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1408.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1443.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">放开 switch_sem</text>
+<line x1="648.0" y1="1470.0" x2="648.0" y2="1484.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1488.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1510.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">释放上一个周期延迟下来的引用</text>
+<text x="648.0" y="1537.4" font-size="13" fill="#534AB7" text-anchor="middle">ovl_release_deferred() 逐个释放</text>
+<line x1="648.0" y1="1550.0" x2="648.0" y2="1564.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="298.0" y="1568.0" width="700.0" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="648.0" y="1603.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">放开 ckpt_mutex</text>
+<rect x="48.0" y="928.0" width="220.0" height="700.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1"/>
+<text x="64.0" y="962.0" font-size="16" fill="#3C3489" font-weight="600" text-anchor="start">提交点之后</text>
+<text x="64.0" y="992.0" font-size="13.5" fill="#534AB7" text-anchor="start">每一步都不会失败。</text>
+<text x="64.0" y="1018.0" font-size="13.5" fill="#534AB7" text-anchor="start">仍需内存的两处小分配用</text>
+<text x="64.0" y="1038.0" font-size="13.5" fill="#534AB7" text-anchor="start">__GFP_NOFAIL：</text>
+<text x="64.0" y="1064.0" font-size="13.5" fill="#534AB7" text-anchor="start">ovl_defer_put 与</text>
+<text x="64.0" y="1084.0" font-size="13.5" fill="#534AB7" text-anchor="start">ovl_inode_keep_real 的链</text>
+<text x="64.0" y="1104.0" font-size="13.5" fill="#534AB7" text-anchor="start">表节点。</text>
+<rect x="1038.0" y="220.0" width="14.0" height="1408.0" rx="7" fill="#B4B2A9" stroke="#B4B2A9" stroke-width="1.2"/>
+<line x1="1056" y1="230" x2="1172" y2="230" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1180.0" y="235.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">ckpt_mutex（互斥锁）</text>
+<text x="1180.0" y="256.0" font-size="13" fill="#5F5E5A" text-anchor="start">ioctl 全程持有：两个切换不交错；保护旧层数组的链表</text>
+<rect x="1072.0" y="620.0" width="14.0" height="848.0" rx="7" fill="#7F77DD" stroke="#7F77DD" stroke-width="1.2"/>
+<line x1="1090" y1="630" x2="1172" y2="630" stroke="#7F77DD" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1180.0" y="635.0" font-size="14.5" fill="#3C3489" font-weight="600" text-anchor="start">switch_sem 写锁（读写信号量）</text>
+<text x="1180.0" y="656.0" font-size="13" fill="#534AB7" text-anchor="start">overlay 的每个操作持读锁；写锁期间没有操作在读后端状态：</text>
+<text x="1180.0" y="675.0" font-size="13" fill="#534AB7" text-anchor="start">__upperdentry、lowerpath、ovl_entry、layers、</text>
+<text x="1180.0" y="694.0" font-size="13" fill="#534AB7" text-anchor="start">workdir、realfile</text>
+<rect x="1106.0" y="1008.0" width="14.0" height="60.0" rx="7" fill="#7F77DD" stroke="#7F77DD" stroke-width="1.2"/>
+<line x1="1124" y1="1018" x2="1172" y2="1018" stroke="#7F77DD" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1180.0" y="1023.0" font-size="14.5" fill="#3C3489" font-weight="600" text-anchor="start">layers_seq 写侧（seqlock）</text>
+<text x="1180.0" y="1044.0" font-size="13" fill="#534AB7" text-anchor="start">layers、numlayer、checkpoint_gen 三个值作为一组被读到</text>
+<rect x="1140.0" y="1488.0" width="14.0" height="60.0" rx="7" fill="#B4B2A9" stroke="#B4B2A9" stroke-width="1.2"/>
+<line x1="1158" y1="1498" x2="1172" y2="1498" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1180.0" y="1503.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">deferred 链表（自旋锁保护）</text>
+<text x="1180.0" y="1524.0" font-size="13" fill="#5F5E5A" text-anchor="start">被换下、别的读者可能还借着的对象；替换引用的人经</text>
+<text x="1180.0" y="1543.0" font-size="13" fill="#5F5E5A" text-anchor="start">ovl_defer_put() 挂进来，下一次 ioctl 才释放</text>
+<line x1="48" y1="1664" x2="1552" y2="1664" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1690.0" font-size="13" fill="#888780" text-anchor="start">注：运行时代码凡是要用 numlayer 约束 layers[] 下标的，都经 ovl_layers_snapshot() 读；只有 layers[0]（upper 的 mount）可以不经快照直接读，因为任何一个层数组都至少有一项。</text>
+</svg>

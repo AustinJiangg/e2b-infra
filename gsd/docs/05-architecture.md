@@ -20,40 +20,7 @@
 
 ## 1. 组件与分工
 
-```mermaid
-flowchart TB
-    SDK["Python SDK"]
-
-    subgraph HOST["宿主"]
-        CP["client-proxy 与 orchestrator 代理"]
-        ORCH["orchestrator 模板构建"]
-    end
-
-    subgraph GUEST["guest 沙箱"]
-        INIT["overlay-init"]
-        GSD["gsd 守护进程"]
-        CRIU["CRIU"]
-        subgraph KERNEL["补丁内核"]
-            OVL["overlayfs 热切层 ioctl"]
-            SD["soft-dirty"]
-        end
-        USER["用户进程树"]
-        STORE["snapshot store 与层目录"]
-    end
-
-    SDK -->|"HTTP 49984"| CP
-    CP -->|"按端口原样转发"| GSD
-    ORCH -.->|"仅建模板时注入并自检"| INIT
-    ORCH -.->|"仅建模板时注入并自检"| GSD
-    INIT -->|"开机时挂好 overlay 根"| OVL
-    GSD -->|"fork 并等待"| CRIU
-    GSD -->|"ioctl"| OVL
-    GSD -->|"信号与 proc 扫描"| USER
-    CRIU -->|"dump 与 restore"| USER
-    CRIU --> SD
-    GSD --> STORE
-    CRIU --> STORE
-```
+![进程级的组件与分工：请求经宿主代理转进 guest，由 gsd 编排 CRIU 与热切层](img/05-1-组件与分工.svg)
 
 | 组件 | 在哪 | 负责 | **不**负责 |
 |---|---|---|---|

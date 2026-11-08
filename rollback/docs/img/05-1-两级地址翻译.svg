@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1076" viewBox="0 0 1600 1076" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1076" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">两级地址翻译：脏页跟踪记的是中间那一层 guest 物理页</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">guest 写内存时不经过任何宿主代码，宿主软件看不见这次写；能看见的只有管 Stage-2 页表的 KVM，或者 CPU 自己。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">地址翻译</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">guest 的一次访存要查两张页表</text>
+<rect x="48.0" y="206.0" width="268.8" height="163.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="217.0" width="52.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="86.3" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest</text>
+<text x="182.4" y="295.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Guest 虚拟地址</text>
+<text x="182.4" y="323.0" font-size="14" fill="#5F5E5A" text-anchor="middle">guest 里的程序使用</text>
+<line x1="320.8" y1="287.8" x2="350.8" y2="287.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="356.8" y="206.0" width="268.8" height="163.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="368.8" y="217.0" width="80.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="409.0" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest 内核</text>
+<text x="491.2" y="295.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Stage-1 页表</text>
+<text x="491.2" y="323.0" font-size="14" fill="#5F5E5A" text-anchor="middle">guest 内核自己管的页表</text>
+<line x1="629.6" y1="287.8" x2="659.6" y2="287.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="665.6" y="206.0" width="268.8" height="163.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="677.6" y="217.0" width="52.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="703.9" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest</text>
+<rect x="677.6" y="317.5" width="244.8" height="44.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="800.0" y="334.5" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">要跟踪的是这一层：哪些 guest 物理</text>
+<text x="800.0" y="352.5" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">页被写过</text>
+<text x="800.0" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Guest 物理地址 / IPA</text>
+<text x="800.0" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">Stage-1 的输出，Stage-2 的输入</text>
+<line x1="938.4" y1="287.8" x2="968.4" y2="287.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="974.4" y="206.0" width="268.8" height="163.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="986.4" y="217.0" width="42.9" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1007.9" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">KVM</text>
+<text x="1108.8" y="295.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Stage-2 页表</text>
+<text x="1108.8" y="323.0" font-size="14" fill="#5F5E5A" text-anchor="middle">宿主 KVM 管的页表</text>
+<line x1="1247.2" y1="287.8" x2="1277.2" y2="287.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1283.2" y="206.0" width="268.8" height="163.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1295.2" y="217.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1316.2" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">宿主</text>
+<text x="1417.6" y="295.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">宿主物理地址</text>
+<text x="1417.6" y="323.0" font-size="14" fill="#5F5E5A" text-anchor="middle">真正的物理内存</text>
+<circle cx="63" cy="415.5" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="421.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="422.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">于是有三条路知道一页被写过</text>
+<rect x="370.0" y="405.5" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="407.0" y="421.5" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="441.5" width="1504.0" height="541.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="220.0" y="461.5" width="422.7" height="62.0" rx="10" fill="#EAF3DE" stroke="#639922" stroke-width="1.6"/>
+<text x="431.3" y="489.5" font-size="19" fill="#27500A" font-weight="600" text-anchor="middle">KVM 写保护 + 脏页日志</text>
+<text x="431.3" y="511.5" font-size="13.5" fill="#3B6D11" text-anchor="middle">KVM 的标准能力</text>
+<rect x="664.7" y="461.5" width="422.7" height="62.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="876.0" y="489.5" font-size="19" fill="#712B13" font-weight="600" text-anchor="middle">userfaultfd 写保护</text>
+<text x="876.0" y="511.5" font-size="13.5" fill="#993C1D" text-anchor="middle">e2b 在 x86 上的原生路径</text>
+<rect x="1109.3" y="461.5" width="422.7" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="1320.7" y="489.5" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">HDBSS</text>
+<text x="1320.7" y="511.5" font-size="13.5" fill="#0F6E56" text-anchor="middle">ARMv9.5 硬件标脏，鲲鹏 950 实现</text>
+<text x="68.0" y="577.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">谁发现写</text>
+<rect x="220.0" y="539.5" width="422.7" height="65.5" rx="10" fill="#EAF3DE" stroke="#639922" stroke-width="1.2"/>
+<text x="431.3" y="564.8" font-size="15.5" fill="#27500A" font-weight="600" text-anchor="middle">KVM</text>
+<text x="431.3" y="591.7" font-size="13" fill="#3B6D11" text-anchor="middle">Stage-2 页设成只读，第一次写触发权限故障</text>
+<rect x="664.7" y="539.5" width="422.7" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="876.0" y="564.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">用户态 handler</text>
+<text x="876.0" y="591.7" font-size="13" fill="#993C1D" text-anchor="middle">写一个因读而填的页，触发写保护故障</text>
+<rect x="1109.3" y="539.5" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="564.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">CPU</text>
+<text x="1320.7" y="591.7" font-size="13" fill="#0F6E56" text-anchor="middle">直接把脏 GPA 写进该 vCPU 的 HDBSS buffer</text>
+<text x="68.0" y="672.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">判据来源</text>
+<rect x="220.0" y="635.0" width="422.7" height="65.5" rx="10" fill="#EAF3DE" stroke="#639922" stroke-width="1.2"/>
+<text x="431.3" y="660.3" font-size="15.5" fill="#27500A" font-weight="600" text-anchor="middle">Stage-2 权限故障</text>
+<text x="431.3" y="687.2" font-size="13" fill="#3B6D11" text-anchor="middle">VMM 用 KVM_GET_DIRTY_LOG 取走位图</text>
+<rect x="664.7" y="635.0" width="422.7" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="876.0" y="660.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">pagemap bit 57</text>
+<text x="876.0" y="687.2" font-size="13" fill="#993C1D" text-anchor="middle">present = 1 且 uffd-wp = 0 即为脏</text>
+<rect x="1109.3" y="635.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="660.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">CPU 写 buffer + VM-Exit 时汇总</text>
+<text x="1320.7" y="687.2" font-size="13" fill="#0F6E56" text-anchor="middle">最终仍走 KVM_GET_DIRTY_LOG</text>
+<line x1="68" y1="732.5" x2="1532" y2="732.5" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="766.5" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">对比小结</text>
+<rect x="62.0" y="784.5" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="812.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">每页首次写的代价</text>
+<text x="431.3" y="812.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">一次 VM-Exit</text>
+<text x="876.0" y="812.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">一次用户态故障往返</text>
+<text x="1320.7" y="812.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">≈ 0</text>
+<text x="68.0" y="856.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">精度</text>
+<text x="431.3" y="856.5" font-size="15" fill="#2C2C2A" text-anchor="middle">精确：只有写才触发</text>
+<text x="876.0" y="856.5" font-size="15" fill="#2C2C2A" text-anchor="middle">精确</text>
+<text x="1320.7" y="856.5" font-size="15" fill="#2C2C2A" text-anchor="middle">精确</text>
+<rect x="62.0" y="872.5" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="900.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">可用性</text>
+<text x="431.3" y="900.5" font-size="15" fill="#2C2C2A" text-anchor="middle">任何 KVM</text>
+<text x="876.0" y="900.5" font-size="15" fill="#2C2C2A" text-anchor="middle">内存由 uffd 托管，内核支持 uffd 写保护</text>
+<text x="1320.7" y="900.5" font-size="15" fill="#2C2C2A" text-anchor="middle">ARMv9.5 + 内核支持 + VHE</text>
+<text x="68.0" y="944.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">本方案</text>
+<text x="431.3" y="944.5" font-size="15" fill="#2C2C2A" text-anchor="middle">用：没有 HDBSS 时退回它</text>
+<text x="876.0" y="944.5" font-size="15" fill="#888780" text-anchor="middle">不用</text>
+<text x="1320.7" y="944.5" font-size="15" fill="#2C2C2A" text-anchor="middle">用：有 HDBSS 时用它</text>
+<line x1="48" y1="1018.5" x2="1552" y2="1018.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1044.5" font-size="13" fill="#888780" text-anchor="start">注：本方案的两种方式喂给上层的是同一个位图，下文说「KVM 脏页日志」时两者都包括。</text>
+</svg>

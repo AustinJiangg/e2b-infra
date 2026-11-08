@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="808" viewBox="0 0 1400 808" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="808" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">五个原因修完后，restore 的 total_ms p50 从 196～206 降到 85～89 ms</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">旧 920B（已退役），2026-09-11，195 MB 单进程、guest 内直连 gsd 的微基准，THP 为 never，单位 ms。三档按修复先后排列。虚线框是原文给出的区间或两个样本。</text>
+<rect x="48.0" y="109.0" width="22.0" height="14.0" rx="3" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="78.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">初始实现</text>
+<rect x="164.0" y="109.0" width="22.0" height="14.0" rx="3" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="194.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">修掉原因二、三、四（gsd 侧）</text>
+<rect x="420.7" y="109.0" width="22.0" height="14.0" rx="3" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="450.7" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">再修掉原因一、五（内核侧）</text>
+<line x1="278.0" y1="154.0" x2="278.0" y2="678.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="698.0" font-size="12.5" fill="#888780" text-anchor="middle">0 ms</text>
+<line x1="447.1" y1="154.0" x2="447.1" y2="678.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="447.1" y="698.0" font-size="12.5" fill="#888780" text-anchor="middle">50 ms</text>
+<line x1="616.2" y1="154.0" x2="616.2" y2="678.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="616.2" y="698.0" font-size="12.5" fill="#888780" text-anchor="middle">100 ms</text>
+<line x1="785.3" y1="154.0" x2="785.3" y2="678.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="785.3" y="698.0" font-size="12.5" fill="#888780" text-anchor="middle">150 ms</text>
+<line x1="954.4" y1="154.0" x2="954.4" y2="678.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="954.4" y="698.0" font-size="12.5" fill="#888780" text-anchor="middle">200 ms</text>
+<line x1="278.0" y1="154.0" x2="278.0" y2="678.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="264.0" y="201.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">cgroup 迁移等待</text>
+<text x="264.0" y="219.0" font-size="12.5" fill="#888780" text-anchor="end">原因二</text>
+<rect x="278.0" y="162.0" width="128.5" height="24.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<text x="416.5" y="179.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">38</text>
+<rect x="278.0" y="192.0" width="2.0" height="24.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="288.3" y="209.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">0.1</text>
+<rect x="278.0" y="222.0" width="2.0" height="24.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<text x="288.3" y="239.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">0.1</text>
+<text x="264.0" y="307.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">文件校验前停顿</text>
+<text x="264.0" y="325.0" font-size="12.5" fill="#888780" text-anchor="end">原因一</text>
+<rect x="278.0" y="268.0" width="60.9" height="24.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<text x="348.9" y="285.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">18</text>
+<rect x="278.0" y="298.0" width="54.1" height="24.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="342.1" y="315.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">16</text>
+<rect x="278.0" y="328.0" width="2.0" height="24.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<rect x="279.7" y="328.0" width="2.0" height="24.0" rx="2" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="290.7" y="345.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">0.5～0.8</text>
+<text x="264.0" y="413.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">kill_ms</text>
+<text x="264.0" y="431.0" font-size="12.5" fill="#888780" text-anchor="end">原因三</text>
+<rect x="278.0" y="374.0" width="69.3" height="24.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<text x="357.3" y="391.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">20.5</text>
+<rect x="278.0" y="404.0" width="37.2" height="24.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="325.2" y="421.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">11</text>
+<rect x="278.0" y="434.0" width="37.2" height="24.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<rect x="315.2" y="434.0" width="3.4" height="24.0" rx="2" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="328.6" y="451.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">11～12</text>
+<text x="264.0" y="527.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">criu_restore_ms p50</text>
+<rect x="278.0" y="480.0" width="612.1" height="24.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<text x="900.1" y="497.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">181</text>
+<rect x="278.0" y="510.0" width="368.6" height="24.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="656.6" y="527.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">109</text>
+<rect x="278.0" y="540.0" width="250.3" height="24.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<rect x="528.3" y="540.0" width="6.8" height="24.0" rx="2" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="545.0" y="557.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">74～76</text>
+<text x="264.0" y="633.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">total_ms p50</text>
+<rect x="278.0" y="586.0" width="662.8" height="24.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<rect x="940.8" y="586.0" width="33.8" height="24.0" rx="2" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="984.7" y="603.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">196 / 206</text>
+<text x="1118.0" y="603.0" font-size="13" fill="#5F5E5A" text-anchor="start">连续 14 次：第 12 次根盘写满</text>
+<rect x="278.0" y="616.0" width="409.2" height="24.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="697.2" y="633.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">121</text>
+<text x="1118.0" y="633.0" font-size="13" fill="#5F5E5A" text-anchor="start">通过，根盘每次仍 +17 MB</text>
+<rect x="278.0" y="646.0" width="287.5" height="24.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<rect x="565.5" y="646.0" width="13.5" height="24.0" rx="2" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="589.0" y="663.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">85～89</text>
+<text x="1118.0" y="663.0" font-size="13" fill="#5F5E5A" text-anchor="start">通过，根盘恒定 289 MB</text>
+<line x1="48" y1="750" x2="1352" y2="750" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="776.0" font-size="13" fill="#888780" text-anchor="start">注：初始实现两个沙箱各恢复 4 次，total_ms p50 分别为 196、206 ms。这是旧 920B 同口径微基准，不能与正文 20 章的分档结果相减。</text>
+</svg>

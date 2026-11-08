@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1374" viewBox="0 0 1600 1374" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1374" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">请求发往沙箱，由宿主完成：checkpoint / restore 经过的四个层次</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">SDK 发请求，orchestrator 编排并持有账本，分叉的 Firecracker 读写内存与设备状态，KVM 和硬件提供脏页信息。Firecracker 进程全程不重建；①～④ 是贯穿全书的四处设计。</text>
+<rect x="48.0" y="119.0" width="30.0" height="18.0" rx="5" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="88.0" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">本方案的部件：checkpoint 接口、拦截、编排、账本、Firecracker 扩展、产物目录</text>
+<rect x="648.8" y="119.0" width="30.0" height="18.0" rx="5" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="688.8" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">沙箱原有的部件</text>
+<line x1="1362.0" y1="127.0" x2="1402.0" y2="127.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="1412.0" y="132.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">调用 / 数据流向</text>
+<rect x="48.0" y="168.0" width="1102.0" height="141.5" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="66.0" y="195.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">调用方</text>
+<rect x="72.0" y="212.0" width="640.0" height="79.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="392.0" y="244.2" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">Python SDK</text>
+<text x="392.0" y="272.0" font-size="14" fill="#0F6E56" text-anchor="middle">sandbox.checkpoint.create / restore / list / delete，目标地址：沙箱的 49984 端口</text>
+<text x="790.0" y="256.8" font-size="13.5" fill="#888780" text-anchor="start">沙箱内没有任何东西监听 49984</text>
+<rect x="48.0" y="373.5" width="1102.0" height="357.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="66.0" y="400.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">宿主 orchestrator 进程</text>
+<text x="784.0" y="400.5" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">账本（只在进程内存）</text>
+<rect x="778.0" y="415.5" width="360.0" height="301.0" rx="10" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<rect x="72.0" y="425.5" width="280.0" height="281.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="84.0" y="672.5" width="256.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="212.0" y="689.5" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">① 宿主侧应答，沙箱内无代理</text>
+<text x="212.0" y="529.9" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">代理拦截</text>
+<text x="212.0" y="557.8" font-size="14" fill="#0F6E56" text-anchor="middle">49984 + checkpoint 路径不转发进沙</text>
+<text x="212.0" y="578.8" font-size="14" fill="#0F6E56" text-anchor="middle">箱，宿主直接应答并校验 token</text>
+<rect x="392.0" y="425.5" width="320.0" height="281.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="552.0" y="547.9" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">Checkpoint Service</text>
+<text x="552.0" y="575.8" font-size="14" fill="#0F6E56" text-anchor="middle">按沙箱串行 · 决定全量 / 增量 · 失败分级 · 分</text>
+<text x="552.0" y="596.8" font-size="14" fill="#0F6E56" text-anchor="middle">阶段计时</text>
+<rect x="790.0" y="425.5" width="336.0" height="136.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="802.0" y="528.0" width="312.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="958.0" y="545.0" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">③ 每代只存脏页，历史是树</text>
+<text x="958.0" y="468.2" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">内存差分树账本</text>
+<text x="958.0" y="496.0" font-size="14" fill="#0F6E56" text-anchor="middle">父指针 · 每代脏页位图 · 删除 / 隐藏 / 合并</text>
+<rect x="790.0" y="606.0" width="336.0" height="100.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="958.0" y="648.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">磁盘层账本</text>
+<text x="958.0" y="676.5" font-size="14" fill="#0F6E56" text-anchor="middle">合并 header · 层引用计数</text>
+<line x1="356.0" y1="493.8" x2="386.0" y2="493.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="716.0" y1="493.8" x2="772.0" y2="493.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="262.0" y1="293.5" x2="262.0" y2="420.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="274.0" y="362.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="start">HTTP</text>
+<rect x="48.0" y="834.5" width="684.0" height="187.5" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="66.0" y="861.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">Firecracker 进程</text>
+<text x="216.1" y="861.5" font-size="13" fill="#888780" text-anchor="start">分叉版，全程不重建</text>
+<line x1="552.0" y1="708.5" x2="552.0" y2="881.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="568.0" y="770.5" font-size="13.5" fill="#0F6E56" font-weight="600" text-anchor="start">checkpoint：暂停 → 写差分 ‖ 封存写层 → 恢复</text>
+<text x="568.0" y="796.5" font-size="13.5" fill="#0F6E56" font-weight="600" text-anchor="start">restore：暂停 → 算回滚集 → 原地写回 → 切磁盘视图 → 恢复</text>
+<rect x="72.0" y="886.5" width="280.0" height="115.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="212.0" y="936.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">vCPU · GIC · virtio 设备</text>
+<text x="212.0" y="964.5" font-size="14" fill="#5F5E5A" text-anchor="middle">逻辑状态写回活对象</text>
+<rect x="392.0" y="886.5" width="320.0" height="115.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="404.0" y="968.0" width="296.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="552.0" y="985.0" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">② 原地写回，不重建进程</text>
+<text x="552.0" y="918.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Guest 内存</text>
+<text x="552.0" y="946.5" font-size="14" fill="#5F5E5A" text-anchor="middle">差异页直接写回活映射</text>
+<rect x="790.0" y="886.5" width="336.0" height="115.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="958.0" y="936.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">磁盘视图（live NBD 之下）</text>
+<text x="958.0" y="964.5" font-size="14" fill="#5F5E5A" text-anchor="middle">模板底座 + 封存层 × k + 活写层</text>
+<line x1="716.0" y1="944.2" x2="784.0" y2="944.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="750.0" y="936.2" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">块 I/O</text>
+<rect x="48.0" y="1082.0" width="684.0" height="198.5" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="66.0" y="1109.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">KVM · 鲲鹏</text>
+<rect x="72.0" y="1126.0" width="640.0" height="136.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="84.0" y="1228.5" width="616.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="392.0" y="1245.5" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">④ 950 上由硬件标脏</text>
+<text x="392.0" y="1158.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">脏页跟踪</text>
+<text x="392.0" y="1186.0" font-size="14" fill="#5F5E5A" text-anchor="middle">950：HDBSS 硬件标脏（启动时探测，自动启用）；无 HDBSS：KVM 软件写保护（需显式</text>
+<text x="392.0" y="1207.0" font-size="14" fill="#5F5E5A" text-anchor="middle">开启）</text>
+<line x1="552.0" y1="1124.0" x2="552.0" y2="1007.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="564.0" y="1069.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="start">脏页日志</text>
+<rect x="1186.0" y="373.5" width="366.0" height="907.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="1204.0" y="400.5" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">宿主本地存储</text>
+<text x="1204.0" y="429.5" font-size="13" fill="#5F5E5A" text-anchor="start">ORCHESTRATOR_BASE_PATH/build/checkpoints</text>
+<text x="1204.0" y="449.5" font-size="13" fill="#5F5E5A" text-anchor="start">/&lt;sandbox-id&gt;/</text>
+<rect x="1204.0" y="479.5" width="330.0" height="174.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1218.0" y="505.5" font-size="14.5" fill="#085041" font-weight="600" text-anchor="start">ckpt_&lt;UnixNano&gt;/</text>
+<text x="1218.0" y="526.5" font-size="13" fill="#0F6E56" text-anchor="start">每个 checkpoint 一个目录</text>
+<text x="1218.0" y="553.5" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">snapfile</text>
+<text x="1364.0" y="553.5" font-size="13" fill="#0F6E56" text-anchor="start">vCPU 与设备状态</text>
+<text x="1218.0" y="579.5" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">mem_diff</text>
+<text x="1364.0" y="579.5" font-size="13" fill="#0F6E56" text-anchor="start">稀疏，仅本代脏页</text>
+<text x="1218.0" y="605.5" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">mem_bitmap</text>
+<text x="1364.0" y="605.5" font-size="13" fill="#0F6E56" text-anchor="start">本代脏页位图</text>
+<text x="1218.0" y="631.5" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">rootfs.header</text>
+<text x="1364.0" y="631.5" font-size="13" fill="#0F6E56" text-anchor="start">这一刻的磁盘视图</text>
+<rect x="1204.0" y="669.5" width="330.0" height="96.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1218.0" y="695.5" font-size="14.5" fill="#085041" font-weight="600" text-anchor="start">layers/</text>
+<text x="1218.0" y="716.5" font-size="13" fill="#0F6E56" text-anchor="start">封存写层，多代共享</text>
+<text x="1218.0" y="743.5" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">layer-&lt;uuid&gt;</text>
+<text x="1364.0" y="743.5" font-size="13" fill="#0F6E56" text-anchor="start">一个封存层</text>
+<text x="1204.0" y="789.5" font-size="13" fill="#888780" text-anchor="start">绑定活沙箱的当前生命周期：</text>
+<text x="1204.0" y="809.5" font-size="13" fill="#888780" text-anchor="start">不跨 orchestrator 重启、不跨节点</text>
+<line x1="1140.0" y1="566.0" x2="1180.0" y2="566.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1130.0" y1="944.2" x2="1180.0" y2="944.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<path d="M672.0 1004.0 L672.0 1050.0 L1180.0 1050.0" fill="none" stroke="#5F5E5A" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ar-flow)"/>
+<text x="949.0" y="1042.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">snapfile · mem_diff · mem_bitmap</text>
+<line x1="48" y1="1316.5" x2="1552" y2="1316.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1342.5" font-size="13" fill="#888780" text-anchor="start">注：控制面在宿主侧（第 4 章）；restore 原地写回的实现见第 9 章，脏页跟踪见第 5 章，差分树见第 6 章，磁盘分层见第 7 章。</text>
+</svg>

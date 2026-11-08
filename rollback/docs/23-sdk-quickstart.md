@@ -161,13 +161,7 @@ def checkpoint_expect_incremental(sbx, name=None, first=False):
 - restore 之后再做 checkpoint，新节点挂在 restore 目标下面，树长出一条新分支；
 - 任意两个 checkpoint 之间都可以直接跳，不管它们在不在同一条分支上。
 
-```mermaid
-flowchart TD
-    A["deps<br/>（第一次，full）"] --> B["try-A"]
-    A --> C["try-B<br/>restore 到 deps 之后拍的"]
-    C --> D["try-B-fixed"]
-    B -. "restore(try-A)：跨分支直接跳" .-> D
-```
+![SDK 视角的 checkpoint 树](img/23-1-SDK视角的checkpoint树.svg)
 
 对 Agent 类负载的典型用法：每完成一步打一个点；某一步走坏了就 restore 到上一步、换个做法；
 后来发现原先的做法其实是对的，再 restore 回那条分支。

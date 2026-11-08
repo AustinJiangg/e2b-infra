@@ -38,28 +38,7 @@ restore 时把层栈换回去（[07](07-overlay-hot-switch.md)）。
 脚本里的三个路径变量来自模板模型（`template/build/core/rootfs/templates.go:57-61`）：`WORK_ROOT=/overlay/workspace`、`LAYER_ROOT=/overlay/layers`、
 `SNAPSHOT_STORE=/var/lib/gsd/snapshots`，与 `gsd.service` 里传给 gsd 的参数出自同一处，不会不一致。
 
-```mermaid
-flowchart TB
-    EXT4["ext4 根盘"]
-    LOWER["mnt lower 基础层"]
-    UPPER["overlay workspace upper 初始 upper"]
-    NEWROOT["overlay 根 也就是 chroot 之后的根"]
-    BIND["var log 与 var lib systemd 与 var lib chrony"]
-    TMPFS["run 与 snapshot store"]
-    OVLDIR["overlay 目录 层与 upper 所在"]
-    SYSTEMD["systemd"]
-
-    EXT4 -->|"步骤 2 bind"| LOWER
-    EXT4 -->|"步骤 1 建目录"| UPPER
-    LOWER -->|"步骤 3 lowerdir"| NEWROOT
-    UPPER -->|"步骤 3 upperdir"| NEWROOT
-    EXT4 -->|"步骤 4 bind 进新根"| BIND
-    BIND --> NEWROOT
-    TMPFS -->|"步骤 5 与 7 tmpfs"| NEWROOT
-    EXT4 -->|"步骤 8 与 9 bind 进新根"| OVLDIR
-    OVLDIR --> NEWROOT
-    NEWROOT -->|"步骤 10 chroot 后 exec"| SYSTEMD
-```
+![overlay-init 把 ext4 根盘装配成 overlay 根，再 chroot 启动 systemd](img/06-1-overlay-init装配根文件系统.svg)
 
 | 步骤 | 行 | 做什么 | 为什么 |
 |---|---|---|---|

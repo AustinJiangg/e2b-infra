@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1136" viewBox="0 0 1600 1136" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1136" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一个沙箱在宿主上的样子：部件都挂在 orchestrator 里，内存按需经 UFFD 填入</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">每个沙箱在 orchestrator 里有一个 Sandbox 对象和一个 UFFD handler；Firecracker 进程、NBD 设备、tap 与网络命名空间是它们在宿主上对应的资源。</text>
+<rect x="48.0" y="119.0" width="30.0" height="18.0" rx="5" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="88.0" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">e2b 原有的部件</text>
+<rect x="219.4" y="119.0" width="30.0" height="18.0" rx="5" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="259.4" y="133.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">本方案加在 orchestrator 里的部件</text>
+<circle cx="63" cy="184" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="189.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="191.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">orchestrator 进程里有什么</text>
+<text x="374.9" y="190.0" font-size="14.5" fill="#888780" text-anchor="start">下面一排是沙箱在宿主上占用的资源</text>
+<rect x="48.0" y="218.0" width="1504.0" height="301.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="66.0" y="245.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">orchestrator 进程</text>
+<text x="223.3" y="245.0" font-size="13" fill="#888780" text-anchor="start">宿主上的管理进程：管沙箱生命周期、网络、存储、代理</text>
+<rect x="68.0" y="262.0" width="571.2" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="353.6" y="307.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">沙箱表</text>
+<rect x="663.2" y="262.0" width="571.2" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="948.8" y="294.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">代理（端口路由）</text>
+<text x="948.8" y="322.0" font-size="14" fill="#5F5E5A" text-anchor="middle">按 (sandboxID, port) 转发进沙箱</text>
+<rect x="1258.4" y="262.0" width="273.6" height="79.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1395.2" y="294.2" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">Checkpoint Service</text>
+<text x="1395.2" y="322.0" font-size="14" fill="#0F6E56" text-anchor="middle">本方案的控制面</text>
+<rect x="355.6" y="379.5" width="1186.4" height="123.5" rx="10" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="367.6" y="399.5" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">Sandbox 对象</text>
+<rect x="68.0" y="413.5" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="204.8" y="445.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">UFFD handler</text>
+<text x="204.8" y="473.5" font-size="14" fill="#5F5E5A" text-anchor="middle">每沙箱一个，按需填充 guest 内存页</text>
+<rect x="365.6" y="413.5" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="502.4" y="445.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">process</text>
+<text x="502.4" y="473.5" font-size="14" fill="#5F5E5A" text-anchor="middle">→ Firecracker 的 API socket</text>
+<rect x="663.2" y="413.5" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="445.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Rootfs Provider</text>
+<text x="800.0" y="473.5" font-size="14" fill="#5F5E5A" text-anchor="middle">→ Overlay + NBD</text>
+<rect x="960.8" y="413.5" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1097.6" y="445.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Slot</text>
+<text x="1097.6" y="473.5" font-size="14" fill="#5F5E5A" text-anchor="middle">→ 网络命名空间、tap、IP</text>
+<rect x="1258.4" y="413.5" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1395.2" y="445.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Template</text>
+<text x="1395.2" y="473.5" font-size="14" fill="#5F5E5A" text-anchor="middle">→ memfile / rootfs / snapfile</text>
+<line x1="204.8" y1="343.5" x2="204.8" y2="408.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="542.4" y1="343.5" x2="542.4" y2="374.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="365.6" y="583.0" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="502.4" y="615.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Firecracker 进程</text>
+<text x="502.4" y="643.0" font-size="14" fill="#5F5E5A" text-anchor="middle">每个沙箱一个，真正跑 guest 的 VMM</text>
+<line x1="502.4" y1="495.0" x2="502.4" y2="578.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="663.2" y="583.0" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="615.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/dev/nbdX</text>
+<text x="800.0" y="643.0" font-size="14" fill="#5F5E5A" text-anchor="middle">把 Overlay 暴露成块设备给 guest</text>
+<line x1="800.0" y1="495.0" x2="800.0" y2="578.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="960.8" y="583.0" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1097.6" y="615.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">tap 设备 + netns</text>
+<text x="1097.6" y="643.0" font-size="14" fill="#5F5E5A" text-anchor="middle">通过 NAT 出网</text>
+<line x1="1097.6" y1="495.0" x2="1097.6" y2="578.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="365.6" y="702.5" width="273.6" height="79.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="502.4" y="734.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">KVM</text>
+<text x="502.4" y="762.5" font-size="14" fill="#5F5E5A" text-anchor="middle">/dev/kvm</text>
+<line x1="502.4" y1="664.5" x2="502.4" y2="697.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<path d="M204.8 495.0 L204.8 622.8 L359.6 622.8" fill="none" stroke="#5F5E5A" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ar-flow)"/>
+<text x="216.8" y="610.8" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="start">填 guest 内存页</text>
+<circle cx="63" cy="828.0" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="833.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="835.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">guest 访问一个还没有内容的内存页时</text>
+<text x="454.1" y="834.0" font-size="14.5" fill="#888780" text-anchor="start">UFFD：Linux 让一段内存缺页时由用户态程序来填</text>
+<rect x="48.0" y="856.0" width="340.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="867.0" width="52.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="86.3" y="882.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest</text>
+<text x="218.0" y="928.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">guest 访问一页</text>
+<text x="218.0" y="956.5" font-size="14" fill="#5F5E5A" text-anchor="middle">这一页还没有内容</text>
+<line x1="392.0" y1="921.2" x2="430.0" y2="921.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="436.0" y="856.0" width="340.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="448.0" y="867.0" width="66.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="481.0" y="882.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">宿主内核</text>
+<text x="606.0" y="928.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">缺页</text>
+<text x="606.0" y="956.5" font-size="14" fill="#5F5E5A" text-anchor="middle">内核不自己处理，转交给用户态</text>
+<line x1="780.0" y1="921.2" x2="818.0" y2="921.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="824.0" y="856.0" width="340.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="836.0" y="867.0" width="226.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="949.2" y="882.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">UFFD handler（orchestrator 里）</text>
+<text x="994.0" y="918.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">取这一页的内容</text>
+<text x="994.0" y="946.0" font-size="14" fill="#5F5E5A" text-anchor="middle">从本地缓存取；没有就经 chunker 从对象存储</text>
+<text x="994.0" y="967.0" font-size="14" fill="#5F5E5A" text-anchor="middle">按块拉</text>
+<line x1="1168.0" y1="921.2" x2="1206.0" y2="921.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1212.0" y="856.0" width="340.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1224.0" y="867.0" width="103.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1275.8" y="882.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">UFFD handler</text>
+<text x="1382.0" y="928.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">把这一页填进去</text>
+<text x="1382.0" y="956.5" font-size="14" fill="#5F5E5A" text-anchor="middle">guest 继续跑</text>
+<rect x="48.0" y="1002.5" width="1504.0" height="40.0" rx="8" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="800.0" y="1028.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">memfile 可能有几个 GB、在对象存储里：沙箱在只拉了很小一部分时就能跑起来，用到哪拉到哪</text>
+<line x1="48" y1="1078.5" x2="1552" y2="1078.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1104.5" font-size="13" fill="#888780" text-anchor="start">注：只有 template 构建流程用 CreateSandbox（普通内存，冷启动）；所有用户沙箱走 ResumeSandbox，内存后端是真正的 UFFD。</text>
+</svg>

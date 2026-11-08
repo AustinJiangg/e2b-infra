@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1077" viewBox="0 0 1600 1077" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1077" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">读也算脏：同一组页，ARM 适配基线把每一个换入过的页都记成脏</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">x86 原生和本方案只把写过的页算脏；ARM 适配基线的判据塌缩成“常驻”，只读过的页也进了增量。这是修复 ARM 适配引入的退化，不是超越 x86 原生。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">判据的推导</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">同一段运行里的一组 guest 页，三种判据各把哪些页算脏</text>
+<rect x="620.4" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="657.4" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="218.0" width="1504.0" height="490.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="70.0" y="266.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">guest 页的经历</text>
+<text x="70.0" y="288.0" font-size="13" fill="#888780" text-anchor="start">（示意，12 页）</text>
+<rect x="362.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="406.0" y="270.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">只读过</text>
+<text x="406.0" y="291.0" font-size="12" fill="#5F5E5A" text-anchor="middle">读缺页填入</text>
+<rect x="460.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="504.0" y="270.0" font-size="14" fill="#888780" font-weight="600" text-anchor="middle">没碰过</text>
+<text x="504.0" y="291.0" font-size="12" fill="#888780" text-anchor="middle">未换入</text>
+<rect x="558.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1.2"/>
+<text x="602.0" y="270.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">写过</text>
+<text x="602.0" y="291.0" font-size="12" fill="#FFFFFF" text-anchor="middle">写缺页填入</text>
+<rect x="656.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="700.0" y="270.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">只读过</text>
+<text x="700.0" y="291.0" font-size="12" fill="#5F5E5A" text-anchor="middle">读缺页填入</text>
+<rect x="754.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1.2"/>
+<text x="798.0" y="270.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">读后又写</text>
+<text x="798.0" y="291.0" font-size="12" fill="#FFFFFF" text-anchor="middle">读缺页填入</text>
+<rect x="852.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="896.0" y="270.0" font-size="14" fill="#888780" font-weight="600" text-anchor="middle">没碰过</text>
+<text x="896.0" y="291.0" font-size="12" fill="#888780" text-anchor="middle">未换入</text>
+<rect x="950.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="994.0" y="270.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">只读过</text>
+<text x="994.0" y="291.0" font-size="12" fill="#5F5E5A" text-anchor="middle">读缺页填入</text>
+<rect x="1048.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1.2"/>
+<text x="1092.0" y="270.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">写过</text>
+<text x="1092.0" y="291.0" font-size="12" fill="#FFFFFF" text-anchor="middle">写缺页填入</text>
+<rect x="1146.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1190.0" y="270.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">只读过</text>
+<text x="1190.0" y="291.0" font-size="12" fill="#5F5E5A" text-anchor="middle">读缺页填入</text>
+<rect x="1244.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1.2"/>
+<text x="1288.0" y="270.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">读后又写</text>
+<text x="1288.0" y="291.0" font-size="12" fill="#FFFFFF" text-anchor="middle">读缺页填入</text>
+<rect x="1342.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="1386.0" y="270.0" font-size="14" fill="#888780" font-weight="600" text-anchor="middle">没碰过</text>
+<text x="1386.0" y="291.0" font-size="12" fill="#888780" text-anchor="middle">未换入</text>
+<rect x="1440.0" y="244.0" width="88.0" height="62.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1484.0" y="270.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">只读过</text>
+<text x="1484.0" y="291.0" font-size="12" fill="#5F5E5A" text-anchor="middle">读缺页填入</text>
+<line x1="70" y1="332" x2="1530" y2="332" stroke="#E5E3DB" stroke-width="1"/>
+<text x="70.0" y="374.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">e2b x86 原生</text>
+<text x="70.0" y="396.0" font-size="13" fill="#5F5E5A" text-anchor="start">present = 1 且 uffd-wp = 0</text>
+<rect x="362.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="406.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">wp=1</text>
+<rect x="460.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="504.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<rect x="558.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1"/>
+<text x="602.0" y="382.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="656.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="700.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">wp=1</text>
+<rect x="754.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1"/>
+<text x="798.0" y="382.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="852.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="896.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<rect x="950.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="994.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">wp=1</text>
+<rect x="1048.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1"/>
+<text x="1092.0" y="382.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="1146.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1190.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">wp=1</text>
+<rect x="1244.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#888780" stroke="#888780" stroke-width="1"/>
+<text x="1288.0" y="382.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="1342.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1386.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<rect x="1440.0" y="354.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1484.0" y="382.0" font-size="13.5" fill="#888780" text-anchor="middle">wp=1</text>
+<text x="362.0" y="426.0" font-size="14" fill="#0F6E56" font-weight="600" text-anchor="start">精确：只读过的页带着写保护位，不算脏</text>
+<text x="70.0" y="486.0" font-size="16" fill="#712B13" font-weight="600" text-anchor="start">ARM 适配基线</text>
+<text x="70.0" y="508.0" font-size="13" fill="#5F5E5A" text-anchor="start">同一判据，但填页从不带 WP</text>
+<rect x="362.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="406.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="460.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="504.0" y="494.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<rect x="558.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="602.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="656.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="700.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="754.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="798.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="852.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="896.0" y="494.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<rect x="950.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="994.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="1048.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1092.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="1146.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1190.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="1244.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1288.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<rect x="1342.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1386.0" y="494.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<rect x="1440.0" y="466.0" width="88.0" height="44.0" rx="6" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1484.0" y="494.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">wp=0</text>
+<text x="362.0" y="538.0" font-size="14" fill="#A32D2D" font-weight="600" text-anchor="start">退化：凡被换入过的页都算脏</text>
+<text x="70.0" y="598.0" font-size="16" fill="#085041" font-weight="600" text-anchor="start">本方案</text>
+<text x="70.0" y="620.0" font-size="13" fill="#5F5E5A" text-anchor="start">KVM / HDBSS 脏页日志（Stage-2）</text>
+<rect x="362.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="406.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="460.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="504.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="558.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<text x="602.0" y="606.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<rect x="656.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="700.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="754.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<text x="798.0" y="606.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<rect x="852.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="896.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="950.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="994.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="1048.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<text x="1092.0" y="606.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<rect x="1146.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1190.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="1244.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<text x="1288.0" y="606.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<rect x="1342.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1386.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<rect x="1440.0" y="578.0" width="88.0" height="44.0" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1484.0" y="606.0" font-size="13.5" fill="#888780" text-anchor="middle">0</text>
+<text x="362.0" y="650.0" font-size="14" fill="#0F6E56" font-weight="600" text-anchor="start">精确：读一页不会让它在 Stage-2 上变脏</text>
+<text x="70.0" y="692.0" font-size="12.5" fill="#888780" text-anchor="start">实心格 = 算脏，进增量；虚线格 = 不算脏。wp 是 /proc/self/pagemap 的 bit 57（uffd 写保护）；本方案一行是 KVM 位图里的位。</text>
+<circle cx="63" cy="754" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="759.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="761.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">ARM 适配基线上判据怎么塌缩</text>
+<text x="377.9" y="760.0" font-size="14.5" fill="#888780" text-anchor="start">§5.1、§5.2</text>
+<rect x="48.0" y="782.0" width="346.0" height="145.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="793.0" width="98.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="109.0" y="808.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">uffd handler</text>
+<text x="221.0" y="851.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">UFFDIO_COPY 不带 WP</text>
+<text x="221.0" y="879.5" font-size="14" fill="#5F5E5A" text-anchor="middle">写保护模式那几行被注释掉，每次填页都清掉 WP</text>
+<text x="221.0" y="900.5" font-size="14" fill="#5F5E5A" text-anchor="middle">位，无论读写</text>
+<line x1="398.0" y1="854.8" x2="428.0" y2="854.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="434.0" y="782.0" width="346.0" height="145.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="446.0" y="793.0" width="66.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="479.3" y="808.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">pagemap</text>
+<text x="607.0" y="862.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">bit 57 恒为 0</text>
+<text x="607.0" y="890.0" font-size="14" fill="#5F5E5A" text-anchor="middle">!is_write_protected() 恒真</text>
+<line x1="784.0" y1="854.8" x2="814.0" y2="854.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="820.0" y="782.0" width="346.0" height="145.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="832.0" y="793.0" width="95.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="879.8" y="808.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">Firecracker</text>
+<rect x="832.0" y="893.5" width="322.0" height="26.0" rx="6" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="993.0" y="910.5" font-size="13" fill="#712B13" font-weight="500" text-anchor="middle">第二级逐页 pread 成了纯开销</text>
+<text x="993.0" y="844.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">判据塌缩成 is_present()</text>
+<text x="993.0" y="872.0" font-size="14" fill="#5F5E5A" text-anchor="middle">也就是 mincore 已经回答过的问题</text>
+<line x1="1170.0" y1="854.8" x2="1200.0" y2="854.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1206.0" y="782.0" width="346.0" height="145.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1218.0" y="793.0" width="132.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1284.3" y="808.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">GET /memory/dirty</text>
+<text x="1379.0" y="862.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">位图 = 常驻页集合</text>
+<text x="1379.0" y="890.0" font-size="14" fill="#5F5E5A" text-anchor="middle">“被读进来过”和“被写过”不再有区别</text>
+<rect x="48.0" y="943.5" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="800.0" y="969.5" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">再叠加原生 Checkpoint RPC 会重建沙箱、工作集要重新缺页换入：两次 snapshot 之间什么都没做，增量下限也约等于整个常驻工作集</text>
+<line x1="48" y1="1019.5" x2="1552" y2="1019.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1045.5" font-size="13" fill="#888780" text-anchor="start">注：本方案不走 uffd 判据，也不需要沙箱内存由 uffd 托管。原生 pause 路径上的这个问题在本书交付的代码里已经修复，改法见第 14 章。</text>
+</svg>

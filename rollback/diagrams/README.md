@@ -1,6 +1,6 @@
 # checkpoint / restore 配图
 
-950 ext4 路线的汇报素材。完整技术文档见 [`../docs/`](../docs/)。
+950 ext4 路线的早期汇报素材，现在只有 `../slides/` 在用。完整技术文档见 [`../docs/`](../docs/)。
 
 ## 目录内容
 
@@ -17,7 +17,7 @@
 - **要汇报** → 用三张 SVG。纯 SVG、无外部依赖，PowerPoint / WPS 可直接插入并保持矢量清晰度，
   放大不糊；中文走系统字体栈（微软雅黑 / 苹方 / 思源黑体），Windows 与 macOS 都能正常显示。
   浏览器和 VS Code 内置图像预览也能直接打开，不需要装任何插件。
-- **要修改交付 HTML 中的配图** → 直接编辑相应 `.svg`；这些 SVG 是手写矢量源文件，由手册构建工具直接内嵌。
+- **要修改交付 HTML 中的配图** → 不在这里。手册的配图在 [`../docs/img/`](../docs/img/)，由 [`../tools/figures/`](../tools/figures/README.md) 里的脚本生成；这三张不再进入交付 HTML，只供 `../slides/` 使用。
   `.mmd` 是另行维护的 Mermaid 逻辑示意，不会自动生成或覆盖这套手写 SVG；修改文字含义时同步两份源文件。
   `.mmd` 文件需要支持 mermaid 语言的扩展才能预览，
   仅装「Markdown Preview Mermaid Support」是不够的 —— 它只增强 Markdown 预览里的 `mermaid` 代码块。

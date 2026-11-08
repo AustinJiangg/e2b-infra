@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1380" viewBox="0 0 1600 1380" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1380" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">overlay-init：先把 ext4 根盘搭成 overlay 根，再 chroot 进去启动 systemd</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">内核以 init=/usr/bin/overlay-init 启动它，此时 / 还是 ext4 根盘。紫色是组成 overlay 根的部分，checkpoint 和 restore 换的就是它的层；灰色是 bind 或 tmpfs 挂进新根、不经过 overlay 的东西。图中</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">步骤号与下表一致。</text>
+<line x1="48.0" y1="149.0" x2="88.0" y2="149.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="154.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">建目录、挂载、bind</text>
+<circle cx="63" cy="202" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="207.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="209.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">在旧根上搭出 overlay 根</text>
+<rect x="343.4" y="192.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="380.4" y="208.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="433.4" y="208.0" font-size="14.5" fill="#888780" text-anchor="start">步骤 1–3</text>
+<rect x="48.0" y="238.0" width="330.0" height="232.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="346.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">ext4 根盘</text>
+<text x="213.0" y="374.3" font-size="14" fill="#5F5E5A" text-anchor="middle">内核启动时的 /；之后降为只读的最底层</text>
+<rect x="598.0" y="238.0" width="380.0" height="96.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="788.0" y="267.9" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">/mnt/lower</text>
+<text x="788.0" y="295.8" font-size="14" fill="#534AB7" text-anchor="middle">mount --bind / /mnt/lower：给 ext4 根一个可以当</text>
+<text x="788.0" y="316.8" font-size="14" fill="#534AB7" text-anchor="middle">lowerdir 的路径</text>
+<rect x="598.0" y="374.0" width="380.0" height="96.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="788.0" y="414.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">/overlay/workspace/upper 与 work</text>
+<text x="788.0" y="442.3" font-size="14" fill="#534AB7" text-anchor="middle">初始 upper：根目录属主、权限与 /mnt/lower 相同</text>
+<rect x="1128.0" y="238.0" width="424.0" height="232.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1340.0" y="346.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">/mnt/newroot：overlay 根</text>
+<text x="1340.0" y="374.3" font-size="14" fill="#534AB7" text-anchor="middle">唯一 lower 是 /mnt/lower；chroot 之后它就是 /</text>
+<line x1="382.0" y1="286.0" x2="592.0" y2="286.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="488.0" y="276.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 2：bind</text>
+<line x1="382.0" y1="422.0" x2="592.0" y2="422.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="488.0" y="412.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 1：建目录</text>
+<line x1="982.0" y1="286.0" x2="1122.0" y2="286.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="1053.0" y="276.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">lowerdir</text>
+<line x1="982.0" y1="422.0" x2="1122.0" y2="422.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="1053.0" y="412.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">upperdir</text>
+<text x="1053.0" y="359.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 3</text>
+<circle cx="63" cy="516" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="521.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="523.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">在新根里补齐 overlay 之外的东西</text>
+<text x="423.4" y="522.0" font-size="14.5" fill="#888780" text-anchor="start">步骤 4–9，都挂在 /mnt/newroot 下面</text>
+<text x="48.0" y="564.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">来源</text>
+<text x="628.0" y="564.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">新根里的位置</text>
+<text x="1068.0" y="564.0" font-size="14" fill="#888780" font-weight="600" text-anchor="start">为什么</text>
+<rect x="48.0" y="580.0" width="330.0" height="66.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="618.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">ext4 上的三个系统目录</text>
+<rect x="628.0" y="580.0" width="380.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="818.0" y="606.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/var/log、/var/lib/systemd、</text>
+<text x="818.0" y="631.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/var/lib/chrony</text>
+<line x1="382.0" y1="613.0" x2="622.0" y2="613.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="503.0" y="603.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 4：bind</text>
+<text x="1068.0" y="618.0" font-size="14" fill="#5F5E5A" text-anchor="start">日志、systemd 状态、时钟漂移数据不随 restore 回滚（§2.2）</text>
+<rect x="48.0" y="660.0" width="330.0" height="66.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="698.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">伪文件系统与 tmpfs</text>
+<rect x="628.0" y="660.0" width="380.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="818.0" y="698.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/dev、/proc、/sys，/run 上的 tmpfs</text>
+<line x1="382.0" y1="693.0" x2="622.0" y2="693.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="503.0" y="683.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 5：挂载</text>
+<text x="1068.0" y="698.0" font-size="14" fill="#5F5E5A" text-anchor="start">内核不会替 init= 指定的程序挂这些</text>
+<rect x="48.0" y="740.0" width="330.0" height="66.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="778.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">新根里刚挂好的 sysfs</text>
+<rect x="628.0" y="740.0" width="380.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="818.0" y="778.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">透明大页设为 never，回读确认</text>
+<line x1="382.0" y1="773.0" x2="622.0" y2="773.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="503.0" y="763.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 6：写 sysfs</text>
+<text x="1068.0" y="778.0" font-size="14" fill="#5F5E5A" text-anchor="start">必须在任何用户进程出现之前关掉（§2.3）</text>
+<rect x="48.0" y="820.0" width="330.0" height="66.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="858.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">tmpfs，size=2G</text>
+<rect x="628.0" y="820.0" width="380.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="818.0" y="858.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">snapshot store：/var/lib/gsd/snapshots</text>
+<line x1="382.0" y1="853.0" x2="622.0" y2="853.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="503.0" y="843.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 7：挂 tmpfs</text>
+<text x="1068.0" y="858.0" font-size="14" fill="#5F5E5A" text-anchor="start">CRIU 镜像绝不能被回滚，restore 要读的正是它们（§2.4）</text>
+<rect x="48.0" y="900.0" width="330.0" height="66.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="938.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">ext4 上的 /overlay</text>
+<rect x="628.0" y="900.0" width="380.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="818.0" y="938.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/overlay：层目录与 upper 所在</text>
+<line x1="382.0" y1="933.0" x2="622.0" y2="933.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="503.0" y="923.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 8：bind</text>
+<text x="1068.0" y="938.0" font-size="14" fill="#5F5E5A" text-anchor="start">gsd 在 chroot 之后要看见并管理层目录</text>
+<rect x="48.0" y="980.0" width="330.0" height="66.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="213.0" y="1018.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">旧根里的 /mnt/lower</text>
+<rect x="628.0" y="980.0" width="380.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="818.0" y="1018.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/mnt/lower</text>
+<line x1="382.0" y1="1013.0" x2="622.0" y2="1013.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="503.0" y="1003.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">步骤 9：bind</text>
+<text x="1068.0" y="1018.0" font-size="14" fill="#5F5E5A" text-anchor="start">chroot 后 gsd 传的层路径从新根解析（§2.5）</text>
+<rect x="48.0" y="1062.0" width="1504.0" height="40.0" rx="8" fill="#EEEDFE" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="800.0" y="1088.0" font-size="14.5" fill="#3C3489" font-weight="600" text-anchor="middle">步骤 7 同时整理 /tmp：它留在 overlay 上随 restore 回滚；每次开机清空、权限 1777、屏蔽 tmp.mount，这是 tmpfs 原来顺带提供的三样东西</text>
+<circle cx="63" cy="1148" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="1153.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="1155.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">切进新根</text>
+<text x="190.0" y="1154.0" font-size="14.5" fill="#888780" text-anchor="start">步骤 10</text>
+<rect x="48.0" y="1176.0" width="464.0" height="110.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="1187.0" width="99.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="109.5" y="1202.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">overlay-init</text>
+<text x="280.0" y="1238.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">cd /mnt/newroot</text>
+<text x="280.0" y="1266.3" font-size="14" fill="#5F5E5A" text-anchor="middle">进入装配好的新根</text>
+<line x1="516.0" y1="1231.0" x2="562.0" y2="1231.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="568.0" y="1176.0" width="464.0" height="110.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="580.0" y="1187.0" width="99.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="629.5" y="1202.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">overlay-init</text>
+<text x="800.0" y="1238.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">exec chroot . /sbin/init</text>
+<text x="800.0" y="1266.3" font-size="14" fill="#5F5E5A" text-anchor="middle">overlay-init 被 systemd 取代</text>
+<line x1="1036.0" y1="1231.0" x2="1082.0" y2="1231.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1088.0" y="1176.0" width="464.0" height="110.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="1100.0" y="1187.0" width="66.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1133.3" y="1202.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">systemd</text>
+<text x="1320.0" y="1238.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">systemd 成为 PID 1</text>
+<text x="1320.0" y="1266.3" font-size="14" fill="#534AB7" text-anchor="middle">从此 / 是 overlay，gsd.service 随后启动</text>
+<line x1="48" y1="1322" x2="1552" y2="1322" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1348.0" font-size="13" fill="#888780" text-anchor="start">注：脚本对大多数挂载失败是“尽力而为”的（|| true），不中途退出；全部输出写到 /dev/kmsg，前缀 [overlay-init]。沙箱从快照恢复时不会再运行这个脚本。</text>
+</svg>

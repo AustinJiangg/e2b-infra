@@ -25,15 +25,7 @@
 
 Guest 的地址翻译在虚拟化下是两层：
 
-```
-Guest 虚拟地址
-   │  Stage-1（guest 内核自己管的页表）
-   ▼
-Guest 物理地址 / IPA
-   │  Stage-2（宿主 KVM 管的页表）
-   ▼
-宿主物理地址
-```
+![两级地址翻译与三种跟踪方式](img/05-1-两级地址翻译.svg)
 
 我们要跟踪的是**中间那一层**：哪些 guest 物理页被写过。guest 写内存时不经过任何宿主代码，宿主软件看不见这次写；
 能看见的只有管 Stage-2 页表的 KVM，或者 CPU 自己。于是有三条路。
@@ -71,21 +63,7 @@ e2b 在 x86 上用的做法（原生路径，[第 13 章 §3.1](13-native-snapsh
 
 **HDBSS**（Hardware Dirty state tracking Structure）是 ARMv9.5 的能力，鲲鹏 950 实现了它。它工作在 **Stage-2** 这一层：
 
-```
-Guest 写入某个 GPA
-    │
-    ▼  Stage-2 PTE 上启用了 DBM（Dirty Bit Modifier）
-CPU 直接把脏 GPA 写进该 vCPU 的 HDBSS buffer         ← 硬件完成，无陷出
-    │
-    ▼  vCPU 发生 VM-Exit（任何原因）
-KVM 遍历 HDBSS buffer，逐条 kvm_vcpu_mark_page_dirty()
-    │
-    ▼
-标准 KVM memory-slot dirty bitmap
-    │
-    ▼
-VMM 调用 KVM_GET_DIRTY_LOG
-```
+![KVM 写保护与 HDBSS 怎么标脏，以及 HDBSS 从启用到收集](img/05-2-写保护与HDBSS怎么标脏.svg)
 
 关键在于**没有写保护，也就没有为标脏而生的 VM-Exit**。CPU 直接写入一条记录，等到 vCPU 因为别的原因退出时，内核再把 buffer 里的记录
 汇总进标准位图（下表：VM-Exit 时刷新 buffer，dirty-log 同步时也会处理）。打快照、回滚前都先暂停虚机，暂停本身就让每个 vCPU 退出 `KVM_RUN`，
@@ -311,6 +289,8 @@ HDBSS **不会被快照继承**：从快照恢复会创建新的 KVM VM 和新�
 | **本方案** | 不经过 uffd，直接取 KVM / HDBSS 的脏页日志 | ARM 上**恢复精确增量** |
 
 > **必须明确：这是修复 ARM 适配引入的退化，不是超越 x86 原生。** 在 x86 上 e2b 的增量本来就是精确的。
+
+![同一组页在三种判据下哪些算脏](img/05-3-读也算脏.svg)
 
 ### 5.1 退化是怎么发生的
 

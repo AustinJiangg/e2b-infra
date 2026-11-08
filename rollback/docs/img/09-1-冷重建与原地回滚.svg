@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1909" viewBox="0 0 1600 1909" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-back" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#0F6E56" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#D85A30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1909" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">回到一个快照：原生 resume 重建整台虚机，原地回滚只写回差异</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">原生 resume 新建 Firecracker 进程，宿主资源全部重做，工作集靠缺页换回；原地回滚往同一个进程的活对象上写，代价正比于回滚集大小，与虚机规格无关。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">执行顺序</text>
+<line x1="192.0" y1="125.0" x2="232.0" y2="125.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="242.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">恢复之后仍要付的代价</text>
+<line x1="417.0" y1="125.0" x2="457.0" y2="125.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="467.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">直接继续运行</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">两条恢复路径</text>
+<rect x="230.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="267.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="204.0" width="1504.0" height="1611.5" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="220.0" y="224.0" width="645.0" height="62.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="542.5" y="252.0" font-size="19" fill="#712B13" font-weight="600" text-anchor="middle">冷重建：原生 resume</text>
+<text x="542.5" y="274.0" font-size="13.5" fill="#993C1D" text-anchor="middle">Factory.ResumeSandbox 新建进程加载快照</text>
+<rect x="887.0" y="224.0" width="645.0" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="1209.5" y="252.0" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">原地回滚：本方案 restore</text>
+<text x="1209.5" y="274.0" font-size="13.5" fill="#0F6E56" text-anchor="middle">往活着的 Firecracker 进程里写回差异</text>
+<text x="68.0" y="340.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">恢复前</text>
+<rect x="260.0" y="302.0" width="565.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="327.8" font-size="16" fill="#712B13" font-weight="600" text-anchor="middle">沙箱已离场</text>
+<text x="542.5" y="354.7" font-size="13" fill="#993C1D" text-anchor="middle">旧 Firecracker 进程已停，快照在本地缓存或对象存储</text>
+<rect x="927.0" y="302.0" width="565.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="327.8" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">沙箱活着，虚机已暂停</text>
+<text x="1209.5" y="354.7" font-size="13" fill="#0F6E56" text-anchor="middle">同一个 Firecracker 进程，宿主资源都在</text>
+<text x="68.0" y="429.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">触发</text>
+<rect x="220.0" y="398.0" width="1312.0" height="52.0" rx="10" fill="#FFFFFF" stroke="#888780" stroke-width="1.2"/>
+<text x="876.0" y="430.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">回到一个快照：原生 Sandbox.connect() 触发 resume / 本方案调用 restore</text>
+<text x="68.0" y="866.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">恢复做什么</text>
+<rect x="220.0" y="480.0" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="505.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">新建 Firecracker 进程</text>
+<text x="542.5" y="532.2" font-size="13" fill="#993C1D" text-anchor="middle">对外 SandboxID 不变，底下是全新进程</text>
+<line x1="542.5" y1="547.5" x2="542.5" y2="574.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="579.5" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="617.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">建 KVM VM、vCPU、GIC、virtio 设备</text>
+<line x1="542.5" y1="647.0" x2="542.5" y2="674.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="679.0" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="717.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">注册 eventfd / irqfd / ioeventfd</text>
+<line x1="542.5" y1="746.5" x2="542.5" y2="773.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="778.5" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="816.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">建 tap、分配网络槽位</text>
+<line x1="542.5" y1="846.0" x2="542.5" y2="873.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="878.0" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="903.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">起 UFFD handler，挂上 guest 内存</text>
+<text x="542.5" y="930.2" font-size="13" fill="#993C1D" text-anchor="middle">新进程的 guest 内存映射是空的</text>
+<line x1="542.5" y1="945.5" x2="542.5" y2="972.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="977.5" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="1002.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">建 NBD 设备 + Overlay</text>
+<text x="542.5" y="1029.7" font-size="13" fill="#993C1D" text-anchor="middle">模板 rootfs + 新写层</text>
+<line x1="542.5" y1="1045.0" x2="542.5" y2="1072.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="1077.0" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="1102.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">加载 snapfile</text>
+<text x="542.5" y="1129.2" font-size="13" fill="#993C1D" text-anchor="middle">恢复 vCPU、GIC、设备状态</text>
+<line x1="542.5" y1="1144.5" x2="542.5" y2="1171.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="220.0" y="1176.5" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="1214.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">运行</text>
+<line x1="542.5" y1="452.0" x2="542.5" y2="475.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="480.0" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="505.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">虚机暂停</text>
+<text x="1209.5" y="532.2" font-size="13" fill="#0F6E56" text-anchor="middle">回滚在 VMM 线程上执行</text>
+<line x1="1209.5" y1="547.5" x2="1209.5" y2="574.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="579.5" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="604.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">校验、静默 I/O</text>
+<text x="1209.5" y="631.7" font-size="13" fill="#0F6E56" text-anchor="middle">拓扑一致、内存文件覆盖回滚集；排空在途设备 I/O</text>
+<line x1="1209.5" y1="647.0" x2="1209.5" y2="674.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="679.0" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="704.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">算回滚集</text>
+<text x="1209.5" y="731.2" font-size="13" fill="#0F6E56" text-anchor="middle">活跃脏页 ∪ 调用方给的累积集合</text>
+<line x1="1209.5" y1="746.5" x2="1209.5" y2="773.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="778.5" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="803.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">把差异页写回活映射</text>
+<text x="1209.5" y="830.7" font-size="13" fill="#0F6E56" text-anchor="middle">只处理回滚集里的页</text>
+<line x1="1209.5" y1="846.0" x2="1209.5" y2="873.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="878.0" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="903.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">vCPU / GIC / 设备状态写回既有对象</text>
+<text x="1209.5" y="930.2" font-size="13" fill="#0F6E56" text-anchor="middle">作用在既有的 fd 上</text>
+<line x1="1209.5" y1="945.5" x2="1209.5" y2="972.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="977.5" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="1002.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">切磁盘视图</text>
+<text x="1209.5" y="1029.7" font-size="13" fill="#0F6E56" text-anchor="middle">NBD 设备、Overlay 保留，只换视图</text>
+<line x1="1209.5" y1="1045.0" x2="1209.5" y2="1072.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="887.0" y="1077.0" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="1102.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">恢复运行</text>
+<text x="1209.5" y="1129.2" font-size="13" fill="#0F6E56" text-anchor="middle">一个宿主资源都不重建</text>
+<line x1="1209.5" y1="452.0" x2="1209.5" y2="475.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="68.0" y="1319.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">运行之后</text>
+<rect x="220.0" y="1272.0" width="645.0" height="85.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="1297.3" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">guest 逐页缺页，把工作集换回内存</text>
+<text x="542.5" y="1324.2" font-size="13" fill="#993C1D" text-anchor="middle">缺页 → UFFD handler → 查本地缓存 → 没有就按 header 从对象存储拉那一块；prefetch 按上次缺页</text>
+<text x="542.5" y="1344.2" font-size="13" fill="#993C1D" text-anchor="middle">顺序提前拉，只能缓解</text>
+<line x1="542.5" y1="1244.0" x2="542.5" y2="1267.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="554.5" y="1260.5" font-size="13" fill="#D85A30" font-weight="600" text-anchor="start">落在业务的第一批请求上</text>
+<rect x="887.0" y="1272.0" width="645.0" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1209.5" y="1307.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">工作集留在物理内存里</text>
+<text x="1209.5" y="1334.2" font-size="13" fill="#0F6E56" text-anchor="middle">没被回退的页原封不动，guest 访问它们不缺页</text>
+<line x1="1209.5" y1="1144.5" x2="1209.5" y2="1267.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="1221.5" y="1210.8" font-size="13" fill="#0F6E56" font-weight="600" text-anchor="start">直接继续</text>
+<line x1="68" y1="1389.5" x2="1532" y2="1389.5" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="1423.5" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">哪些对象保留、哪些重建</text>
+<rect x="62.0" y="1441.5" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1469.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">进程、KVM VM fd、vCPU fd</text>
+<text x="542.5" y="1469.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">新建</text>
+<text x="1209.5" y="1469.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留</text>
+<text x="68.0" y="1513.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">GIC 设备 fd</text>
+<text x="542.5" y="1513.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">新建</text>
+<text x="1209.5" y="1513.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留</text>
+<rect x="62.0" y="1529.5" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1557.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">eventfd / irqfd / ioeventfd 注册</text>
+<text x="542.5" y="1557.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">全部重做</text>
+<text x="1209.5" y="1557.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留</text>
+<text x="68.0" y="1601.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">tap 设备、网络槽位</text>
+<text x="542.5" y="1601.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">重建</text>
+<text x="1209.5" y="1601.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留</text>
+<rect x="62.0" y="1617.5" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1645.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">guest 内存映射</text>
+<text x="542.5" y="1645.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">重新 mmap</text>
+<text x="1209.5" y="1645.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留</text>
+<text x="68.0" y="1689.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">guest 工作集</text>
+<text x="542.5" y="1689.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">靠缺页重新换入</text>
+<text x="1209.5" y="1689.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">留在物理内存里</text>
+<rect x="62.0" y="1705.5" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1733.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">NBD 设备、Overlay</text>
+<text x="542.5" y="1733.5" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">重建</text>
+<text x="1209.5" y="1733.5" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留，只换视图</text>
+<text x="68.0" y="1777.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">代价正比于</text>
+<text x="542.5" y="1777.5" font-size="15" fill="#2C2C2A" text-anchor="middle">虚机规格与工作集</text>
+<text x="1209.5" y="1777.5" font-size="15" fill="#2C2C2A" text-anchor="middle">回滚集大小</text>
+<line x1="48" y1="1851.5" x2="1552" y2="1851.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1877.5" font-size="13" fill="#888780" text-anchor="start">注：原生 resume 适合跨节点迁移、长期持久化、进程崩溃后恢复、沙箱离场后再回来；原地回滚服务活沙箱内的高频回退。两者并存，本方案没有改动原生的恢复路径。</text>
+</svg>

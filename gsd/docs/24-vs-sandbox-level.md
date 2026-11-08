@@ -33,37 +33,7 @@
 
 下面这张图把两套各自工作的位置画在一起。SDK 入口和端口号相同，请求在宿主的代理处由不同组件应答：
 
-```mermaid
-flowchart TB
-    SDK["Python SDK 的 checkpoint 接口"]
-
-    subgraph HOST["宿主"]
-        PROXY["代理 按端口 49984 寻址"]
-        ORCH["orchestrator 沙箱级的服务与账本"]
-        FC["Firecracker 读写整台虚拟机的内存与设备状态"]
-        HSTORE["宿主本地存储 内存差分与磁盘层"]
-    end
-
-    subgraph GUEST["沙箱内部"]
-        GSD["gsd 进程级的服务与状态"]
-        CRIU["CRIU 保存与重建用户进程"]
-        KERN["guest 内核 soft-dirty 与 overlay 热切层"]
-        USERS["用户进程树"]
-        OTHERS["内核与 PID 1 与 envd 与系统服务"]
-        GSTORE["沙箱内的镜像目录与层目录"]
-    end
-
-    SDK --> PROXY
-    PROXY -- "沙箱级 在宿主截下" --> ORCH
-    PROXY -- "进程级 转进沙箱" --> GSD
-    ORCH --> FC
-    FC --> HSTORE
-    GSD --> CRIU
-    GSD --> KERN
-    CRIU --> USERS
-    CRIU --> GSTORE
-    KERN --> GSTORE
-```
+![两套方案在同一沙箱里分别作用于哪一层](img/24-1-两套方案作用的层.svg)
 
 图里有两点值得注意。第一，沙箱级的 Firecracker 操作的是整个"沙箱内部"这个方框，所以方框里的一切一起回滚；
 进程级只触及方框里的"用户进程树"和文件系统，"内核与 PID 1 与 envd 与系统服务"那一格不动。
@@ -178,6 +148,8 @@ flowchart TB
 | restore · 文件 | 切换磁盘视图，不搬数据 | 一次层切换，不搬数据 |
 | 多棵进程树 | 无关 | checkpoint 和 restore 都随 N 线性增长（串行，[04](04-goals-and-tradeoffs.md)） |
 
+![两套 restore 的耗时随不同的量增长](img/24-2-成本模型的形状.svg)
+
 由此得到三条判断。
 
 **checkpoint：进程级处理的数据范围更小，但这不等于耗时更低。** d 不大于 D。文件写得多的负载下差得更明显：在沙箱级那里，文件写入会经过 guest 的页缓存，
@@ -251,6 +223,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 | 64 | 48 / 16 | 100 | 30.8 | 36.3 | 33.1（32.3～33.6） | 32.6（31.2～33.1） |
 | 128 | 96 / 32 | 60 | 43.6 | 49.5 | 54.6（54.3～57.2） | 53.8（53.1～54.6） |
 | 256 | 192 / 64 | 60 | 66.1 | 71.8 | 96.4（95.8～97.6） | 96.8（95.5～98.9） |
+
+![920B 同平台：两套方案的增量 checkpoint 与 restore 客户端墙钟](img/24-3-920B同平台对比.svg)
 
 ### 4.5 第一次全量单列
 

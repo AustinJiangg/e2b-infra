@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="744" viewBox="0 0 1400 744" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="744" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">第一版修复让 restore 慢了约 18 ms，分成三块</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">新 920B，2026-09-30 第一版修复（21 个提交）首次上机。verify_gsd：192 MiB 匿名内存的进程，同一沙箱连续 8 次 restore，各分段取 p50，单位 ms。</text>
+<rect x="48.0" y="109.0" width="22.0" height="14.0" rx="3" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="78.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">criu_restore_ms</text>
+<rect x="231.3" y="109.0" width="22.0" height="14.0" rx="3" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="261.3" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">kill_ms</text>
+<rect x="349.0" y="109.0" width="22.0" height="14.0" rx="3" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="379.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">find_pids_ms</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">verify_gsd 的分段 p50</text>
+<text x="335.1" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">条内是各分段 p50，右端写 total_ms p50</text>
+<line x1="308.0" y1="226.0" x2="308.0" y2="340.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="308.0" y="360.0" font-size="13" fill="#888780" text-anchor="middle">0 ms</text>
+<line x1="494.8" y1="226.0" x2="494.8" y2="340.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="494.8" y="360.0" font-size="13" fill="#888780" text-anchor="middle">20 ms</text>
+<line x1="681.6" y1="226.0" x2="681.6" y2="340.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="681.6" y="360.0" font-size="13" fill="#888780" text-anchor="middle">40 ms</text>
+<line x1="868.4" y1="226.0" x2="868.4" y2="340.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="868.4" y="360.0" font-size="13" fill="#888780" text-anchor="middle">60 ms</text>
+<line x1="1055.2" y1="226.0" x2="1055.2" y2="340.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1055.2" y="360.0" font-size="13" fill="#888780" text-anchor="middle">80 ms</text>
+<line x1="1242.0" y1="226.0" x2="1242.0" y2="340.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1242.0" y="360.0" font-size="13" fill="#888780" text-anchor="middle">100 ms</text>
+<text x="294.0" y="250.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">修复前</text>
+<text x="294.0" y="268.0" font-size="12.5" fill="#888780" text-anchor="end">修复前的 gsd，修复前建的模板</text>
+<rect x="308.0" y="232.0" width="597.8" height="40.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<text x="606.9" y="257.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">64</text>
+<rect x="905.8" y="232.0" width="103.7" height="40.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="957.6" y="257.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">11.1</text>
+<text x="294.0" y="312.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">第一版修复</text>
+<text x="294.0" y="330.0" font-size="12.5" fill="#888780" text-anchor="end">新建的模板，两次</text>
+<rect x="308.0" y="294.0" width="657.5" height="40.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<text x="636.8" y="319.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">70.4</text>
+<rect x="965.5" y="294.0" width="127.0" height="40.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="1029.0" y="319.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">13.6</text>
+<rect x="1092.6" y="294.0" width="84.1" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<text x="1134.6" y="319.0" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="middle">9</text>
+<text x="1021.4" y="257.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">total_ms 75.6（find_pids 不单独计时）</text>
+<text x="1188.6" y="319.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">total_ms 93.8 / 94.5</text>
+<circle cx="63" cy="420" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="425.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="427.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">多出来的约 18 ms 分三块</text>
+<text x="335.9" y="426.0" font-size="14.5" fill="#888780" text-anchor="start">区间是正文给的范围；原因见 §2 与 §3、§4</text>
+<line x1="308.0" y1="470.0" x2="308.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="308.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">0 ms</text>
+<line x1="427.0" y1="470.0" x2="427.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="427.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">2 ms</text>
+<line x1="546.0" y1="470.0" x2="546.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="546.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">4 ms</text>
+<line x1="665.0" y1="470.0" x2="665.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="665.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">6 ms</text>
+<line x1="784.0" y1="470.0" x2="784.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="784.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">8 ms</text>
+<line x1="903.0" y1="470.0" x2="903.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="903.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">10 ms</text>
+<line x1="1022.0" y1="470.0" x2="1022.0" y2="614.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1022.0" y="634.0" font-size="12.5" fill="#888780" text-anchor="middle">12 ms</text>
+<line x1="308.0" y1="470.0" x2="308.0" y2="614.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="294.0" y="489.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">find_pids</text>
+<text x="294.0" y="507.0" font-size="12.5" fill="#888780" text-anchor="end">每次操作多调两次 systemctl show</text>
+<rect x="308.0" y="478.0" width="535.5" height="28.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
+<text x="853.5" y="497.0" font-size="14" fill="#712B13" font-weight="600" text-anchor="start">约 9</text>
+<text x="1118.0" y="497.0" font-size="13" fill="#5F5E5A" text-anchor="start">gsd 引入，读代码可确定</text>
+<text x="294.0" y="539.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">kill</text>
+<text x="294.0" y="557.0" font-size="12.5" fill="#888780" text-anchor="end">直接杀改成先冻结再杀</text>
+<rect x="308.0" y="528.0" width="89.2" height="28.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<rect x="397.2" y="528.0" width="59.5" height="28.0" rx="2" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="466.8" y="547.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">约 +1.5～2.5</text>
+<text x="1118.0" y="547.0" font-size="13" fill="#5F5E5A" text-anchor="start">gsd 引入，读代码可确定</text>
+<text x="294.0" y="589.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">criu_restore</text>
+<text x="294.0" y="607.0" font-size="12.5" fill="#888780" text-anchor="end">gsd 调用 criu 的方式几乎没变</text>
+<rect x="308.0" y="578.0" width="357.0" height="28.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
+<rect x="665.0" y="578.0" width="238.0" height="28.0" rx="2" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="913.0" y="597.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">约 +6～10</text>
+<text x="1118.0" y="597.0" font-size="13" fill="#5F5E5A" text-anchor="start">当时原因不明</text>
+<line x1="48" y1="686" x2="1352" y2="686" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="712.0" font-size="13" fill="#888780" text-anchor="start">注：criu_restore 的约 6～10 ms 在 verify_gsd 里是 64.0 对 70.4，性能脚本 demo_checkpoint_perf 各档是 8～10。18 次 restore 的文件与内存校验全部正确，这是纯粹的性能问题。</text>
+</svg>

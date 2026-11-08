@@ -4,7 +4,7 @@
 
 ## 当前手册
 
-当前手册版本为 **v1.0.0（2026-11-06）**：六篇、30章、五个文字附录及一个内嵌配图附录。950为实测主线，920B性能与平台差异在第20章，920B详细数据和工程修复案例在附录。
+当前手册版本为 **v1.0.0（2026-11-06）**：六篇、30章、五个附录，配图随正文。950为实测主线，920B性能与平台差异在第20章，920B详细数据和工程修复案例在附录。
 
 - [手册首页与完整目录](docs/README.md)
 - [交付范围、版本与阅读方法](docs/01-delivery-and-reading.md)
@@ -26,7 +26,7 @@ bash rollback/tools/build.sh --check
 bash rollback/tools/build.sh
 ```
 
-输出为`rollback/dist/checkpoint-restore-docs.html`，内含分组目录、正文、附录、Mermaid运行库及矢量图，可离线打开。版本与日期由[`book.json`](book.json)维护，分篇和章序由[`contents.json`](contents.json)维护。
+输出为`rollback/dist/checkpoint-restore-docs.html`，内含分组目录、正文、附录和各章配图（SVG 内嵌），可离线打开。版本与日期由[`book.json`](book.json)维护，分篇和章序由[`contents.json`](contents.json)维护。
 
 本地重建不会提交、推送、创建标签或更新Release。历史阶段归档 `docs-v0.5.6` 保持原样。
 
@@ -35,8 +35,8 @@ bash rollback/tools/build.sh
 | 目录 | 用途 |
 |---|---|
 | `docs/` | 当前手册Markdown，参与HTML生成 |
-| `diagrams/` | 图表源文件及内嵌SVG |
-| `tools/` | 构建、链接、图表、统计和离线交互检查 |
+| `diagrams/` | 早期三张手画汇报图，现只供 `slides/` 使用；手册配图在 `docs/img/` |
+| `tools/` | 构建、链接检查、画图脚本（`tools/figures/`）和代码统计 |
 | `migration/` | 内部迁移清单与检查记录，不进入交付HTML |
 | `scripts/` | 功能、性能、并发、HDBSS和开发诊断工具 |
 | `evidence/` | 已回传测试证据、环境说明与逐文件校验清单 |

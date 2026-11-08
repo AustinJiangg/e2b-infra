@@ -6,57 +6,7 @@
 
 ## 1. 四个层次
 
-```mermaid
-flowchart TB
-    SDK["<b>Python SDK</b><br/>sandbox.checkpoint.create / restore / list / delete<br/>目标地址：沙箱的 49984 端口"]
-
-    subgraph HOST["<b>orchestrator 进程（宿主）</b>"]
-        direction TB
-        PX["<b>Sandbox Proxy</b><br/>包装原 Handler：命中 49984 + checkpoint 路径就不转发"]
-        SVC["<b>Checkpoint Service</b><br/>鉴权 · 按沙箱串行 · 全量/增量决策<br/>失败分级 · 分阶段计时"]
-        subgraph LEDGERS["账本（只在进程内存）"]
-            direction LR
-            LED["<b>内存差分树</b><br/>条目 · 基准 · 子节点计数"]
-            RLE["<b>磁盘层账本</b><br/>合并 header · 层清单 · 层引用计数"]
-        end
-        SBX["<b>Sandbox 对象</b><br/>process · Rootfs Provider · Slot · Template"]
-        PX --> SVC --> LEDGERS
-        SVC --> SBX
-    end
-
-    subgraph FCP["<b>Firecracker 进程</b>（分叉版，全程不重建）"]
-        direction TB
-        API["API socket<br/>标准端点 + 三处扩展"]
-        VM["vCPU · GIC · virtio 设备 · Guest Memory"]
-        API --> VM
-    end
-
-    NBD["<b>NBD 设备 + Overlay</b><br/>模板 rootfs → 层栈 → 活写层"]
-
-    subgraph HW["<b>KVM · 宿主内核 · CPU</b>"]
-        HD["脏页跟踪后端<br/>HDBSS 硬件标脏 / KVM 写保护 / 关闭"]
-    end
-
-    STO[("<b>宿主本地存储</b><br/>ORCHESTRATOR_BASE_PATH/build/checkpoints")]
-
-    SDK -->|HTTP| PX
-    SVC -->|"HTTP over unix socket"| API
-    SBX --> NBD
-    VM -.->|"块 I/O"| NBD
-    HD -.->|"脏页日志"| VM
-    SVC --> STO
-    VM --> STO
-    NBD --> STO
-
-    classDef host fill:#f4f7fb,stroke:#b9c8db
-    classDef fc fill:#fff8f0,stroke:#e0b98a
-    classDef hw fill:#f2f0fb,stroke:#b8aede
-    classDef sto fill:#f2faf3,stroke:#a8ceac
-    class PX,SVC,LED,RLE,SBX host
-    class API,VM fc
-    class HD hw
-    class STO,NBD sto
-```
+![四个层次与它们之间的调用](img/04-1-四个层次.svg)
 
 每一层的职责与**边界**：
 
@@ -295,46 +245,9 @@ store 根是 `${ORCHESTRATOR_BASE_PATH}/build/checkpoints`（`packages/orchestra
 
 ## 6. 时序全图
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant S as Python SDK
-    participant O as orchestrator<br/>Checkpoint Service
-    participant F as Firecracker<br/>（同一个进程，全程不重建）
-    participant D as 宿主本地存储
+![一次 checkpoint 的时序，标出冻结窗口、纪元前进与提交](img/04-2-checkpoint时序.svg)
 
-    Note over S,D: ① checkpoint
-    S->>O: CreateCheckpoint（端口 49984，被宿主拦截，不进沙箱）
-    O->>O: 鉴权 → 取沙箱操作锁 → 水位检查 → 决定全量 / 增量 → Prepare（个数与字节配额）
-    rect rgb(234, 243, 255)
-        Note over F: 冻结窗口
-        O->>F: 暂停虚机
-        O->>F: （仅全量）导出活跃脏页位图
-        O->>F: 写快照（vmstate + 稀疏内存差分 + 位图侧车，一次调用）
-        O->>F: 刷屏障 → 写层就地封存为只读层，挂上新的空写层
-        O->>F: 恢复虚机
-    end
-    O->>D: 封存层文件移入 store（窗口外）
-    O->>O: AppendLayer（层 sidecar + header）→ Commit（rename + 锁内发布，基准 ← 本条目）
-    O-->>S: checkpointId + memMode
-
-    Note over S,D: ② restore
-    S->>O: RestoreCheckpoint(checkpointId)
-    O->>O: 鉴权 → 取锁 → 取条目 → 读层 sidecar → 水位检查 → 装配磁盘视图（窗口外）→ 丢弃代理连接池
-    rect rgb(234, 243, 255)
-        Note over F: 冻结窗口
-        O->>F: 暂停虚机；后台启动 conntrack 清理
-        O->>F: 导出活跃脏页位图
-        O->>O: 回滚集 = 树路径各代位图 ∪ 活跃脏页；沿目标祖先链物化内容
-        O->>F: PUT /snapshot/rollback：内存 → vCPU → GIC → 设备 → VMGenID
-        O->>F: 挂载不动，整体切换磁盘视图
-        O->>O: join conntrack 清理
-        O->>F: 恢复虚机
-    end
-    O->>O: 基准 ← 目标；磁盘账本 ← 目标 header
-    O->>F: 等 guest 内 envd 应答（上限 45 s）
-    O-->>S: success
-```
+![一次 restore 的时序，标出冻结窗口与提交点](img/04-3-restore时序.svg)
 
 ## 7. 一次 checkpoint，逐步
 
@@ -550,12 +463,7 @@ Firecracker 在第 18 步要写回的全部页。若在暂停前导出，中间 
 
 ## 10. 三个时钟
 
-```
-├──────────────── 客户端墙钟 ────────────────┤   SDK 调用耗时（含网络往返）
-       ├────── 冻结窗口 ──────┤                  业务实际感受到的停顿（frozen）
-   │pause│snapshot│ seal │resume│                宿主分阶段（timings）
-                                                  ↑ 其中 fc_* 来自 Firecracker 自报
-```
+![三个时钟的嵌套关系：客户端墙钟、冻结窗口、宿主分阶段与 Firecracker 自报的 fc_*](img/04-4-三个时钟.svg)
 
 三个时钟回答三个不同的问题：客户端墙钟是"调用方等了多久"（含网络往返与排队），冻结窗口是"业务停了多久"，
 宿主分阶段是"停的这段时间花在哪"。排查时先看哪个时钟异常，就知道该往哪一层找。

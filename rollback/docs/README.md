@@ -81,4 +81,3 @@ HTML 支持分篇折叠目录、章节小节展开和当前章高亮。右上角
 - [附录 C．工程修复案例](C-evolution-and-cases.md)
 - [附录 D．代码规模与统计口径](D-code-size.md)
 - [附录 E．测试环境、轮次与工具索引](E-environment-and-tools.md)
-- [附录 F．架构与流程配图（HTML 内嵌矢量图）](../diagrams/)

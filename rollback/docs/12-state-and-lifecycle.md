@@ -110,6 +110,8 @@ Store.mu           ← 短时间持有（一次 map 读写）
 
 **只有这一个方向**，所以不会死锁。
 
+![两把锁的层级与一次 restore 里的持锁范围](img/12-1-两把锁的层级与持锁范围.svg)
+
 **为什么按沙箱**：要保护的是每沙箱的状态 —— 内存基准和磁盘层栈。两个操作同时推进同一个沙箱的基准，账本就会与实际的层栈、脏页跟踪状态错位；
 不同沙箱之间在账本层面没有共享状态，可以完全并行（`TestCreatesOfDifferentSandboxesRunConcurrently`）。
 
@@ -495,6 +497,8 @@ for _, layer := range layers {
 
 Firecracker 进程、KVM fd、eventfd、irqfd / ioeventfd 注册、tap、网络槽位、NBD 设备 —— 全是活体资源。**原地回滚的全部价值就在于一个都不重建**
 （[第 9 章](09-in-place-rollback.md)），这正是它快的原因，也正是它离不开沙箱的原因。**同一件事的两面。**
+
+![一个 checkpoint 依赖的四层，以及各自什么时候消失](img/12-2-checkpoint依赖的四层.svg)
 
 ## 14. 内存那一半其实已经自足
 

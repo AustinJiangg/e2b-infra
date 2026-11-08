@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1409" viewBox="0 0 1600 1409" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1409" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">分叉 Firecracker 的三个扩展：orchestrator 在暂停期间调用，Firecracker 只做无状态的读写</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">一个可选字段加两个新端点，没有改动任何既有语义。哪些页该回滚、内容从哪一代取，由 orchestrator 算好再递过去；Firecracker 不知道 checkpoint 树是什么。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">调用顺序</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">checkpoint：快照与它写了哪些页，在同一次调用里交出</text>
+<text x="625.5" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">扩展一；第一个 checkpoint 另外先调扩展三</text>
+<rect x="48.0" y="206.0" width="346.0" height="166.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="217.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="110.6" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="221.0" y="296.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">暂停虚机</text>
+<text x="221.0" y="324.5" font-size="14" fill="#5F5E5A" text-anchor="middle">PATCH /vm</text>
+<line x1="398.0" y1="289.2" x2="428.0" y2="289.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="434.0" y="206.0" width="346.0" height="166.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="446.0" y="217.0" width="137.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="514.7" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator → FC</text>
+<rect x="446.0" y="338.5" width="322.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="607.0" y="355.5" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">扩展三</text>
+<text x="607.0" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">PUT /snapshot/save-dirty-bitmap</text>
+<text x="607.0" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">只在全量 checkpoint 之前：导出自启动以来的活</text>
+<text x="607.0" y="317.0" font-size="14" fill="#5F5E5A" text-anchor="middle">跃脏图</text>
+<line x1="784.0" y1="289.2" x2="814.0" y2="289.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="820.0" y="206.0" width="346.0" height="166.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="832.0" y="217.0" width="137.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="900.7" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator → FC</text>
+<rect x="832.0" y="338.5" width="322.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="993.0" y="355.5" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">扩展一</text>
+<text x="993.0" y="278.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">PUT /snapshot/create</text>
+<text x="993.0" y="306.5" font-size="14" fill="#5F5E5A" text-anchor="middle">带 mem_file_path 与 dirty_bitmap_path</text>
+<line x1="1170.0" y1="289.2" x2="1200.0" y2="289.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1206.0" y="206.0" width="346.0" height="166.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1218.0" y="217.0" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1268.6" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="1379.0" y="296.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">恢复运行</text>
+<text x="1379.0" y="324.5" font-size="14" fill="#5F5E5A" text-anchor="middle">封存文件移进 layers/ 等在这之后</text>
+<circle cx="63" cy="418.5" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="424.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="425.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">restore：先导出活跃脏图，物化之后再回滚</text>
+<text x="510.9" y="424.5" font-size="14.5" fill="#888780" text-anchor="start">顺序约束：先 Pause，再 SaveDirtyBitmap，再物化，再 RollbackSnapshot</text>
+<rect x="48.0" y="446.5" width="272.0" height="187.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="457.5" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="110.6" y="473.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="184.0" y="547.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">暂停虚机</text>
+<text x="184.0" y="575.5" font-size="14" fill="#5F5E5A" text-anchor="middle">PATCH /vm</text>
+<line x1="324.0" y1="540.2" x2="350.0" y2="540.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="356.0" y="446.5" width="272.0" height="187.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="368.0" y="457.5" width="137.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="436.7" y="473.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator → FC</text>
+<rect x="368.0" y="600.0" width="248.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="492.0" y="617.0" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">扩展三</text>
+<text x="492.0" y="508.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">导出活跃脏图</text>
+<text x="492.0" y="536.5" font-size="14" fill="#5F5E5A" text-anchor="middle">PUT</text>
+<text x="492.0" y="557.5" font-size="14" fill="#5F5E5A" text-anchor="middle">/snapshot/save-dirty-bitmap；</text>
+<text x="492.0" y="578.5" font-size="14" fill="#5F5E5A" text-anchor="middle">FC 回滚时要并入这些页</text>
+<line x1="632.0" y1="540.2" x2="658.0" y2="540.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="664.0" y="446.5" width="272.0" height="187.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="676.0" y="457.5" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="726.6" y="473.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="800.0" y="537.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">物化回滚集</text>
+<text x="800.0" y="565.0" font-size="14" fill="#5F5E5A" text-anchor="middle">回滚集 = 累积集合 ∪ 活跃脏页，写成</text>
+<text x="800.0" y="586.0" font-size="14" fill="#5F5E5A" text-anchor="middle">只含这些页的稀疏文件</text>
+<line x1="940.0" y1="540.2" x2="966.0" y2="540.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="972.0" y="446.5" width="272.0" height="187.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="984.0" y="457.5" width="137.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1052.7" y="473.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator → FC</text>
+<rect x="984.0" y="600.0" width="248.0" height="26.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="1108.0" y="617.0" font-size="13" fill="#085041" font-weight="500" text-anchor="middle">扩展二</text>
+<text x="1108.0" y="519.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">原地回滚内存与状态</text>
+<text x="1108.0" y="547.0" font-size="14" fill="#5F5E5A" text-anchor="middle">PUT /snapshot/rollback，</text>
+<text x="1108.0" y="568.0" font-size="14" fill="#5F5E5A" text-anchor="middle">resume_vm: false：磁盘视图还没换</text>
+<line x1="1248.0" y1="540.2" x2="1274.0" y2="540.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1280.0" y="446.5" width="272.0" height="187.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1292.0" y="457.5" width="101.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1342.6" y="473.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">orchestrator</text>
+<text x="1416.0" y="537.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">换磁盘视图、恢复运行</text>
+<text x="1416.0" y="565.0" font-size="14" fill="#5F5E5A" text-anchor="middle">清完 conntrack 之后由</text>
+<text x="1416.0" y="586.0" font-size="14" fill="#5F5E5A" text-anchor="middle">orchestrator 恢复</text>
+<circle cx="63" cy="680.0" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="685.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="687.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">三个扩展各读写什么</text>
+<rect x="290.0" y="670.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="327.0" y="686.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="706.0" width="1504.0" height="609.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="220.0" y="726.0" width="422.7" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="431.3" y="754.0" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">dirty_bitmap_path</text>
+<text x="431.3" y="776.0" font-size="13.5" fill="#0F6E56" text-anchor="middle">CreateSnapshotParams 的可选字段</text>
+<rect x="664.7" y="726.0" width="422.7" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="876.0" y="754.0" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">PUT /snapshot/rollback</text>
+<text x="876.0" y="776.0" font-size="13.5" fill="#0F6E56" text-anchor="middle">往活着的虚机写回状态</text>
+<rect x="1109.3" y="726.0" width="422.7" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="1320.7" y="754.0" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">PUT /snapshot/save-dirty-bitmap</text>
+<text x="1320.7" y="776.0" font-size="13.5" fill="#0F6E56" text-anchor="middle">导出还没进快照的脏页</text>
+<text x="68.0" y="841.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">前提</text>
+<rect x="220.0" y="804.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="431.3" y="829.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">必须同时给 mem_file_path</text>
+<text x="431.3" y="856.2" font-size="13" fill="#0F6E56" text-anchor="middle">否则拒绝：DirtyBitmapWithoutMemFile</text>
+<rect x="664.7" y="804.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="876.0" y="829.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">虚机 Paused</text>
+<text x="876.0" y="856.2" font-size="13" fill="#0F6E56" text-anchor="middle">拓扑一致、内存文件长度与位图几何对上、回滚集每页都有数据</text>
+<rect x="1109.3" y="804.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="829.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">虚机 Paused</text>
+<text x="1320.7" y="856.2" font-size="13" fill="#0F6E56" text-anchor="middle">否则活跃脏页集在导出之后还会增长</text>
+<text x="68.0" y="949.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">读</text>
+<rect x="220.0" y="899.5" width="422.7" height="89.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="431.3" y="936.6" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">KVM 位图 ∪ 用户态位图</text>
+<text x="431.3" y="963.4" font-size="13" fill="#0F6E56" text-anchor="middle">dump_dirty 遍历两者的并集</text>
+<rect x="664.7" y="899.5" width="422.7" height="89.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="876.0" y="924.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">snapshot_path、mem_file_path、</text>
+<text x="876.0" y="948.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">revert_bitmap_path</text>
+<text x="876.0" y="975.2" font-size="13" fill="#0F6E56" text-anchor="middle">目标时刻的 vmstate、稀疏物化文件、累积集合（FCDB）</text>
+<rect x="1109.3" y="899.5" width="422.7" height="89.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="936.6" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">KVM 位图</text>
+<text x="1320.7" y="963.4" font-size="13" fill="#0F6E56" text-anchor="middle">破坏性读，取走后立刻折回用户态位图</text>
+<text x="68.0" y="1066.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">写</text>
+<rect x="220.0" y="1018.5" width="422.7" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="431.3" y="1053.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">snapfile、内存文件、侧车</text>
+<text x="431.3" y="1080.7" font-size="13" fill="#0F6E56" text-anchor="middle">侧车 = merged 位图 E_x（FCDB）；全量快照写全 1</text>
+<rect x="664.7" y="1018.5" width="422.7" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="876.0" y="1043.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">guest 内存、vCPU、GIC、设备状态</text>
+<text x="876.0" y="1070.7" font-size="13" fill="#0F6E56" text-anchor="middle">回滚集 = 传入位图 ∪ 活跃脏页；返回 restored_pages、</text>
+<text x="876.0" y="1090.7" font-size="13" fill="#0F6E56" text-anchor="middle">timings_us</text>
+<rect x="1109.3" y="1018.5" width="422.7" height="85.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="1053.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">path 指定的 FCDB 文件</text>
+<text x="1320.7" y="1080.7" font-size="13" fill="#0F6E56" text-anchor="middle">当前的活跃脏页位图</text>
+<text x="68.0" y="1171.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">之后的位图</text>
+<rect x="220.0" y="1134.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="431.3" y="1159.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">写成功才 reset_dirty</text>
+<text x="431.3" y="1186.2" font-size="13" fill="#0F6E56" text-anchor="middle">写文件失败时折回用户态位图</text>
+<rect x="664.7" y="1134.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="876.0" y="1159.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">阶段 9 reset_dirty</text>
+<text x="876.0" y="1186.2" font-size="13" fill="#0F6E56" text-anchor="middle">队列页重新标脏</text>
+<rect x="1109.3" y="1134.0" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="1159.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">不清位图</text>
+<text x="1320.7" y="1186.2" font-size="13" fill="#0F6E56" text-anchor="middle">之后的 Diff 快照或回滚仍看到完整集合</text>
+<text x="68.0" y="1267.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">失败时</text>
+<rect x="220.0" y="1229.5" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="431.3" y="1254.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">快照失败</text>
+<text x="431.3" y="1281.7" font-size="13" fill="#0F6E56" text-anchor="middle">取出来的脏页信息不丢</text>
+<rect x="664.7" y="1229.5" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="876.0" y="1254.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">提交点前 400 / 提交点后 500 + fault: true</text>
+<text x="876.0" y="1281.7" font-size="13" fill="#0F6E56" text-anchor="middle">可恢复，或撕裂只能替换进程</text>
+<rect x="1109.3" y="1229.5" width="422.7" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1320.7" y="1254.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">restore 失败</text>
+<text x="1320.7" y="1281.7" font-size="13" fill="#0F6E56" text-anchor="middle">虚机 resume，沙箱原样继续</text>
+<line x1="48" y1="1351.0" x2="1552" y2="1351.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1377.0" font-size="13" fill="#888780" text-anchor="start">注：不使用这三处的调用方，看到的行为与上游完全一致。内存文件与侧车都只 flush、不 sync_all；未打补丁的 Firecracker 对新路由回 400 或 404，orchestrator 识别为 RollbackUnsupportedError。</text>
+</svg>

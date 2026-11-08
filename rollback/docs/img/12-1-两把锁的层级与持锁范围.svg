@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1240" viewBox="0 0 1600 1240" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="1240" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">两把锁只有一个方向：opLocks 管整个操作，Store.mu 只管一次 map 读写</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">按沙箱的 opLocks 让同一沙箱的 checkpoint / restore / delete 全程串行；全局的 Store.mu 保护账本，持有时只读写 map，文件 I/O 和 Firecracker 调用都放在锁外。</text>
+<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">两把锁各管什么</text>
+<text x="250.0" y="150.0" font-size="14.5" fill="#888780" text-anchor="start">packages/orchestrator/internal/checkpoint/store.go</text>
+<rect x="48.0" y="170.0" width="1504.0" height="470.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="220.0" y="190.0" width="645.0" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="542.5" y="218.0" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">opLocks[sandboxID]</text>
+<text x="542.5" y="240.0" font-size="13.5" fill="#0F6E56" text-anchor="middle">每个沙箱一把，长时间持有</text>
+<rect x="887.0" y="190.0" width="645.0" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="1209.5" y="218.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">Store.mu</text>
+<text x="1209.5" y="240.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">全局一把，短时间持有</text>
+<text x="68.0" y="305.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">是什么</text>
+<rect x="220.0" y="268.0" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="542.5" y="293.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">容量为 1 的 channel</text>
+<text x="542.5" y="320.2" font-size="13" fill="#0F6E56" text-anchor="middle">channel 里有一个值就是持锁；沙箱移除后不删，同一个 id 经 pause / resume 回来仍用它</text>
+<rect x="887.0" y="268.0" width="645.0" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1209.5" y="293.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">普通互斥锁</text>
+<text x="1209.5" y="320.2" font-size="13" fill="#5F5E5A" text-anchor="middle">保护账本：bySandbox、bases、rootfs、children、layerRefs、owners 等表</text>
+<text x="68.0" y="401.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">持多久</text>
+<rect x="220.0" y="363.5" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="542.5" y="388.8" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">整个 checkpoint / restore / delete</text>
+<text x="542.5" y="415.7" font-size="13" fill="#0F6E56" text-anchor="middle">保护每沙箱的内存基准和磁盘层栈</text>
+<rect x="887.0" y="363.5" width="645.0" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1209.5" y="388.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">一次 map 读写</text>
+<text x="1209.5" y="415.7" font-size="13" fill="#5F5E5A" text-anchor="middle">持锁时不做文件 I/O、不调 Firecracker</text>
+<text x="68.0" y="496.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">等不到时</text>
+<rect x="220.0" y="459.0" width="645.0" height="65.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="542.5" y="484.3" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">等满 CHECKPOINT_LOCK_WAIT_TIMEOUT 回 busy</text>
+<text x="542.5" y="511.2" font-size="13" fill="#0F6E56" text-anchor="middle">LockSandboxWithin；不限时的 LockSandbox 只留给不面向客户端的内部路径</text>
+<rect x="887.0" y="459.0" width="645.0" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1209.5" y="484.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">排队时间记在 materialize_lock_wait</text>
+<text x="1209.5" y="511.2" font-size="13" fill="#5F5E5A" text-anchor="middle">锁内做的慢事会出现在别的沙箱 restore 的这一项里</text>
+<text x="68.0" y="592.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">不这样会怎样</text>
+<rect x="220.0" y="554.5" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="542.5" y="579.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">同一沙箱两个操作交错</text>
+<text x="542.5" y="606.7" font-size="13" fill="#993C1D" text-anchor="middle">第二个 checkpoint 读到旧基准：两代产物声称同一个父亲，纪元位图覆盖的时间区间重叠</text>
+<rect x="887.0" y="554.5" width="645.0" height="65.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1209.5" y="579.8" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">一个沙箱的 I/O 阻塞全机</text>
+<text x="1209.5" y="606.7" font-size="13" fill="#993C1D" text-anchor="middle">写成 defer Unlock，物化的 I/O 会持着全局锁，阻塞这台机器上所有沙箱的账本操作</text>
+<rect x="48.0" y="656.0" width="1504.0" height="40.0" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="800.0" y="682.0" font-size="14.5" fill="#085041" font-weight="600" text-anchor="middle">获取顺序只有 opLocks → Store.mu 一个方向，所以不会死锁。gate() 短暂持 Store.mu 取出沙箱锁对象，返回前就放掉，然后才去等沙箱锁</text>
+<circle cx="63" cy="742.0" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="747.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="749.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一次 restore 里两把锁各持多久</text>
+<rect x="403.4" y="732.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="440.4" y="748.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="493.4" y="748.0" font-size="14.5" fill="#888780" text-anchor="start">示意：沙箱 A 做 restore，同时沙箱 B 做 checkpoint；横轴是时间，不按比例</text>
+<text x="48.0" y="804.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">opLocks[A]</text>
+<text x="48.0" y="823.0" font-size="12.5" fill="#888780" text-anchor="start">沙箱 A 的 restore</text>
+<line x1="258.0" y1="807.0" x2="1552.0" y2="807.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="876.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">opLocks[B]</text>
+<text x="48.0" y="895.0" font-size="12.5" fill="#888780" text-anchor="start">沙箱 B 的 checkpoint</text>
+<line x1="258.0" y1="879.0" x2="1552.0" y2="879.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="948.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">Store.mu</text>
+<text x="48.0" y="967.0" font-size="12.5" fill="#888780" text-anchor="start">全局，一次只有一个持有者</text>
+<line x1="258.0" y1="951.0" x2="1552.0" y2="951.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1020.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">A 在锁外做的事</text>
+<text x="48.0" y="1039.0" font-size="12.5" fill="#888780" text-anchor="start">文件 I/O、调 Firecracker</text>
+<line x1="258.0" y1="1023.0" x2="1552.0" y2="1023.0" stroke="#E5E3DB" stroke-width="1"/>
+<rect x="303.3" y="788.0" width="64.7" height="38.0" rx="6" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2" stroke-dasharray="5 4"/>
+<rect x="368.0" y="788.0" width="1164.6" height="38.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="950.3" y="812.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">持有：整个 restore，从取锁到返回</text>
+<rect x="258.0" y="860.0" width="427.0" height="38.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="471.5" y="884.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">持有：B 的整个 checkpoint</text>
+<rect x="258.0" y="932.0" width="45.3" height="38.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="280.6" y="990.0" font-size="12.5" fill="#1D9E75" font-weight="600" text-anchor="middle">gate()</text>
+<rect x="633.3" y="932.0" width="51.8" height="38.0" rx="4" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="659.1" y="990.0" font-size="12.5" fill="#0F6E56" font-weight="600" text-anchor="middle">B：Commit</text>
+<rect x="685.0" y="932.0" width="51.8" height="38.0" rx="6" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2" stroke-dasharray="5 4"/>
+<rect x="736.8" y="932.0" width="77.6" height="38.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="775.6" y="990.0" font-size="12.5" fill="#1D9E75" font-weight="600" text-anchor="middle">A：算路径</text>
+<rect x="1293.2" y="932.0" width="64.7" height="38.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1325.5" y="990.0" font-size="12.5" fill="#1D9E75" font-weight="600" text-anchor="middle">A：挪基准</text>
+<text x="710.9" y="920.0" font-size="12.5" fill="#993C1D" font-weight="600" text-anchor="middle">A 等锁：materialize_lock_wait</text>
+<text x="335.6" y="776.0" font-size="12.5" fill="#0F6E56" font-weight="600" text-anchor="middle">等沙箱锁</text>
+<rect x="387.4" y="1004.0" width="232.9" height="38.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="503.9" y="1028.0" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">暂停、导出活跃脏页</text>
+<rect x="827.4" y="1004.0" width="245.9" height="38.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="950.3" y="1028.0" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读位图、写物化文件</text>
+<rect x="1086.2" y="1004.0" width="194.1" height="38.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1183.2" y="1028.0" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">rollback、恢复虚机</text>
+<rect x="1370.8" y="1004.0" width="38.8" height="38.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1422.6" y="1004.0" width="103.5" height="38.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1474.4" y="1028.0" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">等 envd</text>
+<text x="1390.2" y="1062.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">删 reclaim</text>
+<rect x="48.0" y="1086.0" width="1504.0" height="40.0" rx="8" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="800.0" y="1112.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">同一沙箱的操作被 opLocks 串行，不同沙箱各持各的 opLocks、完全并行，只在 Store.mu 的这几小段上排队；实心短条是锁内只改 map 的工作，灰条全部在锁外</text>
+<line x1="48" y1="1162.0" x2="1552" y2="1162.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1188.0" font-size="13" fill="#888780" text-anchor="start">注：顺序按第 4 章 §8：ResetView、恢复虚机之后才在 finishRestore 里挪基准（SetBaseToEntry、SetRootfsToEntry），再等 envd。「算路径」是 MaterializeRevert 锁内取目标、查断链、算祖先链与回滚路径，之后手工 Unlock；Commit 锁</text>
+<text x="48.0" y="1208.0" font-size="13" fill="#888780" text-anchor="start">内只插入条目、移动基准、登记计数（commit_index）；删除类操作锁内只摘账，文件收进 reclaim 列表放锁后删除。</text>
+</svg>

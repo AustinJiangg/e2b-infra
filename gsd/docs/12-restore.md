@@ -38,19 +38,7 @@
 杀进程是不可逆的。一旦杀了，沙箱就离开了"当前状态"，只有把 restore 做完才能到达一个完整的状态；中途失败的沙箱处在"进程没了、文件系统在旧状态或目标状态"的中间态。
 所以 `RestoreCheckpoint` 把所有**能提前做、又不改变任何东西**的检查和准备，全部放到杀进程之前（`ckpt/service.go:451-462` 的头注释）：
 
-```
-持操作锁 → 检查健康状态 → 查条目
-        → 逐棵检查镜像与父链可读
-        → PrepareRestore：预检选项串长度、检查层目录、建好新的 upper 与 work
-        → 扫描 /proc
-        ──────────────────────────── 以上失败："什么都没动"，返回普通错误
-        → killTrees：杀掉当前全部用户进程                    ← 提交点
-        ──────────────────────────── 以下失败：DataLoss，进入 degraded
-        → CommitRestore：restore 模式的切换 ioctl
-        → [逐棵] criu restore
-        → 重建增量父镜像、解除 degraded
-        → 写 state.json → 放锁
-```
+![restore 两段式与提交点](img/12-1-restore两段式.svg)
 
 第一段里失败的请求，调用方可以当它没发生过。第二段里失败的请求返回 `DataLoss`，错误信息里写明用户进程已经没了、文件系统处在 `old` 还是 `target` 状态，
 gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，restore 和 delete 仍然允许，直到下一次 restore 成功（[14](14-failure-semantics.md)）。

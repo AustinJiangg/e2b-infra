@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="964" viewBox="0 0 1600 964" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#D85A30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="964" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">soft-dirty：每一页从干净变脏，恰好付一次缺页</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">写 clear_refs 把页清零并设成只读；进程第一次写这一页时触发缺页，内核恢复写权限并置脏，之后同一页再写不经过内核。CRIU 的 --track-mem 和 --prev-images-dir 分别用到这一机制的两端。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">状态变化、控制流</text>
+<line x1="246.0" y1="125.0" x2="286.0" y2="125.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="296.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">缺页异常：唯一的一次代价</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一页的页表项怎样变化</text>
+<rect x="310.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="347.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="212.0" width="368.0" height="104.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="232.0" y="256.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">可写，soft-dirty = ?</text>
+<text x="232.0" y="284.3" font-size="14" fill="#5F5E5A" text-anchor="middle">写 clear_refs 之前</text>
+<rect x="616.0" y="212.0" width="368.0" height="104.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="800.0" y="256.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">只读，soft-dirty = 0</text>
+<text x="800.0" y="284.3" font-size="14" fill="#534AB7" text-anchor="middle">即使这一页本来是可写的，写权限也被去掉</text>
+<rect x="1184.0" y="212.0" width="368.0" height="104.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1368.0" y="256.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">可写，soft-dirty = 1</text>
+<text x="1368.0" y="284.3" font-size="14" fill="#534AB7" text-anchor="middle">写权限已恢复，这一页记为“写过”</text>
+<line x1="420.0" y1="264.0" x2="610.0" y2="264.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="516.0" y="252.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">写 clear_refs = 4</text>
+<line x1="988.0" y1="264.0" x2="1178.0" y2="264.0" stroke="#D85A30" stroke-width="1.8" marker-end="url(#ar-warn)"/>
+<text x="1084.0" y="252.0" font-size="13" fill="#D85A30" font-weight="600" text-anchor="middle">进程第一次写这一页</text>
+<text x="1084.0" y="288.0" font-size="13" fill="#D85A30" font-weight="600" text-anchor="middle">缺页</text>
+<line x1="800.0" y1="320.0" x2="800.0" y2="366.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="616.0" y="372.0" width="368.0" height="70.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="800.0" y="402.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">没有写：一直保持 0（干净）</text>
+<text x="800.0" y="424.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">页一直保持只读</text>
+<line x1="1368.0" y1="320.0" x2="1368.0" y2="366.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1184.0" y="372.0" width="368.0" height="70.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1368.0" y="402.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">再写：不经过内核</text>
+<text x="1368.0" y="424.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">一直保持 1（脏），之后不再有开销</text>
+<circle cx="63" cy="488" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="493.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="495.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">这一次缺页里，谁做了什么</text>
+<text x="350.0" y="494.0" font-size="14.5" fill="#888780" text-anchor="start">进程写内存是一条普通的机器指令，不经过内核，所以要先把页设成只读</text>
+<rect x="48.0" y="516.0" width="343.0" height="150.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="60.0" y="527.0" width="191.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="155.9" y="542.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">内核（由写 clear_refs 触发）</text>
+<text x="219.5" y="587.9" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">清零并上锁</text>
+<text x="219.5" y="615.8" font-size="14" fill="#534AB7" text-anchor="middle">往 /proc/&lt;pid&gt;/clear_refs 写 4：遍历全部页</text>
+<text x="219.5" y="636.8" font-size="14" fill="#534AB7" text-anchor="middle">表项，清 soft-dirty 位、去掉写权限</text>
+<line x1="395.0" y1="591.0" x2="429.0" y2="591.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="435.0" y="516.0" width="343.0" height="150.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="447.0" y="527.0" width="54.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="474.0" y="542.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">处理器</text>
+<text x="606.5" y="587.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">第一次写触发缺页</text>
+<text x="606.5" y="615.8" font-size="14" fill="#5F5E5A" text-anchor="middle">处理器发现页表项不允许写，产生缺页异常，控制</text>
+<text x="606.5" y="636.8" font-size="14" fill="#5F5E5A" text-anchor="middle">权进入内核</text>
+<line x1="782.0" y1="591.0" x2="816.0" y2="591.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="822.0" y="516.0" width="343.0" height="150.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="834.0" y="527.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="855.0" y="542.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">内核</text>
+<text x="993.5" y="587.9" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">内核记账并放行</text>
+<text x="993.5" y="615.8" font-size="14" fill="#534AB7" text-anchor="middle">内存区域其实允许写：恢复写权限、置</text>
+<text x="993.5" y="636.8" font-size="14" fill="#534AB7" text-anchor="middle">soft-dirty 位，让进程重新执行那条写指令</text>
+<line x1="1169.0" y1="591.0" x2="1203.0" y2="591.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1209.0" y="516.0" width="343.0" height="150.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1221.0" y="527.0" width="66.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1254.0" y="542.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">用户进程</text>
+<text x="1380.5" y="587.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">之后再写不再打扰</text>
+<text x="1380.5" y="615.8" font-size="14" fill="#5F5E5A" text-anchor="middle">这一页已经可写，同一页上的后续写入不再经过</text>
+<text x="1380.5" y="636.8" font-size="14" fill="#5F5E5A" text-anchor="middle">内核</text>
+<circle cx="63" cy="712" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="717.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="719.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">CRIU 的两个选项对应机制的两端</text>
+<rect x="48.0" y="740.0" width="464.0" height="130.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="60.0" y="751.0" width="51.3" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="85.6" y="766.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">CRIU</text>
+<text x="280.0" y="812.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">上一次 dump 带 --track-mem</text>
+<text x="280.0" y="840.5" font-size="14" fill="#534AB7" text-anchor="middle">CRIU 在 dump 的过程中替我们做第 1 步：清零并上锁</text>
+<line x1="516.0" y1="805.2" x2="562.0" y2="805.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="568.0" y="740.0" width="464.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="580.0" y="751.0" width="66.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="613.0" y="766.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">用户进程</text>
+<text x="800.0" y="812.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">用户进程照常运行</text>
+<text x="800.0" y="840.5" font-size="14" fill="#5F5E5A" text-anchor="middle">被写过的页 soft-dirty 置 1，没写过的保持 0</text>
+<line x1="1036.0" y1="805.2" x2="1082.0" y2="805.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1088.0" y="740.0" width="464.0" height="130.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="1100.0" y="751.0" width="51.3" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1125.6" y="766.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">CRIU</text>
+<text x="1320.0" y="802.2" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">下一次 dump 带 --prev-images-dir</text>
+<text x="1320.0" y="830.0" font-size="14" fill="#534AB7" text-anchor="middle">读 /proc/&lt;pid&gt;/pagemap：每页一个 64 位描述，第 55 位是</text>
+<text x="1320.0" y="851.0" font-size="14" fill="#534AB7" text-anchor="middle">soft-dirty；只保存为 1 的页</text>
+<line x1="48" y1="906.5" x2="1552" y2="906.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="932.5" font-size="13" fill="#888780" text-anchor="start">注：除了页表项上的位，内存区域（VMA）上还有一个 VM_SOFTDIRTY 标志，新映射或扩大的区域整块报成脏，见 §3.2。</text>
+</svg>

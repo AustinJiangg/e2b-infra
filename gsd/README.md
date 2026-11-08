@@ -11,7 +11,7 @@
 | [`docs/`](docs/README.md) | **《进程级快照回滚技术手册》**，30 章加 5 个附录，分六篇：导论与基础 → 设计与实现 → 性能原理 → 验证与实测 → 与沙箱级对比 → 使用与运维 | 首要入口 |
 | [`scripts/`](scripts/README.md) | **全部测试脚本**：`acceptance/` 功能验证与性能、`stress/` 压测与看门狗、`probes/` 探针、`ops/` 切栈脚本、`kernel/` 调试内核的 config 与构建说明 | 验收方（`acceptance/`）；接手开发的人（其余） |
 | [`validation/`](validation/README.md) | 已复核的结果摘要、环境版本与历史修复依据。完整日志与原始结果不入库 | 要核对数字的人 |
-| [`diagrams/`](diagrams/README.md) | 只有一页说明：本手册的图都以 mermaid 内嵌在各章里，不另出 SVG | 想找图或改图的人 |
+| [`diagrams/`](diagrams/README.md) | 只有一页说明：本手册的图在 `docs/img/`，画图脚本在 `rollback/tools/figures/` | 想找图或改图的人 |
 | [`dist/`](dist/README.md) | 文档打包件（单文件 HTML）与重新打包的命令。构建产物，只有 `docs/` 是源 | 要把手册发给别人的人 |
 
 `contents.json` 是目录，`book.json` 是打包用的书目信息（书名、版本、日期），改版时与 `docs/README.md` 开头的信息块一起改。
@@ -86,7 +86,7 @@
 ## 把文档发给别人
 
 [`dist/`](dist/) 下的 `gsd-checkpoint-restore-docs.html` 是单文件离线版：双击用浏览器打开，不联网、不装任何东西，
-手册内的链接都改写成了页内锚点，mermaid 图内联渲染；浏览器 Ctrl+P 可直接存 PDF。
+手册内的链接都改写成了页内跳转，配图以 SVG 内嵌；浏览器 Ctrl+P 可直接存 PDF。
 改完 `docs/` 之后怎么重新生成，见 [`dist/README.md`](dist/README.md)。
 
 ## 不在这里的东西

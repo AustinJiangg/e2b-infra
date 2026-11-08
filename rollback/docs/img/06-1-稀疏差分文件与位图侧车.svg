@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="902" viewBox="0 0 1600 902" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="902" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">稀疏差分文件：逻辑上是完整的 guest 内存，物理上只占改动量</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">Firecracker 以 Diff 模式写快照时，把每一个脏页写在它自己的 guest 物理偏移上，中间的干净页不写；位图 E_x 与快照在同一次 Firecracker 调用内落地，参数是</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">CreateSnapshotParams.dirty_bitmap_path。</text>
+<circle cx="63" cy="168" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="173.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="175.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一代产物里的 mem_diff 与 mem_bitmap</text>
+<rect x="479.7" y="158.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="516.7" y="174.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="278.0" y="228.0" font-size="13" fill="#888780" text-anchor="start">偏移 0</text>
+<text x="1552.0" y="228.0" font-size="13" fill="#888780" text-anchor="end">guest 内存末尾</text>
+<text x="915.0" y="228.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="middle">逻辑偏移 = guest 物理地址（页号 × 页大小）</text>
+<line x1="338.0" y1="238.0" x2="1548.0" y2="238.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="48.0" y="291.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">mem_diff</text>
+<text x="48.0" y="311.0" font-size="13" fill="#888780" text-anchor="start">稀疏差分文件</text>
+<rect x="278.0" y="258.0" width="110.0" height="70.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="333.0" y="288.0" font-size="13.5" fill="#888780" text-anchor="middle">空洞（未分配）</text>
+<text x="333.0" y="310.0" font-size="13" fill="#888780" text-anchor="middle">页 0–2</text>
+<rect x="388.0" y="258.0" width="92.0" height="70.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="434.0" y="288.0" font-size="13" fill="#0F6E56" text-anchor="middle">page</text>
+<text x="434.0" y="310.0" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">3</text>
+<rect x="480.0" y="258.0" width="220.0" height="70.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="590.0" y="288.0" font-size="13.5" fill="#888780" text-anchor="middle">空洞（未分配）</text>
+<text x="590.0" y="310.0" font-size="13" fill="#888780" text-anchor="middle">页 4–16</text>
+<rect x="700.0" y="258.0" width="92.0" height="70.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="746.0" y="288.0" font-size="13" fill="#0F6E56" text-anchor="middle">page</text>
+<text x="746.0" y="310.0" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">17</text>
+<rect x="792.0" y="258.0" width="92.0" height="70.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="838.0" y="288.0" font-size="13" fill="#0F6E56" text-anchor="middle">page</text>
+<text x="838.0" y="310.0" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">18</text>
+<rect x="884.0" y="258.0" width="330.0" height="70.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="1049.0" y="288.0" font-size="13.5" fill="#888780" text-anchor="middle">空洞（未分配）</text>
+<text x="1049.0" y="310.0" font-size="13" fill="#888780" text-anchor="middle">页 19–98</text>
+<rect x="1214.0" y="258.0" width="92.0" height="70.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="1260.0" y="288.0" font-size="13" fill="#0F6E56" text-anchor="middle">page</text>
+<text x="1260.0" y="310.0" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">99</text>
+<rect x="1306.0" y="258.0" width="246.0" height="70.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="1429.0" y="288.0" font-size="13.5" fill="#888780" text-anchor="middle">空洞（未分配）</text>
+<text x="1429.0" y="310.0" font-size="13" fill="#888780" text-anchor="middle">页 100 起</text>
+<text x="48.0" y="363.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">mem_bitmap</text>
+<text x="48.0" y="383.0" font-size="13" fill="#888780" text-anchor="start">位图 E_x，FCDB 格式</text>
+<rect x="278.0" y="342.0" width="110.0" height="46.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="333.0" y="371.0" font-size="14" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="middle">0 … 0</text>
+<rect x="388.0" y="342.0" width="92.0" height="46.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="434.0" y="371.0" font-size="16" fill="#085041" font-family="'DejaVu Sans Mono','Consolas',monospace" font-weight="600" text-anchor="middle">1</text>
+<rect x="480.0" y="342.0" width="220.0" height="46.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="590.0" y="371.0" font-size="14" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="middle">0 … 0</text>
+<rect x="700.0" y="342.0" width="92.0" height="46.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="746.0" y="371.0" font-size="16" fill="#085041" font-family="'DejaVu Sans Mono','Consolas',monospace" font-weight="600" text-anchor="middle">1</text>
+<rect x="792.0" y="342.0" width="92.0" height="46.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="838.0" y="371.0" font-size="16" fill="#085041" font-family="'DejaVu Sans Mono','Consolas',monospace" font-weight="600" text-anchor="middle">1</text>
+<rect x="884.0" y="342.0" width="330.0" height="46.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1049.0" y="371.0" font-size="14" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="middle">0 … 0</text>
+<rect x="1214.0" y="342.0" width="92.0" height="46.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="1260.0" y="371.0" font-size="16" fill="#085041" font-family="'DejaVu Sans Mono','Consolas',monospace" font-weight="600" text-anchor="middle">1</text>
+<rect x="1306.0" y="342.0" width="246.0" height="46.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1429.0" y="371.0" font-size="14" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="middle">0 … 0</text>
+<line x1="278" y1="414" x2="1552" y2="414" stroke="#B4B2A9" stroke-width="1.2"/>
+<line x1="278" y1="407" x2="278" y2="421" stroke="#B4B2A9" stroke-width="1.2"/>
+<line x1="1552" y1="407" x2="1552" y2="421" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="915.0" y="440.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">文件逻辑大小：等于 guest 内存</text>
+<text x="915.0" y="464.0" font-size="14.5" fill="#085041" font-weight="600" text-anchor="middle">物理占用：约等于脏页总量（只有 page 格分配了物理块）</text>
+<text x="48.0" y="440.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">两个大小</text>
+<rect x="48.0" y="494.0" width="481.3" height="100.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="288.7" y="536.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">读空洞返回零</text>
+<text x="288.7" y="564.5" font-size="14" fill="#5F5E5A" text-anchor="middle">SEEK_DATA / SEEK_HOLE 可以枚举出真正有数据的区间</text>
+<rect x="559.3" y="494.0" width="481.3" height="100.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="526.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">长度校验天然满足</text>
+<text x="800.0" y="554.0" font-size="14" fill="#5F5E5A" text-anchor="middle">Firecracker 的回滚端点校验内存文件长度等于 guest 内存大小，不</text>
+<text x="800.0" y="575.0" font-size="14" fill="#5F5E5A" text-anchor="middle">需要额外元数据</text>
+<rect x="1070.7" y="494.0" width="481.3" height="100.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1311.3" y="536.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">全量快照也写位图</text>
+<text x="1311.3" y="564.5" font-size="14" fill="#5F5E5A" text-anchor="middle">内容全 1；增量条目的 E_x = parent(x) 到 x 之间 guest 写过的页</text>
+<circle cx="63" cy="640.5" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="646.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="647.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一代产物的五个文件</text>
+<text x="290.0" y="646.5" font-size="14.5" fill="#888780" text-anchor="start">目录布局见第 4 章 §5</text>
+<rect x="48.0" y="668.5" width="281.6" height="84.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="188.8" y="702.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">snapfile</text>
+<text x="188.8" y="730.8" font-size="14" fill="#5F5E5A" text-anchor="middle">vCPU、GIC、设备状态</text>
+<rect x="353.6" y="668.5" width="281.6" height="84.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="494.4" y="702.9" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">mem_diff</text>
+<text x="494.4" y="730.8" font-size="14" fill="#0F6E56" text-anchor="middle">稀疏差分</text>
+<rect x="659.2" y="668.5" width="281.6" height="84.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="800.0" y="702.9" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">mem_bitmap</text>
+<text x="800.0" y="730.8" font-size="14" fill="#0F6E56" text-anchor="middle">E_x，FCDB 格式</text>
+<rect x="964.8" y="668.5" width="281.6" height="84.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1105.6" y="702.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">rootfs.header</text>
+<text x="1105.6" y="730.8" font-size="14" fill="#5F5E5A" text-anchor="middle">磁盘视图（第 7 章）</text>
+<rect x="1270.4" y="668.5" width="281.6" height="84.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1411.2" y="702.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">manifest.json</text>
+<text x="1411.2" y="730.8" font-size="14" fill="#5F5E5A" text-anchor="middle">条目记录</text>
+<rect x="48.0" y="768.5" width="1504.0" height="40.0" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="800.0" y="794.5" font-size="14.5" fill="#085041" font-weight="600" text-anchor="middle">checkpoint 成本 O(本代脏页)：与虚机规格无关，与历史长度无关，与文件系统无关</text>
+<line x1="48" y1="844.5" x2="1552" y2="844.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="870.5" font-size="13" fill="#888780" text-anchor="start">注：图中页号 3、17、18、99 只是示意位置。位图与快照描述的是同一件事，省掉 orchestrator 再发一轮「取脏页位图」的往返。</text>
+</svg>

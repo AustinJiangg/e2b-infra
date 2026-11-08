@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="948" viewBox="0 0 1600 948" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="948" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">四层测试各回答一个问题，没有一层能同时看见全部四处</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">gsd 的正确性分散在四个地方。单测只看得见 gsd 自己以为做了什么；最严重的几个问题在内核补丁里，要靠压测在并发文件操作下连续撞出来。</text>
+<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">正确性分散在四个地方</text>
+<rect x="48.0" y="172.0" width="355.0" height="140.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="183.0" width="52.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="86.3" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest</text>
+<text x="225.5" y="249.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">gsd 的编排逻辑</text>
+<text x="225.5" y="277.3" font-size="14" fill="#5F5E5A" text-anchor="middle">Go 代码：顺序、失败路径、状态文件</text>
+<rect x="431.0" y="172.0" width="355.0" height="140.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="443.0" y="183.0" width="52.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="469.3" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest</text>
+<text x="608.5" y="249.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">CRIU</text>
+<text x="608.5" y="277.3" font-size="14" fill="#5F5E5A" text-anchor="middle">真实的 dump 与重建</text>
+<rect x="814.0" y="172.0" width="355.0" height="140.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="826.0" y="183.0" width="80.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="866.2" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">guest 内核</text>
+<rect x="826.0" y="278.0" width="331.0" height="26.0" rx="6" fill="#EEEDFE" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="991.5" y="295.0" font-size="13" fill="#3C3489" font-weight="500" text-anchor="middle">切换时的内核崩溃、层不释放、BUG 都在这里</text>
+<text x="991.5" y="231.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">overlayfs 热切层补丁</text>
+<text x="991.5" y="259.3" font-size="14" fill="#5F5E5A" text-anchor="middle">guest 内核里的切换、回收</text>
+<rect x="1197.0" y="172.0" width="355.0" height="140.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1209.0" y="183.0" width="54.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1236.0" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">建模板</text>
+<text x="1374.5" y="249.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">注入逻辑</text>
+<text x="1374.5" y="277.3" font-size="14" fill="#5F5E5A" text-anchor="middle">建模板时把 gsd、CRIU 装进 guest</text>
+<circle cx="63" cy="358" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="363.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="365.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">四层测试：每层只对自己看得见的部分负责</text>
+<rect x="490.0" y="348.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="527.0" y="364.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="384.0" width="1504.0" height="470.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="188.0" y="404.0" width="319.5" height="62.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<text x="347.8" y="432.0" font-size="19" fill="#3C3489" font-weight="600" text-anchor="middle">单测</text>
+<text x="347.8" y="454.0" font-size="13.5" fill="#534AB7" text-anchor="middle">Go 与 Python 的单元测试</text>
+<rect x="529.5" y="404.0" width="319.5" height="62.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<text x="689.2" y="432.0" font-size="19" fill="#3C3489" font-weight="600" text-anchor="middle">功能验证</text>
+<text x="689.2" y="454.0" font-size="13.5" fill="#534AB7" text-anchor="middle">四个 verify_* 脚本</text>
+<rect x="871.0" y="404.0" width="319.5" height="62.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<text x="1030.8" y="432.0" font-size="19" fill="#3C3489" font-weight="600" text-anchor="middle">性能</text>
+<text x="1030.8" y="454.0" font-size="13.5" fill="#534AB7" text-anchor="middle">demo_checkpoint_perf、exp_gsd_swap</text>
+<rect x="1212.5" y="404.0" width="319.5" height="62.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<text x="1372.2" y="432.0" font-size="19" fill="#3C3489" font-weight="600" text-anchor="middle">压测与探针</text>
+<text x="1372.2" y="454.0" font-size="13.5" fill="#534AB7" text-anchor="middle">四个 stress_*、十几个 probe_*</text>
+<text x="68.0" y="519.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">回答什么</text>
+<rect x="188.0" y="482.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="347.8" y="507.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">gsd 以为自己做了什么</text>
+<text x="347.8" y="534.2" font-size="13" fill="#534AB7" text-anchor="middle">用假的 /proc 和假的 criu 断言编排</text>
+<rect x="529.5" y="482.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="689.2" y="507.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">做一件事，结果对不对</text>
+<text x="689.2" y="534.2" font-size="13" fill="#534AB7" text-anchor="middle">进程是否回来、文件是否回滚</text>
+<rect x="871.0" y="482.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1030.8" y="507.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">时间花在哪</text>
+<text x="1030.8" y="534.2" font-size="13" fill="#534AB7" text-anchor="middle">各分段耗时，两个版本之间的差</text>
+<rect x="1212.5" y="482.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1372.2" y="507.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">并发下会不会坏</text>
+<text x="1372.2" y="534.2" font-size="13" fill="#534AB7" text-anchor="middle">压测撞竞态；探针各复现一个具体问题</text>
+<text x="68.0" y="615.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">在哪跑</text>
+<rect x="188.0" y="577.5" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="347.8" y="602.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">有 Go 工具链的机器</text>
+<text x="347.8" y="629.7" font-size="13" fill="#534AB7" text-anchor="middle">不需要 guest</text>
+<rect x="529.5" y="577.5" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="689.2" y="602.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">gsd 栈运行中的宿主机</text>
+<text x="689.2" y="629.7" font-size="13" fill="#534AB7" text-anchor="middle">起真实沙箱</text>
+<rect x="871.0" y="577.5" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1030.8" y="602.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">gsd 栈运行中的宿主机</text>
+<text x="1030.8" y="629.7" font-size="13" fill="#534AB7" text-anchor="middle">起真实沙箱</text>
+<rect x="1212.5" y="577.5" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1372.2" y="602.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">gsd 栈运行中的宿主机</text>
+<text x="1372.2" y="629.7" font-size="13" fill="#534AB7" text-anchor="middle">压测另在调试内核上跑一遍</text>
+<text x="68.0" y="710.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">能抓到</text>
+<rect x="188.0" y="673.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="347.8" y="698.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">编排与失败路径</text>
+<text x="347.8" y="725.2" font-size="13" fill="#534AB7" text-anchor="middle">清理、状态文件、增量父子关系、SDK 错误映射</text>
+<rect x="529.5" y="673.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="689.2" y="698.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">端到端行为</text>
+<text x="689.2" y="725.2" font-size="13" fill="#534AB7" text-anchor="middle">错误码与 SDK 异常、增量是否漏页</text>
+<rect x="871.0" y="673.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1030.8" y="698.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">分段与一致性</text>
+<text x="1030.8" y="725.2" font-size="13" fill="#534AB7" text-anchor="middle">SDK 返回的分段与 gsd 日志是否一致</text>
+<rect x="1212.5" y="673.0" width="319.5" height="65.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1372.2" y="698.3" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">内核侧竞态</text>
+<text x="1372.2" y="725.2" font-size="13" fill="#534AB7" text-anchor="middle">切换与并发文件操作、释放后使用、死锁、泄漏</text>
+<text x="68.0" y="806.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">抓不到</text>
+<rect x="188.0" y="768.5" width="319.5" height="65.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="347.8" y="793.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">真实 CRIU、内核补丁</text>
+<text x="347.8" y="820.7" font-size="13" fill="#534AB7" text-anchor="middle">以及模板注入的实际效果</text>
+<rect x="529.5" y="768.5" width="319.5" height="65.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="689.2" y="793.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">内核竞态</text>
+<text x="689.2" y="820.7" font-size="13" fill="#534AB7" text-anchor="middle">每项只跑几秒到几十秒</text>
+<rect x="871.0" y="768.5" width="319.5" height="65.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1030.8" y="793.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">未覆盖的程序或内核行为</text>
+<text x="1030.8" y="820.7" font-size="13" fill="#534AB7" text-anchor="middle">也不能替代功能验收</text>
+<rect x="1212.5" y="768.5" width="319.5" height="65.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1372.2" y="793.8" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">功能语义的全面覆盖</text>
+<text x="1372.2" y="820.7" font-size="13" fill="#534AB7" text-anchor="middle">压测只盯几条不变量</text>
+<line x1="48" y1="890.0" x2="1552" y2="890.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="916.0" font-size="13" fill="#888780" text-anchor="start">注：多数脚本的退出码不是判定，各脚本的判定看哪一行见 §1.1。本章只讲用什么测、怎么判，测到的结果见第 19～22 章。</text>
+</svg>

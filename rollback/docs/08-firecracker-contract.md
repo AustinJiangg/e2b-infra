@@ -44,6 +44,8 @@ PUT /snapshot/save-dirty-bitmap                                   ← 新端点
 "把这个位图指定的页从这个文件写进 guest 内存"这类无状态的动作；哪些页该回滚、内容从哪一代取，全由 orchestrator 算好再递过去。
 这个划分让分叉停在一个容易审阅的规模，也让[第 6 章](06-memory-diff-tree.md)的全部正确性论证只需要在 orchestrator 一侧成立。
 
+![三个扩展的调用位置与读写的文件](img/08-1-三个扩展.svg)
+
 参数结构在 `firecracker/src/vmm/src/vmm_config/snapshot.rs`（`CreateSnapshotParams` :39、`RollbackSnapshotParams` :62、
 `SaveDirtyBitmapParams` :82、`RollbackTimings` :89、`RollbackVcpuCounters` :126、`RollbackResponse` :146），路由在
 `firecracker/src/firecracker/src/api_server/request/snapshot.rs:34-35`，三个扩展端点的请求、响应、错误体写在
@@ -312,6 +314,8 @@ Firecracker 接下来要写的页 —— 又回到 [§4.1](#41-为什么非有�
 | 24 | 8 × ⌈num_pages/64⌉ | 位图字，u64 小端；第 `w` 个字的第 `i` 位对应页 `w*64 + i` |
 
 一个例子：2 GiB guest 内存、4 KiB 页，`num_pages` = 524288，位图 8192 个字，文件长 24 + 65536 字节。
+
+![FCDB 位图格式与页索引空间](img/08-2-FCDB位图格式.svg)
 
 两侧读时都要求文件长度**恰好**等于 24 + 8 × 字数，版本不符、magic 不符一律拒绝（`deserialize_dirty_bitmap`，`memory.rs:563`；
 `readDirtyBitmap`，`bitmap.go:29`；测试 `bitmap_test.go:17` `TestBitmapWireFormat`、:40 `TestBitmapRejectsMalformed`）。

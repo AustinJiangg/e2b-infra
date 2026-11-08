@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1056" viewBox="0 0 1600 1056" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="1056" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">950 混合 128 / 256 / 512 MiB：checkpoint 与 restore 各分段的 p50</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">950（slot6），2026-10-13 perf 轮，analyze.log 各分段中位数，每档 n = 20 / 20 / 10（§4 表）。每个分段三根条分别是三档；单位 ms。</text>
+<rect x="48.0" y="109.0" width="22.0" height="14.0" rx="3" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.2"/>
+<text x="78.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">混合 128</text>
+<rect x="165.5" y="109.0" width="22.0" height="14.0" rx="3" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.2"/>
+<text x="195.5" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">混合 256</text>
+<rect x="283.1" y="109.0" width="22.0" height="14.0" rx="3" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.2"/>
+<text x="313.1" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">混合 512</text>
+<rect x="400.6" y="109.0" width="22.0" height="14.0" rx="3" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="430.6" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">正文只给范围的分段</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">checkpoint 分段</text>
+<text x="271.8" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">snapshot 是内存快照段，seal 是封层段</text>
+<line x1="258.0" y1="228.0" x2="258.0" y2="418.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="258.0" y="438.0" font-size="12.5" fill="#888780" text-anchor="middle">0 ms</text>
+<line x1="538.5" y1="228.0" x2="538.5" y2="418.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="538.5" y="438.0" font-size="12.5" fill="#888780" text-anchor="middle">50 ms</text>
+<line x1="818.9" y1="228.0" x2="818.9" y2="418.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="818.9" y="438.0" font-size="12.5" fill="#888780" text-anchor="middle">100 ms</text>
+<line x1="1099.4" y1="228.0" x2="1099.4" y2="418.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1099.4" y="438.0" font-size="12.5" fill="#888780" text-anchor="middle">150 ms</text>
+<line x1="1379.8" y1="228.0" x2="1379.8" y2="418.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1379.8" y="438.0" font-size="12.5" fill="#888780" text-anchor="middle">200 ms</text>
+<line x1="258.0" y1="228.0" x2="258.0" y2="418.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="244.0" y="279.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">snapshot</text>
+<rect x="258.0" y="236.0" width="349.4" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="617.4" y="252.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">62.3</text>
+<rect x="258.0" y="263.0" width="616.4" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="884.4" y="279.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">109.9</text>
+<rect x="258.0" y="290.0" width="1176.8" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="1444.8" y="306.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">209.8</text>
+<text x="244.0" y="377.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">seal</text>
+<rect x="258.0" y="334.0" width="39.8" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="307.8" y="350.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">7.1</text>
+<rect x="258.0" y="361.0" width="69.6" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="337.6" y="377.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">12.4</text>
+<rect x="258.0" y="388.0" width="122.8" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="390.8" y="404.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">21.9</text>
+<circle cx="63" cy="500" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="505.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="507.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">restore 分段</text>
+<text x="237.2" y="506.0" font-size="14.5" fill="#888780" text-anchor="start">fc_memory 包含在 fc_rollback 中</text>
+<line x1="258.0" y1="550.0" x2="258.0" y2="926.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="258.0" y="946.0" font-size="12.5" fill="#888780" text-anchor="middle">0 ms</text>
+<line x1="538.5" y1="550.0" x2="538.5" y2="926.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="538.5" y="946.0" font-size="12.5" fill="#888780" text-anchor="middle">50 ms</text>
+<line x1="818.9" y1="550.0" x2="818.9" y2="926.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="818.9" y="946.0" font-size="12.5" fill="#888780" text-anchor="middle">100 ms</text>
+<line x1="1099.4" y1="550.0" x2="1099.4" y2="926.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1099.4" y="946.0" font-size="12.5" fill="#888780" text-anchor="middle">150 ms</text>
+<line x1="1379.8" y1="550.0" x2="1379.8" y2="926.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1379.8" y="946.0" font-size="12.5" fill="#888780" text-anchor="middle">200 ms</text>
+<line x1="258.0" y1="550.0" x2="258.0" y2="926.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="244.0" y="601.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">materialize</text>
+<rect x="258.0" y="558.0" width="191.3" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="459.3" y="574.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">34.1</text>
+<rect x="258.0" y="585.0" width="296.7" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="564.7" y="601.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">52.9</text>
+<rect x="258.0" y="612.0" width="584.5" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="852.5" y="628.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">104.2</text>
+<text x="244.0" y="699.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">fc_memory</text>
+<rect x="258.0" y="656.0" width="108.8" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="376.8" y="672.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">19.4</text>
+<rect x="258.0" y="683.0" width="190.1" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="458.1" y="699.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">33.9</text>
+<rect x="258.0" y="710.0" width="384.2" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="652.2" y="726.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">68.5</text>
+<text x="244.0" y="797.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">wait_envd</text>
+<rect x="258.0" y="754.0" width="7.9" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="275.9" y="770.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">1.4</text>
+<rect x="258.0" y="781.0" width="9.5" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="277.5" y="797.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">1.7</text>
+<rect x="258.0" y="808.0" width="9.0" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="277.0" y="824.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">1.6</text>
+<text x="244.0" y="860.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">fc_bitmap</text>
+<text x="244.0" y="878.0" font-size="12.5" fill="#888780" text-anchor="end">三档同一范围</text>
+<rect x="258.0" y="852.0" width="9.0" height="22.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<rect x="267.0" y="852.0" width="2.0" height="22.0" rx="2" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="277.5" y="868.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">约 1.6～1.7</text>
+<text x="244.0" y="904.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">assemble_view_pre</text>
+<text x="244.0" y="922.0" font-size="12.5" fill="#888780" text-anchor="end">三档同一范围</text>
+<rect x="258.0" y="896.0" width="2.0" height="22.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<rect x="259.1" y="896.0" width="2.0" height="22.0" rx="2" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.1" stroke-dasharray="4 3"/>
+<text x="269.1" y="912.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">约 0.2</text>
+<line x1="48" y1="998" x2="1552" y2="998" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1024.0" font-size="13" fill="#888780" text-anchor="start">注：后台清扫可能与关键路径重叠，各列中位数也未必出自同一次操作，所以各分段不能相加成总耗时，这里按分段并排而不画成堆叠条。这是本轮的分段观察，不作平台间性能差异的因果证明。</text>
+</svg>

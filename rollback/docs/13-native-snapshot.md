@@ -55,6 +55,8 @@ m.ToFile(metadataFileLink.Path())                                   //   写元�
 
 **注意 ② 之后一直没有 resume。** 原生路径的语义就是"沙箱到此为止"；`Checkpoint` 里的"继续跑"是另起一个新沙箱实现的。
 
+![原生 Sandbox.Pause 的六步，以及内存增量、磁盘增量各存什么](img/13-1-原生Pause与两份增量.svg)
+
 ## 3. 内存增量
 
 ### 3.1 判据：UFFD 的写保护位
@@ -159,18 +161,7 @@ func (r *RootfsDiffCreator) process(ctx context.Context, out io.Writer) (*header
 
 客户端对已暂停的沙箱调用 `Sandbox.connect()` 即触发 resume，服务端走 `Factory.ResumeSandbox`（`sandbox.go:424`）：
 
-```
-新建 Firecracker 进程
-   ├── 建 KVM VM、vCPU、GIC、virtio 设备
-   ├── 注册 eventfd / irqfd / ioeventfd
-   ├── 建 tap、分配网络槽位
-   ├── 起一个 UFFD handler，挂上 guest 内存
-   ├── 建 NBD 设备 + Overlay（模板 rootfs + 新写层）
-   └── 加载 snapfile：恢复 vCPU、GIC、设备状态
-跑起来
-   └── guest 每访问一个还没有内容的页 → 缺页 → UFFD handler
-        → 查本地缓存 → 没有就按 header 从对象存储拉那一块
-```
+![ResumeSandbox 的重建步骤，与原地回滚对照](img/09-1-冷重建与原地回滚.svg)
 
 成本落在两处：
 

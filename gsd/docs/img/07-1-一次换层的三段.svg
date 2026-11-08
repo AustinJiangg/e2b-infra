@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1114" viewBox="0 0 1600 1114" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1114" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一次换层：新层栈在旁边建好，提交点一次换上，换下的东西留到下一次切换再放</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">ovl_do_ioctl_checkpoint 分准备、提交、善后三段，图以 checkpoint 模式为例。逐步顺序和三把锁各管什么见 08-1，这里只看每一段里层栈和内存对象发生了什么。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">顺序</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">三段里，层栈和内存对象怎么变</text>
+<rect x="390.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="427.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="480.0" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">正在用的 overlay 直到提交点才被改动</text>
+<rect x="198.0" y="214.0" width="424.7" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="410.3" y="241.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">准备</text>
+<text x="410.3" y="262.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">所有可能失败的事都在这里</text>
+<line x1="626.7" y1="244.0" x2="656.7" y2="244.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="662.7" y="214.0" width="424.7" height="60.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<text x="875.0" y="241.0" font-size="19" fill="#3C3489" font-weight="600" text-anchor="middle">提交</text>
+<text x="875.0" y="262.0" font-size="13.5" fill="#534AB7" text-anchor="middle">从这里起不允许任何事情失败</text>
+<line x1="1091.3" y1="244.0" x2="1121.3" y2="244.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1127.3" y="214.0" width="424.7" height="60.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="1339.7" y="241.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">善后</text>
+<text x="1339.7" y="262.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">仍在写锁内</text>
+<text x="642.7" y="204.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">提交点</text>
+<text x="52.0" y="420.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">层栈</text>
+<text x="52.0" y="442.0" font-size="12.5" fill="#888780" text-anchor="start">最上面的层在上</text>
+<text x="298.2" y="314.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">正在用的：不改</text>
+<text x="522.5" y="314.0" font-size="13.5" fill="#534AB7" font-weight="600" text-anchor="middle">旁边建好的：未生效</text>
+<rect x="198.0" y="330.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="298.2" y="352.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">upper（可写）</text>
+<rect x="198.0" y="372.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="298.2" y="394.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">L1</text>
+<rect x="198.0" y="414.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="298.2" y="436.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/mnt/lower</text>
+<rect x="422.3" y="330.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="522.5" y="352.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">新 upper（空）</text>
+<rect x="422.3" y="372.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="522.5" y="394.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">旧 upper（自动 lower）</text>
+<rect x="422.3" y="414.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="522.5" y="436.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">L1</text>
+<rect x="422.3" y="456.0" width="200.3" height="34.0" rx="6" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="522.5" y="478.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">/mnt/lower</text>
+<text x="875.0" y="314.0" font-size="13.5" fill="#534AB7" font-weight="600" text-anchor="middle">成对发布：层数组、层数、checkpoint_gen + 1</text>
+<rect x="702.7" y="330.0" width="344.7" height="34.0" rx="6" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="875.0" y="352.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">新 upper（可写）</text>
+<rect x="702.7" y="372.0" width="344.7" height="34.0" rx="6" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="875.0" y="394.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">旧 upper（变成只读 lower）</text>
+<rect x="702.7" y="414.0" width="344.7" height="34.0" rx="6" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="875.0" y="436.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">L1</text>
+<rect x="702.7" y="456.0" width="344.7" height="34.0" rx="6" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="875.0" y="478.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">/mnt/lower</text>
+<text x="1339.7" y="314.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">旧层数组退役</text>
+<rect x="1167.3" y="330.0" width="344.7" height="34.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1339.7" y="352.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">upper（可写）</text>
+<rect x="1167.3" y="372.0" width="344.7" height="34.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1339.7" y="394.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">L1</text>
+<rect x="1167.3" y="414.0" width="344.7" height="34.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1339.7" y="436.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">/mnt/lower</text>
+<text x="1339.7" y="492.0" font-size="13" fill="#5F5E5A" text-anchor="middle">能改指新数组的层指针都改过去；</text>
+<text x="1339.7" y="512.0" font-size="13" fill="#5F5E5A" text-anchor="middle">无人指向的旧数组下一次切换释放，挂载交工作队列卸载</text>
+<text x="52.0" y="599.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">内存里的对象</text>
+<text x="52.0" y="620.0" font-size="12.5" fill="#888780" text-anchor="start">缓存的 inode、目录项</text>
+<rect x="198.0" y="546.0" width="424.7" height="112.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="410.3" y="584.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">收缩目录项缓存，再建计划</text>
+<text x="410.3" y="611.4" font-size="13" fill="#5F5E5A" text-anchor="middle">只剩被钉住的对象；每个受影响的 inode 一项，预先取好引用、分</text>
+<text x="410.3" y="631.4" font-size="13" fill="#5F5E5A" text-anchor="middle">配好要换上去的新结构。建计划是最后一个可能失败的步骤</text>
+<rect x="662.7" y="546.0" width="424.7" height="112.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="875.0" y="584.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">按计划逐项改写</text>
+<text x="875.0" y="611.4" font-size="13" fill="#534AB7" text-anchor="middle">checkpoint：promote，进程无感；restore：丢弃、标记陈旧、</text>
+<text x="875.0" y="631.4" font-size="13" fill="#534AB7" text-anchor="middle">摘出（§4）。再换上新 work 目录、trap 和根的层栈描述</text>
+<rect x="1127.3" y="546.0" width="424.7" height="112.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1339.7" y="584.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">换下的对象挂到延迟释放表</text>
+<text x="1339.7" y="611.4" font-size="13" fill="#5F5E5A" text-anchor="middle">旧的层栈描述、旧工作目录、被替换掉的目录项引用；restore 模</text>
+<text x="1339.7" y="631.4" font-size="13" fill="#5F5E5A" text-anchor="middle">式再收缩一次目录项缓存</text>
+<text x="52.0" y="727.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">这一段失败时</text>
+<rect x="198.0" y="684.0" width="424.7" height="76.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="410.3" y="714.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">只释放本次调用申请的东西</text>
+<text x="410.3" y="741.4" font-size="13" fill="#5F5E5A" text-anchor="middle">overlay 的状态一个字节都没变</text>
+<rect x="662.7" y="684.0" width="424.7" height="76.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="875.0" y="714.6" font-size="15.5" fill="#3C3489" font-weight="600" text-anchor="middle">不会失败</text>
+<text x="875.0" y="741.4" font-size="13" fill="#534AB7" text-anchor="middle">要分配内存、做磁盘操作的事都已推到提交点之前</text>
+<rect x="1127.3" y="684.0" width="424.7" height="76.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1339.7" y="714.6" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">不会失败</text>
+<text x="1339.7" y="741.4" font-size="13" fill="#5F5E5A" text-anchor="middle">放开写锁后：释放计划的引用和上一次的延迟释放表</text>
+<line x1="642.7" y1="210.0" x2="642.7" y2="766.0" stroke="#E24B4A" stroke-width="1.4" stroke-dasharray="6 4"/>
+<circle cx="63" cy="806" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="811.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="813.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">换下的对象跨两次切换才释放</text>
+<text x="370.0" y="812.0" font-size="14.5" fill="#888780" text-anchor="start">有些使用者不持读写锁，它们离开的时间只能靠下一次拿到写锁来确认</text>
+<rect x="48.0" y="834.0" width="340.0" height="130.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="60.0" y="845.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="81.0" y="860.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">内核</text>
+<text x="218.0" y="906.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">切换 N 善后</text>
+<text x="218.0" y="934.5" font-size="14" fill="#534AB7" text-anchor="middle">被换下的对象挂到延迟释放表，不立刻释放</text>
+<line x1="392.0" y1="899.2" x2="430.0" y2="899.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="436.0" y="834.0" width="340.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="448.0" y="845.0" width="126.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="511.0" y="860.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">不持读写锁的使用者</text>
+<text x="606.0" y="896.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">两次切换之间</text>
+<text x="606.0" y="924.0" font-size="14" fill="#5F5E5A" text-anchor="middle">免锁快速路径的路径查找、异步 I/O 的完成回调</text>
+<text x="606.0" y="945.0" font-size="14" fill="#5F5E5A" text-anchor="middle">可能还看得见这些对象</text>
+<line x1="780.0" y1="899.2" x2="818.0" y2="899.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="824.0" y="834.0" width="340.0" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="836.0" y="845.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="857.0" y="860.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">内核</text>
+<text x="994.0" y="906.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">切换 N+1 拿到写锁</text>
+<text x="994.0" y="934.5" font-size="14" fill="#5F5E5A" text-anchor="middle">这时上述使用者必然都已离开</text>
+<line x1="1168.0" y1="899.2" x2="1206.0" y2="899.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1212.0" y="834.0" width="340.0" height="130.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="1224.0" y="845.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1245.0" y="860.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">内核</text>
+<text x="1382.0" y="906.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">切换 N+1 放开写锁之后</text>
+<text x="1382.0" y="934.5" font-size="14" fill="#534AB7" text-anchor="middle">释放切换 N 留下的延迟释放表</text>
+<rect x="48.0" y="980.5" width="1504.0" height="40.0" rx="8" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="800.0" y="1006.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">这样既不会释放后使用，也不会泄漏；两条论证分别见 08“切换与所有 overlay 入口的互斥”和 09“回收：被换下的层、mount 与缓存引用”</text>
+<line x1="48" y1="1056.5" x2="1552" y2="1056.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1082.5" font-size="13" fill="#888780" text-anchor="start">注：从取到写锁到放开写锁，overlay 上所有读后端状态的操作都在等，这是切换对 guest 里所有进程造成的停顿；2026-10-08 的确认验证里 overlay_sink_ms、overlay_restore_ms 都不到 1 ms（新 920B，259f1a25c，没有可写打开的大文件）。</text>
+</svg>

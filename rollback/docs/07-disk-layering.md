@@ -30,29 +30,7 @@
 
 ### 1.2 请求怎样到达活写层
 
-```text
-guest 内部
-    ext4 文件系统驱动：把文件读写转换为磁盘读写
-                 │
-    virtio-blk 驱动：设备名 /dev/vda
-                 │ 通过 virtio 队列提交请求
-─────────────────┼────────────────────────────────────
-host 上          ▼
-    Firecracker：模拟 virtio-blk 磁盘设备
-                 │ 对配置的后端设备执行读写
-                 ▼
-    /dev/nbdX：host 内核中的 NBD 块设备
-                 │ NBD 驱动通过连接转发请求
-                 ▼
-    orchestrator 进程中的 NBD dispatcher
-                 │ 调用 Overlay 的读写方法
-                 ▼
-    Overlay：读合并、写落上层
-      ├─ Cache（活写层）：稀疏文件 + mmap + 块位图
-      └─ 只读数据来源
-           ├─ LayerStack：封存层 + 块归属索引（封层后才有）
-           └─ 模板 rootfs：按需拉取并缓存
-```
+![一次 guest 磁盘读写经过的各层](img/07-1-一次磁盘读写经过的各层.svg)
 
 **`/dev/vda` 和 `/dev/nbdX` 分属两个操作系统。** `/dev/vda` 是 guest 内核为 Firecracker 提供的 virtio-blk 虚拟磁盘命名的设备；
 `/dev/nbdX` 是 host 上的块设备，作为这块虚拟磁盘的数据后端。guest 不直接访问 host 的 `/dev/nbdX`。
@@ -96,6 +74,8 @@ mmap 在这里的具体作用是：把 host 上的层文件映射进 orchestrato
 **封存**是停止把后续正常写入送到旧写层，并保留它已有的内容。c1 的完整磁盘由“模板 + W1”共同提供；W1 本身不是完整磁盘副本。
 
 如果继续保存 c2，W2 也会被封存，后续写入进入新活写层。c2 的磁盘由“模板 + W1 + W2”提供，同一个块以较新的层为准。W2 没有保存的块仍可能需要 W1。
+
+![checkpoint、restore、删除时层栈怎么变](img/07-2-层栈怎么变.svg)
 
 ### 2.2 暂停期间具体做什么
 

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="710" viewBox="0 0 1400 710" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="710" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">上限 60：long6 的盘持续上涨，long7 与最终长测从第 5 分钟起走平</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">920B，每沙箱可见 checkpoint 上限 60，同一负载各跑 30 min。纵轴是根分区 df 增量（GiB）。long6 在修复层回收和合并之前，long7 加了合并。</text>
+<line x1="48.0" y1="116.0" x2="74.0" y2="116.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="82.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">long6（5319de5dc）</text>
+<line x1="255.0" y1="116.0" x2="281.0" y2="116.0" stroke="#1D9E75" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="289.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">long7（0c4c2c5ae）</text>
+<line x1="461.6" y1="116.0" x2="487.6" y2="116.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="495.6" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">最终长测（8ea5322bf）</text>
+<line x1="288.0" y1="496.0" x2="1302.0" y2="496.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="500.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="288.0" y1="398.9" x2="1302.0" y2="398.9" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="403.4" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="288.0" y1="301.7" x2="1302.0" y2="301.7" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="306.2" font-size="12.5" fill="#888780" text-anchor="end">200</text>
+<line x1="288.0" y1="204.6" x2="1302.0" y2="204.6" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="209.1" font-size="12.5" fill="#888780" text-anchor="end">300</text>
+<text x="278.0" y="144.0" font-size="12.5" fill="#888780" text-anchor="end">GiB</text>
+<text x="360.4" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">1 min</text>
+<text x="505.3" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">6 min</text>
+<text x="650.1" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">11 min</text>
+<text x="795.0" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 min</text>
+<text x="939.9" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">21 min</text>
+<text x="1084.7" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">26 min</text>
+<text x="1229.6" y="522.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">30 min</text>
+<polyline points="360.4,404.5 505.3,325.3 650.1,280.7 795.0,248.2 939.9,217.0 1084.7,186.3 1229.6,170.6" fill="none" stroke="#D85A30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="360.4" cy="404.5" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="505.3" cy="325.3" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="650.1" cy="280.7" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="795.0" cy="248.2" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="939.9" cy="217.0" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1084.7" cy="186.3" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1229.6" cy="170.6" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="360.4,421.3 505.3,408.1 650.1,411.4 795.0,411.7 939.9,413.6 1084.7,412.8 1229.6,412.3" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="360.4" cy="421.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="505.3" cy="408.1" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="650.1" cy="411.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="795.0" cy="411.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="939.9" cy="413.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1084.7" cy="412.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1229.6" cy="412.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="360.4,420.1 505.3,410.2 650.1,410.1 795.0,412.5 939.9,411.4 1084.7,413.5 1229.6,413.2" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="360.4" cy="420.1" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="505.3" cy="410.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="650.1" cy="410.1" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="795.0" cy="412.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="939.9" cy="411.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1084.7" cy="413.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1229.6" cy="413.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<line x1="288.0" y1="528.0" x2="1302.0" y2="528.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="553.0" x2="70.0" y2="553.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="78.0" y="558.0" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="start">long6（5319de5dc）</text>
+<text x="360.4" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">94.2</text>
+<text x="505.3" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">175.7</text>
+<text x="650.1" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">221.6</text>
+<text x="795.0" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">255.1</text>
+<text x="939.9" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">287.2</text>
+<text x="1084.7" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">318.8</text>
+<text x="1229.6" y="558.0" font-size="13.5" fill="#712B13" text-anchor="middle">335.0</text>
+<line x1="48.0" y1="579.0" x2="70.0" y2="579.0" stroke="#1D9E75" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="78.0" y="584.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">long7（0c4c2c5ae）</text>
+<text x="360.4" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">76.9</text>
+<text x="505.3" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">90.5</text>
+<text x="650.1" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">87.1</text>
+<text x="795.0" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">86.8</text>
+<text x="939.9" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">84.8</text>
+<text x="1084.7" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">85.6</text>
+<text x="1229.6" y="584.0" font-size="13.5" fill="#085041" text-anchor="middle">86.2</text>
+<line x1="48.0" y1="605.0" x2="70.0" y2="605.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="78.0" y="610.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">最终长测（8ea5322bf）</text>
+<text x="360.4" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">78.1</text>
+<text x="505.3" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">88.3</text>
+<text x="650.1" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">88.4</text>
+<text x="795.0" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">86.0</text>
+<text x="939.9" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">87.1</text>
+<text x="1084.7" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">84.9</text>
+<text x="1229.6" y="610.0" font-size="13.5" fill="#085041" text-anchor="middle">85.2</text>
+<line x1="48" y1="652" x2="1352" y2="652" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="678.0" font-size="13" fill="#888780" text-anchor="start">注：long6 峰值 340.6 GiB，后 15 min 斜率 6.12 GiB/min，仍在涨；long7 峰值 90.5 GiB、最终长测峰值 90.3 GiB，后 15 min 斜率 −0.03 与 −0.13 GiB/min。df 在 84–89 GiB 之间来回。</text>
+</svg>

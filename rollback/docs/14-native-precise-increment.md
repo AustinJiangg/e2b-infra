@@ -62,13 +62,7 @@ guest 第一次碰某一页，内核发一个缺页事件给 orchestrator，orch
 
 三层的粒度被一根链条锁在一起：
 
-```mermaid
-flowchart LR
-    G["guest 页 = 2 MiB<br/>（hugetlbfs 大页）"] --> F["③ 填：一次缺页填一整页<br/>只能按 2 MiB 填"]
-    F --> C["③ 的硬检查：<br/>guest 页大小 == BlockSize"]
-    C --> S["② 存：BlockSize = 2 MiB<br/>写在 header 里逐代继承"]
-    S --> J["① 判：位图再精细<br/>也要归并到 2 MiB 块导出"]
-```
+![三层的粒度被 guest 页大小锁在一起](img/14-1-原生内存增量的三层.svg)
 
 guest 页 2 MiB ⇒ ③ 只会按 2 MiB 填 ⇒ ③ 要求 ② 的块等于 2 MiB ⇒ ② 的块写在 header 里逐代继承 ⇒ ① 无论多精细，最终也要归并到 2 MiB 块导出。
 
@@ -100,6 +94,8 @@ ARM 适配基线上，arm64 的 6.6 内核没有 uffd 写保护，`faultPage` �
 
 于是每一代增量的**下限约等于这一代 guest 碰过的全部页**，与改了多少无关。guest 读一遍 192 MiB 的文件缓存，这 192 MiB 就进了下一次导出；
 guest 什么都不做，内核自己的活动也会碰到上百 MiB（[附录 C 的“改 12 MiB，导出 148 MiB”案例](C-evolution-and-cases.md) 表里"刚建好"那一行）。
+
+![三种判据各导出哪些块，以及每代新进程把工作集重新换入](img/14-2-修复前为什么不精确.svg)
 
 这件事对测量口径有直接影响。原生快照的基准脚本（`native_snapshot_bench.py`）在每一档恢复后都会把负载完整读一遍来验证内容。
 这一读本身就让负载的全部页换入、被判脏，于是修复前六档导出的 memfile 恒在 440 MiB 左右，几乎不随档位变化
@@ -138,6 +134,8 @@ x86 上换入的是干净页：读缺页填进来的页保留了写保护位，�
 4.1 MiB 大约是 1050 个 4 KiB 页，落进了约 67 个不同的 2 MiB 块（134 ÷ 2），平均每块只有十几个页真被写过，剩下的四百多个页只因同在一块而被一起导出。
 
 这就是**只换判据能到的地板**：只要 guest 还活着，每一代就有几 MiB 的"本底散写"，归并到 2 MiB 之后约 130 MiB，与改动量无关。
+
+![只换判据的地板：写跟踪是 4 KiB，导出按 2 MiB 块](img/14-3-2MiB归并的地板.svg)
 
 所以"只换判据"治好的是"读算脏"：对读多写少的负载收益很大（只读 192 MiB 那一行从 366 降到 148），
 对写多的负载只省个位数百分比（写 192 MiB 那一行从 382 降到 358），而且**永远到不了写入量**。要精确，② 和 ③ 必须动。
@@ -307,18 +305,7 @@ if blockSize <= 0 || int64(region.PageSize)%blockSize != 0 {
 **三级取源。** 缺页处理 `faultPage`（:325）与预取器（`uffd/prefetch/prefetcher.go:207`）共用一个新入口
 `block.ReadPage(ctx, src, off, pageSize)`（`packages/orchestrator/internal/sandbox/block/page.go:63`），它返回一整页内容和一个 `release` 函数：
 
-```mermaid
-flowchart TD
-    A["uffd 缺页：offset，pageSize = 2 MiB"] --> B{"源的 BlockSize == pageSize？"}
-    B -- "是（旧的 2 MiB 快照）" --> C["第一级：src.Slice(off, 2 MiB)<br/>零拷贝，与修复前同一条路"]
-    B -- "否（4 KiB 差分）" --> D{"SliceContiguous(off, 2 MiB)<br/>一条映射覆盖整页？"}
-    D -- "是（整块同代，或整块是空洞）" --> E["第二级：直接返回那一代<br/>mmap 缓存里的切片，零拷贝"]
-    D -- "否（跨代的块）" --> F["第三级：从池里取 2 MiB 缓冲<br/>src.ReadAt 沿映射链逐段拼满<br/>空洞由 ReadAt 自己清零"]
-    C --> G["UFFDIO_COPY 2 MiB"]
-    E --> G
-    F --> G
-    G --> H["release()：拼接缓冲归还池"]
-```
+![一次 2 MiB 缺页的三级取源](img/14-4-缺页的三级取源.svg)
 
 - **第一级**（page.go:66-71）：块等于页，走原来的 `Slice`。从旧的 2 MiB 快照起沙箱时走这条路，行为与修复前逐字节相同。
 - **第二级**（:77-89）：`build.File.SliceContiguous`（`build/build.go:103`）查一次映射，如果这一条映射从缺页地址起覆盖了整整 2 MiB，

@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="708" viewBox="0 0 1400 708" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="708" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">滚动保留 10 两小时：120 min 时 restore p50 从 160.7 降到 94.3 ms，低约 41%</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">920B，rolling_keep10.py，16 沙箱，保留 10，restore 概率 0.25，各跑 2 h。纵轴是每 10 min 一段的服务端 restore total p50（ms）。long9 是视图装配优化之前的版本，</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">long11 是部署件。</text>
+<line x1="48.0" y1="140.0" x2="74.0" y2="140.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="82.0" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">long9（3539c45df）</text>
+<line x1="255.2" y1="140.0" x2="281.2" y2="140.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="289.2" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">long11（93ccb02 部署件）</text>
+<line x1="288.0" y1="520.0" x2="1302.0" y2="520.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="524.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="288.0" y1="425.6" x2="1302.0" y2="425.6" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="430.1" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="288.0" y1="331.1" x2="1302.0" y2="331.1" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="335.6" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="288.0" y1="236.7" x2="1302.0" y2="236.7" stroke="#E8E6DF" stroke-width="1"/>
+<text x="278.0" y="241.2" font-size="12.5" fill="#888780" text-anchor="end">150</text>
+<text x="278.0" y="168.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="330.2" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">0-10</text>
+<text x="414.8" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">10-20</text>
+<text x="499.2" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">20-30</text>
+<text x="583.8" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">30-40</text>
+<text x="668.2" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">40-50</text>
+<text x="752.8" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">50-60</text>
+<text x="837.2" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">60-70</text>
+<text x="921.8" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">70-80</text>
+<text x="1006.2" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">80-90</text>
+<text x="1090.8" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">90-100</text>
+<text x="1175.2" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">100-110</text>
+<text x="1259.8" y="546.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">110-120</text>
+<polyline points="330.2,348.3 414.8,313.7 499.2,286.0 583.8,267.6 668.2,259.0 752.8,252.0 837.2,239.9 921.8,227.4 1006.2,229.3 1090.8,221.2 1175.2,216.1 1259.8,216.5" fill="none" stroke="#D85A30" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="330.2" cy="348.3" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="414.8" cy="313.7" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="499.2" cy="286.0" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="583.8" cy="267.6" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="668.2" cy="259.0" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="752.8" cy="252.0" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="837.2" cy="239.9" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="921.8" cy="227.4" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1006.2" cy="229.3" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1090.8" cy="221.2" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1175.2" cy="216.1" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1259.8" cy="216.5" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="330.2,381.9 414.8,371.2 499.2,367.6 583.8,364.2 668.2,360.8 752.8,359.1 837.2,358.7 921.8,358.3 1006.2,353.4 1090.8,349.8 1175.2,342.8 1259.8,341.9" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="330.2" cy="381.9" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="414.8" cy="371.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="499.2" cy="367.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="583.8" cy="364.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="668.2" cy="360.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="752.8" cy="359.1" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="837.2" cy="358.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="921.8" cy="358.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1006.2" cy="353.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1090.8" cy="349.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1175.2" cy="342.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1259.8" cy="341.9" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<line x1="288.0" y1="552.0" x2="1302.0" y2="552.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="577.0" x2="70.0" y2="577.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="78.0" y="582.0" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="start">long9（3539c45df）</text>
+<text x="330.2" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">90.9</text>
+<text x="414.8" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">109.2</text>
+<text x="499.2" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">123.9</text>
+<text x="583.8" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">133.6</text>
+<text x="668.2" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">138.2</text>
+<text x="752.8" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">141.9</text>
+<text x="837.2" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">148.3</text>
+<text x="921.8" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">154.9</text>
+<text x="1006.2" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">153.9</text>
+<text x="1090.8" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">158.2</text>
+<text x="1175.2" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">160.9</text>
+<text x="1259.8" y="582.0" font-size="13.5" fill="#712B13" text-anchor="middle">160.7</text>
+<line x1="48.0" y1="603.0" x2="70.0" y2="603.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="78.0" y="608.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">long11（93ccb02 部署件）</text>
+<text x="330.2" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">73.1</text>
+<text x="414.8" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">78.8</text>
+<text x="499.2" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">80.7</text>
+<text x="583.8" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">82.5</text>
+<text x="668.2" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">84.3</text>
+<text x="752.8" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">85.2</text>
+<text x="837.2" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">85.4</text>
+<text x="921.8" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">85.6</text>
+<text x="1006.2" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">88.2</text>
+<text x="1090.8" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">90.1</text>
+<text x="1175.2" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">93.8</text>
+<text x="1259.8" y="608.0" font-size="13.5" fill="#085041" text-anchor="middle">94.3</text>
+<line x1="48" y1="650" x2="1352" y2="650" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="676.0" font-size="13" fill="#888780" text-anchor="start">注：横轴单位 min。long11 全程斜率 0.296 ms / 千块，long9 为 1.190。long11 第二个小时 85.4 → 94.3 ms 的上涨主要来自冻结窗口里等 conntrack 的时间。</text>
+</svg>

@@ -34,15 +34,7 @@
 Firecracker 以 Diff 模式写快照时，把每一个脏页写在它自己的 **guest 物理偏移**上，中间的干净页不写。
 文件系统对没写过的区间不分配物理块 —— 这就是**稀疏文件**（sparse file）。
 
-```
-文件逻辑大小：等于 guest 内存
-物理占用    ：约等于脏页总量
-                                       ← 逻辑偏移 = guest 物理地址
- ┌────┬──────────────┬────┬────┬────────────────┬────┐
- │page│    空洞      │page│page│      空洞      │page│
- │ 3  │  (未分配)    │ 17 │ 18 │   (未分配)     │ 99 │
- └────┴──────────────┴────┴────┴────────────────┴────┘
-```
+![稀疏差分文件与位图侧车](img/06-1-稀疏差分文件与位图侧车.svg)
 
 读空洞返回零，`SEEK_DATA` / `SEEK_HOLE` 可以枚举出真正有数据的区间。所以"文件逻辑上是完整的 guest 内存"和
 "物理上只占改动量"这两件事同时成立。这一点在恢复端很重要：Firecracker 的回滚端点会校验内存文件长度等于 guest 内存大小，
@@ -126,27 +118,7 @@ orchestrator 为每个沙箱另外记录一个**当前基准**：当前内存以
 
 下面的实线箭头表示条目之间的父子关系，虚线和粗线表示 restore 操作；restore 操作本身不会增加树节点：
 
-```mermaid
-flowchart TD
-    CK1["<b>ck1</b><br/>全量捕获（树根）"]
-    CK2["<b>ck2</b>"]
-    CK3["<b>ck3</b>"]
-    CK4["<b>ck4</b>"]
-    CK5["<b>ck5</b><br/>当前基准"]
-
-    CK1 --> CK2 --> CK3
-    CK1 --> CK4 --> CK5
-
-    CK3 -. "① 曾回滚到 ck1，旁支 ck2 / ck3 保留" .-> CK1
-    CK5 == "② 本次：ck5 → ck3，跨分支，经最近公共祖先 ck1" ==> CK3
-
-    classDef root fill:#e8f0fe,stroke:#4285f4,stroke-width:2px
-    classDef base fill:#fef7e0,stroke:#f9ab00,stroke-width:2px
-    classDef inc  fill:#ffffff,stroke:#9fb4cc
-    class CK1 root
-    class CK5 base
-    class CK2,CK3,CK4 inc
-```
+![checkpoint 树、回滚集与逐页解析](img/06-2-checkpoint树与回滚集.svg)
 
 保留这些依赖关系后，可以执行以下操作：
 

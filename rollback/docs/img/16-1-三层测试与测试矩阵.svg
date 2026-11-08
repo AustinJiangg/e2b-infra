@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1300" viewBox="0 0 1600 1300" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="1300" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">三层测试各回答一个问题：部件对不对，交付的整机对不对，盲区和长稳有没有问题</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">单元测试证部件，交付态验收证整机，补充测试覆盖盲区、边界、故障注入和长稳，三层不能互相替代。测试矩阵（§2）里的每一行都落在后两层；单元测试不进矩阵。</text>
+<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">三层各在哪、证什么、怎么跑</text>
+<rect x="370.0" y="134.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="407.0" y="150.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="170.0" width="1504.0" height="514.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="220.0" y="190.0" width="422.7" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="431.3" y="218.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">单元测试与属性测试</text>
+<text x="431.3" y="240.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">部件</text>
+<rect x="664.7" y="190.0" width="422.7" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="876.0" y="218.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">交付态验收</text>
+<text x="876.0" y="240.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">整机</text>
+<rect x="1109.3" y="190.0" width="422.7" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="1320.7" y="218.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">补充测试与开发态工具</text>
+<text x="1320.7" y="240.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">盲区与长稳</text>
+<text x="68.0" y="306.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">回答的问题</text>
+<rect x="260.0" y="268.0" width="342.7" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="431.3" y="293.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">部件与不变量对不对</text>
+<text x="431.3" y="320.7" font-size="13" fill="#5F5E5A" text-anchor="middle">属性测试随机生成操作序列，每一步与参照模型比对</text>
+<rect x="704.7" y="268.0" width="342.7" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="293.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">交付的整机对不对、多快</text>
+<text x="876.0" y="320.7" font-size="13" fill="#5F5E5A" text-anchor="middle">整机正确性、耗时、并发、长跑</text>
+<rect x="1149.3" y="268.0" width="342.7" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1320.7" y="293.8" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">前两层看不到的地方</text>
+<text x="1320.7" y="320.7" font-size="13" fill="#5F5E5A" text-anchor="middle">盲区、边界、故障注入、长稳</text>
+<text x="68.0" y="411.8" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">位置</text>
+<rect x="220.0" y="364.0" width="422.7" height="85.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="431.3" y="389.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">代码仓库 KASandbox_0904</text>
+<text x="431.3" y="416.2" font-size="13" fill="#5F5E5A" text-anchor="middle">分支 deltabox-dev，与被测代码同目录：Go、FC 的</text>
+<text x="431.3" y="436.2" font-size="13" fill="#5F5E5A" text-anchor="middle">#[cfg(test)]、SDK 的 py-sdk/tests</text>
+<rect x="664.7" y="364.0" width="422.7" height="85.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="399.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">rollback/scripts/acceptance/</text>
+<text x="876.0" y="426.2" font-size="13" fill="#5F5E5A" text-anchor="middle">五个单文件脚本，互不依赖；外加 rolling_keep10.py</text>
+<rect x="1109.3" y="364.0" width="422.7" height="85.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1320.7" y="399.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">rollback/scripts/crtest/、dev/</text>
+<text x="1320.7" y="426.2" font-size="13" fill="#5F5E5A" text-anchor="middle">crtest 20 个用例 + 基准；dev 是共享 lib.py 的工具箱</text>
+<text x="68.0" y="517.2" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">怎么跑</text>
+<rect x="220.0" y="479.5" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="431.3" y="504.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">在代码仓库里单独跑</text>
+<text x="431.3" y="531.7" font-size="13" fill="#5F5E5A" text-anchor="middle">950 测试部署的构建只做 go build，不跑单测（第 29 章）</text>
+<rect x="664.7" y="479.5" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="504.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">单文件拷到目标机就能跑</text>
+<text x="876.0" y="531.7" font-size="13" fill="#5F5E5A" text-anchor="middle">rolling_keep10.py 要和 checkpoint_concurrent.py 一起拷</text>
+<rect x="1109.3" y="479.5" width="422.7" height="65.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1320.7" y="504.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">一站式入口 rollback/scripts/950/run.sh</text>
+<text x="1320.7" y="531.7" font-size="13" fill="#5F5E5A" text-anchor="middle">smoke、hdbss 等档</text>
+<text x="68.0" y="624.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">矩阵里的行</text>
+<rect x="220.0" y="575.0" width="422.7" height="89.0" rx="10" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="431.3" y="613.5" font-size="15" fill="#5F5E5A" font-weight="600" text-anchor="middle">不进测试矩阵</text>
+<text x="431.3" y="635.5" font-size="15" fill="#5F5E5A" font-weight="600" text-anchor="middle">守着的不变量见第 11、29 章</text>
+<rect x="664.7" y="575.0" width="422.7" height="89.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="876.0" y="612.1" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">checkpoint_verify.py：59 项</text>
+<text x="876.0" y="638.9" font-size="13" fill="#5F5E5A" text-anchor="middle">checkpoint_concurrent.py：A/B 短时并发、D 段长稳</text>
+<rect x="1109.3" y="575.0" width="422.7" height="89.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1320.7" y="600.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">correctness.py、pause_verify.py、</text>
+<text x="1320.7" y="623.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">compat_matrix.py、loop.py、hdbss_evidence.py</text>
+<text x="1320.7" y="650.7" font-size="13" fill="#5F5E5A" text-anchor="middle">crtest T11–T41（含 T36、T39、T40、T41）、sdktests</text>
+<circle cx="63" cy="730.0" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="735.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="737.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">在哪台机器上跑</text>
+<text x="250.0" y="736.0" font-size="14.5" fill="#888780" text-anchor="start">§1 的表：脚本能量到什么，取决于它跑在哪</text>
+<rect x="48.0" y="756.0" width="1504.0" height="394.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="268.0" y="776.0" width="621.0" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="578.5" y="804.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">在宿主机上以 root 跑</text>
+<text x="578.5" y="826.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">性能测量必须在这里</text>
+<rect x="911.0" y="776.0" width="621.0" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="1221.5" y="804.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">从别的机器连过来</text>
+<text x="1221.5" y="826.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">只适合验正确性</text>
+<line x1="68" y1="856.0" x2="1532" y2="856.0" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="890.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">能量到的东西</text>
+<rect x="62.0" y="908.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="936.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">脏页后端</text>
+<text x="578.5" y="936.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">问 FC API 套接字</text>
+<text x="1221.5" y="936.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">“未知”：套接字是本地文件</text>
+<text x="68.0" y="980.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">产物路径与文件系统</text>
+<text x="578.5" y="980.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">读 environ 与 /proc/mounts</text>
+<text x="1221.5" y="980.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">空</text>
+<rect x="62.0" y="996.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1024.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">每代内存 / 磁盘产物实占</text>
+<text x="578.5" y="1024.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">量 st_blocks</text>
+<text x="1221.5" y="1024.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">量不到</text>
+<text x="68.0" y="1068.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">服务端分段计时</text>
+<text x="578.5" y="1068.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">读 timings.json</text>
+<text x="1221.5" y="1068.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">量不到</text>
+<rect x="62.0" y="1084.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1112.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">客户端墙钟、全部正确性断言</text>
+<text x="578.5" y="1112.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">有</text>
+<text x="1221.5" y="1112.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">有</text>
+<rect x="48.0" y="1166.0" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="800.0" y="1192.0" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">正确性可以远程验，性能必须上宿主机；远程跑出的耗时缺条件标签，不允许引用（§4）</text>
+<line x1="48" y1="1242.0" x2="1552" y2="1242.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1268.0" font-size="13" fill="#888780" text-anchor="start">注：测试矩阵只记各项在 920B、950 上的状态，数字见第 17～21 章；默认功能回归通过不代表未运行的重启 / 注入项也通过。</text>
+</svg>

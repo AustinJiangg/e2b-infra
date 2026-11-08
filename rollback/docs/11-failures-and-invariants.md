@@ -54,6 +54,8 @@ pub fn faults_vm(&self) -> bool {
 | 提交点**之后**失败，或 rollback 调用超时 | **撕裂**；此后这一代沙箱的 checkpoint 与 restore 一律被拒，`list` / `delete` 仍可用 | `torn` | 只能销毁重建沙箱 |
 | 回滚成功但 guest 的 envd 在 45 s 内不应答 | 宿主侧已完成，虚机在目标时刻；**不是撕裂** | `guest_unresponsive` | 按业务决定：稍后重试命令，或销毁重建 |
 
+![restore 的四档失败：提交点之前恢复运行，之后按撕裂处理](img/11-1-restore的四档失败.svg)
+
 - **撕裂按代记**：标记记在 `Sandbox.LifecycleID` 下（每个 Firecracker 进程一个），不按沙箱 id。同一个 id 经原生 pause / resume 换了新进程之后从干净状态开始
   （`service.go` — `refuseIfTorn`、`markTorn`）。撕裂时服务端同时标记断链与磁盘账本 poisoned，并**让虚机保持暂停**：它持有回滚写到一半的内容，
   是事后分析唯一的材料；恢复运行会让一个半新半旧的 guest 写它的磁盘。

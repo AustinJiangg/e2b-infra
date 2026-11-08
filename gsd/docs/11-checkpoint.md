@@ -19,18 +19,7 @@
 
 ## 1. 总览
 
-```
-持操作锁 → 检查健康状态 → 扫描 /proc、找根、记状态
-        → [有用户进程时] 多树预检 → 容量预检                       ← 到这里为止什么都没动
-        → 建镜像目录
-        → [逐棵] criu dump --leave-stopped                         ← 第一棵 dump 完，冻结窗口开始
-        → 列出全部被停住的进程
-        → 下沉 upper（改名 + ioctl）
-        → 对被停住的进程重写 clear_refs
-        → SIGCONT                                                  ← 冻结窗口结束
-        → 量镜像大小、更新增量父镜像、条目入池
-        → 写 state.json → 放锁
-```
+![checkpoint 的执行顺序与冻结窗口](img/11-1-checkpoint总览.svg)
 
 checkpoint 没有不可逆的步骤：任何一步失败，收尾之后沙箱都回到 checkpoint 之前的样子（进程在跑，文件系统没变，没有多出条目）。这与 restore 形成对比（[12](12-restore.md)、[14](14-failure-semantics.md)）。
 

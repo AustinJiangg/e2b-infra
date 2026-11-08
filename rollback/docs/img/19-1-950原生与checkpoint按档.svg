@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="712" viewBox="0 0 1400 712" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="712" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">950：checkpoint / restore 与原生 pause / resume 按档的 p50</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">950，客户端墙钟 p50，ms。checkpoint / restore 取第 18 章 §4 混合档（2026-10-13，内核 6.6.0-159.4.12.166.oe2403sp4，部署身份待补，每档 n = 30 或 20）；pause /</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">resume 取本章 §3.1（2026-11-06，hdbss，每档 n = 15）。两组负载构造和宿主条件不同，只说明量级，不能当作同条件的精确倍数。横轴按档位顺序等距排列。</text>
+<line x1="48.0" y1="150.0" x2="74.0" y2="150.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="82.0" y="155.0" font-size="14" fill="#5F5E5A" text-anchor="start">checkpoint / restore（本方案）</text>
+<line x1="333.9" y1="150.0" x2="359.9" y2="150.0" stroke="#D85A30" stroke-width="2.6"/>
+<text x="367.9" y="155.0" font-size="14" fill="#5F5E5A" text-anchor="start">原生 pause / resume</text>
+<text x="48.0" y="208.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">保存：checkpoint 与 pause</text>
+<line x1="166.0" y1="480.0" x2="665.0" y2="480.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="484.5" font-size="12.5" fill="#888780" text-anchor="end">0 ms</text>
+<line x1="166.0" y1="430.0" x2="665.0" y2="430.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="434.5" font-size="12.5" fill="#888780" text-anchor="end">100 ms</text>
+<line x1="166.0" y1="380.0" x2="665.0" y2="380.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="384.5" font-size="12.5" fill="#888780" text-anchor="end">200 ms</text>
+<line x1="166.0" y1="330.0" x2="665.0" y2="330.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="334.5" font-size="12.5" fill="#888780" text-anchor="end">300 ms</text>
+<line x1="166.0" y1="280.0" x2="665.0" y2="280.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="284.5" font-size="12.5" fill="#888780" text-anchor="end">400 ms</text>
+<line x1="166.0" y1="230.0" x2="665.0" y2="230.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="234.5" font-size="12.5" fill="#888780" text-anchor="end">500 ms</text>
+<line x1="166.0" y1="480.0" x2="665.0" y2="480.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<polyline points="207.6,471.4 290.8,468.1 373.9,464.8 457.1,459.3 540.2,443.5 623.4,417.2" fill="none" stroke="#1D9E75" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="207.6" cy="471.4" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="290.8" cy="468.1" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="373.9" cy="464.8" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="457.1" cy="459.3" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="540.2" cy="443.5" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="623.4" cy="417.2" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<polyline points="207.6,354.1 290.8,348.6 373.9,337.7 457.1,325.6 540.2,306.6 623.4,265.1" fill="none" stroke="#D85A30" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="207.6" cy="354.1" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="290.8" cy="348.6" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="373.9" cy="337.7" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="457.1" cy="325.6" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="540.2" cy="306.6" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="623.4" cy="265.1" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="207.6" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">0</text>
+<text x="207.6" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="290.8" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">16</text>
+<text x="290.8" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="373.9" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">32</text>
+<text x="373.9" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="457.1" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">64</text>
+<text x="457.1" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="540.2" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">128</text>
+<text x="540.2" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="623.4" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">256</text>
+<text x="623.4" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<line x1="166.0" y1="529.0" x2="665.0" y2="529.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="156.0" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="end">checkpoint</text>
+<text x="207.6" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">17.2</text>
+<text x="290.8" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">23.8</text>
+<text x="373.9" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">30.5</text>
+<text x="457.1" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">41.4</text>
+<text x="540.2" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">73.0</text>
+<text x="623.4" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">125.5</text>
+<text x="156.0" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="end">pause</text>
+<text x="207.6" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">251.9</text>
+<text x="290.8" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">262.7</text>
+<text x="373.9" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">284.6</text>
+<text x="457.1" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">308.8</text>
+<text x="540.2" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">346.8</text>
+<text x="623.4" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">429.9</text>
+<text x="156.0" y="590.0" font-size="13" fill="#888780" text-anchor="end">倍数（正文）</text>
+<text x="207.6" y="590.0" font-size="13" fill="#888780" text-anchor="middle">14.6</text>
+<text x="290.8" y="590.0" font-size="13" fill="#888780" text-anchor="middle">11.0</text>
+<text x="373.9" y="590.0" font-size="13" fill="#888780" text-anchor="middle">9.3</text>
+<text x="457.1" y="590.0" font-size="13" fill="#888780" text-anchor="middle">7.5</text>
+<text x="540.2" y="590.0" font-size="13" fill="#888780" text-anchor="middle">4.8</text>
+<text x="623.4" y="590.0" font-size="13" fill="#888780" text-anchor="middle">3.4</text>
+<text x="735.0" y="208.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">恢复：restore 与 resume</text>
+<line x1="853.0" y1="480.0" x2="1352.0" y2="480.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="484.5" font-size="12.5" fill="#888780" text-anchor="end">0 ms</text>
+<line x1="853.0" y1="444.3" x2="1352.0" y2="444.3" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="448.8" font-size="12.5" fill="#888780" text-anchor="end">20 ms</text>
+<line x1="853.0" y1="408.6" x2="1352.0" y2="408.6" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="413.1" font-size="12.5" fill="#888780" text-anchor="end">40 ms</text>
+<line x1="853.0" y1="372.9" x2="1352.0" y2="372.9" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="377.4" font-size="12.5" fill="#888780" text-anchor="end">60 ms</text>
+<line x1="853.0" y1="337.1" x2="1352.0" y2="337.1" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="341.6" font-size="12.5" fill="#888780" text-anchor="end">80 ms</text>
+<line x1="853.0" y1="301.4" x2="1352.0" y2="301.4" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="305.9" font-size="12.5" fill="#888780" text-anchor="end">100 ms</text>
+<line x1="853.0" y1="265.7" x2="1352.0" y2="265.7" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="270.2" font-size="12.5" fill="#888780" text-anchor="end">120 ms</text>
+<line x1="853.0" y1="230.0" x2="1352.0" y2="230.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="234.5" font-size="12.5" fill="#888780" text-anchor="end">140 ms</text>
+<line x1="853.0" y1="480.0" x2="1352.0" y2="480.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<polyline points="894.6,440.0 977.8,425.7 1060.9,415.0 1144.1,397.9 1227.2,358.9 1310.4,291.4" fill="none" stroke="#1D9E75" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="894.6" cy="440.0" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="977.8" cy="425.7" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1060.9" cy="415.0" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1144.1" cy="397.9" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1227.2" cy="358.9" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1310.4" cy="291.4" r="5.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<polyline points="894.6,284.8 977.8,288.6 1060.9,285.7 1144.1,290.5 1227.2,285.5 1310.4,264.5" fill="none" stroke="#D85A30" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="894.6" cy="284.8" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="977.8" cy="288.6" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1060.9" cy="285.7" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1144.1" cy="290.5" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1227.2" cy="285.5" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1310.4" cy="264.5" r="5.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="894.6" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">0</text>
+<text x="894.6" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="977.8" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">16</text>
+<text x="977.8" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="1060.9" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">32</text>
+<text x="1060.9" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="1144.1" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">64</text>
+<text x="1144.1" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="1227.2" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">128</text>
+<text x="1227.2" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<text x="1310.4" y="504.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">256</text>
+<text x="1310.4" y="522.0" font-size="12" fill="#888780" text-anchor="middle">MiB</text>
+<line x1="853.0" y1="529.0" x2="1352.0" y2="529.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="843.0" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="end">restore</text>
+<text x="894.6" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">22.4</text>
+<text x="977.8" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">30.4</text>
+<text x="1060.9" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">36.4</text>
+<text x="1144.1" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">46.0</text>
+<text x="1227.2" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">67.8</text>
+<text x="1310.4" y="546.0" font-size="13" fill="#085041" font-weight="600" text-anchor="middle">105.6</text>
+<text x="843.0" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="end">resume</text>
+<text x="894.6" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">109.3</text>
+<text x="977.8" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">107.2</text>
+<text x="1060.9" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">108.8</text>
+<text x="1144.1" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">106.1</text>
+<text x="1227.2" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">108.9</text>
+<text x="1310.4" y="568.0" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">120.7</text>
+<text x="843.0" y="590.0" font-size="13" fill="#888780" text-anchor="end">倍数（正文）</text>
+<text x="894.6" y="590.0" font-size="13" fill="#888780" text-anchor="middle">4.9</text>
+<text x="977.8" y="590.0" font-size="13" fill="#888780" text-anchor="middle">3.5</text>
+<text x="1060.9" y="590.0" font-size="13" fill="#888780" text-anchor="middle">3.0</text>
+<text x="1144.1" y="590.0" font-size="13" fill="#888780" text-anchor="middle">2.3</text>
+<text x="1227.2" y="590.0" font-size="13" fill="#888780" text-anchor="middle">1.6</text>
+<text x="1310.4" y="590.0" font-size="13" fill="#888780" text-anchor="middle">1.1</text>
+<line x1="48" y1="634" x2="1352" y2="634" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="660.0" font-size="13" fill="#888780" text-anchor="start">注：横轴是档（总改动 MiB，内存:文件 = 3:1）。256 MiB 档 restore 105.6 与 resume 120.7 接近，含义不同：restore 返回时内存已写回、保留原 Firecracker 进程、之前的 checkpoint 仍然有效；resume 返回时</text>
+<text x="48.0" y="680.0" font-size="13" fill="#888780" text-anchor="start">页还没有加载，之后读这些页要再付约 112 ms，并换一代新进程，之前的 checkpoint 全部失效。</text>
+</svg>

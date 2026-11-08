@@ -187,6 +187,8 @@ CRIU 在子镜像目录里留一个名为 `parent` 的符号链接指向父目�
 
 restore 之后再 checkpoint，新 checkpoint 的父是被恢复的那个，而不是时间上最近的那个。所以 checkpoint 之间的依赖关系是一棵树，不是一条链。
 
+![state.json、镜像父链与层目录的依赖，以及删除时的回收](img/15-1-依赖与删除回收.svg)
+
 ### 4.2 删除一个有子节点的 checkpoint
 
 修改前 delete 直接删掉镜像目录。如果它是别人的增量父镜像，子 checkpoint 就在不知不觉中坏掉了，要到 restore 时、杀了进程之后才报错。

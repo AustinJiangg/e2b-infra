@@ -32,6 +32,8 @@
 
 restore 的耗时与"回滚掉了多少改动"几乎无关：它总是杀掉全部进程、恢复全部内存。一次 restore 的工作量取决于目标 checkpoint 时进程有多大，不取决于上次 checkpoint 之后改了多少。这条性质与沙箱级回滚的差别在 [24](24-vs-sandbox-level.md)。
 
+![restore、checkpoint 的计时项随什么增长，多棵树线性叠加](img/17-1-代价的组成与增长.svg)
+
 ### 1.2 剩下的时间是什么
 
 [附录 D](D-restore-slowness-case.md) 修完五项原因之后，留下的时间是这样分布的。口径：旧 920B，2026-09，guest 内直连 gsd 的微基准，约 195 MB 匿名内存的单进程，THP 为 never。

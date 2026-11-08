@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1219" viewBox="0 0 1600 1219" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1219" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">谁是用户进程、谁是根：一次 /proc 扫描划出几棵树</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">用户进程是 uid 1000、且不是 PID 1、gsd、envd 的进程；根是父进程不是用户进程、祖先里也没有别的根的用户进程；一棵树是根加上它的全部子孙，不看 uid。CRIU 的 --tree 按同样的范围取。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">判定顺序 / 父进程 → 子进程</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">判定顺序</text>
+<text x="190.0" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">一次操作只扫一次 /proc，checkpoint 和 restore 都用同一次扫描的结果</text>
+<rect x="48.0" y="206.0" width="272.0" height="151.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="217.0" width="81.8" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="100.9" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">scanProcs</text>
+<text x="184.0" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">扫描 /proc</text>
+<text x="184.0" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">每个进程读 stat 和 status；</text>
+<text x="184.0" y="317.0" font-size="14" fill="#5F5E5A" text-anchor="middle">kthreadd 的子进程（内核线程）整</text>
+<text x="184.0" y="338.0" font-size="14" fill="#5F5E5A" text-anchor="middle">批跳过</text>
+<line x1="324.0" y1="281.8" x2="350.0" y2="281.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="356.0" y="206.0" width="272.0" height="151.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="368.0" y="217.0" width="91.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="413.7" y="232.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">systemPIDs</text>
+<text x="492.0" y="268.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">去掉排除集合</text>
+<text x="492.0" y="296.0" font-size="14" fill="#5F5E5A" text-anchor="middle">PID 1、gsd 自己、envd；envd 取</text>
+<text x="492.0" y="317.0" font-size="14" fill="#5F5E5A" text-anchor="middle">envd.service 的主进程号，缓存并用</text>
+<text x="492.0" y="338.0" font-size="14" fill="#5F5E5A" text-anchor="middle">启动时间校验</text>
+<line x1="632.0" y1="281.8" x2="658.0" y2="281.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="664.0" y="206.0" width="272.0" height="151.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="676.0" y="217.0" width="92.8" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="722.4" y="232.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">userPIDsIn</text>
+<text x="800.0" y="278.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">用户进程</text>
+<text x="800.0" y="306.5" font-size="14" fill="#534AB7" text-anchor="middle">真实 uid 等于 1000；以 root 运行的</text>
+<text x="800.0" y="327.5" font-size="14" fill="#534AB7" text-anchor="middle">命令和服务都不是</text>
+<line x1="940.0" y1="281.8" x2="966.0" y2="281.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="972.0" y="206.0" width="272.0" height="151.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="984.0" y="217.0" width="97.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1032.5" y="232.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">userRootsIn</text>
+<text x="1108.0" y="278.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">候选根 → 根</text>
+<text x="1108.0" y="306.5" font-size="14" fill="#534AB7" text-anchor="middle">候选根：父进程不是用户进程。根：祖</text>
+<text x="1108.0" y="327.5" font-size="14" fill="#534AB7" text-anchor="middle">先链上没有别的候选根</text>
+<line x1="1248.0" y1="281.8" x2="1274.0" y2="281.8" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1280.0" y="206.0" width="272.0" height="151.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="1292.0" y="217.0" width="66.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1325.3" y="232.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">subtree</text>
+<text x="1416.0" y="278.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">划树、编号</text>
+<text x="1416.0" y="306.5" font-size="14" fill="#534AB7" text-anchor="middle">根加全部子孙，不看 uid；按根的进程</text>
+<text x="1416.0" y="327.5" font-size="14" fill="#534AB7" text-anchor="middle">号数值升序编号 t0、t1……</text>
+<circle cx="63" cy="403.5" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="409.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="410.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一个沙箱里的例子：三棵树</text>
+<rect x="350.0" y="393.5" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="387.0" y="409.5" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="440.0" y="409.5" font-size="14.5" fill="#888780" text-anchor="start">对应 §3.4 表里的几种形状</text>
+<rect x="54.0" y="723.5" width="492.0" height="390.0" rx="14" fill="#F8F7FF" stroke="#7F77DD" stroke-width="1" stroke-dasharray="6 4"/>
+<rect x="475.1" y="1101.5" width="54.9" height="24.0" rx="12" fill="#7F77DD" stroke="#7F77DD" stroke-width="0"/>
+<text x="502.6" y="1118.5" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">树 t0</text>
+<rect x="554.0" y="723.5" width="242.0" height="110.0" rx="14" fill="#F8F7FF" stroke="#7F77DD" stroke-width="1" stroke-dasharray="6 4"/>
+<rect x="725.1" y="821.5" width="54.9" height="24.0" rx="12" fill="#7F77DD" stroke="#7F77DD" stroke-width="0"/>
+<text x="752.6" y="838.5" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">树 t1</text>
+<rect x="1054.0" y="583.5" width="242.0" height="110.0" rx="14" fill="#F8F7FF" stroke="#7F77DD" stroke-width="1" stroke-dasharray="6 4"/>
+<rect x="1225.1" y="681.5" width="54.9" height="24.0" rx="12" fill="#7F77DD" stroke="#7F77DD" stroke-width="0"/>
+<text x="1252.6" y="698.5" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">树 t2</text>
+<rect x="568.0" y="457.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="675.0" y="483.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">PID 1（systemd）</text>
+<text x="675.0" y="504.5" font-size="13" fill="#5F5E5A" text-anchor="middle">root</text>
+<text x="675.0" y="525.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">排除集合，永远不碰</text>
+<rect x="1318.0" y="457.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1425.0" y="483.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">kthreadd（PID 2）</text>
+<text x="1425.0" y="504.5" font-size="13" fill="#5F5E5A" text-anchor="middle">内核线程的父进程</text>
+<text x="1425.0" y="525.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">读一次它的 children 名单</text>
+<rect x="68.0" y="597.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="175.0" y="623.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">gsd</text>
+<text x="175.0" y="644.5" font-size="13" fill="#5F5E5A" text-anchor="middle">root</text>
+<text x="175.0" y="665.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">排除集合，永远不碰</text>
+<rect x="318.0" y="597.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="425.0" y="623.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">envd</text>
+<text x="425.0" y="644.5" font-size="13" fill="#5F5E5A" text-anchor="middle">root；envd.service 主进程</text>
+<text x="425.0" y="665.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">排除集合，永远不碰</text>
+<rect x="818.0" y="597.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="925.0" y="623.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">系统服务</text>
+<text x="925.0" y="644.5" font-size="13" fill="#5F5E5A" text-anchor="middle">root</text>
+<text x="925.0" y="665.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">不是用户进程</text>
+<rect x="1068.0" y="597.5" width="214.0" height="82.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.8"/>
+<text x="1175.0" y="623.5" font-size="15" fill="#3C3489" font-weight="600" text-anchor="middle">nohup … &amp; 起的进程</text>
+<text x="1175.0" y="644.5" font-size="13" fill="#534AB7" text-anchor="middle">uid 1000；已被 PID 1 收养</text>
+<text x="1175.0" y="665.5" font-size="12.5" fill="#3C3489" font-weight="600" text-anchor="middle">根：父进程 PID 1 不是用户进程</text>
+<rect x="1318.0" y="597.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1425.0" y="623.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">内核线程</text>
+<text x="1425.0" y="644.5" font-size="13" fill="#5F5E5A" text-anchor="middle">约 60 个</text>
+<text x="1425.0" y="665.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">整批跳过，不读 status</text>
+<rect x="68.0" y="737.5" width="214.0" height="82.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.8"/>
+<text x="175.0" y="763.5" font-size="15" fill="#3C3489" font-weight="600" text-anchor="middle">后台命令 A</text>
+<text x="175.0" y="784.5" font-size="13" fill="#534AB7" text-anchor="middle">uid 1000；envd 的子进程</text>
+<text x="175.0" y="805.5" font-size="12.5" fill="#3C3489" font-weight="600" text-anchor="middle">根：父进程 envd 不是用户进程</text>
+<rect x="568.0" y="737.5" width="214.0" height="82.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.8"/>
+<text x="675.0" y="763.5" font-size="15" fill="#3C3489" font-weight="600" text-anchor="middle">后台命令 B</text>
+<text x="675.0" y="784.5" font-size="13" fill="#534AB7" text-anchor="middle">uid 1000；envd 的子进程</text>
+<text x="675.0" y="805.5" font-size="12.5" fill="#3C3489" font-weight="600" text-anchor="middle">根</text>
+<rect x="818.0" y="737.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="925.0" y="763.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">以 root 执行的命令</text>
+<text x="925.0" y="784.5" font-size="13" fill="#5F5E5A" text-anchor="middle">uid 0；envd 的子进程</text>
+<text x="925.0" y="805.5" font-size="12.5" fill="#888780" font-weight="600" text-anchor="middle">不是用户进程，不保存也不杀</text>
+<rect x="68.0" y="877.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="175.0" y="903.5" font-size="15" fill="#3C3489" font-weight="600" text-anchor="middle">子进程</text>
+<text x="175.0" y="924.5" font-size="13" fill="#534AB7" text-anchor="middle">uid 1000</text>
+<text x="175.0" y="945.5" font-size="12.5" fill="#534AB7" font-weight="600" text-anchor="middle">树成员</text>
+<rect x="318.0" y="877.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="425.0" y="903.5" font-size="15" fill="#3C3489" font-weight="600" text-anchor="middle">sudo</text>
+<text x="425.0" y="924.5" font-size="13" fill="#534AB7" text-anchor="middle">uid 0</text>
+<text x="425.0" y="945.5" font-size="12.5" fill="#534AB7" font-weight="600" text-anchor="middle">树成员：子孙不看 uid</text>
+<rect x="318.0" y="1017.5" width="214.0" height="82.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="425.0" y="1043.5" font-size="15" fill="#3C3489" font-weight="600" text-anchor="middle">切回用户身份的进程</text>
+<text x="425.0" y="1064.5" font-size="13" fill="#534AB7" text-anchor="middle">uid 1000；父进程是 sudo</text>
+<text x="425.0" y="1085.5" font-size="12.5" fill="#3C3489" font-weight="600" text-anchor="middle">候选根，但祖先 A 是候选根</text>
+<path d="M675.0 541.5 L675.0 563.9 L175.0 563.9 L175.0 591.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M675.0 541.5 L675.0 563.9 L425.0 563.9 L425.0 591.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M675.0 541.5 L675.0 563.9 L925.0 563.9 L925.0 591.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M675.0 541.5 L675.0 563.9 L1175.0 563.9 L1175.0 591.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M1425.0 541.5 L1425.0 563.9 L1425.0 563.9 L1425.0 591.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M425.0 681.5 L425.0 703.9 L175.0 703.9 L175.0 731.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M425.0 681.5 L425.0 703.9 L675.0 703.9 L675.0 731.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M425.0 681.5 L425.0 703.9 L925.0 703.9 L925.0 731.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M175.0 821.5 L175.0 843.9 L175.0 843.9 L175.0 871.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M175.0 821.5 L175.0 843.9 L425.0 843.9 L425.0 871.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<path d="M425.0 961.5 L425.0 983.9 L425.0 983.9 L425.0 1011.5" fill="none" stroke="#5F5E5A" stroke-width="1.6" marker-end="url(#ar-flow)"/>
+<rect x="568.0" y="877.5" width="984.0" height="222.0" rx="10" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<text x="590.0" y="907.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">最里面那个进程为什么不算根</text>
+<text x="590.0" y="931.5" font-size="13.5" fill="#5F5E5A" text-anchor="start">它满足候选根的条件（父进程 sudo 不是用户进程），但它已经在 t0 里。</text>
+<text x="590.0" y="955.5" font-size="13.5" fill="#5F5E5A" text-anchor="start">如果再当成一棵树单独 dump，restore 时同一个进程号要被创建两次，</text>
+<text x="590.0" y="979.5" font-size="13.5" fill="#5F5E5A" text-anchor="start">后一次必然失败，而那时进程已经被杀掉了。</text>
+<text x="590.0" y="1027.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">编号顺序就是 dump 的顺序、镜像子目录名，也是 restore 的顺序</text>
+<text x="590.0" y="1051.5" font-size="13.5" fill="#5F5E5A" text-anchor="start">按根的进程号数值升序：初始实现按目录名字符串排序，"1203" 排在 "850" 前面。</text>
+<line x1="48" y1="1161.5" x2="1552" y2="1161.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1187.5" font-size="13" fill="#888780" text-anchor="start">注：图中省略进程号；t0、t1、t2 的编号假定三棵树的根进程号从左到右递增。§3.4 表里前四行（0、1、2、3 棵树）是 2026-10-08 确认验证里用探针脚本实际数过的形状，sudo 那一行是按规则推出的。</text>
+</svg>

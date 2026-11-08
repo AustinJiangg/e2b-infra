@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1378" viewBox="0 0 1600 1378" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-proc" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#7F77DD" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-sbx" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#1D9E75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1378" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">沙箱级在虚拟机外恢复整台虚拟机，进程级在虚拟机里只恢复用户进程和文件</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">SDK 入口和端口号相同，请求在宿主的代理处由不同组件应答。沙箱级的 Firecracker 操作整个“沙箱内部”方框；进程级只触及方框里的用户进程树和文件系统。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">请求入口</text>
+<line x1="192.0" y1="125.0" x2="232.0" y2="125.0" stroke="#1D9E75" stroke-width="1.8" marker-end="url(#ar-sbx)"/>
+<text x="242.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">沙箱级的路径</text>
+<line x1="363.0" y1="125.0" x2="403.0" y2="125.0" stroke="#7F77DD" stroke-width="1.8" marker-end="url(#ar-proc)"/>
+<text x="413.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">进程级的路径</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">两套各自在哪一侧动手</text>
+<rect x="310.0" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="347.0" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="214.0" width="1504.0" height="128.0" rx="12" fill="#FAFAF7" stroke="#E2E0D8" stroke-width="1"/>
+<text x="66.0" y="242.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">调用方</text>
+<rect x="790.0" y="236.0" width="380.0" height="84.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="980.0" y="270.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Python SDK 的 checkpoint 接口</text>
+<text x="980.0" y="298.3" font-size="14" fill="#5F5E5A" text-anchor="middle">两套的入口和端口号相同</text>
+<rect x="48.0" y="388.0" width="1504.0" height="316.0" rx="12" fill="#FAFAF7" stroke="#E2E0D8" stroke-width="1"/>
+<text x="66.0" y="416.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">宿主</text>
+<rect x="840.0" y="434.0" width="280.0" height="96.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="980.0" y="474.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">代理</text>
+<text x="980.0" y="502.3" font-size="14" fill="#5F5E5A" text-anchor="middle">按端口 49984 寻址</text>
+<rect x="464.0" y="434.0" width="280.0" height="96.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="604.0" y="474.4" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">orchestrator</text>
+<text x="604.0" y="502.3" font-size="14" fill="#0F6E56" text-anchor="middle">沙箱级的服务与账本</text>
+<rect x="464.0" y="586.0" width="280.0" height="96.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="604.0" y="626.4" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">Firecracker（分叉版）</text>
+<text x="604.0" y="654.3" font-size="14" fill="#0F6E56" text-anchor="middle">读写整台虚拟机的内存与设备状态</text>
+<rect x="88.0" y="586.0" width="280.0" height="96.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="228.0" y="626.4" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">宿主本地存储</text>
+<text x="228.0" y="654.3" font-size="14" fill="#0F6E56" text-anchor="middle">内存差分与磁盘层</text>
+<line x1="980.0" y1="324.0" x2="980.0" y2="428.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="992.0" y="381.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="start">HTTP 49984</text>
+<line x1="836.0" y1="482.0" x2="750.0" y2="482.0" stroke="#1D9E75" stroke-width="1.8" marker-end="url(#ar-sbx)"/>
+<text x="792.0" y="472.0" font-size="13" fill="#0F6E56" font-weight="600" text-anchor="middle">在宿主截下</text>
+<line x1="604.0" y1="534.0" x2="604.0" y2="580.0" stroke="#1D9E75" stroke-width="1.8" marker-end="url(#ar-sbx)"/>
+<line x1="460.0" y1="634.0" x2="374.0" y2="634.0" stroke="#1D9E75" stroke-width="1.8" marker-end="url(#ar-sbx)"/>
+<rect x="48.0" y="768.0" width="1504.0" height="516.0" rx="12" fill="#FAFAF7" stroke="#1D9E75" stroke-width="2.4"/>
+<text x="66.0" y="796.0" font-size="16" fill="#085041" font-weight="600" text-anchor="start">沙箱内部</text>
+<text x="144.0" y="796.0" font-size="13.5" fill="#085041" text-anchor="start">沙箱级 restore：方框里的一切一起回到 checkpoint 时刻</text>
+<rect x="840.0" y="822.0" width="280.0" height="104.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="980.0" y="866.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">gsd</text>
+<text x="980.0" y="894.3" font-size="14" fill="#534AB7" text-anchor="middle">进程级的服务与状态</text>
+<rect x="464.0" y="988.0" width="280.0" height="104.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="604.0" y="1032.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">用户进程树</text>
+<text x="604.0" y="1060.3" font-size="14" fill="#534AB7" text-anchor="middle">进程级回滚的对象：杀掉后按镜像重建</text>
+<rect x="840.0" y="988.0" width="280.0" height="104.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="980.0" y="1032.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">CRIU</text>
+<text x="980.0" y="1060.3" font-size="14" fill="#534AB7" text-anchor="middle">保存与重建用户进程</text>
+<rect x="1216.0" y="988.0" width="280.0" height="104.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1356.0" y="1032.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">guest 内核（打了补丁）</text>
+<text x="1356.0" y="1060.3" font-size="14" fill="#534AB7" text-anchor="middle">soft-dirty 与 overlay 热切层</text>
+<rect x="88.0" y="1154.0" width="656.0" height="104.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="416.0" y="1198.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">内核、PID 1、envd、系统服务</text>
+<text x="416.0" y="1226.3" font-size="14" fill="#5F5E5A" text-anchor="middle">进程级不动，照常运行；沙箱级 restore 时随整台虚拟机一起恢复</text>
+<rect x="840.0" y="1154.0" width="656.0" height="104.0" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="1168.0" y="1198.4" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">沙箱内的镜像目录与层目录</text>
+<text x="1168.0" y="1226.3" font-size="14" fill="#534AB7" text-anchor="middle">进程级的状态存在沙箱内部</text>
+<line x1="980.0" y1="534.0" x2="980.0" y2="816.0" stroke="#7F77DD" stroke-width="1.8" marker-end="url(#ar-proc)"/>
+<text x="992.0" y="686.0" font-size="13" fill="#534AB7" font-weight="600" text-anchor="start">转进沙箱</text>
+<line x1="604.0" y1="686.0" x2="604.0" y2="762.0" stroke="#1D9E75" stroke-width="1.8" marker-end="url(#ar-sbx)"/>
+<text x="616.0" y="730.0" font-size="13" fill="#0F6E56" font-weight="600" text-anchor="start">整台虚拟机</text>
+<line x1="980.0" y1="930.0" x2="980.0" y2="982.0" stroke="#7F77DD" stroke-width="1.8" marker-end="url(#ar-proc)"/>
+<path d="M1124.0 874.0 L1356.0 874.0 L1356.0 982.0" fill="none" stroke="#7F77DD" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ar-proc)"/>
+<line x1="836.0" y1="1040.0" x2="750.0" y2="1040.0" stroke="#7F77DD" stroke-width="1.8" marker-end="url(#ar-proc)"/>
+<text x="792.0" y="1030.0" font-size="13" fill="#534AB7" font-weight="600" text-anchor="middle">dump、重建</text>
+<line x1="980.0" y1="1096.0" x2="980.0" y2="1148.0" stroke="#7F77DD" stroke-width="1.8" marker-end="url(#ar-proc)"/>
+<line x1="1356.0" y1="1096.0" x2="1356.0" y2="1148.0" stroke="#7F77DD" stroke-width="1.8" marker-end="url(#ar-proc)"/>
+<line x1="48" y1="1320" x2="1552" y2="1320" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1346.0" font-size="13" fill="#888780" text-anchor="start">注：两套的入口是同一个端口，同一时刻一台宿主上的这个端口只能由其中一套应答（§8）。沙箱级的事实以沙箱级手册为准。</text>
+</svg>

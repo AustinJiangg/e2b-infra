@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="778" viewBox="0 0 1600 778" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="778" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">三棵树的 checkpoint：先 dump 的树停得最久</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">根进程号从小到大是 A、B、C，各自的 dump 耗时是 dA、dB、dC。CRIU 一次 dump 一棵，dump 完的树被 --leave-stopped 留在停止状态，直到全部下沉、重写 clear_refs 之后一起放开。</text>
+<rect x="48.0" y="116.0" width="34.0" height="16.0" rx="3" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="92.0" y="129.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">运行</text>
+<rect x="159.0" y="116.0" width="34.0" height="16.0" rx="3" fill="#7F77DD" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="203.0" y="129.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">被 CRIU 冻结（自己的 dump）</text>
+<rect x="432.4" y="116.0" width="34.0" height="16.0" rx="3" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="476.4" y="129.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">停着（--leave-stopped）</text>
+<text x="48.0" y="199.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">gsd 在做什么</text>
+<rect x="201.0" y="172.0" width="244.0" height="40.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="323.0" y="197.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">criu dump A</text>
+<rect x="451.0" y="172.0" width="244.0" height="40.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="573.0" y="197.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">criu dump B</text>
+<rect x="701.0" y="172.0" width="244.0" height="40.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="823.0" y="197.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">criu dump C</text>
+<rect x="951.0" y="172.0" width="154.0" height="40.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
+<text x="1028.0" y="197.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">下沉 + clear_refs</text>
+<rect x="1111.0" y="172.0" width="104.0" height="40.0" rx="6" fill="#FFFFFF" stroke="#0F6E56" stroke-width="1.1"/>
+<text x="1163.0" y="197.0" font-size="14" fill="#0F6E56" font-weight="600" text-anchor="middle">SIGCONT</text>
+<text x="323.0" y="244.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="middle">← dA →</text>
+<text x="573.0" y="244.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="middle">← dB →</text>
+<text x="823.0" y="244.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="middle">← dC →</text>
+<text x="1028.0" y="244.0" font-size="14" fill="#5F5E5A" font-weight="600" text-anchor="middle">下沉 + clear_refs</text>
+<line x1="1108" y1="256" x2="1108" y2="472" stroke="#2C2C2A" stroke-width="1.6" stroke-dasharray="3 3"/>
+<line x1="448" y1="256" x2="448" y2="472" stroke="#2C2C2A" stroke-width="1.6" stroke-dasharray="3 3"/>
+<text x="48.0" y="285.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">树 A</text>
+<text x="48.0" y="303.0" font-size="12.5" fill="#888780" text-anchor="start">根进程号最小</text>
+<rect x="198.0" y="266.0" width="250.0" height="44.0" rx="4" fill="#7F77DD" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="323.0" y="293.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">冻结</text>
+<rect x="448.0" y="266.0" width="660.0" height="44.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="778.0" y="293.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="middle">停着</text>
+<rect x="1108.0" y="266.0" width="110.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1163.0" y="293.0" font-size="14" fill="#0F6E56" font-weight="600" text-anchor="middle">放开，运行</text>
+<text x="48.0" y="354.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">树 B</text>
+<rect x="198.0" y="332.0" width="250.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="323.0" y="359.0" font-size="14" fill="#5F5E5A" text-anchor="middle">运行</text>
+<rect x="448.0" y="332.0" width="250.0" height="44.0" rx="4" fill="#7F77DD" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="573.0" y="359.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">冻结</text>
+<rect x="698.0" y="332.0" width="410.0" height="44.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="903.0" y="359.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="middle">停着</text>
+<rect x="1108.0" y="332.0" width="110.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1163.0" y="359.0" font-size="14" fill="#0F6E56" font-weight="600" text-anchor="middle">放开，运行</text>
+<text x="48.0" y="417.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">树 C</text>
+<text x="48.0" y="435.0" font-size="12.5" fill="#888780" text-anchor="start">根进程号最大</text>
+<rect x="198.0" y="398.0" width="500.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="448.0" y="425.0" font-size="14" fill="#5F5E5A" text-anchor="middle">运行</text>
+<rect x="698.0" y="398.0" width="250.0" height="44.0" rx="4" fill="#7F77DD" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="823.0" y="425.0" font-size="14" fill="#FFFFFF" font-weight="600" text-anchor="middle">冻结</text>
+<rect x="948.0" y="398.0" width="160.0" height="44.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1028.0" y="425.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="middle">停着</text>
+<rect x="1108.0" y="398.0" width="110.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1163.0" y="425.0" font-size="14" fill="#0F6E56" font-weight="600" text-anchor="middle">放开，运行</text>
+<text x="448.0" y="492.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">tFirstStopped</text>
+<text x="1108.0" y="492.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">SIGCONT</text>
+<path d="M198 526 V534 H948 V526" fill="none" stroke="#2C2C2A" stroke-width="1.8"/>
+<text x="962.0" y="539.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">criu_dump_ms = dA + dB + dC</text>
+<path d="M448 566 V574 H1108 V566" fill="none" stroke="#3C3489" stroke-width="1.8"/>
+<text x="1122.0" y="579.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">stopped_ms = dB + dC + 下沉 + clear_refs</text>
+<path d="M198 606 V614 H1108 V606" fill="none" stroke="#3C3489" stroke-width="1.8"/>
+<text x="1122.0" y="619.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">A 不在运行 = dA + stopped_ms，约等于整个 criu_dump_ms</text>
+<path d="M698 646 V654 H1108 V646" fill="none" stroke="#3C3489" stroke-width="1.8"/>
+<text x="1122.0" y="659.0" font-size="14" fill="#3C3489" font-weight="600" text-anchor="start">C 不在运行 ≈ dC + 零头</text>
+<line x1="48" y1="700" x2="1552" y2="700" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="726.0" font-size="13" fill="#888780" text-anchor="start">注：各段宽度只表示先后，不按比例。2026-10-08 一轮多树测量（新 920B，每棵 64 MiB，首次全量，8 轮中位数，早于最终提交）：三棵树时 criu_dump_ms 138.87、stopped_ms 91.82，差约 47 ms，与单棵全量 dump 的 49.66 ms 相近，差的正是 A 自</text>
+<text x="48.0" y="746.0" font-size="13" fill="#888780" text-anchor="start">己的 dump 时间。</text>
+</svg>

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1376" viewBox="0 0 1400 1376" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="1376" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">约 8.7 ms 只取决于内核代码的位置：挪 64 字节变慢，挪 128 KiB 回到快</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">新 920B，2026-09-30，guest 2 vCPU、2048 MB，THP 为 never，192 MiB。三段各用不同的内核和模板，段与段之间不能相减。单位 ms。</text>
+<circle cx="54.0" cy="116.0" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.2" fill-opacity="1.0"/>
+<text x="66.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">快的内核（修复前的布局）</text>
+<circle cx="270.0" cy="116.0" r="6" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.2" fill-opacity="1.0"/>
+<text x="282.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">含第一个修复提交的内核</text>
+<circle cx="472.0" cy="116.0" r="6" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.2" fill-opacity="1.0"/>
+<text x="484.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">快的内核 + 不执行的填充</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">二分：约 8.5～9 ms 全部在第一个修复提交处出现</text>
+<text x="555.9" y="184.0" font-size="14.5" fill="#888780" text-anchor="start">criu_restore_ms，各轮 p50 的中位数；一行两个点是两个模板</text>
+<line x1="378.0" y1="226.0" x2="378.0" y2="438.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="378.0" y="458.0" font-size="12.5" fill="#888780" text-anchor="middle">60</text>
+<line x1="556.5" y1="226.0" x2="556.5" y2="438.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="556.5" y="458.0" font-size="12.5" fill="#888780" text-anchor="middle">65</text>
+<line x1="735.0" y1="226.0" x2="735.0" y2="438.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="735.0" y="458.0" font-size="12.5" fill="#888780" text-anchor="middle">70</text>
+<line x1="913.5" y1="226.0" x2="913.5" y2="438.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="913.5" y="458.0" font-size="12.5" fill="#888780" text-anchor="middle">75</text>
+<line x1="1092.0" y1="226.0" x2="1092.0" y2="438.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1092.0" y="458.0" font-size="12.5" fill="#888780" text-anchor="middle">80</text>
+<rect x="48.0" y="230.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="252.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">修复前的内核（09-23 构建）</text>
+<circle cx="520.8" cy="242.0" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="517.2" cy="252.0" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="252.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">64.0 / 63.9</text>
+<text x="362.0" y="286.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">同一份源码，用后来的编译配置重编</text>
+<circle cx="506.5" cy="276.0" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="506.5" cy="286.0" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="286.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">63.6 / 63.6</text>
+<rect x="48.0" y="298.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="320.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">加上第一个修复提交</text>
+<circle cx="849.2" cy="310.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="788.5" cy="320.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="320.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">73.2 / 71.5</text>
+<text x="362.0" y="354.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">再加上第二个修复提交</text>
+<circle cx="799.3" cy="349.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="354.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">71.8</text>
+<rect x="48.0" y="366.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="388.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">加到当时的第一批修复为止</text>
+<circle cx="884.9" cy="378.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="845.7" cy="388.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="388.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">74.2 / 73.1</text>
+<text x="362.0" y="422.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">再加上切换与并发操作互斥的修复</text>
+<circle cx="838.5" cy="412.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="824.2" cy="422.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="422.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">72.9 / 72.5</text>
+<circle cx="63" cy="520" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="525.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="527.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">微基准：只有“拷贝当中缺页”这一种操作变慢</text>
+<text x="530.0" y="526.0" font-size="14.5" fill="#888780" text-anchor="start">guest 内各做 192 MiB；上为快的内核，下为慢的内核</text>
+<line x1="378.0" y1="568.0" x2="378.0" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="378.0" y="772.0" font-size="12.5" fill="#888780" text-anchor="middle">0</text>
+<line x1="520.8" y1="568.0" x2="520.8" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="520.8" y="772.0" font-size="12.5" fill="#888780" text-anchor="middle">20</text>
+<line x1="663.6" y1="568.0" x2="663.6" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="663.6" y="772.0" font-size="12.5" fill="#888780" text-anchor="middle">40</text>
+<line x1="806.4" y1="568.0" x2="806.4" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="806.4" y="772.0" font-size="12.5" fill="#888780" text-anchor="middle">60</text>
+<line x1="949.2" y1="568.0" x2="949.2" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="949.2" y="772.0" font-size="12.5" fill="#888780" text-anchor="middle">80</text>
+<line x1="1092.0" y1="568.0" x2="1092.0" y2="752.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1092.0" y="772.0" font-size="12.5" fill="#888780" text-anchor="middle">100</text>
+<rect x="48.0" y="572.0" width="1304.0" height="44.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="599.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">只触发匿名内存的缺页</text>
+<rect x="851.4" y="582.0" width="24.3" height="10.0" rx="5" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<rect x="851.4" y="596.0" width="24.3" height="10.0" rx="5" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="1122.0" y="599.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">67～69 · 67～69</text>
+<text x="362.0" y="643.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">只读文件</text>
+<rect x="480.1" y="626.0" width="17.1" height="10.0" rx="5" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<rect x="480.1" y="640.0" width="17.1" height="10.0" rx="5" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="1122.0" y="643.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">15～16 · 15～16</text>
+<rect x="48.0" y="660.0" width="1304.0" height="44.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="687.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">把文件读进已经缺过页的内存</text>
+<circle cx="485.1" cy="675.0" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="485.1" cy="689.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="687.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">约 15 · 约 15</text>
+<text x="362.0" y="731.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">preadv 进尚未缺页的匿名内存</text>
+<rect x="922.8" y="714.0" width="17.1" height="10.0" rx="5" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<rect x="987.0" y="728.0" width="24.3" height="10.0" rx="5" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="1122.0" y="731.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">77～78 · 86～88</text>
+<circle cx="63" cy="834" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="839.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="841.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">惰性填充：只挪位置、不改逻辑</text>
+<text x="390.0" y="840.0" font-size="14.5" fill="#888780" text-anchor="start">同一个微基准的中位数；填充插在 fs/proc 的代码段里，永远不被执行</text>
+<line x1="378.0" y1="898.0" x2="378.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="378.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">74</text>
+<line x1="497.0" y1="898.0" x2="497.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="497.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">77</text>
+<line x1="616.0" y1="898.0" x2="616.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="616.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">80</text>
+<line x1="735.0" y1="898.0" x2="735.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="735.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">83</text>
+<line x1="854.0" y1="898.0" x2="854.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="854.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">86</text>
+<line x1="973.0" y1="898.0" x2="973.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="973.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">89</text>
+<line x1="1092.0" y1="898.0" x2="1092.0" y2="1246.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1092.0" y="1266.0" font-size="12.5" fill="#888780" text-anchor="middle">92</text>
+<line x1="497.0" y1="888.0" x2="497.0" y2="1246.0" stroke="#888780" stroke-width="1.1" stroke-dasharray="5 4"/>
+<text x="497.0" y="882.0" font-size="12.5" fill="#888780" text-anchor="middle">快的内核 77.0</text>
+<rect x="48.0" y="902.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="924.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核（基准）</text>
+<circle cx="497.0" cy="919.0" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="924.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">77.0</text>
+<text x="362.0" y="958.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">加上第一个修复提交</text>
+<circle cx="778.6" cy="953.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="958.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">84.1</text>
+<rect x="48.0" y="970.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="992.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核 + 64 字节填充</text>
+<circle cx="861.9" cy="987.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="992.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">86.2</text>
+<text x="362.0" y="1026.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核 + 4 KiB 填充</text>
+<circle cx="842.1" cy="1021.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1026.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">85.7</text>
+<rect x="48.0" y="1038.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="1060.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核 + 16 KiB 填充</text>
+<circle cx="766.7" cy="1055.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1060.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">83.8</text>
+<text x="362.0" y="1094.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核 + 64 KiB 填充</text>
+<circle cx="782.6" cy="1089.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1094.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">84.2</text>
+<rect x="48.0" y="1106.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="1128.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核 + 128 KiB 填充</text>
+<circle cx="532.7" cy="1123.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1128.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">77.9</text>
+<text x="362.0" y="1162.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核 + 2 MiB 填充</text>
+<circle cx="639.8" cy="1157.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1162.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">80.6</text>
+<rect x="48.0" y="1174.0" width="1304.0" height="34.0" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="0"/>
+<text x="362.0" y="1196.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">快的内核，所有函数按 64 字节对齐</text>
+<circle cx="798.5" cy="1191.0" r="6.5" fill="#B4B2A9" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1196.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">84.6</text>
+<text x="362.0" y="1230.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">慢的内核，所有函数按 64 字节对齐</text>
+<circle cx="977.0" cy="1225.0" r="6.5" fill="#D85A30" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="1122.0" y="1230.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">89.1</text>
+<line x1="48" y1="1318" x2="1352" y2="1318" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1344.0" font-size="13" fill="#888780" text-anchor="start">注：§4.1 中同一内核的两个模板相差 0.1～1.1 ms，不同内核之间相差约 9 ms。§4.4 的最后一种操作正是 criu 恢复内存的做法。效应以 128 KiB 为周期；为什么相位会影响这条路径的速度，没有继续往下查。</text>
+</svg>

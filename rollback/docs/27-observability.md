@@ -49,6 +49,8 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -3
 - **`total` 的起点**：checkpoint 与 restore 的 `total` 从进入处理函数开始，**包含在该沙箱操作锁上排队的时间**（没有单独的键；排队上限是 `CHECKPOINT_LOCK_WAIT_TIMEOUT`）；delete 的 `total` 从拿到操作锁之后开始。
 - 所有 `*_lock_wait` 等的是 **store 的全局锁**，即"本沙箱在为别的沙箱的账本操作排队"，并发高时才会非零。
 
+![checkpoint 与 restore 的计时键落在三个时钟的哪一段](img/04-4-三个时钟.svg)
+
 ### 3.2 checkpoint
 
 阶段关系（缩进表示包含，`≈` 表示另有零碎开销）：

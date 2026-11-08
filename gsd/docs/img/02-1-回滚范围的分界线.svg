@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1059" viewBox="0 0 1600 1059" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="1059" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">回滚范围的分界线：只有 uid 1000 的用户进程树和 overlay 根文件系统回到过去</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">restore 之后，分界线左侧回到 checkpoint 那一刻，右侧一直在运行或保持 restore 那一刻的内容。两侧不再属于同一时刻，这是后面许多设计和限制的来源。</text>
+<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">沙箱里哪些回滚、哪些不回滚</text>
+<rect x="370.0" y="134.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="407.0" y="150.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="460.0" y="150.0" font-size="14.5" fill="#888780" text-anchor="start">§2.1、§2.2 两张表</text>
+<rect x="48.0" y="178.0" width="470.0" height="501.0" rx="16" fill="#FBFBF9" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="68.0" y="194.0" width="430.0" height="52.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.6"/>
+<text x="283.0" y="218.0" font-size="19" fill="#3C3489" font-weight="600" text-anchor="middle">回滚</text>
+<text x="283.0" y="238.0" font-size="13.5" fill="#534AB7" text-anchor="middle">范围内：回到 checkpoint 那一刻</text>
+<rect x="68.0" y="258.0" width="430.0" height="193.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="80.0" y="269.0" width="159.3" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="159.6" y="284.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">CRIU：杀掉后按镜像重建</text>
+<text x="283.0" y="351.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">用户进程树</text>
+<text x="283.0" y="379.5" font-size="14" fill="#534AB7" text-anchor="middle">uid 1000 的进程连同全部子孙；子孙不看 uid，sudo 起的</text>
+<text x="283.0" y="400.5" font-size="14" fill="#534AB7" text-anchor="middle">root 子进程也算</text>
+<rect x="68.0" y="465.5" width="430.0" height="193.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="80.0" y="476.5" width="180.2" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="170.1" y="492.0" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">overlayfs 热切层：换回层栈</text>
+<text x="283.0" y="569.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">overlay 根文件系统</text>
+<text x="283.0" y="597.5" font-size="14" fill="#534AB7" text-anchor="middle">/etc、/home、/opt、/usr、/var 的大部分，以及 /tmp</text>
+<rect x="588.0" y="178.0" width="964.0" height="501.0" rx="16" fill="#FBFBF9" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="608.0" y="194.0" width="450.0" height="52.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="833.0" y="218.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">不回滚 · 有意划出去的</text>
+<text x="833.0" y="238.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">不属于“任务的状态”</text>
+<rect x="608.0" y="258.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="833.0" y="284.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">PID 1（systemd）</text>
+<text x="833.0" y="311.7" font-size="13" fill="#5F5E5A" text-anchor="middle">所有进程的祖先，杀不得也重建不得</text>
+<rect x="608.0" y="341.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="833.0" y="367.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">envd</text>
+<text x="833.0" y="394.7" font-size="13" fill="#5F5E5A" text-anchor="middle">SDK 的通道，以 root 运行</text>
+<rect x="608.0" y="424.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="833.0" y="450.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">gsd 自己</text>
+<text x="833.0" y="477.7" font-size="13" fill="#5F5E5A" text-anchor="middle">执行回滚的一方；checkpoint 列表不随 restore 变化</text>
+<rect x="608.0" y="507.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="833.0" y="533.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">root 起的其他服务</text>
+<text x="833.0" y="560.7" font-size="13" fill="#5F5E5A" text-anchor="middle">不是 uid 1000；仍在运行，但用的文件系统被换掉了</text>
+<rect x="608.0" y="590.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="833.0" y="616.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">内核状态</text>
+<text x="833.0" y="643.7" font-size="13" fill="#5F5E5A" text-anchor="middle">页缓存、网络栈、时钟、内核线程不变，时钟不倒退</text>
+<rect x="1082.0" y="194.0" width="450.0" height="52.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="1307.0" y="218.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">不回滚 · 不在 overlay 上的目录</text>
+<text x="1307.0" y="238.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">根文件系统搭建方式的结果</text>
+<rect x="1082.0" y="258.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1307.0" y="284.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">/run、/dev/shm</text>
+<text x="1307.0" y="311.7" font-size="13" fill="#5F5E5A" text-anchor="middle">独立挂载的内存文件系统，保持 restore 那一刻的内容</text>
+<rect x="1082.0" y="341.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1307.0" y="367.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">/var/log、/var/lib/systemd、/var/lib/chrony</text>
+<text x="1307.0" y="394.7" font-size="13" fill="#5F5E5A" text-anchor="middle">开机时从 ext4 直接绑定进来，日志不会被回滚掉</text>
+<rect x="1082.0" y="424.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1307.0" y="450.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">镜像目录 /var/lib/gsd/snapshots</text>
+<text x="1307.0" y="477.7" font-size="13" fill="#5F5E5A" text-anchor="middle">独立挂载的 2 GiB 内存文件系统，不变</text>
+<rect x="1082.0" y="507.0" width="450.0" height="69.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1307.0" y="533.9" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">/overlay、/mnt/lower</text>
+<text x="1307.0" y="560.7" font-size="13" fill="#5F5E5A" text-anchor="middle">overlay 的层目录和基础镜像，从 ext4 绑定进来，由 gsd 管理</text>
+<line x1="553.0" y1="174.0" x2="553.0" y2="683.0" stroke="#D85A30" stroke-width="2.4" stroke-dasharray="10 6"/>
+<rect x="523.0" y="414.5" width="60.0" height="28.0" rx="14" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2"/>
+<text x="553.0" y="433.5" font-size="14" fill="#712B13" font-weight="600" text-anchor="middle">分界线</text>
+<rect x="588.0" y="695.0" width="964.0" height="66.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1070.0" y="720.4" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="middle">沙箱之外的一切</text>
+<text x="1070.0" y="747.2" font-size="13" fill="#5F5E5A" text-anchor="middle">已经发出去的请求、写进外部数据库的数据，任何快照都退不回来</text>
+<circle cx="63" cy="807" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="812.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="814.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">分界线带来的三个后果</text>
+<text x="310.0" y="813.0" font-size="14.5" fill="#888780" text-anchor="start">§5；都不是实现疏漏，而是只回滚一部分的必然结果</text>
+<rect x="48.0" y="835.0" width="480.0" height="130.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="60.0" y="846.0" width="85.8" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="102.9" y="861.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">08 · 09 · 26</text>
+<text x="288.0" y="897.2" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">范围外的进程跨越切换继续运行</text>
+<text x="288.0" y="925.0" font-size="14" fill="#534AB7" text-anchor="middle">换层那一刻 root 服务、envd 的文件接口可能正在读写；手里的目录和</text>
+<text x="288.0" y="946.0" font-size="14" fill="#534AB7" text-anchor="middle">文件可能属于被丢弃的时间线</text>
+<rect x="560.0" y="835.0" width="480.0" height="130.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="572.0" y="846.0" width="32.4" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="588.2" y="861.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">10</text>
+<text x="800.0" y="897.2" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">范围内外的状态可能对不上</text>
+<text x="800.0" y="925.0" font-size="14" fill="#534AB7" text-anchor="middle">恢复的进程回到过去，连着的 envd、/run 里的文件、系统服务停在现</text>
+<text x="800.0" y="946.0" font-size="14" fill="#534AB7" text-anchor="middle">在；最常见的是通向 envd 的标准输出管道</text>
+<rect x="1072.0" y="835.0" width="480.0" height="130.5" rx="10" fill="#FFFFFF" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="1084.0" y="846.0" width="59.1" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1113.5" y="861.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">10 · 11</text>
+<text x="1312.0" y="897.2" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">范围内部也不是一个整体</text>
+<text x="1312.0" y="925.0" font-size="14" fill="#534AB7" text-anchor="middle">多棵树分别保存、分别恢复，彼此有很短的先后差；树之间用管道或</text>
+<text x="1312.0" y="946.0" font-size="14" fill="#534AB7" text-anchor="middle">socket 直接相连时 checkpoint 被拒绝</text>
+<line x1="48" y1="1001.5" x2="1552" y2="1001.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1027.5" font-size="13" fill="#888780" text-anchor="start">注：框左上角的数字是展开讨论的章号；三个后果作为取舍逐条列在第 04 章，由此而来的限制汇总在第 16 章。哪些目录在 overlay 上由开机脚本 overlay-init 决定（第 06 章）。</text>
+</svg>

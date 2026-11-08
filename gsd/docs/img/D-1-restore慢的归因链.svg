@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="867" viewBox="0 0 1600 867" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="867" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">restore 慢与连续 restore 后失联，大半出自同一处内核代码</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">从两个现象出发，经隔离阶梯、日志里程碑对齐找到五个原因。停顿二先被归到目录缓存是冷的，预热对照推翻这个假设后，查看新换上的 upper 目录才找到根因 ovl_mmap 对私有可写映射做 copy-up。</text>
+<rect x="48.0" y="138.0" width="268.8" height="130.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="149.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="81.0" y="164.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">现象</text>
+<text x="182.4" y="210.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">现象一：restore 慢且抖</text>
+<text x="182.4" y="238.5" font-size="14" fill="#5F5E5A" text-anchor="middle">最高一档端到端约 150～230 ms</text>
+<rect x="356.8" y="138.0" width="268.8" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="368.8" y="149.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="389.8" y="164.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">方法</text>
+<text x="491.2" y="200.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">隔离阶梯：差在调用上下文</text>
+<text x="491.2" y="228.0" font-size="14" fill="#5F5E5A" text-anchor="middle">干净环境 35～39 ms，经 gsd 调用</text>
+<text x="491.2" y="249.0" font-size="14" fill="#5F5E5A" text-anchor="middle">113～170 ms</text>
+<rect x="665.6" y="138.0" width="268.8" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="677.6" y="149.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="698.6" y="164.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">方法</text>
+<text x="800.0" y="210.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">日志里程碑对齐</text>
+<text x="800.0" y="238.5" font-size="14" fill="#5F5E5A" text-anchor="middle">gsd 调用比干净环境多出两段停顿</text>
+<rect x="974.4" y="138.0" width="268.8" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="986.4" y="149.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1007.4" y="164.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">观察</text>
+<text x="1108.8" y="210.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">停顿二：打开映射文件之前</text>
+<text x="1108.8" y="238.5" font-size="14" fill="#5F5E5A" text-anchor="middle">约 15 ms 是 gsd 独有的</text>
+<rect x="1283.2" y="138.0" width="268.8" height="130.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<rect x="1295.2" y="149.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1316.2" y="164.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">假设</text>
+<text x="1417.6" y="224.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">假设：切层后目录缓存是冷的</text>
+<rect x="356.8" y="320.5" width="268.8" height="109.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="368.8" y="331.5" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="389.8" y="347.0" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">原因</text>
+<text x="491.2" y="382.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">原因三：杀进程后 10 ms 轮询</text>
+<text x="491.2" y="410.5" font-size="14" fill="#534AB7" text-anchor="middle">kill_ms 总落在 10 或 20 附近</text>
+<rect x="665.6" y="320.5" width="268.8" height="109.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="677.6" y="331.5" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="698.6" y="347.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">观察</text>
+<text x="800.0" y="382.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">停顿一：紧跟 cgroup 迁移</text>
+<text x="800.0" y="410.5" font-size="14" fill="#5F5E5A" text-anchor="middle">0～57 ms，随机出现</text>
+<rect x="974.4" y="320.5" width="268.8" height="109.5" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="986.4" y="331.5" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1007.4" y="347.0" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">原因</text>
+<text x="1108.8" y="396.2" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">原因二：迁移等 RCU 宽限期</text>
+<rect x="1283.2" y="320.5" width="268.8" height="109.5" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<rect x="1295.2" y="331.5" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1316.2" y="347.0" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">对照</text>
+<text x="1417.6" y="382.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">预热只省 3 ms</text>
+<text x="1417.6" y="410.5" font-size="14" fill="#5F5E5A" text-anchor="middle">假设不成立</text>
+<rect x="48.0" y="482.0" width="268.8" height="143.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="493.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="81.0" y="508.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">现象</text>
+<text x="182.4" y="560.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">现象二：连续 restore 后失联</text>
+<text x="182.4" y="588.8" font-size="14" fill="#5F5E5A" text-anchor="middle">连续 5～7 次后 envd 不应答</text>
+<rect x="356.8" y="482.0" width="268.8" height="143.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="368.8" y="493.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="389.8" y="508.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">观察</text>
+<text x="491.2" y="550.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">根盘每次增加，直到写满</text>
+<text x="491.2" y="578.3" font-size="14" fill="#5F5E5A" text-anchor="middle">每次 restore 根盘净增约 31 MB，第</text>
+<text x="491.2" y="599.3" font-size="14" fill="#5F5E5A" text-anchor="middle">12 次时写满</text>
+<rect x="974.4" y="482.0" width="268.8" height="143.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="986.4" y="493.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1007.4" y="508.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">原因</text>
+<rect x="986.4" y="591.0" width="244.8" height="26.0" rx="6" fill="#EEEDFE" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1108.8" y="608.0" font-size="13" fill="#3C3489" font-weight="500" text-anchor="middle">真根因：同时解释两个现象</text>
+<text x="1108.8" y="544.2" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">原因一：ovl_mmap 误做</text>
+<text x="1108.8" y="568.7" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">copy-up</text>
+<rect x="1283.2" y="482.0" width="268.8" height="143.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1295.2" y="493.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1316.2" y="508.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">观察</text>
+<text x="1417.6" y="560.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">查看新 upper 目录</text>
+<text x="1417.6" y="588.8" font-size="14" fill="#5F5E5A" text-anchor="middle">里面是整份的二进制</text>
+<rect x="356.8" y="677.0" width="268.8" height="96.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="368.8" y="688.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="389.8" y="703.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">原因</text>
+<text x="491.2" y="745.9" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">原因四：临时目录不回收</text>
+<rect x="974.4" y="677.0" width="268.8" height="96.0" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<rect x="986.4" y="688.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#7F77DD" stroke-width="0.8"/>
+<text x="1007.4" y="703.5" font-size="12" fill="#534AB7" font-weight="500" text-anchor="middle">原因</text>
+<text x="1108.8" y="745.9" font-size="16.5" fill="#3C3489" font-weight="600" text-anchor="middle">原因五：查找路径上的调试打印</text>
+<line x1="320.8" y1="203.2" x2="350.8" y2="203.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="629.6" y1="203.2" x2="659.6" y2="203.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="938.4" y1="203.2" x2="968.4" y2="203.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1247.2" y1="203.2" x2="1277.2" y2="203.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="491.2" y1="272.5" x2="491.2" y2="314.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="800.0" y1="272.5" x2="800.0" y2="314.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="938.4" y1="375.2" x2="968.4" y2="375.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1417.6" y1="272.5" x2="1417.6" y2="314.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1417.6" y1="434.0" x2="1417.6" y2="476.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1279.2" y1="553.5" x2="1249.2" y2="553.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="320.8" y1="553.5" x2="350.8" y2="553.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="629.6" y1="553.5" x2="968.4" y2="553.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="491.2" y1="629.0" x2="491.2" y2="671.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1108.8" y1="629.0" x2="1108.8" y2="671.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="48" y1="809.0" x2="1552" y2="809.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="835.0" font-size="13" fill="#888780" text-anchor="start">注：数字来自旧 920B（已退役）上初始实现的微基准，口径见本附录开头，不能与正文的判定值比较。</text>
+</svg>

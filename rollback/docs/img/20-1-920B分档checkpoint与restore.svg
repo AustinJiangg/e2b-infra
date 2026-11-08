@@ -1,0 +1,299 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1802" viewBox="0 0 1400 1802" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="1802" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">920B 分档：checkpoint 与 restore 随改动量的 p50 / p99</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">新 920B，kvm-wp，deltabox-dev@8ea5322bf，2026-09-29；单沙箱串行、页缓存全热，bench_tiers.py 全表 3 遍共 1040 次迭代。客户端墙钟 ms。p99 取最近秩法，n &lt; 100 的档</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">取最大值。横轴按档位顺序等距排列，不按数值比例。</text>
+<circle cx="63" cy="168" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="173.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="175.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">混合档（内存:文件 = 3:1）：checkpoint</text>
+<text x="491.0" y="174.0" font-size="14.5" fill="#888780" text-anchor="start">判定线 checkpoint ≤ 200 ms</text>
+<line x1="48.0" y1="214.0" x2="74.0" y2="214.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="82.0" y="219.0" font-size="14" fill="#5F5E5A" text-anchor="start">checkpoint p50</text>
+<line x1="222.1" y1="214.0" x2="248.1" y2="214.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="256.1" y="219.0" font-size="14" fill="#5F5E5A" text-anchor="start">checkpoint p99</text>
+<line x1="396.2" y1="214.0" x2="422.2" y2="214.0" stroke="#B4B2A9" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="430.2" y="219.0" font-size="14" fill="#5F5E5A" text-anchor="start">判定线</text>
+<line x1="168.0" y1="496.0" x2="1342.0" y2="496.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="500.5" font-size="12.5" fill="#888780" text-anchor="end">0 ms</text>
+<line x1="168.0" y1="450.0" x2="1342.0" y2="450.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="454.5" font-size="12.5" fill="#888780" text-anchor="end">50 ms</text>
+<line x1="168.0" y1="404.0" x2="1342.0" y2="404.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="408.5" font-size="12.5" fill="#888780" text-anchor="end">100 ms</text>
+<line x1="168.0" y1="358.0" x2="1342.0" y2="358.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="362.5" font-size="12.5" fill="#888780" text-anchor="end">150 ms</text>
+<line x1="168.0" y1="312.0" x2="1342.0" y2="312.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="316.5" font-size="12.5" fill="#888780" text-anchor="end">200 ms</text>
+<line x1="168.0" y1="266.0" x2="1342.0" y2="266.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="270.5" font-size="12.5" fill="#888780" text-anchor="end">250 ms</text>
+<line x1="168.0" y1="496.0" x2="1342.0" y2="496.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<line x1="168.0" y1="312.0" x2="1342.0" y2="312.0" stroke="#888780" stroke-width="1.3" stroke-dasharray="6 4"/>
+<text x="176.0" y="305.0" font-size="12.5" fill="#5F5E5A" text-anchor="start">判定线 200 ms</text>
+<polyline points="226.7,478.1 344.1,474.7 461.5,475.1 578.9,474.4 696.3,469.2 813.7,458.8 931.1,437.8 1048.5,419.6 1165.9,386.8 1283.3,326.8" fill="none" stroke="#BA7517" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="226.7" cy="478.1" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="344.1" cy="474.7" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="461.5" cy="475.1" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="578.9" cy="474.4" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="696.3" cy="469.2" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="813.7" cy="458.8" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="931.1" cy="437.8" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="419.6" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="1165.9" cy="386.8" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="1283.3" cy="326.8" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<polyline points="226.7,482.3 344.1,481.1 461.5,480.3 578.9,478.3 696.3,474.6 813.7,464.4 931.1,444.6 1048.5,425.1 1165.9,406.5 1283.3,333.4" fill="none" stroke="#BA7517" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="226.7" cy="482.3" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="344.1" cy="481.1" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="461.5" cy="480.3" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="578.9" cy="478.3" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="696.3" cy="474.6" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="813.7" cy="464.4" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="931.1" cy="444.6" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="425.1" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1165.9" cy="406.5" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1283.3" cy="333.4" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="226.7" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">0 MB</text>
+<text x="226.7" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="344.1" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">4 MB</text>
+<text x="344.1" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="461.5" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">8 MB</text>
+<text x="461.5" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="578.9" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 MB</text>
+<text x="578.9" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="696.3" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">32 MB</text>
+<text x="696.3" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="813.7" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">64 MB</text>
+<text x="813.7" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="931.1" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">128 MB</text>
+<text x="931.1" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 60</text>
+<text x="1048.5" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">192 MB</text>
+<text x="1048.5" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 60</text>
+<text x="1165.9" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">256 MB</text>
+<text x="1165.9" y="538.0" font-size="12" fill="#888780" text-anchor="middle">n 60</text>
+<text x="1283.3" y="520.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">512 MB</text>
+<text x="1283.3" y="538.0" font-size="12" fill="#888780" text-anchor="middle">极限档 · n 30</text>
+<line x1="168.0" y1="545.0" x2="1342.0" y2="545.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="end">p50</text>
+<text x="226.7" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">14.9</text>
+<text x="344.1" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">16.2</text>
+<text x="461.5" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">17.1</text>
+<text x="578.9" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">19.2</text>
+<text x="696.3" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">23.3</text>
+<text x="813.7" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">34.4</text>
+<text x="931.1" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">55.9</text>
+<text x="1048.5" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">77.1</text>
+<text x="1165.9" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">97.3</text>
+<text x="1283.3" y="562.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">176.7</text>
+<text x="158.0" y="584.0" font-size="13" fill="#888780" text-anchor="end">p99</text>
+<text x="226.7" y="584.0" font-size="13" fill="#888780" text-anchor="middle">19.5</text>
+<text x="344.1" y="584.0" font-size="13" fill="#888780" text-anchor="middle">23.2</text>
+<text x="461.5" y="584.0" font-size="13" fill="#888780" text-anchor="middle">22.7</text>
+<text x="578.9" y="584.0" font-size="13" fill="#888780" text-anchor="middle">23.5</text>
+<text x="696.3" y="584.0" font-size="13" fill="#888780" text-anchor="middle">29.1</text>
+<text x="813.7" y="584.0" font-size="13" fill="#888780" text-anchor="middle">40.4</text>
+<text x="931.1" y="584.0" font-size="13" fill="#888780" text-anchor="middle">63.3</text>
+<text x="1048.5" y="584.0" font-size="13" fill="#888780" text-anchor="middle">83.0</text>
+<text x="1165.9" y="584.0" font-size="13" fill="#888780" text-anchor="middle">118.7</text>
+<text x="1283.3" y="584.0" font-size="13" fill="#888780" text-anchor="middle">183.9</text>
+<circle cx="63" cy="638" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="643.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="645.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">混合档（内存:文件 = 3:1）：restore</text>
+<text x="456.4" y="644.0" font-size="14.5" fill="#888780" text-anchor="start">判定线 restore ≤ 100 ms</text>
+<line x1="48.0" y1="684.0" x2="74.0" y2="684.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="82.0" y="689.0" font-size="14" fill="#5F5E5A" text-anchor="start">restore p50</text>
+<line x1="197.8" y1="684.0" x2="223.8" y2="684.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="231.8" y="689.0" font-size="14" fill="#5F5E5A" text-anchor="start">restore p99</text>
+<line x1="347.7" y1="684.0" x2="373.7" y2="684.0" stroke="#B4B2A9" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="381.7" y="689.0" font-size="14" fill="#5F5E5A" text-anchor="start">判定线</text>
+<line x1="168.0" y1="966.0" x2="1342.0" y2="966.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="970.5" font-size="12.5" fill="#888780" text-anchor="end">0 ms</text>
+<line x1="168.0" y1="920.0" x2="1342.0" y2="920.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="924.5" font-size="12.5" fill="#888780" text-anchor="end">25 ms</text>
+<line x1="168.0" y1="874.0" x2="1342.0" y2="874.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="878.5" font-size="12.5" fill="#888780" text-anchor="end">50 ms</text>
+<line x1="168.0" y1="828.0" x2="1342.0" y2="828.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="832.5" font-size="12.5" fill="#888780" text-anchor="end">75 ms</text>
+<line x1="168.0" y1="782.0" x2="1342.0" y2="782.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="786.5" font-size="12.5" fill="#888780" text-anchor="end">100 ms</text>
+<line x1="168.0" y1="736.0" x2="1342.0" y2="736.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="740.5" font-size="12.5" fill="#888780" text-anchor="end">125 ms</text>
+<line x1="168.0" y1="966.0" x2="1342.0" y2="966.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<line x1="168.0" y1="782.0" x2="1342.0" y2="782.0" stroke="#888780" stroke-width="1.3" stroke-dasharray="6 4"/>
+<text x="176.0" y="775.0" font-size="12.5" fill="#5F5E5A" text-anchor="start">判定线 100 ms</text>
+<polyline points="226.7,922.2 344.1,920.4 461.5,919.6 578.9,916.0 696.3,908.8 813.7,899.2 931.1,874.9 1048.5,850.1 1165.9,833.9 1283.3,758.1" fill="none" stroke="#BA7517" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="226.7" cy="922.2" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="344.1" cy="920.4" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="461.5" cy="919.6" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="578.9" cy="916.0" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="696.3" cy="908.8" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="813.7" cy="899.2" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="931.1" cy="874.9" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="850.1" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="1165.9" cy="833.9" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="1283.3" cy="758.1" r="5.5" fill="#FFFFFF" stroke="#BA7517" stroke-width="2" fill-opacity="1.0"/>
+<polyline points="226.7,932.7 344.1,931.0 461.5,929.8 578.9,926.6 696.3,919.8 813.7,909.3 931.1,885.8 1048.5,864.6 1165.9,844.4 1283.3,766.9" fill="none" stroke="#BA7517" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="226.7" cy="932.7" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="344.1" cy="931.0" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="461.5" cy="929.8" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="578.9" cy="926.6" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="696.3" cy="919.8" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="813.7" cy="909.3" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="931.1" cy="885.8" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1048.5" cy="864.6" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1165.9" cy="844.4" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<circle cx="1283.3" cy="766.9" r="5.5" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="1.0"/>
+<text x="226.7" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">0 MB</text>
+<text x="226.7" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="344.1" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">4 MB</text>
+<text x="344.1" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="461.5" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">8 MB</text>
+<text x="461.5" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="578.9" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 MB</text>
+<text x="578.9" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="696.3" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">32 MB</text>
+<text x="696.3" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="813.7" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">64 MB</text>
+<text x="813.7" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 100</text>
+<text x="931.1" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">128 MB</text>
+<text x="931.1" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 60</text>
+<text x="1048.5" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">192 MB</text>
+<text x="1048.5" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 60</text>
+<text x="1165.9" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">256 MB</text>
+<text x="1165.9" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">n 60</text>
+<text x="1283.3" y="990.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">512 MB</text>
+<text x="1283.3" y="1008.0" font-size="12" fill="#888780" text-anchor="middle">极限档 · n 30</text>
+<line x1="168.0" y1="1015.0" x2="1342.0" y2="1015.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="158.0" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="end">p50</text>
+<text x="226.7" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">18.1</text>
+<text x="344.1" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">19.0</text>
+<text x="461.5" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">19.7</text>
+<text x="578.9" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">21.4</text>
+<text x="696.3" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">25.1</text>
+<text x="813.7" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">30.8</text>
+<text x="931.1" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">43.6</text>
+<text x="1048.5" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">55.1</text>
+<text x="1165.9" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">66.1</text>
+<text x="1283.3" y="1032.0" font-size="13" fill="#633806" font-weight="600" text-anchor="middle">108.2</text>
+<text x="158.0" y="1054.0" font-size="13" fill="#888780" text-anchor="end">p99</text>
+<text x="226.7" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">23.8</text>
+<text x="344.1" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">24.8</text>
+<text x="461.5" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">25.2</text>
+<text x="578.9" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">27.2</text>
+<text x="696.3" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">31.1</text>
+<text x="813.7" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">36.3</text>
+<text x="931.1" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">49.5</text>
+<text x="1048.5" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">63.0</text>
+<text x="1165.9" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">71.8</text>
+<text x="1283.3" y="1054.0" font-size="13" fill="#888780" text-anchor="middle">113.0</text>
+<circle cx="63" cy="1108" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="1113.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="1115.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">纯内存、纯文件与只读触碰</text>
+<text x="350.0" y="1114.0" font-size="14.5" fill="#888780" text-anchor="start">条长到 p50，细线延到 p99；纯文件档写后 sync</text>
+<rect x="48.0" y="1147.0" width="26.0" height="13.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="74.0" y1="1153.5" x2="92.0" y2="1153.5" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="92.0" y1="1149.0" x2="92.0" y2="1158.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="102.0" y="1159.0" font-size="14" fill="#5F5E5A" text-anchor="start">checkpoint p50 → p99</text>
+<rect x="289.8" y="1147.0" width="26.0" height="13.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="315.8" y1="1153.5" x2="333.8" y2="1153.5" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="333.8" y1="1149.0" x2="333.8" y2="1158.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="343.8" y="1159.0" font-size="14" fill="#5F5E5A" text-anchor="start">restore p50 → p99</text>
+<line x1="298.0" y1="1192.0" x2="298.0" y2="1652.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="298.0" y="1672.0" font-size="12.5" fill="#888780" text-anchor="middle">0 ms</text>
+<line x1="478.8" y1="1192.0" x2="478.8" y2="1652.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="478.8" y="1672.0" font-size="12.5" fill="#888780" text-anchor="middle">20 ms</text>
+<line x1="659.6" y1="1192.0" x2="659.6" y2="1652.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="659.6" y="1672.0" font-size="12.5" fill="#888780" text-anchor="middle">40 ms</text>
+<line x1="840.4" y1="1192.0" x2="840.4" y2="1652.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="840.4" y="1672.0" font-size="12.5" fill="#888780" text-anchor="middle">60 ms</text>
+<line x1="1021.2" y1="1192.0" x2="1021.2" y2="1652.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1021.2" y="1672.0" font-size="12.5" fill="#888780" text-anchor="middle">80 ms</text>
+<line x1="1202.0" y1="1192.0" x2="1202.0" y2="1652.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="1202.0" y="1672.0" font-size="12.5" fill="#888780" text-anchor="middle">100 ms</text>
+<line x1="298.0" y1="1192.0" x2="298.0" y2="1652.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="48.0" y="1224.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">纯内存</text>
+<text x="284.0" y="1217.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">4 MB</text>
+<text x="284.0" y="1234.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1200.0" width="139.2" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="437.2" y1="1208.0" x2="489.6" y2="1208.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="489.6" y1="1203.0" x2="489.6" y2="1213.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="499.6" y="1212.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">15.4 / 21.2</text>
+<rect x="298.0" y="1222.0" width="177.2" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="475.2" y1="1230.0" x2="530.3" y2="1230.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="530.3" y1="1225.0" x2="530.3" y2="1235.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="540.3" y="1234.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">19.6 / 25.7</text>
+<text x="284.0" y="1271.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">16 MB</text>
+<text x="284.0" y="1288.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1254.0" width="145.5" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="443.5" y1="1262.0" x2="492.4" y2="1262.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="492.4" y1="1257.0" x2="492.4" y2="1267.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="502.4" y="1266.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">16.1 / 21.5</text>
+<rect x="298.0" y="1276.0" width="188.0" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="486.0" y1="1284.0" x2="537.6" y2="1284.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="537.6" y1="1279.0" x2="537.6" y2="1289.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="547.6" y="1288.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">20.8 / 26.5</text>
+<text x="284.0" y="1325.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">48 MB</text>
+<text x="284.0" y="1342.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1308.0" width="165.4" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="463.4" y1="1316.0" x2="486.0" y2="1316.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="486.0" y1="1311.0" x2="486.0" y2="1321.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="496.0" y="1320.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">18.3 / 20.8</text>
+<rect x="298.0" y="1330.0" width="240.5" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="538.5" y1="1338.0" x2="584.6" y2="1338.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="584.6" y1="1333.0" x2="584.6" y2="1343.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="594.6" y="1342.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">26.6 / 31.7</text>
+<text x="284.0" y="1379.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">128 MB</text>
+<text x="284.0" y="1396.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1362.0" width="213.3" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="511.3" y1="1370.0" x2="517.7" y2="1370.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="517.7" y1="1365.0" x2="517.7" y2="1375.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="527.7" y="1374.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">23.6 / 24.3</text>
+<rect x="298.0" y="1384.0" width="364.3" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="662.3" y1="1392.0" x2="744.6" y2="1392.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="744.6" y1="1387.0" x2="744.6" y2="1397.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="754.6" y="1396.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">40.3 / 49.4</text>
+<text x="48.0" y="1454.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">纯文件</text>
+<text x="284.0" y="1447.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">4 MB</text>
+<text x="284.0" y="1464.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1430.0" width="170.0" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="468.0" y1="1438.0" x2="521.3" y2="1438.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="521.3" y1="1433.0" x2="521.3" y2="1443.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="531.3" y="1442.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">18.8 / 24.7</text>
+<rect x="298.0" y="1452.0" width="181.7" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="479.7" y1="1460.0" x2="521.3" y2="1460.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="521.3" y1="1455.0" x2="521.3" y2="1465.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="531.3" y="1464.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">20.1 / 24.7</text>
+<text x="284.0" y="1501.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">16 MB</text>
+<text x="284.0" y="1518.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1484.0" width="291.1" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="589.1" y1="1492.0" x2="642.4" y2="1492.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="642.4" y1="1487.0" x2="642.4" y2="1497.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="652.4" y="1496.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">32.2 / 38.1</text>
+<rect x="298.0" y="1506.0" width="211.5" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="509.5" y1="1514.0" x2="552.9" y2="1514.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="552.9" y1="1509.0" x2="552.9" y2="1519.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="562.9" y="1518.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">23.4 / 28.2</text>
+<text x="284.0" y="1555.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">64 MB</text>
+<text x="284.0" y="1572.0" font-size="12" fill="#888780" text-anchor="end">n 30</text>
+<rect x="298.0" y="1538.0" width="743.1" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="1041.1" y1="1546.0" x2="1121.5" y2="1546.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="1121.5" y1="1541.0" x2="1121.5" y2="1551.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="1131.5" y="1550.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">82.2 / 91.1</text>
+<rect x="298.0" y="1560.0" width="299.2" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="597.2" y1="1568.0" x2="674.1" y2="1568.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="674.1" y1="1563.0" x2="674.1" y2="1573.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="684.1" y="1572.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">33.1 / 41.6</text>
+<text x="48.0" y="1630.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">只读触碰</text>
+<text x="284.0" y="1623.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="end">192 MB</text>
+<text x="284.0" y="1640.0" font-size="12" fill="#888780" text-anchor="end">n 20</text>
+<rect x="298.0" y="1606.0" width="139.2" height="16.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<line x1="437.2" y1="1614.0" x2="476.1" y2="1614.0" stroke="#BA7517" stroke-width="1.6"/>
+<line x1="476.1" y1="1609.0" x2="476.1" y2="1619.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="486.1" y="1618.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">15.4 / 19.7</text>
+<rect x="298.0" y="1628.0" width="173.6" height="16.0" rx="3" fill="#FFFFFF" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="471.6" y1="1636.0" x2="515.9" y2="1636.0" stroke="#BA7517" stroke-width="1.6" stroke-dasharray="4 3"/>
+<line x1="515.9" y1="1631.0" x2="515.9" y2="1641.0" stroke="#BA7517" stroke-width="1.6"/>
+<text x="525.9" y="1640.5" font-size="13" fill="#633806" font-weight="600" text-anchor="start">19.2 / 24.1</text>
+<line x1="48" y1="1724" x2="1352" y2="1724" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1750.0" font-size="13" fill="#888780" text-anchor="start">注：全量 checkpoint（每遍首次，n = 3，服务端 total 433–445 ms、墙钟 630–670 ms）单列、不参与判定，图中未画。只读触碰 192 MB 档的内存差分 23.06 MB、盘层 0.71 MB。混合档“内存差分”大于名义内存份，</text>
+<text x="48.0" y="1770.0" font-size="13" fill="#888780" text-anchor="start">因为文件那份经过 guest 页缓存，同时进了内存差分。</text>
+</svg>

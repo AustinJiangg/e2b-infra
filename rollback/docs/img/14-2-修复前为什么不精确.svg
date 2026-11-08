@@ -1,0 +1,327 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1770" viewBox="0 0 1600 1770" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1600" height="1770" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">修复前为什么不精确：ARM 上判据塌缩成“驻留即脏”，而每一代都要把工作集重新换入</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">导出集合只需满足一条：写过的页一个都不能漏，多导只是浪费。三种判据的差别在于怎样对待经 uffd 读缺页换入的页；原生每代是新进程，换入的页在驻留判据下全部算脏。</text>
+<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">同一代里 guest 碰过的块，三种判据各导出哪些</text>
+<text x="540.4" y="150.0" font-size="14.5" fill="#888780" text-anchor="start">以 24 个 2 MiB 块为例，示意</text>
+<rect x="48.0" y="176.0" width="1504.0" height="520.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="70.0" y="228.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">这一代 guest</text>
+<text x="70.0" y="248.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">碰了哪些块</text>
+<rect x="372.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="417.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="436.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="462.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#5F5E5A" stroke="#5F5E5A" stroke-width="1"/>
+<text x="481.0" y="236.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">写</text>
+<rect x="507.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="552.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="571.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="597.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="616.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="642.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="687.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#5F5E5A" stroke="#5F5E5A" stroke-width="1"/>
+<text x="706.0" y="236.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">写</text>
+<rect x="732.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="751.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="777.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="822.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="841.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="867.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="912.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="931.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="957.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="1002.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#5F5E5A" stroke="#5F5E5A" stroke-width="1"/>
+<text x="1021.0" y="236.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">写</text>
+<rect x="1047.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="1066.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="1092.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="1137.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="1182.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="1201.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="1227.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="1246.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="1272.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#5F5E5A" stroke="#5F5E5A" stroke-width="1"/>
+<text x="1291.0" y="236.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">写</text>
+<rect x="1317.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="1362.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="1381.0" y="236.7" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="middle">读</text>
+<rect x="1407.0" y="210.0" width="38.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="372.0" y="272.0" width="18.0" height="18.0" rx="3" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<text x="398.0" y="286.0" font-size="13" fill="#5F5E5A" text-anchor="start">没碰过：恢复后不缺页，内容留在父代</text>
+<rect x="653.0" y="272.0" width="18.0" height="18.0" rx="3" fill="#F7F6F2" stroke="#888780" stroke-width="1"/>
+<text x="679.0" y="286.0" font-size="13" fill="#5F5E5A" text-anchor="start">只读过：读缺页经 uffd 换入</text>
+<rect x="881.2" y="272.0" width="18.0" height="18.0" rx="3" fill="#5F5E5A" stroke="#5F5E5A" stroke-width="1"/>
+<text x="907.2" y="286.0" font-size="13" fill="#5F5E5A" text-anchor="start">写过</text>
+<line x1="70.0" y1="310.0" x2="1530.0" y2="310.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="70.0" y="358.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">x86 上游：uffd 写保护</text>
+<text x="70.0" y="379.0" font-size="12.5" fill="#888780" text-anchor="start">驻留 ∧ 未被写保护（pagemap）</text>
+<rect x="372.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="417.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="462.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#888780" stroke="#888780" stroke-width="1"/>
+<rect x="507.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="552.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="597.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="687.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#888780" stroke="#888780" stroke-width="1"/>
+<rect x="732.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="777.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="822.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="867.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="912.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="957.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1002.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#888780" stroke="#888780" stroke-width="1"/>
+<rect x="1047.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1092.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1137.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1182.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1227.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1272.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#888780" stroke="#888780" stroke-width="1"/>
+<rect x="1317.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1362.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1407.0" y="340.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1460.0" y="364.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">4 块</text>
+<text x="372.0" y="404.0" font-size="13.5" fill="#0F6E56" font-weight="600" text-anchor="start">只导出写过的块</text>
+<text x="662.0" y="404.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">读缺页填进来的页保留写保护，不算脏</text>
+<text x="70.0" y="478.0" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="start">ARM 适配基线：驻留判据</text>
+<text x="70.0" y="499.0" font-size="12.5" fill="#888780" text-anchor="start">faultPage 里 UFFDIO_COPY_MODE_WP 被</text>
+<text x="70.0" y="517.0" font-size="12.5" fill="#888780" text-anchor="start">注释掉，第二项恒真</text>
+<rect x="372.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="417.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="462.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="507.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="552.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="597.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="642.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="687.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="732.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="777.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="822.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="867.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="912.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="957.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1002.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1047.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1092.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1137.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1182.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1227.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1272.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1317.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1362.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1407.0" y="460.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1460.0" y="484.0" font-size="15" fill="#712B13" font-weight="600" text-anchor="start">14 块</text>
+<text x="372.0" y="524.0" font-size="13.5" fill="#A32D2D" font-weight="600" text-anchor="start">驻留即脏：只读过的块也导出</text>
+<text x="662.0" y="524.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">驻留是写过的超集：只会多导，不会少导</text>
+<text x="70.0" y="598.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="start">写跟踪位图</text>
+<text x="70.0" y="619.0" font-size="12.5" fill="#888780" text-anchor="start">KVM / HDBSS 脏页日志 ∪ Firecracker 用户</text>
+<text x="70.0" y="637.0" font-size="12.5" fill="#888780" text-anchor="start">态位图</text>
+<rect x="372.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="417.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="462.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<rect x="507.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="552.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="597.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="687.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<rect x="732.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="777.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="822.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="867.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="912.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="957.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1002.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<rect x="1047.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1092.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1137.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1182.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1227.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1272.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#1D9E75" stroke="#1D9E75" stroke-width="1"/>
+<rect x="1317.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1362.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1407.0" y="580.0" width="38.0" height="36.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1460.0" y="604.0" font-size="15" fill="#085041" font-weight="600" text-anchor="start">4 块</text>
+<text x="372.0" y="644.0" font-size="13.5" fill="#0F6E56" font-weight="600" text-anchor="start">只导出写过的块</text>
+<text x="662.0" y="644.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">经 uffd 填进来的页不在位图里；修复后 ARM 用它（§8.1）</text>
+<text x="70.0" y="674.0" font-size="12.5" fill="#888780" text-anchor="start">实心格 = 导出到差分文件；虚线格 = 不导出，恢复时从父代读</text>
+<circle cx="63" cy="742" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="747.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="749.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">每一代都是新进程：工作集每代重新换入，驻留判据下每代再导出一遍</text>
+<rect x="730.0" y="732.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="767.0" y="748.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="820.0" y="748.0" font-size="14.5" fill="#888780" text-anchor="start">以驻留判据为例</text>
+<rect x="48.0" y="774.0" width="1504.0" height="424.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="70.0" y="824.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第 0 代：模板</text>
+<text x="70.0" y="845.0" font-size="12.5" fill="#888780" text-anchor="start">全量</text>
+<rect x="372.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="417.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="462.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="507.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="552.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="597.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="642.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="687.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="732.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="777.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="822.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="867.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="912.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="957.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1002.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1047.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1092.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1137.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1182.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1227.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1272.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1317.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1362.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<rect x="1407.0" y="806.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="70.0" y="910.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第 1 代差分</text>
+<text x="70.0" y="931.0" font-size="12.5" fill="#888780" text-anchor="start">新进程，碰过的块全部换入、全部导出</text>
+<rect x="372.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="417.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="462.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="507.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="552.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="597.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="642.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="687.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="732.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="777.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="822.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="867.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="912.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="957.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1002.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="1047.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="1092.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1137.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1182.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="1227.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="1272.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="1317.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1362.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<rect x="1407.0" y="892.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1460.0" y="918.0" font-size="15" fill="#712B13" font-weight="600" text-anchor="start">14 块</text>
+<text x="70.0" y="996.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第 2 代差分</text>
+<text x="70.0" y="1017.0" font-size="12.5" fill="#888780" text-anchor="start">又是新进程：工作集再换入一遍；只写了 1 块</text>
+<rect x="372.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="417.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="462.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="507.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="552.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="597.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="687.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="732.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="777.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="796.0" y="1002.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">写</text>
+<rect x="822.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="867.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="912.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="957.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1002.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1047.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1092.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1137.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1182.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1227.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1272.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1317.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="1362.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<rect x="1407.0" y="978.0" width="38.0" height="40.0" rx="4" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1460.0" y="1004.0" font-size="15" fill="#712B13" font-weight="600" text-anchor="start">15 块</text>
+<line x1="70.0" y1="1062.0" x2="1530.0" y2="1062.0" stroke="#E5E3DB" stroke-width="1"/>
+<text x="70.0" y="1098.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第 2 代 header</text>
+<text x="70.0" y="1119.0" font-size="12.5" fill="#888780" text-anchor="start">每块指向最近导出它的那一代</text>
+<rect x="372.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="391.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<rect x="417.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="436.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="462.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="481.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="507.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="526.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="552.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="571.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="597.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<text x="616.0" y="1104.7" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">1</text>
+<rect x="642.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="661.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<rect x="687.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="706.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="732.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="751.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="777.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="796.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="822.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="841.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="867.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="886.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<rect x="912.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="931.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="957.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="976.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<rect x="1002.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1021.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="1047.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1066.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="1092.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1111.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="1137.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1156.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<rect x="1182.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<text x="1201.0" y="1104.7" font-size="13" fill="#712B13" font-weight="600" text-anchor="middle">1</text>
+<rect x="1227.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1246.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="1272.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1291.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="1317.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1336.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<rect x="1362.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#D85A30" stroke="#D85A30" stroke-width="1"/>
+<text x="1381.0" y="1104.7" font-size="13" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<rect x="1407.0" y="1080.0" width="38.0" height="40.0" rx="4" fill="#E8E6DF" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1426.0" y="1104.7" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">0</text>
+<text x="372.0" y="1140.0" font-size="13" fill="#5F5E5A" text-anchor="start">差分文件是紧凑的：只放导出的块，一块紧挨一块。新一代 header 由父代映射与本代映射合并（MergeMappings）：本代导出过的区间指向本代，其余沿用父代。任何一代的 header 都能</text>
+<text x="372.0" y="1160.0" font-size="13" fill="#5F5E5A" text-anchor="start">直接回答“这一块去哪一代读”，不用逐代往回找。</text>
+<rect x="48.0" y="1214.0" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="800.0" y="1240.0" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">每一代增量的下限约等于这一代 guest 碰过的全部页，与改了多少无关；写跟踪位图下，第 2 代只导出写过的那 1 块</text>
+<circle cx="63" cy="1300" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="1305.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="1307.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">三种判据</text>
+<rect x="48.0" y="1326.0" width="1504.0" height="350.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<rect x="218.0" y="1346.0" width="423.3" height="62.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.6"/>
+<text x="429.7" y="1374.0" font-size="19" fill="#2C2C2A" font-weight="600" text-anchor="middle">x86 上游：uffd 写保护</text>
+<text x="429.7" y="1396.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">驻留 ∧ 未被写保护</text>
+<rect x="663.3" y="1346.0" width="423.3" height="62.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.6"/>
+<text x="875.0" y="1374.0" font-size="19" fill="#712B13" font-weight="600" text-anchor="middle">ARM 适配基线：驻留判据</text>
+<text x="875.0" y="1396.0" font-size="13.5" fill="#993C1D" text-anchor="middle">修复前</text>
+<rect x="1108.7" y="1346.0" width="423.3" height="62.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.6"/>
+<text x="1320.3" y="1374.0" font-size="19" fill="#085041" font-weight="600" text-anchor="middle">写跟踪位图</text>
+<text x="1320.3" y="1396.0" font-size="13.5" fill="#0F6E56" text-anchor="middle">KVM / HDBSS 日志</text>
+<line x1="68" y1="1426" x2="1532" y2="1426" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="1460.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">对比小结</text>
+<rect x="62.0" y="1478.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1506.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">读缺页换入的页</text>
+<text x="429.7" y="1506.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">保留写保护，不算脏</text>
+<text x="875.0" y="1506.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">驻留即算脏</text>
+<text x="1320.3" y="1506.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">不在位图里</text>
+<text x="68.0" y="1550.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">导出集合</text>
+<text x="429.7" y="1550.0" font-size="15" fill="#2C2C2A" text-anchor="middle">写过的块</text>
+<text x="875.0" y="1550.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">驻留的块：写过的超集</text>
+<text x="1320.3" y="1550.0" font-size="15" fill="#2C2C2A" text-anchor="middle">写过的块</text>
+<rect x="62.0" y="1566.0" width="1476.0" height="44.0" rx="6" fill="#F1EFE8" stroke="none" stroke-width="0"/>
+<text x="68.0" y="1594.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">会不会少导</text>
+<text x="429.7" y="1594.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">不会</text>
+<text x="875.0" y="1594.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">不会：方向安全</text>
+<text x="1320.3" y="1594.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">不会，叠加 checkpoint 时靠 §9 补</text>
+<text x="68.0" y="1638.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">在 arm64 6.6 上</text>
+<text x="429.7" y="1638.0" font-size="15" fill="#A32D2D" font-weight="600" text-anchor="middle">不可用：没有 uffd 写保护</text>
+<text x="875.0" y="1638.0" font-size="15" fill="#2C2C2A" text-anchor="middle">修复前一直在用</text>
+<text x="1320.3" y="1638.0" font-size="15" fill="#0F6E56" font-weight="600" text-anchor="middle">修复后开了跟踪时用</text>
+<line x1="48" y1="1712" x2="1552" y2="1712" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1738.0" font-size="13" fill="#888780" text-anchor="start">注：两个放大叠在一起才是附录 C“改 12 MiB，导出 148 MiB”的来源。修复前块是 2 MiB（header 的 BlockSize），所以图里按块画；块为什么是 2 MiB、只换判据能省多少，见图 14-3。</text>
+</svg>

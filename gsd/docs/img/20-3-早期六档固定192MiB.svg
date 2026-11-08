@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="774" viewBox="0 0 1400 774" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="774" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">早期六档，固定 192 MiB 进程：checkpoint 与 restore 随改动量的变化</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">920B，2026-10-08，2026-10-16 之前的测法：一个预分配 192 MiB 的常驻进程按六档依次改写内存并写文件，每档一次 checkpoint，最后逐个 restore 回去。脚本连跑三次，取三次</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">的中位数，每次运行每档一个样本。</text>
+<line x1="48.0" y1="140.0" x2="74.0" y2="140.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="82.0" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">checkpoint total_ms</text>
+<line x1="263.0" y1="140.0" x2="289.0" y2="140.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="297.0" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">restore total_ms</text>
+<circle cx="63" cy="202" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="207.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="209.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">服务端分段</text>
+<text x="210.0" y="208.0" font-size="14.5" fill="#888780" text-anchor="start">横轴是各档的内存改写 / 文件写入，按档位等距排列</text>
+<line x1="298.0" y1="534.0" x2="1312.0" y2="534.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="538.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="298.0" y1="478.0" x2="1312.0" y2="478.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="482.5" font-size="12.5" fill="#888780" text-anchor="end">25</text>
+<line x1="298.0" y1="422.0" x2="1312.0" y2="422.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="426.5" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="298.0" y1="366.0" x2="1312.0" y2="366.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="370.5" font-size="12.5" fill="#888780" text-anchor="end">75</text>
+<line x1="298.0" y1="310.0" x2="1312.0" y2="310.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="314.5" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="298.0" y1="254.0" x2="1312.0" y2="254.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="258.5" font-size="12.5" fill="#888780" text-anchor="end">125</text>
+<text x="288.0" y="242.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="382.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">cp1</text>
+<text x="551.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">cp2</text>
+<text x="720.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">cp3</text>
+<text x="889.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">cp4</text>
+<text x="1058.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">cp5</text>
+<text x="1227.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">cp6</text>
+<polyline points="382.5,506.7 551.5,481.8 720.5,468.8 889.5,446.9 1058.5,391.5 1227.5,292.8" fill="none" stroke="#BA7517" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="506.7" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="481.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="468.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="446.9" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="391.5" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="292.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="382.5,318.7 551.5,341.8 720.5,337.8 889.5,328.4 1058.5,330.6 1227.5,317.6" fill="none" stroke="#BA7517" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 5"/>
+<circle cx="382.5" cy="318.7" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="341.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="337.8" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="328.4" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="330.6" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="317.6" r="6" fill="#BA7517" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<text x="382.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">0 / 0 MiB</text>
+<text x="551.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">12 / 4 MiB</text>
+<text x="720.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">24 / 8 MiB</text>
+<text x="889.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">48 / 16 MiB</text>
+<text x="1058.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">96 / 32 MiB</text>
+<text x="1227.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">192 / 64 MiB</text>
+<line x1="48.0" y1="592.0" x2="1312.0" y2="592.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="617.0" x2="70.0" y2="617.0" stroke="#BA7517" stroke-width="2.6"/>
+<text x="78.0" y="622.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="start">checkpoint total_ms</text>
+<text x="382.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">12.2</text>
+<text x="551.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">23.3</text>
+<text x="720.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">29.1</text>
+<text x="889.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">38.9</text>
+<text x="1058.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">63.6</text>
+<text x="1227.5" y="622.0" font-size="13.5" fill="#633806" text-anchor="middle">107.7</text>
+<line x1="48.0" y1="643.0" x2="70.0" y2="643.0" stroke="#BA7517" stroke-width="2.6" stroke-dasharray="6 4"/>
+<text x="78.0" y="648.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="start">restore total_ms</text>
+<text x="382.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">96.1</text>
+<text x="551.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">85.8</text>
+<text x="720.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">87.6</text>
+<text x="889.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">91.8</text>
+<text x="1058.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">90.8</text>
+<text x="1227.5" y="648.0" font-size="13.5" fill="#633806" text-anchor="middle">96.6</text>
+<text x="78.0" y="674.0" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">restore criu_restore_ms（未画线）</text>
+<text x="382.5" y="674.0" font-size="13.5" fill="#2C2C2A" text-anchor="middle">83.0</text>
+<text x="551.5" y="674.0" font-size="13.5" fill="#2C2C2A" text-anchor="middle">73.0</text>
+<text x="720.5" y="674.0" font-size="13.5" fill="#2C2C2A" text-anchor="middle">74.4</text>
+<text x="889.5" y="674.0" font-size="13.5" fill="#2C2C2A" text-anchor="middle">78.5</text>
+<text x="1058.5" y="674.0" font-size="13.5" fill="#2C2C2A" text-anchor="middle">77.7</text>
+<text x="1227.5" y="674.0" font-size="13.5" fill="#2C2C2A" text-anchor="middle">84.1</text>
+<line x1="48" y1="716" x2="1352" y2="716" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="742.0" font-size="13" fill="#888780" text-anchor="start">注：单位 ms。cp0 是进程刚起来时的全量 checkpoint，total_ms 117.1，不在图中。三次运行之间单档的差可以到十几毫秒，这组数适合看趋势，不适合做版本之间的精细对比。</text>
+</svg>

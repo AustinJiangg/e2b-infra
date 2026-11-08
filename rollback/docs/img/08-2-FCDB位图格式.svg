@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1136" viewBox="0 0 1600 1136" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1136" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">FCDB 位图：24 字节头加 u64 位图字，页索引是内存快照文件里的偏移除以页大小</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">这是 orchestrator 与 Firecracker 之间唯一的二进制格式。Rust 侧 serialize_dirty_bitmap / deserialize_dirty_bitmap，Go 侧 dirtyBitmap.writeTo / readDirtyBitmap，两侧镜像实现，改一个</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">必须同时改另一个。</text>
+<line x1="48.0" y1="149.0" x2="88.0" y2="149.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="154.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">对应关系</text>
+<circle cx="63" cy="202" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="207.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="209.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">逐字节布局</text>
+<text x="210.0" y="208.0" font-size="14.5" fill="#888780" text-anchor="start">整数一律小端</text>
+<text x="48.0" y="306.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">FCDB 文件</text>
+<text x="48.0" y="328.0" font-size="13" fill="#888780" text-anchor="start">（侧车、活跃脏图）</text>
+<rect x="198.0" y="270.0" width="150.0" height="80.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.4"/>
+<text x="273.0" y="304.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">magic</text>
+<text x="273.0" y="328.0" font-size="13" fill="#5F5E5A" text-anchor="middle">"FCDB"</text>
+<text x="198.0" y="260.0" font-size="13" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="start">0</text>
+<rect x="348.0" y="270.0" width="180.0" height="80.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.4"/>
+<text x="438.0" y="304.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">version</text>
+<text x="438.0" y="328.0" font-size="13" fill="#5F5E5A" text-anchor="middle">u32，当前 1</text>
+<text x="348.0" y="260.0" font-size="13" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="start">4</text>
+<rect x="528.0" y="270.0" width="260.0" height="80.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.4"/>
+<text x="658.0" y="304.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">page_size</text>
+<text x="658.0" y="328.0" font-size="13" fill="#5F5E5A" text-anchor="middle">u64</text>
+<text x="528.0" y="260.0" font-size="13" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="start">8</text>
+<rect x="788.0" y="270.0" width="260.0" height="80.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.4"/>
+<text x="918.0" y="304.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="middle">num_pages</text>
+<text x="918.0" y="328.0" font-size="13" fill="#5F5E5A" text-anchor="middle">u64</text>
+<text x="788.0" y="260.0" font-size="13" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="start">16</text>
+<rect x="1048.0" y="270.0" width="504.0" height="80.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.4"/>
+<text x="1300.0" y="304.0" font-size="16" fill="#085041" font-weight="600" text-anchor="middle">位图字</text>
+<text x="1300.0" y="328.0" font-size="13" fill="#0F6E56" text-anchor="middle">u64，共 (num_pages + 63) / 64 个</text>
+<text x="1048.0" y="260.0" font-size="13" fill="#888780" font-family="'DejaVu Sans Mono','Consolas',monospace" text-anchor="start">24</text>
+<text x="1548.0" y="260.0" font-size="13" fill="#888780" text-anchor="end">文件长度 = 24 + 8 × 字数，读时必须恰好相等</text>
+<text x="198.0" y="378.0" font-size="14" fill="#5F5E5A" text-anchor="start">例：2 GiB guest 内存、4 KiB 页 → num_pages = 524288，位图 8192 个字，文件长 24 + 65536 字节。magic、version 不符，或长度不对，两侧一律拒绝。</text>
+<circle cx="63" cy="434" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="439.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="441.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">第 w 个字的第 i 位 = 页 w × 64 + i；最后一个字超出 num_pages 的位必须为 0</text>
+<rect x="831.8" y="424.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="868.8" y="440.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="48.0" y="516.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">位图字</text>
+<text x="48.0" y="538.0" font-size="13" fill="#888780" text-anchor="start">每字 64 位</text>
+<rect x="198.0" y="486.0" width="250.0" height="70.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="323.0" y="516.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">字 0</text>
+<text x="323.0" y="538.0" font-size="13" fill="#0F6E56" text-anchor="middle">页 0 – 63</text>
+<rect x="462.0" y="486.0" width="250.0" height="70.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="587.0" y="516.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">字 1</text>
+<text x="587.0" y="538.0" font-size="13" fill="#0F6E56" text-anchor="middle">页 64 – 127</text>
+<text x="771.0" y="530.0" font-size="20" fill="#888780" font-weight="600" text-anchor="middle">…</text>
+<rect x="830.0" y="486.0" width="303.2" height="70.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="981.6" y="516.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">低 r 位：对应页</text>
+<text x="981.6" y="538.0" font-size="13" fill="#0F6E56" text-anchor="middle">r = num_pages % 64</text>
+<rect x="1133.2" y="486.0" width="418.8" height="70.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1342.6" y="516.0" font-size="15.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">其余位：不对应任何页，必须为 0</text>
+<text x="1342.6" y="538.0" font-size="13" fill="#888780" text-anchor="middle">全 1 位图的尾字 = (1 &lt;&lt; r) − 1</text>
+<text x="198.0" y="584.0" font-size="14" fill="#5F5E5A" text-anchor="start">不掩码时单看一个位图不会出错；但 Firecracker 的全 1 侧车与 orchestrator 的 allOnesBitmap 尾字处理不同，求并后做字级比较或计数就会不一致。</text>
+<circle cx="63" cy="640" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="645.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
+<text x="90.0" y="647.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">页索引在哪个空间：内存快照文件的偏移，不是 guest 物理地址</text>
+<text x="680.4" y="646.0" font-size="14.5" fill="#888780" text-anchor="start">§5.2</text>
+<text x="48.0" y="732.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">guest 物理地址</text>
+<text x="48.0" y="752.0" font-size="13" fill="#888780" text-anchor="start">可能不连续</text>
+<rect x="198.0" y="698.0" width="520.0" height="64.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="458.0" y="736.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">region 0</text>
+<rect x="718.0" y="698.0" width="220.0" height="64.0" rx="6" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="828.0" y="736.0" font-size="14" fill="#888780" text-anchor="middle">架构保留洞</text>
+<rect x="938.0" y="698.0" width="394.0" height="64.0" rx="6" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1135.0" y="736.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">region 1</text>
+<text x="48.0" y="878.0" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="start">快照文件偏移</text>
+<text x="48.0" y="898.0" font-size="13" fill="#888780" text-anchor="start">按顺序首尾相接</text>
+<rect x="198.0" y="848.0" width="520.0" height="64.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="458.0" y="886.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">region 0</text>
+<rect x="718.0" y="848.0" width="394.0" height="64.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="915.0" y="886.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="middle">region 1</text>
+<line x1="458.0" y1="764.0" x2="458.0" y2="842.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1135.0" y1="764.0" x2="919.0" y2="842.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="1149.0" y="810.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">Firecracker 换算：region 起始页号 + region 内页号</text>
+<text x="1132.0" y="874.0" font-size="15" fill="#085041" font-weight="600" text-anchor="start">页索引 = 文件偏移 ÷ 页大小</text>
+<text x="1132.0" y="896.0" font-size="13" fill="#0F6E56" text-anchor="start">num_pages 长的平坦位空间</text>
+<rect x="48.0" y="942.0" width="485.3" height="100.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="290.7" y="984.4" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">orchestrator 不需要知道内存布局</text>
+<text x="290.7" y="1012.3" font-size="14" fill="#0F6E56" text-anchor="middle">只在平坦位空间上求并，在平坦文件上 pread / pwrite</text>
+<rect x="557.3" y="942.0" width="485.3" height="100.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="973.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">Firecracker 负责两个空间的换算</text>
+<text x="800.0" y="1001.8" font-size="14" fill="#5F5E5A" text-anchor="middle">dump_dirty 写页、userspace_bitmap_flat 展平、</text>
+<text x="800.0" y="1022.8" font-size="14" fill="#5F5E5A" text-anchor="middle">restore_dirty写回</text>
+<rect x="1066.7" y="942.0" width="485.3" height="100.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1309.3" y="984.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">几何不符：报错，不猜测</text>
+<text x="1309.3" y="1012.3" font-size="14" fill="#5F5E5A" text-anchor="middle">entryBitmap、merge、回滚端点三处核对页大小与页数</text>
+<line x1="48" y1="1078" x2="1552" y2="1078" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1104.0" font-size="13" fill="#888780" text-anchor="start">注：位图与某个具体的内存布局绑定，换了 region 划分，老位图就不能用了，几何校验会挡住它。格式定义在 firecracker/src/vmm/src/vstate/memory.rs:533-596 与 internal/checkpoint/bitmap.go。</text>
+</svg>

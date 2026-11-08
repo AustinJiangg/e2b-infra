@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1426" viewBox="0 0 1600 1426" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="1426" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">层栈怎么变：checkpoint 封存并接替，restore 改指向，删除看引用计数</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">Overlay 只有两个指针：o.cache 指向当前活写层，o.device 指向活写层没有该块时使用的只读来源。checkpoint 与 restore 都只改这两个指针，不逐块复制数据；层文件何时删除由引用计数决定，不按</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">checkpoint 树决定。</text>
+<line x1="48.0" y1="149.0" x2="88.0" y2="149.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="154.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">操作的先后</text>
+<circle cx="63" cy="202" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="207.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="209.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">checkpoint 与 restore：Overlay 的两个指针怎么变</text>
+<rect x="608.4" y="192.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="645.4" y="208.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<text x="698.4" y="208.0" font-size="14.5" fill="#888780" text-anchor="start">以块 100 为例：模板中是 A</text>
+<rect x="48.0" y="244.0" width="434.7" height="560.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="276.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">① 运行中，还没保存过</text>
+<text x="68.0" y="298.0" font-size="13" fill="#888780" text-anchor="start">块 100 改成 B，写进 W1</text>
+<rect x="582.7" y="244.0" width="434.7" height="560.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="602.7" y="276.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">② checkpoint c1 之后，又改成 C</text>
+<text x="602.7" y="298.0" font-size="13" fill="#888780" text-anchor="start">W1 封存进层栈，W2 接替为活写层</text>
+<rect x="1117.3" y="244.0" width="434.7" height="560.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="1137.3" y="276.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">③ restore c1 之后</text>
+<text x="1137.3" y="298.0" font-size="13" fill="#888780" text-anchor="start">改用 c1 的层清单，新建空写层 W3</text>
+<line x1="486.7" y1="394.0" x2="576.7" y2="394.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="531.7" y="380.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">checkpoint</text>
+<text x="531.7" y="420.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">c1</text>
+<line x1="1021.3" y1="394.0" x2="1111.3" y2="394.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="1066.3" y="380.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">restore</text>
+<text x="1066.3" y="420.0" font-size="12.5" fill="#5F5E5A" font-weight="600" text-anchor="middle">c1</text>
+<text x="68.0" y="328.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">o.cache → 当前活写层</text>
+<rect x="68.0" y="340.0" width="394.7" height="64.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="265.3" y="364.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">W1</text>
+<text x="265.3" y="392.3" font-size="14" fill="#5F5E5A" text-anchor="middle">块 100 = B；所有写入都进这里</text>
+<text x="68.0" y="444.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">o.device → 只读来源</text>
+<rect x="68.0" y="456.0" width="394.7" height="64.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="265.3" y="480.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">模板 rootfs</text>
+<text x="265.3" y="508.3" font-size="14" fill="#5F5E5A" text-anchor="middle">块 100 = A</text>
+<text x="68.0" y="550.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">读块 100：W1 位图为 1 → B</text>
+<rect x="68.0" y="574.0" width="394.7" height="120.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="265.3" y="626.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">还没有 LayerStack</text>
+<text x="265.3" y="654.3" font-size="14" fill="#5F5E5A" text-anchor="middle">活写层没有该块就直接读模板</text>
+<text x="602.7" y="328.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">o.cache → 当前活写层</text>
+<rect x="602.7" y="340.0" width="394.7" height="64.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="364.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">W2（接替时是新建的空文件）</text>
+<text x="800.0" y="392.3" font-size="14" fill="#5F5E5A" text-anchor="middle">之后写入：块 100 = C</text>
+<text x="602.7" y="444.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">o.device → LayerStack（c1 的层清单）</text>
+<rect x="602.7" y="456.0" width="394.7" height="162.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.4"/>
+<rect x="614.7" y="468.0" width="370.7" height="58.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="800.0" y="489.4" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">W1（封存层）</text>
+<text x="800.0" y="517.3" font-size="14" fill="#0F6E56" text-anchor="middle">块 100 = B；不再接收正常写入</text>
+<rect x="614.7" y="536.0" width="370.7" height="58.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="800.0" y="557.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">模板 rootfs</text>
+<text x="800.0" y="585.3" font-size="14" fill="#5F5E5A" text-anchor="middle">块 100 = A</text>
+<text x="602.7" y="648.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">读块 100：W2 有 → C（改成 C 之前从 W1 读 B）</text>
+<rect x="602.7" y="672.0" width="394.7" height="120.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="800.0" y="713.9" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">封存文件移进 layers/</text>
+<text x="800.0" y="741.8" font-size="14" fill="#0F6E56" text-anchor="middle">resume 之后 rename；同一文件系统内 inode 不变，活</text>
+<text x="800.0" y="762.8" font-size="14" fill="#0F6E56" text-anchor="middle">着的 mmap 继续有效</text>
+<text x="1137.3" y="328.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">o.cache → 当前活写层</text>
+<rect x="1137.3" y="340.0" width="394.7" height="64.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1334.7" y="364.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">W3（新建的空文件）</text>
+<text x="1334.7" y="392.3" font-size="14" fill="#5F5E5A" text-anchor="middle">后续新写入的位置</text>
+<text x="1137.3" y="444.0" font-size="13.5" fill="#5F5E5A" font-weight="600" text-anchor="start">o.device → LayerStack（c1 的层清单）</text>
+<rect x="1137.3" y="456.0" width="394.7" height="162.0" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.4"/>
+<rect x="1149.3" y="468.0" width="370.7" height="58.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1334.7" y="489.4" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">W1（封存层）</text>
+<text x="1334.7" y="517.3" font-size="14" fill="#0F6E56" text-anchor="middle">块 100 = B；不再接收正常写入</text>
+<rect x="1149.3" y="536.0" width="370.7" height="58.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="1334.7" y="557.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">模板 rootfs</text>
+<text x="1334.7" y="585.3" font-size="14" fill="#5F5E5A" text-anchor="middle">块 100 = A</text>
+<text x="1137.3" y="648.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">读块 100：W3 没有 → 从 W1 读 B</text>
+<rect x="1137.3" y="672.0" width="191.3" height="120.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1233.0" y="713.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">旧写层 W2</text>
+<text x="1233.0" y="741.8" font-size="14" fill="#993C1D" text-anchor="middle">Close()：解映射，连文</text>
+<text x="1233.0" y="762.8" font-size="14" fill="#993C1D" text-anchor="middle">件一起删</text>
+<rect x="1340.7" y="672.0" width="191.3" height="120.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1436.3" y="713.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">旧层栈</text>
+<text x="1436.3" y="741.8" font-size="14" fill="#5F5E5A" text-anchor="middle">Close()：只解映射，文</text>
+<text x="1436.3" y="762.8" font-size="14" fill="#5F5E5A" text-anchor="middle">件留给 store</text>
+<rect x="48.0" y="820.0" width="1504.0" height="40.0" rx="8" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="800.0" y="846.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">两个操作都在虚机暂停期间先刷屏障（BLKFLSBUF）再换指针；NBD dispatcher 手里的 *Overlay 指针、/dev/vda、/dev/nbdX 都不变</text>
+<circle cx="63" cy="906" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="911.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="913.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">删除 checkpoint：先看哪些层仍被引用</text>
+<text x="471.8" y="912.0" font-size="14.5" fill="#888780" text-anchor="start">§4.2 的例子，尚未发生层合并</text>
+<rect x="48.0" y="948.0" width="600.0" height="250.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="976.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">删除前</text>
+<text x="410.5" y="976.0" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">W1</text>
+<text x="555.5" y="976.0" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">W2</text>
+<text x="68.0" y="1010.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">c1 的视图</text>
+<text x="143.1" y="1010.0" font-size="12.5" fill="#888780" text-anchor="start">Entry.Rootfs</text>
+<rect x="348.0" y="992.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="410.5" y="1015.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<text x="555.5" y="1015.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<text x="68.0" y="1056.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">c2 的视图</text>
+<text x="143.1" y="1056.0" font-size="12.5" fill="#888780" text-anchor="start">Entry.Rootfs</text>
+<rect x="348.0" y="1038.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="410.5" y="1061.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<rect x="493.0" y="1038.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="555.5" y="1061.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<text x="68.0" y="1102.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">活账本</text>
+<text x="121.5" y="1102.0" font-size="12.5" fill="#888780" text-anchor="start">rootfsState.layers</text>
+<rect x="348.0" y="1084.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="410.5" y="1107.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<rect x="493.0" y="1084.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="555.5" y="1107.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<line x1="64" y1="1128" x2="632" y2="1128" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68.0" y="1156.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">引用数</text>
+<text x="410.5" y="1157.0" font-size="18" fill="#2C2C2A" font-weight="600" text-anchor="middle">3</text>
+<text x="555.5" y="1157.0" font-size="18" fill="#2C2C2A" font-weight="600" text-anchor="middle">2</text>
+<rect x="952.0" y="948.0" width="600.0" height="250.0" rx="14" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="972.0" y="976.0" font-size="16" fill="#2C2C2A" font-weight="600" text-anchor="start">删除 c1 之后</text>
+<text x="1314.5" y="976.0" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">W1</text>
+<text x="1459.5" y="976.0" font-size="15" fill="#085041" font-weight="600" text-anchor="middle">W2</text>
+<text x="972.0" y="1010.0" font-size="14.5" fill="#888780" font-weight="600" text-anchor="start">c1 的视图</text>
+<text x="1047.1" y="1010.0" font-size="12.5" fill="#888780" text-anchor="start">Entry.Rootfs</text>
+<rect x="1252.0" y="992.0" width="125.0" height="34.0" rx="6" fill="#FFFFFF" stroke="#D85A30" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="1314.5" y="1015.0" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="middle">−1</text>
+<text x="1459.5" y="1015.0" font-size="13.5" fill="#888780" text-anchor="middle">—</text>
+<text x="972.0" y="1056.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">c2 的视图</text>
+<text x="1047.1" y="1056.0" font-size="12.5" fill="#888780" text-anchor="start">Entry.Rootfs</text>
+<rect x="1252.0" y="1038.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="1314.5" y="1061.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<rect x="1397.0" y="1038.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="1459.5" y="1061.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<text x="972.0" y="1102.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">活账本</text>
+<text x="1025.5" y="1102.0" font-size="12.5" fill="#888780" text-anchor="start">rootfsState.layers</text>
+<rect x="1252.0" y="1084.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="1314.5" y="1107.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<rect x="1397.0" y="1084.0" width="125.0" height="34.0" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="1459.5" y="1107.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">列出</text>
+<line x1="968" y1="1128" x2="1536" y2="1128" stroke="#D3D1C7" stroke-width="1"/>
+<text x="972.0" y="1156.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">引用数</text>
+<text x="1314.5" y="1157.0" font-size="18" fill="#2C2C2A" font-weight="600" text-anchor="middle">2</text>
+<text x="1459.5" y="1157.0" font-size="18" fill="#2C2C2A" font-weight="600" text-anchor="middle">2</text>
+<line x1="656.0" y1="1073.0" x2="942.0" y2="1073.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="799.0" y="1043.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">deleteLocked</text>
+<text x="799.0" y="1061.0" font-size="13" fill="#5F5E5A" text-anchor="middle">条目视图每层 −1</text>
+<text x="799.0" y="1099.0" font-size="13" fill="#5F5E5A" font-weight="600" text-anchor="middle">W1 从 3 减到 2</text>
+<text x="799.0" y="1117.0" font-size="13" fill="#5F5E5A" text-anchor="middle">c2 仍要从 W1 读 B</text>
+<rect x="48.0" y="1222.0" width="469.3" height="110.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="60.0" y="1233.0" width="122.6" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="121.3" y="1248.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">Store.layerRefs</text>
+<text x="282.7" y="1284.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">引用数归零</text>
+<text x="282.7" y="1312.3" font-size="14" fill="#5F5E5A" text-anchor="middle">没有任何视图和活账本再列出这一层</text>
+<line x1="521.3" y1="1277.0" x2="559.3" y2="1277.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="565.3" y="1222.0" width="469.3" height="110.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="577.3" y="1233.0" width="52.7" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="603.7" y="1248.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">store</text>
+<text x="800.0" y="1284.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">进 reclaim，锁外删除</text>
+<text x="800.0" y="1312.3" font-size="14" fill="#5F5E5A" text-anchor="middle">层文件连同 .meta 一起</text>
+<line x1="1038.7" y1="1277.0" x2="1076.7" y2="1277.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1082.7" y="1222.0" width="469.3" height="110.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="1094.7" y="1233.0" width="97.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="1143.4" y="1248.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">host 文件系统</text>
+<text x="1317.3" y="1284.4" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">数据块真正释放</text>
+<text x="1317.3" y="1312.3" font-size="14" fill="#5F5E5A" text-anchor="middle">运行中的旧 LayerStack 若仍有 mmap，要等映射解除</text>
+<line x1="48" y1="1368" x2="1552" y2="1368" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1394.0" font-size="13" fill="#888780" text-anchor="start">注：层栈不是 checkpoint 树，所以不能“删一个叶子就删它封存的那一层”：appendLocked 不看 ParentID，全量根的视图也叠在此前每一层上。跟踪关闭时层文件随 checkpoint 次数累积，直到 restore 替换活栈或沙箱销毁；层合并见 §5。</text>
+</svg>

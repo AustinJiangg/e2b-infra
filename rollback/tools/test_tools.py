@@ -3,7 +3,6 @@
 import json
 import re
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -77,88 +76,91 @@ class ToolsTests(unittest.TestCase):
                             f"{path.name}:{token.map[0] + 1}：正文后分隔线前可能缺少空行",
                         )
 
-    def test_generator_is_deterministic(self):
-        docs = self.root / "docs"
-        self.write("docs/README.md", "# 测试手册\n[正文](01-test.md#章节)\n")
-        self.write("docs/01-test.md", "# 测试正文\n## 章节\n内容。\n```mermaid\nflowchart LR\n A --> B\n```\n")
-        runtime = self.write("mermaid.js", "/* 测试用图表运行库占位 */")
-        config = self.write("book.json", json.dumps({
-            "title": "测试手册", "version": "v1.0.0", "date": "2026-10-15",
-            "svgs": [],
+    SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
+
+    def book(self, config=None, chapters=("01-first.md", "02-second.md"), extra=None):
+        """在临时目录里搭一本两章的小书。"""
+        self.write("book/docs/README.md", "# 首页\n[第一章](01-first.md#契约)\n")
+        self.write("book/docs/01-first.md",
+                   "# 01 · 第一章\n## 契约\n只在正文出现的关键字。\n\n![示意](img/01-1-示意.svg)\n\n"
+                   "### 细节\n```text\n</script><script>不应执行</script>\n```\n")
+        self.write("book/docs/02-second.md", "# 02 · 第二章\n## 配置\n见 [`a.py`](../scripts/a.py)。\n")
+        self.write("book/docs/img/01-1-示意.svg", self.SVG)
+        for name, text in (extra or {}).items():
+            self.write(f"book/docs/{name}", text)
+        self.write("book/contents.json", json.dumps({
+            "parts": [{"title": "第一篇", "chapters": list(chapters)}], "appendices": [],
         }, ensure_ascii=False))
-        outputs = [self.root / "one.html", self.root / "two.html"]
-        for output in outputs:
-            result = subprocess.run([
-                sys.executable, str(TOOLS / "build_docs_html.py"), str(docs),
-                "-", str(runtime), str(output), "--config", str(config),
-            ], capture_output=True, text=True)
+        self.write("book/book.json", json.dumps({
+            "title": "测试手册", "version": "v1", "date": "2026-11-07", "contents": "contents.json",
+            "repo_docs_path": "book/docs", **(config or {}),
+        }, ensure_ascii=False))
+        return self.root / "book"
+
+    def build(self, book, output="book.html"):
+        out = self.root / output
+        result = subprocess.run([sys.executable, str(TOOLS / "build_book.py"), str(book), str(out)],
+                                capture_output=True, text=True)
+        return result, out
+
+    def test_generator_is_deterministic(self):
+        book = self.book()
+        outputs = []
+        for name in ("one.html", "two.html"):
+            result, out = self.build(book, name)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(outputs[0].read_bytes(), outputs[1].read_bytes())
-        html = outputs[0].read_text(encoding="utf-8")
-        self.assertIn('href="#doc--01-test--章节"', html)
-        self.assertIn('<pre class="mermaid">', html)
-        self.assertIn("测试手册 v1.0.0", html)
-        self.assertIn(runtime.read_text(encoding="utf-8"), html)
+            outputs.append(out.read_bytes())
+        self.assertEqual(outputs[0], outputs[1])
+
+    def test_navigation_images_and_escaping(self):
+        result, out = self.build(self.book(chapters=("02-second.md", "01-first.md")))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        html = out.read_text(encoding="utf-8")
+        self.assertIn("测试手册", html)
+        self.assertIn("v1 · 2026-11-07", html)
+        self.assertLess(html.index('href="#d02"'), html.index('href="#d01"'))   # 按分篇清单排
+        self.assertIn('href="#d01-契约"', html)
+        self.assertIn('id="d01-细节"', html)
+        self.assertIn("data:image/svg+xml;base64,", html)
+        self.assertIn("图 01-1", html)
+        self.assertNotIn("</script><script>不应执行", html)
+        self.assertIn("&lt;/script&gt;&lt;script&gt;不应执行", html)
+
+    def test_outside_links_pin_to_github_or_degrade(self):
+        result, out = self.build(self.book({"gh_repo": "https://github.com/o/r", "git_ref": "v9"}))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('href="https://github.com/o/r/blob/v9/book/scripts/a.py"', out.read_text(encoding="utf-8"))
+        result, out = self.build(self.book())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        html = out.read_text(encoding="utf-8")
+        self.assertNotIn("scripts/a.py", html)
+        self.assertIn("<code>a.py</code>", html)
+
+    def test_manifest_rejects_missing_and_duplicate_chapters(self):
+        for chapters in (["01-first.md"], ["01-first.md", "02-second.md", "01-first.md"]):
+            with self.subTest(chapters=chapters):
+                result, out = self.build(self.book(chapters=chapters))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("分篇清单", result.stderr)
+                self.assertFalse(out.exists())
+
+    def test_mermaid_block_is_rejected(self):
+        book = self.book(extra={"02-second.md": "# 02 · 第二章\n```mermaid\nflowchart LR\n A --> B\n```\n"})
+        result, _ = self.build(book)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("mermaid", result.stderr)
+
+    def test_missing_image_fails_and_leaves_no_output(self):
+        book = self.book(extra={"02-second.md": "# 02 · 第二章\n\n![缺](img/02-1-缺.svg)\n"})
+        result, out = self.build(book)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(out.exists())
 
     def test_build_usage_rejects_extra_arguments(self):
         result = subprocess.run([
             "bash", str(TOOLS / "build.sh"), "one.html", "two.html",
         ], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
-
-    def generate(self, config):
-        self.write("docs/README.md", "# 首页\n")
-        self.write("docs/01-first.md", "# 第一章\n## 契约\n只在正文出现的关键字。\n### 细节\n```text\n</script><script>不应执行</script>\n```\n")
-        self.write("docs/02-second.md", "# 第二章\n## 配置\n其他内容。\n")
-        runtime = self.write("mermaid.js", "/* 运行库占位 */")
-        conf = self.write("book.json", json.dumps({
-            "title": "测试手册", "version": "v1", "date": "2026-10-16",
-            "svgs": [], **config,
-        }, ensure_ascii=False))
-        output = self.root / "book.html"
-        result = subprocess.run([
-            sys.executable, str(TOOLS / "build_docs_html.py"), str(self.root / "docs"),
-            "-", str(runtime), str(output), "--config", str(conf),
-        ], capture_output=True, text=True)
-        return result, output
-
-    def test_manifest_order_navigation_and_escaping(self):
-        self.write("contents.json", json.dumps({
-            "parts": [{"title": "第一篇", "chapters": ["02-second.md", "01-first.md"]}],
-            "appendices": [],
-        }, ensure_ascii=False))
-        result, output = self.generate({"contents": "contents.json"})
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        html = output.read_text()
-        self.assertLess(html.index('<section class="doc" id="doc--02-second"'),
-                        html.index('<section class="doc" id="doc--01-first"'))
-        self.assertIn('class="nav-group"', html)
-        self.assertIn('aria-controls="nav--doc--01-first"', html)
-        self.assertIn('href="#doc--01-first--契约"', html)
-        self.assertIn('<h3 id="doc--01-first--细节"', html)
-        self.assertNotIn('id="search-index"', html)
-        self.assertNotIn('id="filter"', html)
-        self.assertNotIn('</script><script>不应执行', html)
-        self.assertIn('&lt;/script&gt;&lt;script&gt;不应执行', html)
-
-    def test_manifest_rejects_missing_and_duplicate_chapters(self):
-        for chapters in (["01-first.md"], ["01-first.md", "02-second.md", "01-first.md"]):
-            with self.subTest(chapters=chapters):
-                self.write("contents.json", json.dumps({
-                    "parts": [{"title": "第一篇", "chapters": chapters}], "appendices": [],
-                }))
-                result, _ = self.generate({"contents": "contents.json"})
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("目录清单", result.stderr)
-
-    @unittest.skipUnless(shutil.which("node"), "需要 Node.js")
-    def test_mermaid_missing_dependencies_fail(self):
-        result = subprocess.run([
-            "node", str(TOOLS / "mdmermaid.mjs"), "--node-modules",
-            str(self.root / "node_modules"), str(self.root / "missing.md"),
-        ], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("校验没有执行", result.stderr)
 
 
 if __name__ == "__main__":

@@ -101,26 +101,7 @@ overlay 文件系统里的每个文件，在内核里有一个 **overlay inode**
 它分成三段，中间以**提交点**为界：提交点之前的每一步都可能失败，失败时文件系统的状态一个字节都没变；提交点之后的每一步都不会失败。
 各阶段逐步做了什么，在 [07](07-overlay-hot-switch.md) 的"一次切换在内核里的过程"一节按顺序讲过，这里不再复述，只给阶段图和锁表。
 
-```mermaid
-flowchart TD
-    A["ckpt_mutex 加锁 同一时刻只有一个切换"] --> B["解析选项串 拒绝 index 目录"]
-    B --> C["为新 upper 和各 lower 建私有 mount 和 trap 拒绝跨文件系统的 upper"]
-    C --> D["分配新的根 entry 和退役记录"]
-    D --> E["在新 upper 上建好 work 目录和它的 trap"]
-    E --> F["switch_sem 写锁 等所有 overlay 操作退出"]
-    F --> G["清掉没人用的 dentry"]
-    G --> H["建计划 最后一个可能失败的步骤"]
-    H --> I["提交点"]
-    I --> J["丢弃 whiteout 缓存 换 work 目录的 trap"]
-    J --> K["seqlock 内发布 layers numlayer checkpoint_gen"]
-    K --> L["按计划改写每个缓存的 inode 和 dentry"]
-    L --> M["换 work 目录和根 entry"]
-    M --> N["checkpoint 时搬走仍以写方式打开的文件"]
-    N --> O["把缓存对象的层指针改指新数组 无人引用的旧数组摘下"]
-    O --> P["放开 switch_sem"]
-    P --> Q["释放上一个周期延迟下来的引用"]
-    Q --> R["放开 ckpt_mutex"]
-```
+![一次热切层 ioctl 的阶段、提交点与锁的范围](img/08-1-一次ioctl的阶段与锁.svg)
 
 涉及三把锁和一张延迟释放表，它们各管一件事：
 

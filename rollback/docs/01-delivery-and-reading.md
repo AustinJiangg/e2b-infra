@@ -33,58 +33,7 @@ E2B 原生的 pause / resume 要停掉沙箱，resume 时新建 Firecracker 进�
 
 ## 3. 总体结构
 
-```mermaid
-flowchart TB
-    SDK["Python SDK<br/>sandbox.checkpoint.create / restore / list / delete<br/>→ 沙箱地址的 49984 端口"]
-
-    subgraph HOST["宿主 orchestrator 进程"]
-        direction LR
-        PX["代理拦截<br/>49984 不转发进沙箱<br/>宿主直接应答 + 校验 token"]
-        SVC["Checkpoint Service<br/>按沙箱串行 · 决定全量 / 增量<br/>失败分级 · 分阶段计时"]
-        LED["内存差分树账本<br/>父指针 · 每代脏页位图 · 删除 / 隐藏 / 合并"]
-        RLE["磁盘层账本<br/>合并 header · 层引用计数"]
-        PX --> SVC
-        SVC --> LED
-        SVC --> RLE
-    end
-
-    subgraph FCP["Firecracker 进程（沙箱）—— 全程不重建"]
-        direction LR
-        VC["vCPU · GIC · virtio 设备<br/>逻辑状态写回活对象"]
-        MEM["Guest 内存<br/>差异页直接写回活映射"]
-        DSK["磁盘视图（live NBD 之下）<br/>模板底座 + 封存层 × k + 活写层"]
-    end
-
-    subgraph HW["KVM · 鲲鹏"]
-        HD["脏页跟踪<br/>950：HDBSS 硬件标脏（启动时探测，自动启用）<br/>无 HDBSS：KVM 软件写保护（需显式开启）"]
-    end
-
-    subgraph STO["宿主本地存储"]
-        direction LR
-        F1["snapfile<br/>vCPU 与设备状态"]
-        F2["mem_diff<br/>稀疏，仅本代脏页"]
-        F3["mem_bitmap<br/>本代脏页位图"]
-        F4["rootfs.header + layers/<br/>封存写层，多代共享"]
-    end
-
-    SDK --> PX
-    SVC -- "checkpoint：暂停 → 写差分 ‖ 封存写层 → 恢复" --> FCP
-    FCP -- "restore：暂停 → 算回滚集 → 原地写回 → 切磁盘视图 → 恢复" --> SVC
-    HD -. "脏页日志" .-> MEM
-    MEM --> F2
-    MEM --> F3
-    VC --> F1
-    DSK --> F4
-
-    classDef host fill:#f4f7fb,stroke:#b9c8db
-    classDef fc fill:#fff8f0,stroke:#e0b98a
-    classDef hw fill:#f2f0fb,stroke:#b8aede
-    classDef sto fill:#f2faf3,stroke:#a8ceac
-    class PX,SVC,LED,RLE host
-    class VC,MEM,DSK fc
-    class HD hw
-    class F1,F2,F3,F4 sto
-```
+![总体结构：SDK、宿主 orchestrator、分叉 Firecracker、KVM 四个层次与产物目录](img/01-1-总体结构.svg)
 
 图中有四个层次：SDK 发请求，orchestrator 编排并持有账本，分叉的 Firecracker 读写内存与设备状态，KVM 和硬件提供脏页信息。全书反复用到两个设计选择：
 
@@ -217,6 +166,8 @@ ARM 适配基线上，原生 pause 用驻留判据决定导出哪些页：被换
 | 接手开发 | [第 4 章](04-architecture-and-flow.md) → 对应机制章节 → [第 29 章](29-development.md) → [第 30 章](30-status-and-directions.md) → [附录 C](C-evolution-and-cases.md) |
 
 全书六篇在首页和侧栏按同一顺序组织。正文从当前机制出发，附录 B 保存 920B 详细结果，附录 C 保存工程修复案例。
+
+![全书地图：六篇与附录，以及按目标的六条阅读路径](img/01-2-全书地图.svg)
 
 ## 本章要点
 

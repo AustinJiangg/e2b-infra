@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="944" viewBox="0 0 1600 944" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+<marker id="ar-back" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#0F6E56" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1600" height="944" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">一个沙箱的生命周期：checkpoint / restore 在一代进程内来回，原生 pause / resume 换代</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">以一个 Agent 工作流为例（①–⑩ 按发生顺序）。一代 Firecracker 进程内可以反复 checkpoint、restore；原生 pause 把这一刻固化进存储，resume 起的是新一代，上一代的 checkpoint 随之作废。</text>
+<line x1="48.0" y1="125.0" x2="88.0" y2="125.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<text x="98.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">执行顺序</text>
+<line x1="192.0" y1="125.0" x2="232.0" y2="125.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="242.0" y="130.0" font-size="13.5" fill="#5F5E5A" text-anchor="start">restore：回到某个 checkpoint</text>
+<circle cx="63" cy="178" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="183.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="185.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一个 Agent 工作流，以及底下发生了什么</text>
+<rect x="482.7" y="168.0" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
+<text x="519.7" y="184.0" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
+<rect x="48.0" y="210.0" width="1504.0" height="366.5" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="72.0" y="242.0" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第 1 代 Firecracker 进程</text>
+<text x="293.4" y="242.0" font-size="14" fill="#888780" text-anchor="start">restore 是原地回写，沙箱不中断</text>
+<rect x="72.0" y="390.0" width="248.0" height="100.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="196.0" y="432.7" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">① 由模板快照加载起来</text>
+<text x="196.0" y="460.5" font-size="14" fill="#993C1D" text-anchor="middle">原生加载机制；第 1 代进程</text>
+<line x1="324.0" y1="440.2" x2="368.0" y2="440.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="374.0" y="390.0" width="248.0" height="100.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="498.0" y="432.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">② checkpoint「干净环境」</text>
+<text x="498.0" y="460.5" font-size="14" fill="#0F6E56" text-anchor="middle">这一代的第一次，全量根</text>
+<line x1="626.0" y1="440.2" x2="670.0" y2="440.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="676.0" y="390.0" width="248.0" height="100.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="800.0" y="432.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">③ checkpoint「依赖装好」</text>
+<text x="800.0" y="460.5" font-size="14" fill="#0F6E56" text-anchor="middle">装好依赖之后；增量</text>
+<line x1="928.0" y1="440.2" x2="972.0" y2="440.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="978.0" y="390.0" width="248.0" height="100.5" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="1102.0" y="422.2" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">⑥ checkpoint「构建通过」</text>
+<text x="1102.0" y="450.0" font-size="14" fill="#0F6E56" text-anchor="middle">换个改法 → 跑构建 → 成功；从</text>
+<text x="1102.0" y="471.0" font-size="14" fill="#0F6E56" text-anchor="middle">③ 分出的新分支</text>
+<line x1="1230.0" y1="440.2" x2="1274.0" y2="440.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="1280.0" y="390.0" width="248.0" height="100.5" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="1404.0" y="422.2" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">⑧ 原生 pause</text>
+<text x="1404.0" y="450.0" font-size="14" fill="#993C1D" text-anchor="middle">任务告一段落，固化当前状态，产</text>
+<text x="1404.0" y="471.0" font-size="14" fill="#993C1D" text-anchor="middle">物进存储；第 1 代结束</text>
+<rect x="676.0" y="264.0" width="248.0" height="62.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="800.0" y="300.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">④ 改配置 → 跑构建 → 失败</text>
+<line x1="750.0" y1="388.0" x2="750.0" y2="331.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="790.0" y1="328.0" x2="790.0" y2="385.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="802.0" y="361.5" font-size="13" fill="#0F6E56" font-weight="600" text-anchor="start">⑤ restore 到「依赖装好」</text>
+<rect x="978.0" y="264.0" width="248.0" height="62.0" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="1102.0" y="300.9" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">⑦ 跑测试 → 失败</text>
+<line x1="1052.0" y1="388.0" x2="1052.0" y2="331.0" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<line x1="1092.0" y1="328.0" x2="1092.0" y2="385.0" stroke="#0F6E56" stroke-width="1.8" marker-end="url(#ar-back)"/>
+<text x="1104.0" y="361.5" font-size="13" fill="#0F6E56" font-weight="600" text-anchor="start">⑦ restore 到「构建通过」</text>
+<rect x="72.0" y="512.5" width="1456.0" height="40.0" rx="8" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="0.8"/>
+<text x="800.0" y="538.5" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">⑧ 导出什么：内存是第 1 代启动以来写过的全部页（包括 ⑤、⑦ 两次 restore 写回的页），磁盘是第 1 代的全部写层压平后的结果；两者都相对模板表达，所以 ⑨ 恢复出来的正是 ⑧ 那一刻</text>
+<rect x="48.0" y="598.5" width="1504.0" height="48.0" rx="10" fill="#FFFFFF" stroke="#D85A30" stroke-width="1.4"/>
+<text x="800.0" y="628.5" font-size="15.5" fill="#712B13" font-weight="600" text-anchor="middle">⑨ 几天后 resume：同一个沙箱 ID 新建 Firecracker 进程，换代 —— ②③⑥ 作废（restore 旧条目得到 not_found），⑧ 的状态还在</text>
+<rect x="48.0" y="668.5" width="1504.0" height="182.0" rx="16" fill="#FBFBF9" stroke="#D3D1C7" stroke-width="1"/>
+<text x="72.0" y="700.5" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">第 2 代 Firecracker 进程</text>
+<rect x="72.0" y="722.5" width="248.0" height="104.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
+<text x="196.0" y="766.9" font-size="16.5" fill="#712B13" font-weight="600" text-anchor="middle">⑨ 第 2 代进程起来</text>
+<text x="196.0" y="794.8" font-size="14" fill="#993C1D" text-anchor="middle">从 ⑧ 的快照加载</text>
+<rect x="374.0" y="722.5" width="248.0" height="104.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="498.0" y="754.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">⑩ 继续工作，需要时</text>
+<text x="498.0" y="779.2" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">checkpoint</text>
+<text x="498.0" y="807.0" font-size="14" fill="#0F6E56" text-anchor="middle">第 2 代的第一次又是全量根</text>
+<line x1="324.0" y1="774.5" x2="368.0" y2="774.5" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
+<rect x="676.0" y="722.5" width="852.0" height="104.0" rx="10" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="1102.0" y="768.5" font-size="15" fill="#5F5E5A" font-weight="600" text-anchor="middle">第 2 代的“自启动以来脏页集”从空开始，父代是 ⑧ 的快照；</text>
+<text x="1102.0" y="790.5" font-size="15" fill="#5F5E5A" font-weight="600" text-anchor="middle">第 2 代再 pause 时，导出的是相对 ⑧ 的差分</text>
+<line x1="48" y1="886.5" x2="1552" y2="886.5" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="912.5" font-size="13" fill="#888780" text-anchor="start">注：方向是单向的：checkpoint / restore → 原生 pause 可以；原生 pause / resume 之后，旧的 checkpoint 作废。SDK 的 create_snapshot()（原生 Checkpoint RPC）同样换一代。</text>
+</svg>

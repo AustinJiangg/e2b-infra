@@ -5,21 +5,5 @@
   "gh_repo": "https://github.com/AustinJiangg/e2b-infra",
   "git_ref": "docs-v0.5.6",
   "repo_docs_path": "rollback/docs",
-  "contents": "contents.json",
-  "svgs": [
-    [
-      "01-architecture.svg",
-      "总体结构（优化点标注在对应层）"
-    ],
-    [
-      "02-diff-tree.svg",
-      "内存差分树，以及一次回滚在宿主侧怎么算出来"
-    ],
-    [
-      "03-vs-native.svg",
-      "与 e2b 原生 snapshot / resume 的路径对比"
-    ]
-  ],
-  "appendix_title": "附录 F · 架构与流程配图",
-  "appendix_intro": "三张矢量图已内嵌，可离线查看和用于汇报。"
+  "contents": "contents.json"
 }
