@@ -23,7 +23,7 @@ def mono(d, x, y, s, size=13, color=INK, anchor="middle", weight=400):
 def f08_1():
     d = Diagram()
     d.header("分叉 Firecracker 的三个扩展：orchestrator 在暂停期间调用，Firecracker 只做无状态的读写",
-             "一个可选字段加两个新端点，没有改动任何既有语义。哪些页该回滚、内容从哪一代取，由 orchestrator 算好再递过去；"
+             "一个可选字段加两个新端点，既有行为只改了 fsync 与暂停两处（见 §1.3）。哪些页该回滚、内容从哪一代取，由 orchestrator 算好再递过去；"
              "Firecracker 不知道 checkpoint 树是什么。",
              legend=[("flow", "调用顺序")])
 
@@ -67,7 +67,7 @@ def f08_1():
                     ("提交点前 400 / 提交点后 500 + fault: true", "可恢复，或撕裂只能替换进程"),
                     ("restore 失败", "虚机 resume，沙箱原样继续")], links=[None, None, None])
     c.end()
-    d.footer("注：不使用这三处的调用方，看到的行为与上游完全一致。内存文件与侧车都只 flush、不 sync_all；"
+    d.footer("注：不使用这三处的调用方，看到的行为与上游基本一致，只有快照不 fsync、暂停前补完 MMIO 退出两处不同。内存文件与侧车都只 flush、不 sync_all；"
              "未打补丁的 Firecracker 对新路由回 400 或 404，orchestrator 识别为 RollbackUnsupportedError。")
     d.save(out("rollback", "08-1-三个扩展"))
 

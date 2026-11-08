@@ -180,8 +180,8 @@ e2b 支持多种 rootfs 提供方式，只有 NBD + Overlay 那一种能封存�
 | `PUT /snapshot/save-dirty-bitmap` | 新端点 |
 | `PUT /snapshot/rollback` | 新端点 |
 
-外加 HDBSS 的启用与能力上报，以及回滚路径需要的 seccomp 白名单条目。**没有改动任何既有语义** ——
-一个不使用这三处的调用方，看到的行为与上游一致。
+外加 HDBSS 的启用与能力上报，以及回滚路径需要的 seccomp 白名单条目。一个不使用这三处的调用方，看到的行为与上游基本一致；
+既有行为只改了两处：带 `mem_file_path` 的快照不再 fsync，aarch64 上 vCPU 暂停前先补完挂起的 MMIO 退出（[第 8 章 §1.3](08-firecracker-contract.md#13-最小化原则)）。
 
 这个克制是有意的：分叉越小，跟上游越容易，出问题时越容易判断是不是我们引入的。三个端点的完整契约见 [第 8 章](08-firecracker-contract.md)。
 

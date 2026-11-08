@@ -26,7 +26,7 @@ orchestrator 与 Firecracker 依靠扩展接口、位图格式和明确的暂停
 
 ### 1.3 最小化原则
 
-分叉的形态是三处接口扩展，加上 HDBSS 的启用和 seccomp 放行，**没有改动任何既有语义**：
+分叉的主体是三处接口扩展，加上 HDBSS 的启用和 seccomp 放行：
 
 ```
 CreateSnapshotParams  +  dirty_bitmap_path: Option<PathBuf>      ← 可选字段
@@ -34,7 +34,16 @@ PUT /snapshot/rollback                                            ← 新端点
 PUT /snapshot/save-dirty-bitmap                                   ← 新端点
 ```
 
-一个不使用这三处的调用方，看到的行为与上游完全一致。这是有意的：
+一个不使用这三处的调用方，看到的行为与上游基本一致，但有两处既有行为变了：
+
+- **带 `mem_file_path` 的快照不再 fsync。** 上游写完内存文件和 snapfile 都调用 `sync_all()`；我们在这条路径上只 `flush()`（`vm.rs:534`、`persist.rs:232` `snapfile_must_be_durable`）。
+  e2b 原生 pause 请求不带 `mem_file_path`，snapfile 仍然 fsync，不受影响。原因见 [§2.4](#24-落地的持久性)。
+- **aarch64 上 vCPU 在回应暂停之前，先补完 KVM 欠它的 MMIO 退出**（`vstate/vcpu.rs:346`、`arch/aarch64/vcpu.rs:320` `complete_pending_exit`）。
+  否则暂停后读到的寄存器停在这次退出完成之前，而设备模型已经处理了这次访问。它对所有暂停都生效，包括原生 pause 和普通快照。
+
+另外新增了 `Faulted` 状态（`rpc_interface.rs:660`）：只有回滚在提交点之后失败才会进入（[第 9 章](09-in-place-rollback.md)），不调用回滚端点的调用方遇不到。
+
+分叉保持小，是有意的：
 
 - 分叉越小，**跟上游合并**越容易；
 - 出问题时**越容易判断**是不是我们引入的；
@@ -443,7 +452,7 @@ Firecracker 给每个线程装独立的 seccomp 过滤器（`firecracker/resourc
 
 ## 本章要点
 
-- 分叉只有三处接口扩展，外加 HDBSS 启用与 seccomp 放行，不改变任何既有语义；语义在 orchestrator，机械动作在 Firecracker。
+- 分叉的主体是三处接口扩展，外加 HDBSS 启用与 seccomp 放行；既有行为只改了两处：带 `mem_file_path` 的快照不再 fsync，aarch64 暂停前先补完挂起的 MMIO 退出。语义在 orchestrator，机械动作在 Firecracker。
 - `dirty_bitmap_path` 必须在写快照的同一次调用里落地：之后位图已清，之前取图又是破坏性的。
 - `PUT /snapshot/rollback` 由 orchestrator 传 `resume_vm: false`，因为磁盘视图还没换；提交点之前回 400，之后回 500 且带 `"fault": true`，错误分类看字段不看文案。
 - `PUT /snapshot/save-dirty-bitmap` 要求虚机暂停，不清位图；它让 orchestrator 事先知道 Firecracker 会写回哪些页，稀疏物化文件才成立。
