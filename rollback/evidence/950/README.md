@@ -1,6 +1,6 @@
 # 950 阶段验证结果摘要
 
-整理日期：2026-10-17。本页记录五轮已回传测试的结论和验证边界。46 个原始文件保留在本地 `rollback/scripts/950/results/`，该目录由 Git 忽略，原始日志不提交、不推送，也不作为 Release 附件分发。
+整理日期：2026-10-17，2026-11-06 补原生分档一轮。本页记录六轮已回传测试的结论和验证边界。46 个原始文件保留在本地 `rollback/scripts/950/results/`，该目录由 Git 忽略，原始日志不提交、不推送，也不作为 Release 附件分发。
 
 ## 轮次摘要
 
@@ -11,6 +11,7 @@
 | 20261013-163056-func | 17 PASS / 0 FAIL / 4 SKIP | 16 个默认 crtest 用例及 SDK 异常语义；T18、T21、T38、T37 的重启、注入、配额专项跳过。包含 4 沙箱 × 120 s 短稳态和恢复后立即请求 |
 | 20261013-165204-hdbss | 3 PASS / 0 FAIL / 0 SKIP | 默认 order 1 的启用和数据面证据；69 次增量迭代、MD5 不一致 0、非增量 0。未扫描其他 order、未做同机软件后端对照 |
 | 20261015-121331-smoke | 5 PASS / 0 FAIL / 0 SKIP | 按部署脚本选择版本后，宿主预检 19 PASS、正确性 59/59，并完成能力、SDK 与 Firecracker 身份检查 |
+| 20261106-native-tiers | PASS，108 样本，失败 0 | 原生 pause / resume 六档，每档 15 个 repeat、3 个 first；身份已回传（orchestrator sha256 `a5d03902…`，`hdbss`）。数据见手册[第 18 章 §9](../../docs/18-950-performance.md#9-原生-pause--resume-分档实测修复后)。原始 JSON 已回传并按样本重算，`create_snapshot()` 路径未测 |
 
 ## 身份与验证边界
 
