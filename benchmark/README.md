@@ -252,6 +252,7 @@ python visualize_intervals.py           # 自动定位最近一次运行目录 �
 | `.env.example` / `sync-env.sh` | `.env` 模板与凭据同步脚本（从磁盘填 E2B/Nomad token，见 `single-node-offline-deploy.md` §12） |
 | `启动耗时阶段分析.md` | 各阶段在源码里的位置/嵌套关系/端到端口径分析 |
 | `高并发瓶颈定位方案.md` | **高并发瓶颈定位的持续迭代方案**：准入排队、`等待fc启动` 拆分、甘特可视化 |
+| `sandbox_mem/` | **空闲沙箱内存占用测量**：测量脚本、原理文档、2026-11-10 两轮实测（每个空闲 2U2G 沙箱约 350 MiB，并发先受 orchestrator cgroup 32 GiB 限制）、原始报告和展示图。凭据沿用本目录 `.env`，见 [`sandbox_mem/README.md`](sandbox_mem/README.md) |
 
 每次 `run_benchmark.py` 会在 `runs/` 下新建一个运行目录，一次压测的全部产物都归集在内：
 

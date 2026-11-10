@@ -1,0 +1,86 @@
+空闲沙箱内存测量  N=1  模板=base  T1=30s  T2=300s  T3=关闭后60s  2026-11-10 17:02:45
+PAGESIZE=4096  Hugepagesize:       2048 kB
+沙箱: iafc6c33ayz7fskbucpb1
+
+   before        T1        T2        T3 | T1-before T2-before |      T2/N | T3-before | (MiB；T3=关闭后残留)
+      0.0     146.0     154.0       0.0 |     146.0     154.0 |     154.0 |       0.0 | ① 客户机内存(fc 大页)
+     76.0     222.0     230.0      76.0 |     146.0     154.0 |     154.0 |       0.0 |    大页已用(核对≈①)
+    258.0     258.0     258.0     258.0 |       0.0       0.0 |       0.0 |       0.0 |    大页 Rsvd(预留未落地)
+      0.0       4.2       4.2       0.0 |       4.2       4.2 |       4.2 |       0.0 | ② firecracker 进程 RSS
+      0.0       4.2       4.2       0.0 |       4.2       4.2 |       4.2 |       0.0 |    (同上 PSS)
+    407.4     503.7     506.8     466.0 |      96.3      99.4 |      99.4 |      58.6 | ③ orchestrator RSS
+    124.5     160.3     162.5     183.1 |      35.8      38.0 |      38.0 |      58.6 |    其中 RssAnon(私有)
+    282.9     343.4     344.3     282.9 |      60.5      61.4 |      61.4 |       0.0 |    其中 RssFile(文件页)
+  15395.5   15571.4   15605.0   15462.3 |     175.9     209.5 |     209.5 |      66.8 |    orch cgroup memory.current
+    124.5     162.7     165.0     183.1 |      38.2      40.5 |      40.5 |      58.6 |      其中 anon
+  15182.0   15320.2   15350.5   15187.5 |     138.2     168.5 |     168.5 |       5.5 |      其中 file(page cache)
+      0.0       0.0       0.0       0.0 |       0.0       0.0 |       0.0 |       0.0 |      其中 kernel
+ 583768.4  584422.5  586473.7  586372.0 |     654.1    2705.3 |    2705.3 |    2603.6 | ④ MemTotal-MemAvailable(普通内存)
+ 108391.3  108511.0  109232.6  109038.4 |     119.7     841.3 |     841.3 |     647.1 |    AnonPages
+  19659.1   20624.9   26236.3   27488.9 |     965.8    6577.2 |    6577.2 |    7829.8 |    Cached(page cache)
+  13068.2   13070.7   13075.6   13074.7 |       2.5       7.4 |       7.4 |       6.5 |    Slab 可回收
+   3967.2    3971.5    3978.5    3972.5 |       4.3      11.3 |      11.3 |       5.3 |    Slab 不可回收
+    383.5     384.1     386.4     385.4 |       0.6       2.9 |       2.9 |       1.9 |    PageTables
+    149.6     149.7     150.3     149.9 |       0.1       0.7 |       0.7 |       0.3 |    KernelStack
+  18190.7   18190.7   18190.7   18190.7 |       0.0       0.0 |       0.0 |       0.0 |    Shmem
+      0.0       0.0       0.0       0.0 |       0.0       0.0 |       0.0 |       0.0 |    snapshot-cache tmpfs
+    211.5     211.5     211.5     211.5 |       0.0       0.0 |       0.0 |       0.0 |    orchestrator build 目录(磁盘)
+      0.0      60.6      62.0       0.0 |      60.6      62.0 |      62.0 |       0.0 |    orchestrator sandbox 目录(磁盘)
+
+T2 时刻每个沙箱：大页 154.0 MiB；可归因合计 (①+②PSS+③)/N = 257.6 MiB；宿主机总口径 (①+④)/N = 2859.3 MiB
+orch cgroup memory.max = 32768.0 MiB（客户机大页不计入；其余普通内存计入，超了会 memcg OOM）
+（同一 N 下的绝对值含一次性开销；边际值请用 N=1 与 N=10 两次做差，见 空闲沙箱内存实测分析.md）
+
+----- T2 明细 -----
+== 2026-11-10 17:01:42  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=1
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=199949,used=115,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 230.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 154.0
+firecracker RSS/PSS 合计    : 4.2 / 4.2
+orchestrator RSS (MiB)      : 506.8   (pid 2358943; anon 162.5 / file 344.3 / shmem 0.0)
+orch cgroup 用量/上限 (MiB) : 15605.0 / 32768.0   (anon 165.0 / file 15350.5 / kernel 0.0；/sys/fs/cgroup/nomad.slice/share.slice/67b55cc2-afb6-af7c-4b2d-14b97d921998.start.scope)
+snapshot-cache tmpfs (MiB)  : 0.0
+build / sandbox 目录 (MiB)  : 211.5 / 62.0   （/orchestrator 下，磁盘）
+AnonPages / Cached (MiB)    : 109230.8 / 26228.7
+Slab 可回收/不可回收 (MiB)  : 13075.6 / 3974.6
+PageTables / KernelStack    : 385.5 / 150.3 MiB
+Shmem (MiB)                 : 18190.7
+MemTotal-MemAvailable (MiB) : 586461.3
+  fc pid 400817   RSS=    4.2 MiB  PSS=    4.2 MiB  客户机大页=   154.0 MiB
+
+----- T3（关闭后）明细 -----
+== 2026-11-10 17:02:44  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=0
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=200026,used=38,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 76.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 0.0
+firecracker RSS/PSS 合计    : 0.0 / 0.0
+orchestrator RSS (MiB)      : 466.0   (pid 2358943; anon 183.1 / file 282.9 / shmem 0.0)
+orch cgroup 用量/上限 (MiB) : 15462.3 / 32768.0   (anon 183.1 / file 15187.5 / kernel 0.0；/sys/fs/cgroup/nomad.slice/share.slice/67b55cc2-afb6-af7c-4b2d-14b97d921998.start.scope)
+snapshot-cache tmpfs (MiB)  : 0.0
+build / sandbox 目录 (MiB)  : 211.5 / 0.0   （/orchestrator 下，磁盘）
+AnonPages / Cached (MiB)    : 109036.0 / 27471.4
+Slab 可回收/不可回收 (MiB)  : 13074.7 / 3972.0
+PageTables / KernelStack    : 385.2 / 150.0 MiB
+Shmem (MiB)                 : 18190.7
+MemTotal-MemAvailable (MiB) : 586387.7
+
+----- idle_sandbox.py 输出（含 --guest 客户机视角）-----
+[1/1] created iafc6c33ayz7fskbucpb1  (0.10s)
+全部创建完成，空闲保持（最长 900s）...
+
+===== 客户机视角（iafc6c33ayz7fskbucpb1）=====
+$ free -m
+               total        used        free      shared  buff/cache   available
+Mem:            1990          68        1863           0          59        1859
+Swap:              0           0           0
+
+$ head -5 /proc/meminfo
+MemTotal:        2038520 kB
+MemFree:         1908332 kB
+MemAvailable:    1904428 kB
+Buffers:            5368 kB
+Cached:            51308 kB
+
+已关闭 1 个沙箱
