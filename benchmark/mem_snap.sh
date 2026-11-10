@@ -12,12 +12,23 @@
 #   fc_rss_mib      所有 firecracker 进程的普通页 RSS（不含大页）= VMM 自身开销
 #   fc_pss_mib      同上的 PSS（共享的二进制/库按进程数均摊）
 #   orch_rss_mib    orchestrator（template-manager 合体进程）RSS
-#   snapcache_mib   /mnt/snapshot-cache（tmpfs）用量：模板 memfile/rootfs 缓存，同模板沙箱共享
+#   orch_anon/file/shmem_mib  orchestrator RSS 拆分（/proc/<pid>/status 的 RssAnon/RssFile/RssShmem）：
+#                   anon 是 Go 堆等私有内存；file 是 mmap 的文件页（属于 page cache，可被多方共享）
+#   snapcache_mib   /mnt/snapshot-cache（tmpfs，SNAPSHOT_CACHE_DIR）用量：暂停/快照用的缓存。
+#                   注意它**不是**模板缓存；模板 memfile/rootfs 的本地缓存在 ${ORCH_BASE}/build（磁盘，走 page cache），
+#                   见 deploy-docs/10 §1
+#   orch_build_mib  ${ORCH_BASE}/build 磁盘占用（模板 diff 缓存，同模板共享）
+#   orch_sbx_mib    ${ORCH_BASE}/sandbox 磁盘占用（运行中沙箱的每沙箱文件）
+#   cg_*_mib        orchestrator 所在 cgroup（Nomad task cgroup，firecracker 也在里面）的 memory.current /
+#                   memory.max 及 memory.stat 的 anon/file/kernel 拆分。客户机大页不记在这里，
+#                   但 orchestrator 堆、fc 进程、page cache、内核对象都记，超过 memory.max 会 memcg OOM（deploy-docs/12）
+#   anon/cached/slab_*/pagetables/kstack_mib  /proc/meminfo 对应项，用来给 MemTotal-MemAvailable 的变化找归属
 #   shmem_mib       /proc/meminfo Shmem（tmpfs 等），snapshot-cache 包含在内
 #   nonhp_used_mib  MemTotal - MemAvailable：普通内存口径的"已用"（静态大页池开机就扣掉了，
 #                   所以只有 overcommit 出来的大页会体现在这里）
 
 set -u
+ORCH_BASE=${ORCHESTRATOR_BASE_PATH:-/orchestrator}
 KV=0
 [ "${1:-}" = "--kv" ] && KV=1
 
@@ -53,11 +64,32 @@ for p in $fc_pids; do
 done
 
 orch_pid=$(pgrep -f /usr/bin/template-manager | head -1)
-orch_rss_kb=0
-[ -n "$orch_pid" ] && orch_rss_kb=$(awk '/^VmRSS:/{print $2}' "/proc/$orch_pid/status" 2>/dev/null || echo 0)
+orch_rss_kb=0; orch_anon_kb=0; orch_file_kb=0; orch_shmem_kb=0
+if [ -n "$orch_pid" ] && [ -r "/proc/$orch_pid/status" ]; then
+  read -r orch_rss_kb orch_anon_kb orch_file_kb orch_shmem_kb < <(awk '
+    /^VmRSS:/{r=$2} /^RssAnon:/{a=$2} /^RssFile:/{f=$2} /^RssShmem:/{s=$2}
+    END{print r+0, a+0, f+0, s+0}' "/proc/$orch_pid/status")
+fi
+
+# orchestrator 所在 cgroup（cgroup v2）
+cg_cur_kb=0; cg_max_kb=0; cg_anon_kb=0; cg_file_kb=0; cg_kern_kb=0; cg_path=""
+if [ -n "$orch_pid" ] && [ -r "/proc/$orch_pid/cgroup" ]; then
+  cg_path="/sys/fs/cgroup$(awk -F: '$1=="0"{print $3}' "/proc/$orch_pid/cgroup")"
+  if [ -r "$cg_path/memory.current" ]; then
+    cg_cur_kb=$(( $(cat "$cg_path/memory.current") / 1024 ))
+    mx=$(cat "$cg_path/memory.max"); [ "$mx" = "max" ] && cg_max_kb=0 || cg_max_kb=$(( mx / 1024 ))
+    read -r cg_anon_kb cg_file_kb cg_kern_kb < <(awk '
+      $1=="anon"{a=$2} $1=="file"{f=$2} $1=="kernel"{k=$2; hk=1}
+      $1=="slab"||$1=="kernel_stack"||$1=="pagetables"||$1=="sock"||$1=="percpu"{ks+=$2}
+      END{if(!hk)k=ks; printf "%d %d %d\n", a/1024, f/1024, k/1024}' "$cg_path/memory.stat")
+  fi
+fi
 
 snapcache_kb=$(du -sk /mnt/snapshot-cache 2>/dev/null | cut -f1)
 snapcache_kb=${snapcache_kb:-0}
+dsk() { local v; v=$(du -sk "$1" 2>/dev/null | cut -f1); echo "${v:-0}"; }
+orch_build_kb=$(dsk "$ORCH_BASE/build")
+orch_sbx_kb=$(dsk "$ORCH_BASE/sandbox")
 
 m() { awk -v x="$1" 'BEGIN{printf "%.1f", x/1024}'; }
 
@@ -69,8 +101,24 @@ if [ $KV -eq 1 ]; then
   echo "fc_rss_mib=$(m $fc_rss_kb)"
   echo "fc_pss_mib=$(m $fc_pss_kb)"
   echo "orch_rss_mib=$(m $orch_rss_kb)"
+  echo "orch_anon_mib=$(m $orch_anon_kb)"
+  echo "orch_file_mib=$(m $orch_file_kb)"
+  echo "orch_shmem_mib=$(m $orch_shmem_kb)"
   echo "snapcache_mib=$(m $snapcache_kb)"
+  echo "cg_cur_mib=$(m $cg_cur_kb)"
+  echo "cg_max_mib=$(m $cg_max_kb)"
+  echo "cg_anon_mib=$(m $cg_anon_kb)"
+  echo "cg_file_mib=$(m $cg_file_kb)"
+  echo "cg_kernel_mib=$(m $cg_kern_kb)"
+  echo "orch_build_mib=$(m $orch_build_kb)"
+  echo "orch_sbx_mib=$(m $orch_sbx_kb)"
   echo "shmem_mib=$(m "$(mi Shmem)")"
+  echo "anon_mib=$(m "$(mi AnonPages)")"
+  echo "cached_mib=$(m "$(mi Cached)")"
+  echo "slab_rec_mib=$(m "$(mi SReclaimable)")"
+  echo "slab_unrec_mib=$(m "$(mi SUnreclaim)")"
+  echo "pagetables_mib=$(m "$(mi PageTables)")"
+  echo "kstack_mib=$(m "$(mi KernelStack)")"
   echo "nonhp_used_mib=$(m $(( $(mi MemTotal) - $(mi MemAvailable) )))"
 else
   echo "== $(date '+%F %T')  PAGESIZE=$(getconf PAGESIZE)  默认Hugepagesize=$(mi Hugepagesize)kB  firecracker 进程数=$fc_count"
@@ -79,8 +127,13 @@ else
   echo "大页已预留未落地 Rsvd (MiB) : $(m $hp_rsvd_kb)"
   echo "firecracker 客户机大页合计  : $(m $fc_huge_kb)"
   echo "firecracker RSS/PSS 合计    : $(m $fc_rss_kb) / $(m $fc_pss_kb)"
-  echo "orchestrator RSS (MiB)      : $(m $orch_rss_kb)   (pid ${orch_pid:-未找到})"
-  echo "snapshot-cache (MiB)        : $(m $snapcache_kb)"
+  echo "orchestrator RSS (MiB)      : $(m $orch_rss_kb)   (pid ${orch_pid:-未找到}; anon $(m $orch_anon_kb) / file $(m $orch_file_kb) / shmem $(m $orch_shmem_kb))"
+  echo "orch cgroup 用量/上限 (MiB) : $(m $cg_cur_kb) / $(m $cg_max_kb)   (anon $(m $cg_anon_kb) / file $(m $cg_file_kb) / kernel $(m $cg_kern_kb)；${cg_path:-未找到})"
+  echo "snapshot-cache tmpfs (MiB)  : $(m $snapcache_kb)"
+  echo "build / sandbox 目录 (MiB)  : $(m $orch_build_kb) / $(m $orch_sbx_kb)   （$ORCH_BASE 下，磁盘）"
+  echo "AnonPages / Cached (MiB)    : $(m "$(mi AnonPages)") / $(m "$(mi Cached)")"
+  echo "Slab 可回收/不可回收 (MiB)  : $(m "$(mi SReclaimable)") / $(m "$(mi SUnreclaim)")"
+  echo "PageTables / KernelStack    : $(m "$(mi PageTables)") / $(m "$(mi KernelStack)") MiB"
   echo "Shmem (MiB)                 : $(m "$(mi Shmem)")"
   echo "MemTotal-MemAvailable (MiB) : $(m $(( $(mi MemTotal) - $(mi MemAvailable) )))"
   printf '%s' "$fc_lines"

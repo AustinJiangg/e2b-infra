@@ -1,0 +1,61 @@
+# 2026-11-10 测量当天的宿主机上下文（用户在服务器上执行，原样记录）
+# 顺序：sandbox.py 冒烟 → mem_snap.sh（空闲基线）→ grep/free → measure_idle_mem.sh 1 → grep/free → measure_idle_mem.sh 10 → grep/free
+
+## sandbox.py 冒烟（客户机内 df -h，摘录）
+/dev/root       737M  241M  480M  34% /
+tmpfs           996M     0  996M   0% /dev/shm
+$ python3 --version -> Python 3.10.12
+
+## bash mem_snap.sh（测量前，无沙箱）
+== 2026-11-10 15:51:47  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=0
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=200026,used=38,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 76.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 0.0
+firecracker RSS/PSS 合计    : 0.0 / 0.0
+orchestrator RSS (MiB)      : 403.7   (pid 2358943)
+snapshot-cache (MiB)        : 0.0
+Shmem (MiB)                 : 18182.4
+MemTotal-MemAvailable (MiB) : 482061.5
+
+## grep -i huge /proc/meminfo / free -m —— 测量前
+AnonHugePages:   3608576 kB
+ShmemHugePages:        0 kB
+FileHugePages:  45424640 kB
+HugePages_Total:   200064
+HugePages_Free:    200026
+HugePages_Rsvd:      129
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:        409731072 kB
+               total        used        free      shared  buff/cache   available
+Mem:         2553129      482037     1930172       18182      171055     2071092
+Swap:           5119         269        4850
+
+## 同上 —— N=1 测完后
+AnonHugePages:   3610624 kB
+ShmemHugePages:        0 kB
+FileHugePages:    409600 kB
+HugePages_Total:   200064
+HugePages_Free:    200026
+HugePages_Rsvd:      129
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:        409731072 kB
+               total        used        free      shared  buff/cache   available
+Mem:         2553129      476284     2072196       18182       32842     2076844
+Swap:           5119         269        4850
+
+## 同上 —— N=10 测完后
+AnonHugePages:   3608576 kB
+ShmemHugePages:        0 kB
+FileHugePages:    411648 kB
+HugePages_Total:   200064
+HugePages_Free:    200026
+HugePages_Rsvd:      129
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:        409731072 kB
+               total        used        free      shared  buff/cache   available
+Mem:         2553129      478061     2069343       18182       34991     2075067
+Swap:           5119         269        4850

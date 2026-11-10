@@ -1,0 +1,48 @@
+空闲沙箱内存测量  N=1  模板=base  T1=30s  T2=300s  2026-11-10 15:57:46
+PAGESIZE=4096  Hugepagesize:       2048 kB
+沙箱: iusxfv47uo1leqc2sxpim
+
+   before        T1        T2 | T1-before T2-before |      T1/N      T2/N | (MiB)
+      0.0     156.0     160.0 |     156.0     160.0 |     156.0     160.0 | ① 客户机内存(fc 大页)
+      0.0       2.3       4.2 |       2.3       4.2 |       2.3       4.2 | ② firecracker 进程 RSS
+      0.0       2.2       4.2 |       2.2       4.2 |       2.2       4.2 |    (同上 PSS)
+    400.1     486.9     502.9 |      86.8     102.8 |      86.8     102.8 | ③ orchestrator RSS
+      0.0       0.0       0.0 |       0.0       0.0 |       0.0       0.0 | ④ snapshot-cache(共享)
+     76.0     232.0     236.0 |     156.0     160.0 |     156.0     160.0 |    大页已用(核对≈①)
+    258.0     258.0     258.0 |       0.0       0.0 |       0.0       0.0 |    大页 Rsvd(预留未落地)
+ 476108.7  476352.9  476346.7 |     244.2     238.0 |     244.2     238.0 |    MemTotal-MemAvailable
+
+T2 时刻每个沙箱独占 ≈ (①+②PSS+③)/N = 267.0 MiB
+另有共享的 snapshot-cache 增量 0.0 MiB（同模板所有沙箱共用一份）
+
+----- T2 明细 -----
+== 2026-11-10 15:57:45  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=1
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=199946,used=118,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 236.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 160.0
+firecracker RSS/PSS 合计    : 4.2 / 4.2
+orchestrator RSS (MiB)      : 502.9   (pid 2358943)
+snapshot-cache (MiB)        : 0.0
+Shmem (MiB)                 : 18182.5
+MemTotal-MemAvailable (MiB) : 476345.2
+  fc pid 225507   RSS=    4.2 MiB  PSS=    4.2 MiB  客户机大页=   160.0 MiB
+
+----- idle_sandbox.py 输出（含 --guest 客户机视角）-----
+[1/1] created iusxfv47uo1leqc2sxpim  (0.08s)
+全部创建完成，空闲保持（最长 900s）...
+
+===== 客户机视角（iusxfv47uo1leqc2sxpim）=====
+$ free -m
+               total        used        free      shared  buff/cache   available
+Mem:            1990          71        1860           0          59        1856
+Swap:              0           0           0
+
+$ head -5 /proc/meminfo
+MemTotal:        2038520 kB
+MemFree:         1905084 kB
+MemAvailable:    1901196 kB
+Buffers:            5368 kB
+Cached:            51308 kB
+
+已关闭 1 个沙箱

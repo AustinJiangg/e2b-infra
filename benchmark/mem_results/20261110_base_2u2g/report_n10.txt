@@ -1,0 +1,66 @@
+空闲沙箱内存测量  N=10  模板=base  T1=30s  T2=300s  2026-11-10 16:04:04
+PAGESIZE=4096  Hugepagesize:       2048 kB
+沙箱: iqst10e4qslvd3ftwydqu i2lauamz86c1vr79cn2pk igpdjb7qa5wluqtruuk1s iiabcmcj6dzki8dwa26sq iqckl8iu5ovj9tvbtpkao im7t7jk13hdz40w6q5jun ifxhk9r8odni8op29r3wn icu0wqqqp9vf3s80jsk05 iklpslbkos4ffo501oktt il3ja7hz4r7wu6htr7uvf
+
+   before        T1        T2 | T1-before T2-before |      T1/N      T2/N | (MiB)
+      0.0    1542.0    1582.0 |    1542.0    1582.0 |     154.2     158.2 | ① 客户机内存(fc 大页)
+      0.0      40.5      42.5 |      40.5      42.5 |       4.0       4.2 | ② firecracker 进程 RSS
+      0.0      24.3      26.3 |      24.3      26.3 |       2.4       2.6 |    (同上 PSS)
+    445.3    1342.3    1278.8 |     897.0     833.5 |      89.7      83.3 | ③ orchestrator RSS
+      0.0       0.0       0.0 |       0.0       0.0 |       0.0       0.0 | ④ snapshot-cache(共享)
+     76.0    1618.0    1658.0 |    1542.0    1582.0 |     154.2     158.2 |    大页已用(核对≈①)
+    258.0     258.0     258.0 |       0.0       0.0 |       0.0       0.0 |    大页 Rsvd(预留未落地)
+ 476159.5  478336.5  478021.8 |    2177.0    1862.3 |     217.7     186.2 |    MemTotal-MemAvailable
+
+T2 时刻每个沙箱独占 ≈ (①+②PSS+③)/N = 244.2 MiB
+另有共享的 snapshot-cache 增量 0.0 MiB（同模板所有沙箱共用一份）
+
+----- T2 明细 -----
+== 2026-11-10 16:04:03  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=10
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=199235,used=829,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 1658.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 1582.0
+firecracker RSS/PSS 合计    : 42.5 / 26.3
+orchestrator RSS (MiB)      : 1278.8   (pid 2358943)
+snapshot-cache (MiB)        : 0.0
+Shmem (MiB)                 : 18182.6
+MemTotal-MemAvailable (MiB) : 478015.6
+  fc pid 236206   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   158.0 MiB
+  fc pid 236227   RSS=    4.2 MiB  PSS=    2.6 MiB  客户机大页=   158.0 MiB
+  fc pid 236248   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   156.0 MiB
+  fc pid 236270   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   162.0 MiB
+  fc pid 236291   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   156.0 MiB
+  fc pid 236320   RSS=    4.2 MiB  PSS=    2.6 MiB  客户机大页=   158.0 MiB
+  fc pid 236347   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   160.0 MiB
+  fc pid 236370   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   158.0 MiB
+  fc pid 236401   RSS=    4.3 MiB  PSS=    2.6 MiB  客户机大页=   160.0 MiB
+  fc pid 236422   RSS=    4.2 MiB  PSS=    2.6 MiB  客户机大页=   156.0 MiB
+
+----- idle_sandbox.py 输出（含 --guest 客户机视角）-----
+[1/10] created iqst10e4qslvd3ftwydqu  (0.08s)
+[2/10] created i2lauamz86c1vr79cn2pk  (0.06s)
+[3/10] created igpdjb7qa5wluqtruuk1s  (0.08s)
+[4/10] created iiabcmcj6dzki8dwa26sq  (0.06s)
+[5/10] created iqckl8iu5ovj9tvbtpkao  (0.06s)
+[6/10] created im7t7jk13hdz40w6q5jun  (0.07s)
+[7/10] created ifxhk9r8odni8op29r3wn  (0.06s)
+[8/10] created icu0wqqqp9vf3s80jsk05  (0.10s)
+[9/10] created iklpslbkos4ffo501oktt  (0.06s)
+[10/10] created il3ja7hz4r7wu6htr7uvf  (0.06s)
+全部创建完成，空闲保持（最长 900s）...
+
+===== 客户机视角（iqst10e4qslvd3ftwydqu）=====
+$ free -m
+               total        used        free      shared  buff/cache   available
+Mem:            1990          70        1860           0          59        1857
+Swap:              0           0           0
+
+$ head -5 /proc/meminfo
+MemTotal:        2038520 kB
+MemFree:         1905528 kB
+MemAvailable:    1901636 kB
+Buffers:            5368 kB
+Cached:            51308 kB
+
+已关闭 10 个沙箱
