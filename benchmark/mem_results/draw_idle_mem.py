@@ -1,8 +1,9 @@
-"""画空闲沙箱内存实测的展示图（SVG + 2 倍 PNG）。数字全部从本目录下的 report_n*.txt 解析，不手抄。
+"""画空闲沙箱内存实测的展示图。数字全部从本目录下的 report_n*.txt 解析，不手抄。
 
-依赖 explainer-chart skill 的 kit（hdbss-dirty-tracking 仓库 .claude/skills/explainer-chart/scripts）：
-    EXPLAINER_CHART_KIT=/path/to/explainer-chart/scripts python3 draw_idle_mem.py
-导出 PNG 需要 node + playwright（chromium），没有就只出 SVG。
+    python3 draw_idle_mem.py
+
+输出 idle_sandbox_mem.html（排版源文件，浏览器可直接打开）和 idle_sandbox_mem.png（2 倍图）。
+PNG 用 node + playwright 的 Chromium 截图，没有就只出 HTML。只依赖 Python 标准库。
 计算口径见 ../空闲沙箱内存实测分析.md §2。
 """
 import os
@@ -10,12 +11,6 @@ import re
 import shutil
 import subprocess
 import sys
-
-sys.path.insert(0, os.environ.get(
-    "EXPLAINER_CHART_KIT",
-    "/home/user/hdbss-dirty-tracking/.claude/skills/explainer-chart/scripts"))
-from chart_kit import Chart   # noqa: E402
-from diagram_kit import Step  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 R1 = os.path.join(HERE, "20261110_base_2u2g_r1")
@@ -101,218 +96,292 @@ all_fc = r1[1][1] + r1[10][1] + r2[1][1] + r2[10][1] + r2[50][1]
 idle_growth = [d2(r2[n][0], "① 客户机内存") / n - d1(r2[n][0], "① 客户机内存") / n for n in NS]
 
 # ---------------------------------------------------------------- 画图
-# 版式：结论卡片 → ① 一个沙箱的 350 MiB 拆在哪两本账上 → ② 左：为什么能用斜率（线性拟合）；右：沙箱数增加时 cgroup 何时撞上限
-from chart_kit import GRID, AXIS, col, nice_ticks  # noqa: E402
-from diagram_kit import RAMPS, INK, SUB, MUTED, text_w, wrap  # noqa: E402
+# 用 HTML + CSS 排版、手写 SVG 画图表，再用 Chromium 截成 2 倍 PNG。不依赖任何画图库。
+import math  # noqa: E402
+import random  # noqa: E402
+from html import escape  # noqa: E402
 
-d = Chart(width=1600)
-W, M = d.W, d.M
-CW = W - 2 * M
-cap_gib = CG_MAX / 1024
-d.header(f"空闲 2U2G 沙箱：每个让宿主机多用约 {total_slope:.0f} MiB，并发先撞上 orchestrator 的 {cap_gib:.0f} GiB 内存上限",
-         "base 模板（ubuntu 22.04 + envd，cpu_count=2，memory_mb=2048）· 宿主机 2.4 TiB 内存，静态大页池 200064 × 2 MiB"
-         " · 2026-11-10 两轮实测，N = 1、10、50，每次空闲 300 s，全部在宿主机侧读数")
+CAP_GIB = CG_MAX / 1024
+OLD_CACHE = cg_base - cg_base_anon_other          # N=50 基线里可回收的旧 page cache（MiB）
 
+C = dict(  # 配色：绿 = 大页池这本账；靛蓝一族 = orchestrator 配额这本账；橙/红 = 风险
+    ink="#1B1A17", sub="#55524C", muted="#8C877F", line="#E6E2DA", grid="#EFECE6",
+    vm="#12A08A", vm_lt="#DDF3EE", vm_dk="#0B6B5C",
+    q1="#3B46B8", q2="#6873E3", q3="#A9B0F2", q4="#CDD1F7", q_lt="#ECEEFD", q_dk="#28308A",
+    warn="#E59A2B", warn_lt="#FCF1DE", bad="#D9472F", bad_lt="#FBE6E1",
+)
 
-def paras(x, y, w, s, size, color, weight=400, lh=None, anchor="start"):
-    lh = lh or size + 7
-    ls = wrap(s, w, size)
-    for k, t in enumerate(ls):
-        d.text(x, y + k * lh, t, size, color, weight, anchor)
-    return len(ls) * lh
+# ---- 方块图：1 格 = 2 MiB
+CELL, GAP = 10, 2.5
 
 
-# ---- 结论卡片
-kpis = [
-    (f"{total_slope:.0f} MiB", "每个空闲沙箱的边际内存",
-     f"大页 {hp_slope:.0f} + cgroup 普通内存 {cg_slope:.0f}；三个 N 拟合，偏差 ≤ {cg_resid:.0f} MiB", "teal"),
-    (f"{hp_slope:.0f} / 2048", "客户机内存真正落地的 MiB",
-     "memory_mb 只是上限；按需缺页，不预留", "teal"),
-    (f"≈ {cap_reclaim} 个", f"orchestrator cgroup 到 {cap_gib:.0f} GiB",
-     f"开始回收旧缓存；超过约 {cap_own} 个就要回收沙箱自己在用的页", "coral"),
-    (f"{cap_gib:.0f} + {cg_slope / 1024:.2f}·X GiB", "template-manager 的 memory 建议",
-     "X = 目标空闲沙箱数；有负载的沙箱还要更多", "coral"),
-]
-gap = 20
-kw = (CW - 3 * gap) / 4
-ky = d.y + 30
-kh = 138
-for i, (big, lab, sub, ramp) in enumerate(kpis):
-    f, s, tc, sc = RAMPS[ramp]
-    x = M + i * (kw + gap)
-    d.rect(x, ky, kw, kh, f, s, sw=1, rx=10)
-    d.text(x + 20, ky + 46, big, 30, tc, 700)
-    d.text(x + 20, ky + 76, lab, 15, INK, 600)
-    paras(x + 20, ky + 100, kw - 40, sub, 13, sc, lh=19)
-d.y = ky + kh
-
-# ---- ① 拆解条
-d.section(1, f"一个空闲沙箱的 {total_slope:.0f} MiB 记在两本账上", note="每段都是对 N = 1、10、50 拟合出的斜率")
-SEG = [  # (值, 色阶, 名称, 说明)
-    (slope[0], "teal", "客户机内存（大页）",
-     f"firecracker smaps 直接读到；{len(all_fc)} 个沙箱都在 {min(all_fc):.0f}–{max(all_fc):.0f}"),
-    (slope[2], "purple", "沙箱目录文件页",
-     "orchestrator mmap 的 /orchestrator/sandbox 下每个沙箱的文件，与目录大小一致"),
-    (slope[3], "amber", "其他 page cache",
-     "非 mmap 的文件缓存，推测来自 rootfs 读写，未逐项确认"),
-    (slope[1], "blue", "匿名内存",
-     "orchestrator 堆约 20、firecracker 约 2；关闭后几分钟回落"),
-    (slope[4], "gray", "其他",
-     "内核对象等，= current − anon − file"),
-]
-sc_ = CW / sum(v for v, *_ in SEG)
-bx, by, bh = M, d.y + 78, 58
-# 上方括号：两本账
-def bracket(x0, x1, y, title, note, ramp):
-    c = col(ramp)
-    d.line(x0 + 1, y, x1 - 1, y, c, 2)
-    d.line(x0 + 1, y, x0 + 1, y + 10, c, 2)
-    d.line(x1 - 1, y, x1 - 1, y + 10, c, 2)
-    t = title
-    d.text(x0 + 2, y - 12, t, 15.5, RAMPS[ramp][2], 600)
-    d.text(x0 + 2 + text_w(t, 15.5) + 14, y - 12, note, 13.5, MUTED)
-hp_w = slope[0] * sc_
-bracket(bx, bx + hp_w, by - 14, f"大页池 · {slope[0]:.0f} MiB", "不计入任何 cgroup", "teal")
-bracket(bx + hp_w + 6, bx + CW, by - 14, f"orchestrator 所在的 Nomad cgroup · {cg_slope:.0f} MiB",
-        f"计入 memory.max = {cap_gib:.0f} GiB，超了会 OOM", "blue")
-x = bx
-for v, ramp, name, _ in SEG:
-    f, s, tc, _ = RAMPS[ramp]
-    w = v * sc_
-    d.rect(x, by, w, bh, f, s, sw=1.2, rx=4)
-    lab = f"{v:.0f}"
-    if text_w(lab, 20) + 12 < w:
-        d.text(x + w / 2, by + bh / 2 + 7, lab, 20, tc, 700, "middle")
-    x += w
-# 下方图例卡（颜色与上面对应，顺序相同）
-cy = by + bh + 22
-cw5 = (CW - 4 * 14) / 5
-hmax = 0
-for i, (v, ramp, name, note) in enumerate(SEG):
-    f, s, tc, sc2 = RAMPS[ramp]
-    x = M + i * (cw5 + 14)
-    d.rect(x, cy, 6, 70, s, s, sw=0, rx=3)
-    d.text(x + 18, cy + 17, f"{name}  {v:.1f} MiB", 14.5, tc, 600)
-    hmax = max(hmax, 26 + paras(x + 18, cy + 41, cw5 - 24, note, 13, SUB, lh=19))
-d.y = cy + max(hmax, 70)
-
-# 小条：2048 地址空间里落地了多少
-ay = d.y + 30
-lab_w = 210
-d.text(M, ay + 13, "客户机看到的 2048 MiB", 14.5, INK, 600)
-d.text(M, ay + 32, "memory_mb = 2048", 12.5, MUTED)
-aw = CW - lab_w - 10
-ax = M + lab_w
-hpw = aw * slope[0] / 2048
-d.rect(ax, ay, hpw, 30, *RAMPS["teal"][:2], sw=1.2, rx=4)
-d.text(ax + hpw / 2, ay + 20, f"{slope[0]:.0f}", 14, RAMPS["teal"][2], 700, "middle")
-d.rect(ax + hpw, ay, aw - hpw, 30, "#FFFFFF", AXIS, sw=1, rx=4, dash="5 4")
-d.text(ax + hpw + (aw - hpw) / 2, ay + 20,
-       f"{2048 - slope[0]:.0f} MiB 映射了但客户机没碰过，不占物理内存（HugePages_Rsvd 增量 = 0）",
-       13.5, MUTED, 400, "middle")
-d.y = ay + 30
+def waffle(cols, cells, title=None):
+    """cells: 每格的颜色列表（None = 空格，只画描边）"""
+    rows = (len(cells) + cols - 1) // cols
+    w, h = cols * (CELL + GAP) - GAP, rows * (CELL + GAP) - GAP
+    o = [f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">']
+    for i, c in enumerate(cells):
+        x, y = (i % cols) * (CELL + GAP), (i // cols) * (CELL + GAP)
+        if c:
+            o.append(f'<rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" rx="2" fill="{c}"/>')
+        else:
+            o.append(f'<rect x="{x + .5}" y="{y + .5}" width="{CELL - 1}" height="{CELL - 1}" rx="2" '
+                     f'fill="#FFFFFF" stroke="#E3DFD7"/>')
+    o.append("</svg>")
+    return "".join(o)
 
 
-# ---- ② 两张折线图
-def axes(x, y, w, h, xlim, ylim, xticks, yticks, xfmt, yfmt, xtitle, ytitle):
-    L, B = 54, 46          # 左侧刻度区、下方刻度区
-    px0, px1, py0, py1 = x + L, x + w - 8, y + h - B, y + 10
-    X = lambda v: px0 + (v - xlim[0]) / (xlim[1] - xlim[0]) * (px1 - px0)
-    Y = lambda v: py0 - (v - ylim[0]) / (ylim[1] - ylim[0]) * (py0 - py1)
-    for t in yticks:
-        d.line(px0, Y(t), px1, Y(t), GRID)
-        d.text(px0 - 10, Y(t) + 4.5, yfmt(t), 13, MUTED, 400, "end")
-    for t in xticks:
-        d.line(X(t), py0, X(t), py0 + 5, AXIS)
-        d.text(X(t), py0 + 22, xfmt(t), 13, MUTED, 400, "middle")
-    d.line(px0, py0, px1, py0, AXIS, 1.2)
-    d.text(px0 - 10, py1 - 18, ytitle, 12.5, MUTED, 400, "end")
-    d.text((px0 + px1) / 2, py0 + 42, xtitle, 13.5, SUB, 400, "middle")
-    return X, Y, (px0, px1, py0, py1)
+hp_cells = round(hp_slope / 2)
+idx = set(random.Random(20261110).sample(range(1024), hp_cells))
+vm_svg = waffle(32, [C["vm"] if i in idx else None for i in range(1024)])
+
+# 配额这本账：按最大余数法把各段分到 round(cg_slope/2) 格
+Q = [("沙箱运行时文件", "orchestrator 为每个沙箱建的一组文件（快照内存映射等），映射进内存", slope[2], C["q1"]),
+     ("磁盘读写缓存", "读写沙箱磁盘镜像时，内核顺手留下的文件缓存", slope[3], C["q2"]),
+     ("进程自身数据", "orchestrator 管理这个沙箱的状态（约 20）、虚拟机进程本身（约 2）", slope[1], C["q3"]),
+     ("内核对象", "其余零碎的内核数据结构", slope[4], C["q4"])]
+n_q = round(cg_slope / 2)
+raw = [v / 2 for _, _, v, _ in Q]
+cnt = [int(r) for r in raw]
+for i in sorted(range(len(raw)), key=lambda i: raw[i] - cnt[i], reverse=True)[:n_q - sum(cnt)]:
+    cnt[i] += 1
+q_cells = sum(([c] * k for (_, _, _, c), k in zip(Q, cnt)), [])
+q_svg = waffle(16, q_cells)
+q_list = "".join(
+    f'<div class="qi"><span class="sw" style="background:{c}"></span><div><b>{escape(nm)}'
+    f'<em>{v:.0f} MiB</em></b><p>{escape(ds)}</p></div></div>' for nm, ds, v, c in Q)
 
 
-def panel_title(x, y, w, title, note):
-    d.text(x, y, title, 17, INK, 600)
-    return 10 + paras(x, y + 24, w, note, 13.5, MUTED, lh=20)
+# ---- 折线图
+def chart(w, h, xlim, ylim, xt, yt, body, xlab, ylab, pad=(56, 24, 40, 52)):
+    """body(X, Y, box) -> svg 片段。pad = 左、右、上、下"""
+    L, R, T, B = pad
+    x0, x1, y0, y1 = L, w - R, h - B, T
+    X = lambda v: x0 + (v - xlim[0]) / (xlim[1] - xlim[0]) * (x1 - x0)
+    Y = lambda v: y0 - (v - ylim[0]) / (ylim[1] - ylim[0]) * (y0 - y1)
+    o = [f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" class="ch">']
+    for t in yt:
+        o.append(f'<line x1="{x0}" x2="{x1}" y1="{Y(t):.1f}" y2="{Y(t):.1f}" stroke="{C["grid"]}"/>'
+                 f'<text x="{x0 - 12}" y="{Y(t) + 4.5:.1f}" class="tk" text-anchor="end">{t:g}</text>')
+    for t in xt:
+        o.append(f'<text x="{X(t):.1f}" y="{y0 + 24}" class="tk" text-anchor="middle">{t:g}</text>')
+    o.append(body(X, Y, (x0, x1, y0, y1)))
+    o.append(f'<line x1="{x0}" x2="{x1}" y1="{y0}" y2="{y0}" stroke="#CFCAC0" stroke-width="1.2"/>')
+    o.append(f'<text x="{(x0 + x1) / 2:.0f}" y="{h - 8}" class="al" text-anchor="middle">{xlab}</text>')
+    o.append(f'<text x="{x0 - 12}" y="{y1 - 18}" class="al" text-anchor="end">{ylab}</text>')
+    o.append("</svg>")
+    return "".join(o)
 
 
-d.section(2, "为什么能按“每个沙箱”算，以及按这个速度多少个会出问题")
-pw = (CW - 56) / 2
-py = d.y + 34
-lx, rx_ = M, M + pw + 56
-th_l = panel_title(lx, py, pw, "增量随 N 严格线性：斜率 = 每多一个沙箱的成本",
-                   f"每个点是一次实测（T2 时刻相对基线的增量）；直线是最小二乘拟合，截距 {cg_icpt:.0f} MiB ≈ 没有一次性开销")
-th_r = panel_title(rx_, py, pw, f"沙箱越多，orchestrator cgroup 越接近 {cap_gib:.0f} GiB",
-                   f"按 N=50 那次的基线：cgroup 里已有 {(cg_base - cg_base_anon_other) / 1024:.1f} GiB 可回收的旧缓存，"
-                   f"{cg_base_anon_other / 1024:.2f} GiB 匿名内存")
-gy = py + max(th_l, th_r) + 34
-GH = 360
+def dot(x, y, c, r=6.5):
+    return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{c}" stroke="#FFFFFF" stroke-width="2.5"/>'
 
-# 左：拟合
-cg_tot = {n: sum(tot[n][1:]) / 1024 for n in NS}
-hp_tot = {n: tot[n][0] / 1024 for n in NS}
-X, Y, (px0, px1, py0, py1) = axes(lx, gy, pw, GH, (0, 72), (0, 12), [0, 10, 20, 30, 40, 50], [0, 3, 6, 9, 12],
-                                  lambda v: f"{v:.0f}", lambda v: f"{v:.0f}", "空闲沙箱数 N", "GiB")
+
+def lbl(x, y, s, c, cls="ll", anchor="start"):
+    return f'<text x="{x:.1f}" y="{y:.1f}" class="{cls}" fill="{c}" text-anchor="{anchor}">{s}</text>'
+
+
 _, hp_icpt = fit(NS, [tot[n][0] for n in NS])
-for ramp, pts, s_, b_, lab in [
-        ("blue", cg_tot, cg_slope, cg_icpt, f"cgroup 普通内存：每个 {cg_slope:.1f} MiB"),
-        ("teal", hp_tot, hp_slope, hp_icpt, f"大页：每个 {hp_slope:.1f} MiB")]:
-    c = col(ramp)
-    d.poly([(X(0), Y(b_ / 1024)), (X(50), Y((b_ + s_ * 50) / 1024))], c, 2.2)
-    for n in NS:
-        d.circle(X(n), Y(pts[n]), 6.5, c, "#FFFFFF", 2)
-    yl = Y((b_ + s_ * 50) / 1024)
-    d.text(X(50) + 14, yl + 5, lab.split("：")[0], 14, RAMPS[ramp][2], 600)
-    d.text(X(50) + 14, yl + 24, lab.split("：")[1], 13, RAMPS[ramp][3])
-
-# 右：容量
-xmax, ymax = 250, 48
-X, Y, (px0, px1, py0, py1) = axes(rx_, gy, pw, GH, (0, xmax), (0, ymax), [0, 50, 100, 150, 200, 250],
-                                  [0, 8, 16, 24, 32, 40, 48], lambda v: f"{v:.0f}", lambda v: f"{v:.0f}",
-                                  "空闲沙箱数", "GiB")
-# 区域底色
-d.rect(X(cap_reclaim), py1, X(cap_own) - X(cap_reclaim), py0 - py1, RAMPS["amber"][0], RAMPS["amber"][0], sw=0, rx=0)
-d.rect(X(cap_own), py1, px1 - X(cap_own), py0 - py1, RAMPS["coral"][0], RAMPS["coral"][0], sw=0, rx=0)
-d.text((px0 + X(cap_reclaim)) / 2, py1 + 22, "宽裕", 13.5, RAMPS["teal"][2], 600, "middle")
-d.text((X(cap_reclaim) + X(cap_own)) / 2, py1 + 22, "挤掉旧缓存", 13.5, RAMPS["amber"][2], 600, "middle")
-d.text((X(cap_own) + px1) / 2, Y(14), "回收沙箱在用的页", 13.5, RAMPS["coral"][2], 600, "middle")
-d.text((X(cap_own) + px1) / 2, Y(14) + 19, "变慢，可能 OOM → api 503", 12.5, RAMPS["coral"][3], 400, "middle")
-# 上限
-d.line(px0, Y(cap_gib), px1, Y(cap_gib), "#A32D2D", 2)
-d.text(px0 + 8, Y(cap_gib) - 8, f"memory.max = {cap_gib:.0f} GiB", 13, "#A32D2D", 600)
 
 
-def demand(base, ramp, label, lab_n, dy):
-    c = col(ramp)
-    nx = (CG_MAX - base) / cg_slope
-    d.poly([(X(0), Y(base / 1024)), (X(nx), Y(cap_gib))], c, 2.6)
-    nend = min(xmax, (ymax * 1024 - base) / cg_slope)
-    d.poly([(X(nx), Y(cap_gib)), (X(nend), Y((base + cg_slope * nend) / 1024))], c, 2, "6 5")
-    d.circle(X(nx), Y(cap_gib), 6.5, c, "#FFFFFF", 2)
-    d.line(X(nx), Y(cap_gib) + 8, X(nx), py0, c, 1, "3 3")
-    d.text(X(nx), py0 - 8, f"{int(nx)}", 14, RAMPS[ramp][2], 700, "middle")
-    yl = Y((base + cg_slope * lab_n) / 1024)
-    d.text(X(lab_n), yl + dy, label, 13.5, RAMPS[ramp][2], 600)
+def fit_body(X, Y, box):
+    o = []
+    for c, s_, b_, key, name in [(C["q1"], cg_slope, cg_icpt, "cg", "账本 B · 配额"),
+                                 (C["vm"], hp_slope, hp_icpt, "hp", "账本 A · 大页池")]:
+        o.append(f'<line x1="{X(0):.1f}" y1="{Y(b_ / 1024):.1f}" x2="{X(50):.1f}" y2="{Y((b_ + 50 * s_) / 1024):.1f}" '
+                 f'stroke="{c}" stroke-width="2.6" stroke-linecap="round"/>')
+        for n in NS:
+            v = tot[n][0] if key == "hp" else sum(tot[n][1:])
+            o.append(dot(X(n), Y(v / 1024), c))
+        ye = Y((b_ + 50 * s_) / 1024)
+        o.append(lbl(X(50) + 16, ye - 2, name, c))
+        o.append(lbl(X(50) + 16, ye + 19, f"斜率 {s_:.1f} MiB / 个", C["sub"], "ls"))
+    return "".join(o)
 
 
-demand(cg_base, "blue", "全部用量（含旧缓存）", 8, 30)
-demand(cg_base_anon_other, "purple", "必须常驻的部分", 48, 30)
-d.y = gy + GH
+fit_svg = chart(700, 380, (0, 70), (0, 12), [0, 10, 20, 30, 40, 50], [0, 3, 6, 9, 12], fit_body,
+                "同时空闲的沙箱数 N", "GiB")
 
-note_hp = (f"大页池不是先到的瓶颈：空闲池 {HP_FREE_MIB / 1024:.0f} GiB，每个空闲沙箱 {hp_slope:.0f} MiB 可放约 {cap_hp_idle} 个；"
-           f"即使每个都把 2048 MiB 用满也有 {cap_hp_full} 个，仍在 {cap_own} 之后")
-d.callout(note_hp, "teal")
-d.callout(f"要稳定跑 X 个空闲沙箱：把 template-manager.hcl 的 memory 调到 ≥ {cap_gib:.0f} GiB（构建模板所需）"
-          f"+ X × {cg_slope / 1024:.2f} GiB，例如 500 个 ≈ {cap_gib + 500 * cg_slope / 1024:.0f} GiB", "coral")
-
-d.footer("口径：普通内存以 orchestrator cgroup 的 memory.current 增量为准，memory.stat 拆出 anon、file；"
-         "全机 MemTotal−MemAvailable 受同机其他负载干扰（1 个沙箱时 Cached 就涨了 6.4 GiB），不用于计算。"
-         "关闭沙箱 60 s 后大页与 page cache 全部归还，orchestrator 堆几分钟内回落，未见泄漏。"
-         "原始报告：benchmark/mem_results/20261110_base_2u2g_r1、_r2；算法见 空闲沙箱内存实测分析.md。")
+XMAX, YMAX = 250, 48
 
 
-svg = os.path.join(HERE, "idle_sandbox_mem.svg")
-d.save(svg)
+def cap_body(X, Y, box):
+    x0, x1, y0, y1 = box
+    xa, xb = X(cap_reclaim), X(cap_own)
+    o = [f'<rect x="{xa:.1f}" y="{y1}" width="{xb - xa:.1f}" height="{y0 - y1}" fill="{C["warn_lt"]}"/>',
+         f'<rect x="{xb:.1f}" y="{y1}" width="{x1 - xb:.1f}" height="{y0 - y1}" fill="{C["bad_lt"]}"/>',
+         lbl((x0 + xa) / 2, y1 + 24, "宽裕", C["vm_dk"], "zl", "middle"),
+         lbl((xa + xb) / 2, y1 + 24, "挤掉旧缓存", "#9A5B06", "zl", "middle"),
+         lbl((xb + x1) / 2, Y(13), "回收沙箱在用的页", "#A3301C", "zl", "middle"),
+         lbl((xb + x1) / 2, Y(13) + 20, "变慢，可能 OOM → api 503", "#A3301C", "ls", "middle"),
+         f'<line x1="{x0}" x2="{x1}" y1="{Y(CAP_GIB):.1f}" y2="{Y(CAP_GIB):.1f}" stroke="{C["bad"]}" stroke-width="2"/>',
+         lbl(x0 + 10, Y(CAP_GIB) - 9, f"配额上限 {CAP_GIB:.0f} GiB", C["bad"], "ll")]
+    for base, c, name, n_lab, dy in [(cg_base, C["q1"], "全部用量（含旧缓存）", 6, -10),
+                                     (cg_base_anon_other, C["q2"], "必须常驻的部分", 6, -10)]:
+        nx = (CG_MAX - base) / cg_slope
+        nend = min(XMAX, (YMAX * 1024 - base) / cg_slope)
+        o.append(f'<line x1="{X(0):.1f}" y1="{Y(base / 1024):.1f}" x2="{X(nx):.1f}" y2="{Y(CAP_GIB):.1f}" '
+                 f'stroke="{c}" stroke-width="2.8" stroke-linecap="round"/>')
+        o.append(f'<line x1="{X(nx):.1f}" y1="{Y(CAP_GIB):.1f}" x2="{X(nend):.1f}" y2="{Y((base + cg_slope * nend) / 1024):.1f}" '
+                 f'stroke="{c}" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/>')
+        o.append(f'<line x1="{X(nx):.1f}" y1="{Y(CAP_GIB) + 8:.1f}" x2="{X(nx):.1f}" y2="{y0}" stroke="{c}" '
+                 f'stroke-width="1" stroke-dasharray="3 3"/>')
+        o.append(dot(X(nx), Y(CAP_GIB), c, 7))
+        o.append(f'<rect x="{X(nx) - 22:.1f}" y="{y0 - 30}" width="44" height="22" rx="11" fill="{c}"/>'
+                 + lbl(X(nx), y0 - 14.5, f"{int(nx)}", "#FFFFFF", "pill", "middle"))
+        ang = math.degrees(math.atan2(Y(cg_slope / 1024) - Y(0), X(1) - X(0)))
+        lx, ly = X(n_lab), Y((base + cg_slope * n_lab) / 1024)
+        o.append(f'<text x="{lx:.1f}" y="{ly + dy:.1f}" class="ll" fill="{c}" '
+                 f'transform="rotate({ang:.2f} {lx:.1f} {ly:.1f})">{name}</text>')
+    return "".join(o)
+
+
+cap_svg = chart(700, 380, (0, XMAX), (0, YMAX), [0, 50, 100, 150, 200, 250], [0, 8, 16, 24, 32, 40, 48],
+                cap_body, "同时空闲的沙箱数", "GiB")
+
+# ---- 页面
+CSS = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1600px;background:#F3F1EC;font-family:'Noto Sans CJK SC','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
+ color:%(ink)s;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+.page{padding:56px 56px 40px}
+.eyebrow{font-size:14px;letter-spacing:.12em;color:%(muted)s;font-weight:500}
+h1{font-size:40px;line-height:1.25;font-weight:700;margin:10px 0 0;letter-spacing:-.01em}
+h1 .hl{color:%(q1)s} h1 .hb{color:%(bad)s}
+.lede{font-size:16px;color:%(sub)s;margin-top:12px;line-height:1.6}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);margin-top:32px;background:#FFFFFF;border-radius:18px;
+ box-shadow:0 1px 2px rgba(40,30,10,.05),0 10px 30px rgba(40,30,10,.05)}
+.st{padding:24px 28px;border-left:1px solid %(line)s}.st:first-child{border-left:0}
+.st .n{font-size:38px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.st .n small{font-size:18px;font-weight:600;margin-left:4px;color:%(sub)s}
+.st .t{font-size:15px;font-weight:600;margin-top:8px}
+.st .d{font-size:13px;color:%(muted)s;margin-top:4px;line-height:1.55}
+.sec{margin-top:44px}
+.sh{display:flex;align-items:baseline;gap:14px}
+.sh .no{font-size:13px;font-weight:700;color:#FFFFFF;background:%(ink)s;border-radius:999px;padding:3px 11px;
+ position:relative;top:-3px}
+.sh h2{font-size:24px;font-weight:700}
+.sh p{font-size:15px;color:%(muted)s}
+.ledgers{display:grid;grid-template-columns:1fr 64px 1fr;margin-top:20px;align-items:stretch}
+.plus{display:flex;align-items:center;justify-content:center;font-size:40px;color:#B9B3A8;font-weight:300}
+.card{background:#FFFFFF;border-radius:18px;padding:26px 28px 0;overflow:hidden;display:flex;flex-direction:column;
+ box-shadow:0 1px 2px rgba(40,30,10,.05),0 10px 30px rgba(40,30,10,.05)}
+.tag{align-self:flex-start;font-size:12.5px;font-weight:700;letter-spacing:.06em;border-radius:6px;padding:3px 9px}
+.card h3{font-size:21px;font-weight:700;margin-top:12px;line-height:1.35}
+.card h3 .big{font-size:30px}
+.card .ex{font-size:14px;color:%(sub)s;line-height:1.65;margin-top:8px}
+.body{display:flex;gap:26px;margin-top:22px;align-items:flex-start}
+.key{font-size:13px;color:%(sub)s;line-height:1.8;white-space:nowrap}
+.key .sw{margin-right:7px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;flex:none}
+.sw.o{background:#FFFFFF;border:1px solid #D9D4CA}
+.qi{display:flex;gap:10px;margin-bottom:14px}.qi .sw{margin-top:5px}
+.qi b{font-size:15px;font-weight:600;display:block}.qi b em{font-style:normal;color:%(q1)s;margin-left:8px}
+.qi p{font-size:13px;color:%(muted)s;line-height:1.55;margin-top:2px}
+.foot{margin:24px -28px 0;padding:16px 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:auto}
+.foot div{font-size:12.5px;color:%(sub)s}.foot b{display:block;font-size:20px;font-weight:700;margin-top:2px}
+.spacer{height:24px}
+.qbar{margin-top:22px}.qbar .lab{font-size:13.5px;font-weight:600;margin-bottom:8px}
+.qbar .bar{display:flex;height:30px;border-radius:7px;overflow:hidden;font-size:12.5px;font-weight:600}
+.qbar .bar div{display:flex;align-items:center;justify-content:center;white-space:nowrap}
+.qbar .cap{display:flex;justify-content:space-between;font-size:12.5px;color:%(muted)s;margin-top:7px}
+.qbar .cap b{color:%(ink)s;font-weight:600}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px}
+.charts .card{padding-bottom:18px}
+.charts h3{font-size:19px;margin-top:0}
+.ch .tk{font-size:13px;fill:%(muted)s}.ch .al{font-size:13px;fill:%(sub)s}
+.ch .ll{font-size:14.5px;font-weight:700}.ch .ls{font-size:13px}.ch .zl{font-size:14px;font-weight:700}
+.ch .pill{font-size:13px;font-weight:700}
+.rec{margin-top:28px;background:#1E2140;color:#FFFFFF;border-radius:18px;padding:26px 32px;display:flex;gap:36px;align-items:center}
+.rec .k{font-size:13px;letter-spacing:.12em;color:#A9B0F2;font-weight:700;white-space:nowrap}
+.rec .f{font-size:28px;font-weight:700;white-space:nowrap}.rec .f span{color:#A9B0F2}
+.rec .x{font-size:14px;color:#C9CCE6;line-height:1.65}
+.note{font-size:12.5px;color:%(muted)s;line-height:1.7;margin-top:22px}
+""" % C
+
+hp_free_gib = HP_FREE_MIB / 1024
+html = f"""<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head><body><div class="page">
+<div class="eyebrow">E2B 自托管 · 空闲沙箱内存实测 · 2026-11-10</div>
+<h1>每个空闲沙箱让宿主机多用约 {total_slope:.0f} MiB，<br>能开多少个，先由 <span class="hl">orchestrator 的 {CAP_GIB:.0f} GiB 配额</span>决定</h1>
+<div class="lede">base 模板（ubuntu 22.04 + envd，2 核，memory_mb = 2048）。宿主机 2.4 TiB 内存。分两轮测了 N = 1、10、50 个同时空闲的沙箱，每次空闲 300 s，全部在宿主机侧读数。</div>
+
+<div class="stats">
+ <div class="st"><div class="n">{total_slope:.0f}<small>MiB</small></div><div class="t">每多一个空闲沙箱</div>
+  <div class="d">{hp_slope:.0f} 大页 + {cg_slope:.0f} 配额，三次测量偏差 ≤ {cg_resid:.0f} MiB</div></div>
+ <div class="st"><div class="n" style="color:{C['vm']}">{hp_slope / 2048 * 100:.1f}<small>%</small></div><div class="t">2048 MiB 里真正用到的</div>
+  <div class="d">memory_mb 是上限，不是占用</div></div>
+ <div class="st"><div class="n" style="color:{C['warn']}">≈ {cap_reclaim}<small>个</small></div><div class="t">配额开始吃紧</div>
+  <div class="d">超过约 {cap_own} 个可能 OOM</div></div>
+ <div class="st"><div class="n" style="color:{C['vm']}">{cap_hp_idle:,}<small>个</small></div><div class="t">大页池能放下的空闲沙箱</div>
+  <div class="d">每个都用满 2048 MiB 也能放 {cap_hp_full} 个</div></div>
+</div>
+
+<div class="sec"><div class="sh"><span class="no">1</span><h2>一个空闲沙箱的内存，记在宿主机的两本账上</h2>
+ <p>图中 1 格 = 2 MiB，两边格子大小相同，可以直接比</p></div>
+<div class="ledgers">
+ <div class="card">
+  <span class="tag" style="background:{C['vm_lt']};color:{C['vm_dk']}">账本 A · 大页池</span>
+  <h3>虚拟机内存：<span class="big" style="color:{C['vm']}">{hp_slope:.0f}</span> MiB</h3>
+  <div class="ex">宿主机开机时预留了一块专给虚拟机用的内存（2 MiB 一页的大页）。沙箱从快照恢复后，虚拟机看到 2048 MiB，
+   但只有它真正读写过的页才会从这里分走一页。</div>
+  <div class="body">{vm_svg}
+   <div class="key"><div><span class="sw" style="background:{C['vm']}"></span>真正占用：{hp_cells} 页 ≈ {hp_slope:.0f} MiB</div>
+    <div><span class="sw o"></span>没碰过：只是地址，不占内存</div>
+    <div style="margin-top:14px;color:{C['muted']}">{len(all_fc)} 个沙箱逐个看，<br>都在 {min(all_fc):.0f}–{max(all_fc):.0f} MiB；<br>关闭后立即全部归还。</div></div>
+  </div>
+  <div class="foot" style="background:{C['vm_lt']}">
+   <div>这本账的空闲额度<b style="color:{C['vm_dk']}">{hp_free_gib:.0f} GiB</b></div>
+   <div>每个空闲沙箱<b style="color:{C['vm_dk']}">{hp_slope:.0f} MiB</b></div>
+   <div>够放<b style="color:{C['vm_dk']}">≈ {cap_hp_idle:,} 个</b></div></div>
+ </div>
+ <div class="plus">+</div>
+ <div class="card">
+  <span class="tag" style="background:{C['q_lt']};color:{C['q_dk']}">账本 B · orchestrator 的内存配额</span>
+  <h3>宿主机进程为它多花：<span class="big" style="color:{C['q1']}">{cg_slope:.0f}</span> MiB</h3>
+  <div class="ex">orchestrator 是管理沙箱的后台服务。它和所有虚拟机进程被 Nomad 放在同一个 cgroup 里，
+   普通内存合计不能超过 {CAP_GIB:.0f} GiB。大页不算在这里面，下面这些都算。</div>
+  <div class="body">{q_svg}<div style="flex:1">{q_list}</div></div>
+  <div class="qbar"><div class="lab">这 {CAP_GIB:.0f} GiB 测前的样子，以及还能放几个</div>
+   <div class="bar">
+    <div style="width:{max(cg_base_anon_other / CG_MAX * 100, .6):.2f}%;background:{C['q1']}"></div>
+    <div style="width:{OLD_CACHE / CG_MAX * 100:.2f}%;background:repeating-linear-gradient(135deg,{C['q_lt']} 0 6px,#DCDFFA 6px 12px);color:{C['q_dk']}">旧文件缓存 {OLD_CACHE / 1024:.1f} GiB（可回收）</div>
+    <div style="flex:1;background:#FFFFFF;border:1.5px dashed {C['q3']};border-left:0;border-radius:0 7px 7px 0;color:{C['sub']}">空闲 {(CG_MAX - cg_base) / 1024:.1f} GiB</div>
+   </div>
+   <div class="cap"><span><span class="sw" style="background:{C['q1']};margin-right:6px"></span>必须常驻 {cg_base_anon_other / 1024:.2f} GiB</span>
+    <span>空闲 ÷ {cg_slope:.0f} MiB ≈ <b>{cap_reclaim} 个</b>；连旧缓存一起 ≈ <b>{cap_own} 个</b></span></div>
+  </div>
+  <div class="foot" style="background:{C['q_lt']}">
+   <div>上限 {CAP_GIB:.0f} GiB，测前已用<b style="color:{C['q_dk']}">{cg_base / 1024:.1f} GiB</b></div>
+   <div>每个空闲沙箱<b style="color:{C['q_dk']}">{cg_slope:.0f} MiB</b></div>
+   <div>约多少个开始吃紧<b style="color:{C['bad']}">≈ {cap_reclaim} 个</b></div></div>
+ </div>
+</div></div>
+
+<div class="sec"><div class="sh"><span class="no">2</span><h2>数字怎么来的，以及按这个速度多少个会出问题</h2></div>
+<div class="charts">
+ <div class="card"><h3>增量随沙箱数严格线性，所以斜率就是每个沙箱的成本</h3>
+  <div class="ex">每个点是一次实测（空闲 300 s 时相对测前的增量），直线是最小二乘拟合。截距只有 {cg_icpt:.0f} MiB，说明几乎没有一次性开销。</div>
+  {fit_svg}</div>
+ <div class="card"><h3>沙箱越多，账本 B 越接近 {CAP_GIB:.0f} GiB 上限</h3>
+  <div class="ex">测前账本 B 已用 {cg_base / 1024:.1f} GiB，其中 {OLD_CACHE / 1024:.1f} GiB 是可回收的旧文件缓存。
+   蓝线到上限后内核开始挤旧缓存；紫线到上限后，只能回收沙箱自己在用的页。</div>
+  {cap_svg}</div>
+</div></div>
+
+<div class="rec"><div class="k">建议</div>
+ <div class="f">memory ≥ {CAP_GIB:.0f} GiB <span>+ X × {cg_slope / 1024:.2f} GiB</span></div>
+ <div class="x">X 是想同时跑的空闲沙箱数，例如 500 个约 {CAP_GIB + 500 * cg_slope / 1024:.0f} GiB。改的是 template-manager.hcl 的 memory，
+  {CAP_GIB:.0f} GiB 是构建模板本身需要的；有负载的沙箱还要更多。</div></div>
+
+<div class="note">口径：账本 B 以 orchestrator 所在 cgroup 的 memory.current 增量为准，按 memory.stat 拆成匿名内存和文件缓存，余下记为内核对象；
+“磁盘读写缓存”的来源是推断，未逐项确认。全机 MemTotal−MemAvailable 受同机其他负载干扰（1 个沙箱时 Cached 就涨了 6.4 GiB），不用于计算。
+关闭沙箱后，orchestrator 堆几分钟内回落，未见泄漏。原始报告：benchmark/mem_results/20261110_base_2u2g_r1、_r2；推导见 空闲沙箱内存实测分析.md。</div>
+</div></body></html>"""
+
+out_html = os.path.join(HERE, "idle_sandbox_mem.html")
+open(out_html, "w", encoding="utf-8").write(html)
+print("HTML:", out_html)
+
 
 # 计算结果打印出来，方便和文档核对
 print(f"hp slope {hp_slope:.1f}; cg slope {cg_slope:.1f} icpt {cg_icpt:.1f} resid {cg_resid:.1f}")
@@ -323,7 +392,18 @@ print(f"cap: hp_idle {cap_hp_idle} hp_full {cap_hp_full} cg_reclaim {cap_reclaim
 print(f"cg_base {cg_base} anon+other base {cg_base_anon_other:.1f}; fc n={len(all_fc)} range {min(all_fc)}-{max(all_fc)}")
 print("idle growth hp per sandbox T1->T2:", [round(x, 1) for x in idle_growth])
 
-js = os.environ.get("SVG2PNG_JS")
-if js and shutil.which("node"):
-    subprocess.run(["node", js, svg, os.path.join(HERE, "idle_sandbox_mem.png"), "2"], check=True)
-    print("PNG:", os.path.join(HERE, "idle_sandbox_mem.png"))
+
+# ---- 截图成 PNG
+JS = """const {chromium}=require('playwright');(async()=>{const b=await chromium.launch();
+const p=await b.newPage({viewport:{width:1600,height:1000},deviceScaleFactor:2});
+await p.goto('file://'+process.argv[1]);await p.waitForTimeout(300);
+await p.screenshot({path:process.argv[2],fullPage:true});await b.close();})();"""
+if shutil.which("node"):
+    env = dict(os.environ)
+    try:
+        env.setdefault("NODE_PATH", subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip())
+    except OSError:
+        pass
+    png = os.path.join(HERE, "idle_sandbox_mem.png")
+    r = subprocess.run(["node", "-e", JS, out_html, png], env=env)
+    print("PNG:", png) if r.returncode == 0 else print("PNG 导出失败（需要 node 的 playwright），只生成了 HTML")
