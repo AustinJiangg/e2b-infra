@@ -130,5 +130,5 @@ h1 .hl{color:#3B46B8} h1 .hb{color:#D9472F}
 
 <div class="note">口径：账本 B 以 orchestrator 所在 cgroup 的 memory.current 增量为准，按 memory.stat 拆成匿名内存和文件缓存，余下记为内核对象；
 “磁盘读写缓存”的来源是推断，未逐项确认。全机 MemTotal−MemAvailable 受同机其他负载干扰（1 个沙箱时 Cached 就涨了 6.4 GiB），不用于计算。
-关闭沙箱后，orchestrator 堆几分钟内回落，未见泄漏。原始报告：benchmark/mem_results/20261110_base_2u2g_r1、_r2；推导见 空闲沙箱内存实测分析.md。</div>
+关闭沙箱后，orchestrator 堆几分钟内回落，未见泄漏。原始报告：benchmark/sandbox_mem/results/20261110_base_2u2g_r1、_r2；推导见 空闲沙箱内存实测分析.md。</div>
 </div></body></html>

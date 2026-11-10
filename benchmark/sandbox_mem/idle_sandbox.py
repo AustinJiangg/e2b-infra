@@ -8,11 +8,17 @@
 注意：创建后**不在沙箱里执行任何命令**，否则 envd 拉起进程会额外碰内存。
 --guest 只在宿主机测量全部结束（done-file 出现）后才进客户机看 free/meminfo。
 """
+import os
+
 from dotenv import load_dotenv
-load_dotenv()
+
+# 凭据沿用 benchmark/.env（和 sandbox.py、run_benchmark.py 共用一份）。
+# 本目录下如果也放了 .env，先读它；load_dotenv 不覆盖已有变量，所以本目录的优先，命令行环境变量最优先。
+_HERE = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_HERE, ".env"))
+load_dotenv(os.path.join(_HERE, "..", ".env"))
 
 import argparse
-import os
 import time
 
 from e2b import Sandbox

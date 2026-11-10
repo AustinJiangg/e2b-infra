@@ -1,13 +1,13 @@
 #!/bin/bash
 # 一键测"空闲沙箱占多少内存"：基线 → 起 N 个沙箱不做任何事 → T1、T2 各采一次 → 关闭沙箱 → 等 T3 秒再采一次（看还回去多少）。
-# 需要 root；在 benchmark 目录下运行（idle_sandbox.py 要读这里的 .env）。
+# 需要 root；在哪个目录运行都行（脚本会切到自己所在目录）。凭据由 idle_sandbox.py 从上一级 benchmark/.env 读取。
 #
 #   bash measure_idle_mem.sh                 # N=1，T1=30s，T2=300s，T3=60s
 #   bash measure_idle_mem.sh 10              # 10 个沙箱
 #   bash measure_idle_mem.sh 10 30 300 60    # N T1 T2 T3（T1、T2 从"全部创建完成"算起；T3 从"全部关闭"算起）
 #   TEMPLATE=xxx PYTHON=python3 bash measure_idle_mem.sh 1
 #
-# 结果在 mem_runs/<时间戳>_n<N>/report.txt。建议 N=1 和 N=10 各跑一次，
+# 结果在本目录的 mem_runs/<时间戳>_n<N>/report.txt（不入库）。建议 N=1 和 N=10 各跑一次，
 # 用 (n10 增量 - n1 增量) / 9 得到"每多一个沙箱"的边际内存（扣掉一次性开销）。
 # 结果解读见 空闲沙箱内存实测分析.md。每个沙箱的普通内存以 orch cgroup memory.current 的增量为准。
 
