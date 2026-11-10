@@ -1,0 +1,184 @@
+空闲沙箱内存测量  N=50  模板=base  T1=30s  T2=300s  T3=关闭后60s  2026-11-10 17:22:32
+PAGESIZE=4096  Hugepagesize:       2048 kB
+沙箱: i4gl63geugff92yafbp0c ic25drq82186fjbs46ubi il2zsk4qn54eaai63bstu issl8thqoha8svgftynna ij5zvygsblr1prt3q10nr ii4e7z8e6gph834shm9bq irnthxkat3a1ikqshlt4j iu8xzhzmiv82s2uktnhc0 ie1v8da3thjiaj4sgwz0u i8xb1wng7iiwprunj70fm itgojd2q0lhci7ep7k5fn ix1tvxq2yo7aaxa7et5di i9qieirfl8ewtb2snrge8 ir839wrrj9m3fdxfdae7r ico4v2l3ifsupweua13re iw42in2x8hvfjonuv7pjy ixnbx27vtdnp3idqox4mn iuj2p2q6w3jjqa4m9y1p4 i8fcjnxh4k9qy8tzpjkfw i2b1cwzd1ebfjff4lw2pa i6w9g379fhxc6g46cgt2w iwi3103p53x3kpm89oklh i7l95aguliwjr5wnglwil iqintcciitmut90yga1rh imyecsd7xltk12sa6g25b ie5t4gijw1aetffujtpxj iiap7mp1ccrrbktmearov i25szh08dicuflbdlzst3 i0soo1mi99xfprahgyobb iv0yrwt58xi6pkvfavqw5 it8a8o4kwzq1w466t0j8i ie3rfjcjblrk0fjd4wrv0 itay5v67l7b3u0evkppgl iboegsllqwqowjvsslylz iubsy27mh0zxzbf00ke9y it99kefqr465hcb71h4gd igh9i6myzmxtu9y36jikh imt6v8x1i484vns9w1cwg iv3w1ra91vrv3wb0l73e6 iyjmkbp1871c1jsjixl65 ifakziakztm2lza3zk1g2 ibli1y6isp4l435yhno2g i1hxa5g5h4lt4p4edj62s ieaykdvjq35hq7tqg372x ibju6rabc8fmq3rfkcwep i5ejftkdoocmddh60cezz if9zn4di7qce56nfjckn8 i1zhe1zm960u1qmr6oczb irpt9lfewn4gsdb9ry94s i03ahzbv4l1uw4pftobli
+
+   before        T1        T2        T3 | T1-before T2-before |      T2/N | T3-before | (MiB；T3=关闭后残留)
+      0.0    7472.0    7834.0       0.0 |    7472.0    7834.0 |     156.7 |       0.0 | ① 客户机内存(fc 大页)
+     76.0    7548.0    7910.0      76.0 |    7472.0    7834.0 |     156.7 |       0.0 |    大页已用(核对≈①)
+    258.0     258.0     258.0     258.0 |       0.0       0.0 |       0.0 |       0.0 |    大页 Rsvd(预留未落地)
+      0.0     198.5     206.4       0.0 |     198.5     206.4 |       4.1 |       0.0 | ② firecracker 进程 RSS
+      0.0     110.0     117.9       0.0 |     110.0     117.9 |       2.4 |       0.0 |    (同上 PSS)
+    428.3    4756.4    4582.7    1273.9 |    4328.1    4154.4 |      83.1 |     845.6 | ③ orchestrator RSS
+    141.4    1426.5    1178.7     943.0 |    1285.1    1037.3 |      20.7 |     801.6 |    其中 RssAnon(私有)
+    286.9    3329.9    3404.0     330.9 |    3043.0    3117.1 |      62.3 |      44.0 |    其中 RssFile(文件页)
+  15431.1   24219.2   25130.8   16575.5 |    8788.1    9699.7 |     194.0 |    1144.4 |    orch cgroup memory.current
+    141.4    1534.0    1294.0     943.0 |    1392.6    1152.6 |      23.1 |     801.6 |      其中 anon
+  15186.0   22570.4   23539.6   15281.2 |    7384.4    8353.6 |     167.1 |      95.2 |      其中 file(page cache)
+      0.0       0.0       0.0       0.0 |       0.0       0.0 |       0.0 |       0.0 |      其中 kernel
+ 587366.8  595723.9  597657.8  599479.4 |    8357.1   10291.0 |     205.8 |   12112.6 | ④ MemTotal-MemAvailable(普通内存)
+ 111260.3  112835.3  114285.2  114796.2 |    1575.0    3024.9 |      60.5 |    3535.9 |    AnonPages
+  19970.3   25828.6   33576.3   35117.2 |    5858.3   13606.0 |     272.1 |   15146.9 |    Cached(page cache)
+  13088.3   13183.1   13187.6   13091.0 |      94.8      99.3 |       2.0 |       2.7 |    Slab 可回收
+   3995.6    4333.3    4359.6    4140.2 |     337.7     364.0 |       7.3 |     144.6 |    Slab 不可回收
+    389.2     402.9     406.3     405.9 |      13.7      17.1 |       0.3 |      16.7 |    PageTables
+    151.1     159.9     160.2     156.2 |       8.8       9.1 |       0.2 |       5.1 |    KernelStack
+  18400.9   18787.7   20084.3   24874.4 |     386.8    1683.4 |      33.7 |    6473.5 |    Shmem
+      0.0       0.0       0.0       0.0 |       0.0       0.0 |       0.0 |       0.0 |    snapshot-cache tmpfs
+    215.5     215.5     259.5     259.5 |       0.0      44.0 |       0.9 |      44.0 |    orchestrator build 目录(磁盘)
+      0.0    3063.8    3099.3       0.0 |    3063.8    3099.3 |      62.0 |       0.0 |    orchestrator sandbox 目录(磁盘)
+
+T2 时刻每个沙箱：大页 156.7 MiB；可归因合计 (①+②PSS+③)/N = 242.1 MiB；宿主机总口径 (①+④)/N = 362.5 MiB
+orch cgroup memory.max = 32768.0 MiB（客户机大页不计入；其余普通内存计入，超了会 memcg OOM）
+（同一 N 下的绝对值含一次性开销；边际值请用 N=1 与 N=10 两次做差，见 空闲沙箱内存实测分析.md）
+
+----- T2 明细 -----
+== 2026-11-10 17:21:28  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=50
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=196109,used=3955,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 7910.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 7834.0
+firecracker RSS/PSS 合计    : 206.4 / 117.9
+orchestrator RSS (MiB)      : 4582.7   (pid 2358943; anon 1178.7 / file 3404.0 / shmem 0.0)
+orch cgroup 用量/上限 (MiB) : 25131.0 / 32768.0   (anon 1294.0 / file 23539.6 / kernel 0.0；/sys/fs/cgroup/nomad.slice/share.slice/67b55cc2-afb6-af7c-4b2d-14b97d921998.start.scope)
+snapshot-cache tmpfs (MiB)  : 0.0
+build / sandbox 目录 (MiB)  : 259.5 / 3099.3   （/orchestrator 下，磁盘）
+AnonPages / Cached (MiB)    : 114284.1 / 33555.3
+Slab 可回收/不可回收 (MiB)  : 13187.7 / 4358.8
+PageTables / KernelStack    : 406.0 / 160.2 MiB
+Shmem (MiB)                 : 20084.3
+MemTotal-MemAvailable (MiB) : 597669.6
+  fc pid 531433   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531459   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 531484   RSS=    4.2 MiB  PSS=    2.4 MiB  客户机大页=   154.0 MiB
+  fc pid 531526   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531552   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531573   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   160.0 MiB
+  fc pid 531595   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 531615   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531636   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531664   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   160.0 MiB
+  fc pid 531689   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531715   RSS=    2.3 MiB  PSS=    0.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531751   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531776   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531801   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 531828   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   160.0 MiB
+  fc pid 531862   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531894   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   154.0 MiB
+  fc pid 531926   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531955   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 531996   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532038   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532071   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   160.0 MiB
+  fc pid 532097   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   152.0 MiB
+  fc pid 532136   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 532174   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532210   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 532233   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532269   RSS=    4.2 MiB  PSS=    2.4 MiB  客户机大页=   158.0 MiB
+  fc pid 532299   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532329   RSS=    2.3 MiB  PSS=    0.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532369   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532399   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 532423   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532450   RSS=    2.3 MiB  PSS=    0.5 MiB  客户机大页=   158.0 MiB
+  fc pid 532509   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532552   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532588   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532617   RSS=    4.2 MiB  PSS=    2.4 MiB  客户机大页=   156.0 MiB
+  fc pid 532646   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532681   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532718   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532752   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532781   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 532850   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 532900   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+  fc pid 533051   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 533106   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   156.0 MiB
+  fc pid 533170   RSS=    4.3 MiB  PSS=    2.5 MiB  客户机大页=   160.0 MiB
+  fc pid 533317   RSS=    4.2 MiB  PSS=    2.5 MiB  客户机大页=   158.0 MiB
+
+----- T3（关闭后）明细 -----
+== 2026-11-10 17:22:31  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=0
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=200026,used=38,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 76.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 0.0
+firecracker RSS/PSS 合计    : 0.0 / 0.0
+orchestrator RSS (MiB)      : 1273.9   (pid 2358943; anon 943.0 / file 330.9 / shmem 0.0)
+orch cgroup 用量/上限 (MiB) : 16576.0 / 32768.0   (anon 943.0 / file 15281.2 / kernel 0.0；/sys/fs/cgroup/nomad.slice/share.slice/67b55cc2-afb6-af7c-4b2d-14b97d921998.start.scope)
+snapshot-cache tmpfs (MiB)  : 0.0
+build / sandbox 目录 (MiB)  : 259.5 / 0.0   （/orchestrator 下，磁盘）
+AnonPages / Cached (MiB)    : 114791.3 / 35095.5
+Slab 可回收/不可回收 (MiB)  : 13091.0 / 4139.3
+PageTables / KernelStack    : 405.9 / 156.2 MiB
+Shmem (MiB)                 : 24874.4
+MemTotal-MemAvailable (MiB) : 599432.0
+
+----- idle_sandbox.py 输出（含 --guest 客户机视角）-----
+[1/50] created i4gl63geugff92yafbp0c  (0.10s)
+[2/50] created ic25drq82186fjbs46ubi  (0.07s)
+[3/50] created il2zsk4qn54eaai63bstu  (0.07s)
+[4/50] created issl8thqoha8svgftynna  (0.08s)
+[5/50] created ij5zvygsblr1prt3q10nr  (0.07s)
+[6/50] created ii4e7z8e6gph834shm9bq  (0.07s)
+[7/50] created irnthxkat3a1ikqshlt4j  (0.07s)
+[8/50] created iu8xzhzmiv82s2uktnhc0  (0.07s)
+[9/50] created ie1v8da3thjiaj4sgwz0u  (0.07s)
+[10/50] created i8xb1wng7iiwprunj70fm  (0.07s)
+[11/50] created itgojd2q0lhci7ep7k5fn  (0.18s)
+[12/50] created ix1tvxq2yo7aaxa7et5di  (0.12s)
+[13/50] created i9qieirfl8ewtb2snrge8  (0.08s)
+[14/50] created ir839wrrj9m3fdxfdae7r  (0.07s)
+[15/50] created ico4v2l3ifsupweua13re  (0.07s)
+[16/50] created iw42in2x8hvfjonuv7pjy  (0.07s)
+[17/50] created ixnbx27vtdnp3idqox4mn  (0.13s)
+[18/50] created iuj2p2q6w3jjqa4m9y1p4  (0.07s)
+[19/50] created i8fcjnxh4k9qy8tzpjkfw  (0.07s)
+[20/50] created i2b1cwzd1ebfjff4lw2pa  (0.07s)
+[21/50] created i6w9g379fhxc6g46cgt2w  (0.07s)
+[22/50] created iwi3103p53x3kpm89oklh  (0.21s)
+[23/50] created i7l95aguliwjr5wnglwil  (0.07s)
+[24/50] created iqintcciitmut90yga1rh  (0.07s)
+[25/50] created imyecsd7xltk12sa6g25b  (0.14s)
+[26/50] created ie5t4gijw1aetffujtpxj  (0.10s)
+[27/50] created iiap7mp1ccrrbktmearov  (0.07s)
+[28/50] created i25szh08dicuflbdlzst3  (0.08s)
+[29/50] created i0soo1mi99xfprahgyobb  (0.15s)
+[30/50] created iv0yrwt58xi6pkvfavqw5  (0.10s)
+[31/50] created it8a8o4kwzq1w466t0j8i  (0.12s)
+[32/50] created ie3rfjcjblrk0fjd4wrv0  (0.07s)
+[33/50] created itay5v67l7b3u0evkppgl  (0.07s)
+[34/50] created iboegsllqwqowjvsslylz  (0.07s)
+[35/50] created iubsy27mh0zxzbf00ke9y  (0.10s)
+[36/50] created it99kefqr465hcb71h4gd  (0.28s)
+[37/50] created igh9i6myzmxtu9y36jikh  (0.10s)
+[38/50] created imt6v8x1i484vns9w1cwg  (0.07s)
+[39/50] created iv3w1ra91vrv3wb0l73e6  (0.07s)
+[40/50] created iyjmkbp1871c1jsjixl65  (0.12s)
+[41/50] created ifakziakztm2lza3zk1g2  (0.14s)
+[42/50] created ibli1y6isp4l435yhno2g  (0.07s)
+[43/50] created i1hxa5g5h4lt4p4edj62s  (0.07s)
+[44/50] created ieaykdvjq35hq7tqg372x  (0.19s)
+[45/50] created ibju6rabc8fmq3rfkcwep  (0.20s)
+[46/50] created i5ejftkdoocmddh60cezz  (0.61s)
+[47/50] created if9zn4di7qce56nfjckn8  (0.28s)
+[48/50] created i1zhe1zm960u1qmr6oczb  (0.15s)
+[49/50] created irpt9lfewn4gsdb9ry94s  (0.79s)
+[50/50] created i03ahzbv4l1uw4pftobli  (0.14s)
+全部创建完成，空闲保持（最长 900s）...
+
+===== 客户机视角（i4gl63geugff92yafbp0c）=====
+$ free -m
+               total        used        free      shared  buff/cache   available
+Mem:            1990          68        1862           0          59        1859
+Swap:              0           0           0
+
+$ head -5 /proc/meminfo
+MemTotal:        2038520 kB
+MemFree:         1907576 kB
+MemAvailable:    1903684 kB
+Buffers:            5368 kB
+Cached:            51308 kB
+
+已关闭 50 个沙箱

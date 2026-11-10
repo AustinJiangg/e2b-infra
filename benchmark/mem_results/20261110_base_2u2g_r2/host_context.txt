@@ -1,0 +1,18 @@
+# 第二轮（2026-11-10 16:56 起）测量前的宿主机快照，用户在服务器 benchmark/ 下执行，原样记录。
+# 之后依次执行 measure_idle_mem.sh 1 / 10 / 50（T1=30s，T2=300s，T3=关闭后60s），报告见同目录 report_n*.txt。
+(jll-e2b) [root@localhost benchmark]# bash mem_snap.sh
+== 2026-11-10 16:56:00  PAGESIZE=4096  默认Hugepagesize=2048kB  firecracker 进程数=0
+大页明细                    : 1048576kB:pool=0,surplus=0,free=0,used=0,rsvd=0 2048kB:pool=200064,surplus=0,free=200026,used=38,rsvd=129 32768kB:pool=0,surplus=0,free=0,used=0,rsvd=0 64kB:pool=0,surplus=0,free=0,used=0,rsvd=0
+大页已用 (MiB)              : 76.0
+大页已预留未落地 Rsvd (MiB) : 258.0
+firecracker 客户机大页合计  : 0.0
+firecracker RSS/PSS 合计    : 0.0 / 0.0
+orchestrator RSS (MiB)      : 414.1   (pid 2358943; anon 131.2 / file 282.9 / shmem 0.0)
+orch cgroup 用量/上限 (MiB) : 15409.5 / 32768.0   (anon 131.2 / file 15189.3 / kernel 0.0；/sys/fs/cgroup/nomad.slice/share.slice/67b55cc2-afb6-af7c-4b2d-14b97d921998.start.scope)
+snapshot-cache tmpfs (MiB)  : 0.0
+build / sandbox 目录 (MiB)  : 211.5 / 0.0   （/orchestrator 下，磁盘）
+AnonPages / Cached (MiB)    : 108556.6 / 41775.3
+Slab 可回收/不可回收 (MiB)  : 13070.6 / 3975.8
+PageTables / KernelStack    : 383.7 / 149.5 MiB
+Shmem (MiB)                 : 18190.7
+MemTotal-MemAvailable (MiB) : 585925.4

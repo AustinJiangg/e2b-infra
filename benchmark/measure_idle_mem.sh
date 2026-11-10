@@ -9,7 +9,7 @@
 #
 # 结果在 mem_runs/<时间戳>_n<N>/report.txt。建议 N=1 和 N=10 各跑一次，
 # 用 (n10 增量 - n1 增量) / 9 得到"每多一个沙箱"的边际内存（扣掉一次性开销）。
-# 结果解读见 空闲沙箱内存实测分析.md。
+# 结果解读见 空闲沙箱内存实测分析.md。每个沙箱的普通内存以 orch cgroup memory.current 的增量为准。
 
 set -u
 cd "$(dirname "$0")"
@@ -85,7 +85,7 @@ row() {  # key 说明
   row cg_cur_mib      "   orch cgroup memory.current"
   row cg_anon_mib     "     其中 anon"
   row cg_file_mib     "     其中 file(page cache)"
-  row cg_kernel_mib   "     其中 kernel"
+  row cg_other_mib    "     其中 其他(current-anon-file)"
   row nonhp_used_mib  "④ MemTotal-MemAvailable(普通内存)"
   row anon_mib        "   AnonPages"
   row cached_mib      "   Cached(page cache)"
@@ -101,10 +101,10 @@ row() {  # key 说明
   awk -F= -v n="$N" '
     FNR==NR {b[$1]=$2; next} {t[$1]=$2}
     END {
-      hp  = t["fc_hugetlb_mib"]-b["fc_hugetlb_mib"]
-      nhp = t["nonhp_used_mib"]-b["nonhp_used_mib"]
-      att = hp + (t["fc_pss_mib"]-b["fc_pss_mib"]) + (t["orch_rss_mib"]-b["orch_rss_mib"])
-      printf "T2 时刻每个沙箱：大页 %.1f MiB；可归因合计 (①+②PSS+③)/N = %.1f MiB；宿主机总口径 (①+④)/N = %.1f MiB\n", hp/n, att/n, (hp+nhp)/n
+      hp = t["fc_hugetlb_mib"]-b["fc_hugetlb_mib"]
+      cg = t["cg_cur_mib"]-b["cg_cur_mib"]
+      printf "T2 时刻每个沙箱：大页 %.1f MiB + orch cgroup 普通内存 %.1f MiB = %.1f MiB\n", hp/n, cg/n, (hp+cg)/n
+      printf "（④ MemTotal-MemAvailable 是全机口径，宿主机有别的负载时噪声很大，只作参考）\n"
     }' "$OUT/before.kv" "$OUT/t2.kv"
   awk -F= '$1=="cg_max_mib"{if($2>0) printf "orch cgroup memory.max = %s MiB（客户机大页不计入；其余普通内存计入，超了会 memcg OOM）\n", $2}' "$OUT/t2.kv"
   echo "（同一 N 下的绝对值含一次性开销；边际值请用 N=1 与 N=10 两次做差，见 空闲沙箱内存实测分析.md）"

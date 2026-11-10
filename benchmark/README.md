@@ -254,7 +254,7 @@ python visualize_intervals.py           # 自动定位最近一次运行目录 �
 | `高并发瓶颈定位方案.md` | **高并发瓶颈定位的持续迭代方案**：准入排队、`等待fc启动` 拆分、甘特可视化 |
 | `mem_snap.sh` / `idle_sandbox.py` / `measure_idle_mem.sh` | 空闲沙箱内存占用测量：宿主机内存分项快照、起空闲沙箱、一键测量出报告（结果在 `mem_runs/`） |
 | `沙箱内存占用测量.md` | 沙箱内存怎么算、和模板规格的关系、测量步骤与读报告 |
-| `空闲沙箱内存实测分析.md` / `mem_results/` | 2026-11-10 base 2U2G 实测：每个空闲沙箱大页 158 MiB、普通内存约 180 MiB，含原始报告与展示图 |
+| `空闲沙箱内存实测分析.md` / `mem_results/` | 2026-11-10 base 2U2G 两轮实测：每个空闲沙箱大页 157 MiB + orchestrator cgroup 普通内存 194 MiB；并发先受 cgroup 32 GiB 限制。含原始报告、拟合与展示图 |
 
 每次 `run_benchmark.py` 会在 `runs/` 下新建一个运行目录，一次压测的全部产物都归集在内：
 

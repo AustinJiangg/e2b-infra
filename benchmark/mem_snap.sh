@@ -20,7 +20,8 @@
 #   orch_build_mib  ${ORCH_BASE}/build 磁盘占用（模板 diff 缓存，同模板共享）
 #   orch_sbx_mib    ${ORCH_BASE}/sandbox 磁盘占用（运行中沙箱的每沙箱文件）
 #   cg_*_mib        orchestrator 所在 cgroup（Nomad task cgroup，firecracker 也在里面）的 memory.current /
-#                   memory.max 及 memory.stat 的 anon/file/kernel 拆分。客户机大页不记在这里，
+#                   memory.max 及 memory.stat 的 anon/file 拆分；other = current − anon − file（内核对象等。
+#                   有的内核 memory.stat 的 kernel 项恒为 0，所以用差值）。客户机大页不记在这里，
 #                   但 orchestrator 堆、fc 进程、page cache、内核对象都记，超过 memory.max 会 memcg OOM（deploy-docs/12）
 #   anon/cached/slab_*/pagetables/kstack_mib  /proc/meminfo 对应项，用来给 MemTotal-MemAvailable 的变化找归属
 #   shmem_mib       /proc/meminfo Shmem（tmpfs 等），snapshot-cache 包含在内
@@ -110,6 +111,7 @@ if [ $KV -eq 1 ]; then
   echo "cg_anon_mib=$(m $cg_anon_kb)"
   echo "cg_file_mib=$(m $cg_file_kb)"
   echo "cg_kernel_mib=$(m $cg_kern_kb)"
+  echo "cg_other_mib=$(m $(( cg_cur_kb - cg_anon_kb - cg_file_kb )))"
   echo "orch_build_mib=$(m $orch_build_kb)"
   echo "orch_sbx_mib=$(m $orch_sbx_kb)"
   echo "shmem_mib=$(m "$(mi Shmem)")"
@@ -128,7 +130,7 @@ else
   echo "firecracker 客户机大页合计  : $(m $fc_huge_kb)"
   echo "firecracker RSS/PSS 合计    : $(m $fc_rss_kb) / $(m $fc_pss_kb)"
   echo "orchestrator RSS (MiB)      : $(m $orch_rss_kb)   (pid ${orch_pid:-未找到}; anon $(m $orch_anon_kb) / file $(m $orch_file_kb) / shmem $(m $orch_shmem_kb))"
-  echo "orch cgroup 用量/上限 (MiB) : $(m $cg_cur_kb) / $(m $cg_max_kb)   (anon $(m $cg_anon_kb) / file $(m $cg_file_kb) / kernel $(m $cg_kern_kb)；${cg_path:-未找到})"
+  echo "orch cgroup 用量/上限 (MiB) : $(m $cg_cur_kb) / $(m $cg_max_kb)   (anon $(m $cg_anon_kb) / file $(m $cg_file_kb) / 其他 $(m $(( cg_cur_kb - cg_anon_kb - cg_file_kb )))；${cg_path:-未找到})"
   echo "snapshot-cache tmpfs (MiB)  : $(m $snapcache_kb)"
   echo "build / sandbox 目录 (MiB)  : $(m $orch_build_kb) / $(m $orch_sbx_kb)   （$ORCH_BASE 下，磁盘）"
   echo "AnonPages / Cached (MiB)    : $(m "$(mi AnonPages)") / $(m "$(mi Cached)")"
