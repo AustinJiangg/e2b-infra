@@ -1,320 +1,174 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2146" viewBox="0 0 1600 2146" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1399" viewBox="0 0 1600 1399" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
 <defs>
-<marker id="ar-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1.5 1L8.5 5L1.5 9" fill="none" stroke="#5F5E5A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
 </defs>
-<rect width="1600" height="2146" fill="#FFFFFF"/>
-<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">空闲 2U2G 沙箱每个约 350 MiB：大页 157 + 普通内存 194，memory_mb = 2048 只是上限</text>
-<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">base 模板（ubuntu 22.04 + envd，cpu_count=2，memory_mb=2048）· 宿主机 2.4 TiB 内存，静态大页池 200064 × 2 MiB · 2026-11-10 两轮实测，每次空闲 300 s</text>
-<circle cx="63" cy="144" r="15" fill="#2C2C2A"/>
-<text x="63.0" y="149.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
-<text x="90.0" y="151.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">怎么测</text>
-<text x="170.0" y="150.0" font-size="14.5" fill="#888780" text-anchor="start">全部在宿主机侧读数，沙箱内不执行任何命令</text>
-<rect x="48.0" y="172.0" width="262.4" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<rect x="60.0" y="183.0" width="54.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
-<text x="87.0" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">宿主机</text>
-<text x="179.2" y="234.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">采基线</text>
-<text x="179.2" y="262.0" font-size="14" fill="#5F5E5A" text-anchor="middle">drop_caches 后读大页计数、</text>
-<text x="179.2" y="283.0" font-size="14" fill="#5F5E5A" text-anchor="middle">smaps、orchestrator cgroup</text>
-<line x1="314.4" y1="237.2" x2="352.4" y2="237.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
-<rect x="358.4" y="172.0" width="262.4" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<rect x="370.4" y="183.0" width="70.5" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
-<text x="405.7" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">E2B SDK</text>
-<text x="489.6" y="234.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">起 N 个沙箱</text>
-<text x="489.6" y="262.0" font-size="14" fill="#5F5E5A" text-anchor="middle">第二轮 N = 1、10、50，创建后什么</text>
-<text x="489.6" y="283.0" font-size="14" fill="#5F5E5A" text-anchor="middle">都不做</text>
-<line x1="624.8" y1="237.2" x2="662.8" y2="237.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
-<rect x="668.8" y="172.0" width="262.4" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<rect x="680.8" y="183.0" width="54.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
-<text x="707.8" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">宿主机</text>
-<text x="800.0" y="244.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">空闲采样</text>
-<text x="800.0" y="272.5" font-size="14" fill="#5F5E5A" text-anchor="middle">T1 = 30 s、T2 = 300 s 各采一次</text>
-<line x1="935.2" y1="237.2" x2="973.2" y2="237.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
-<rect x="979.2" y="172.0" width="262.4" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<rect x="991.2" y="183.0" width="54.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
-<text x="1018.2" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">宿主机</text>
-<text x="1110.4" y="244.7" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">关闭后再采</text>
-<text x="1110.4" y="272.5" font-size="14" fill="#5F5E5A" text-anchor="middle">关闭 60 s 后看还回去多少</text>
-<line x1="1245.6" y1="237.2" x2="1283.6" y2="237.2" stroke="#5F5E5A" stroke-width="1.8" marker-end="url(#ar-flow)"/>
-<rect x="1289.6" y="172.0" width="262.4" height="130.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<rect x="1301.6" y="183.0" width="42.0" height="22.0" rx="11" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.8"/>
-<text x="1322.6" y="198.5" font-size="12" fill="#5F5E5A" font-weight="500" text-anchor="middle">分析</text>
-<text x="1420.8" y="234.2" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">对 N 做线性拟合</text>
-<text x="1420.8" y="262.0" font-size="14" fill="#5F5E5A" text-anchor="middle">斜率 = 每多一个沙箱的增量，截距 =</text>
-<text x="1420.8" y="283.0" font-size="14" fill="#5F5E5A" text-anchor="middle">一次性开销</text>
-<circle cx="63" cy="348.5" r="15" fill="#2C2C2A"/>
-<text x="63.0" y="354.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
-<text x="90.0" y="355.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">每多一个空闲沙箱，宿主机多付出约 350 MiB</text>
-<rect x="517.8" y="338.5" width="74.0" height="24.0" rx="12" fill="#FCEBEB" stroke="#E24B4A" stroke-width="0.8"/>
-<text x="554.8" y="354.5" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="middle">本图重点</text>
-<rect x="48.0" y="399.5" width="22.0" height="14.0" rx="3" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
-<text x="78.0" y="411.5" font-size="14" fill="#5F5E5A" text-anchor="start">客户机内存（大页池）</text>
-<rect x="248.0" y="399.5" width="22.0" height="14.0" rx="3" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.2"/>
-<text x="278.0" y="411.5" font-size="14" fill="#5F5E5A" text-anchor="start">匿名内存（orchestrator 堆等）</text>
-<rect x="521.4" y="399.5" width="22.0" height="14.0" rx="3" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
-<text x="551.4" y="411.5" font-size="14" fill="#5F5E5A" text-anchor="start">沙箱目录文件页（orchestrator mmap）</text>
-<rect x="841.2" y="399.5" width="22.0" height="14.0" rx="3" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
-<text x="871.2" y="411.5" font-size="14" fill="#5F5E5A" text-anchor="start">其他 page cache 与内核对象</text>
-<line x1="248.0" y1="442.5" x2="248.0" y2="680.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="248.0" y="700.5" font-size="13" fill="#888780" text-anchor="middle">0 MiB</text>
-<line x1="546.5" y1="442.5" x2="546.5" y2="680.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="546.5" y="700.5" font-size="13" fill="#888780" text-anchor="middle">100 MiB</text>
-<line x1="845.0" y1="442.5" x2="845.0" y2="680.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="845.0" y="700.5" font-size="13" fill="#888780" text-anchor="middle">200 MiB</text>
-<line x1="1143.5" y1="442.5" x2="1143.5" y2="680.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="1143.5" y="700.5" font-size="13" fill="#888780" text-anchor="middle">300 MiB</text>
-<line x1="1442.0" y1="442.5" x2="1442.0" y2="680.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="1442.0" y="700.5" font-size="13" fill="#888780" text-anchor="middle">400 MiB</text>
-<text x="234.0" y="466.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">N=1</text>
-<text x="234.0" y="484.5" font-size="12.5" fill="#888780" text-anchor="end">T2 增量</text>
-<rect x="248.0" y="448.5" width="459.7" height="40.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
-<text x="477.8" y="473.5" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">154</text>
-<rect x="707.7" y="448.5" width="120.9" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="768.1" y="473.5" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">40.5</text>
-<rect x="828.6" y="448.5" width="183.3" height="40.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
-<text x="920.2" y="473.5" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">61.4</text>
-<rect x="1011.9" y="448.5" width="321.2" height="40.0" rx="4" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.1"/>
-<text x="1172.5" y="473.5" font-size="13.5" fill="#633806" font-weight="600" text-anchor="middle">108</text>
-<text x="1343.0" y="473.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">364 MiB</text>
-<text x="234.0" y="528.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">N=10 均摊</text>
-<text x="234.0" y="546.5" font-size="12.5" fill="#888780" text-anchor="end">T2 增量 ÷ 10</text>
-<rect x="248.0" y="510.5" width="472.2" height="40.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
-<text x="484.1" y="535.5" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">158</text>
-<rect x="720.2" y="510.5" width="88.0" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="764.2" y="535.5" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">29.5</text>
-<rect x="808.3" y="510.5" width="184.6" height="40.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
-<text x="900.5" y="535.5" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">61.8</text>
-<rect x="992.8" y="510.5" width="308.2" height="40.0" rx="4" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.1"/>
-<text x="1146.9" y="535.5" font-size="13.5" fill="#633806" font-weight="600" text-anchor="middle">103</text>
-<text x="1311.0" y="535.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">353 MiB</text>
-<text x="234.0" y="590.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">N=50 均摊</text>
-<text x="234.0" y="608.5" font-size="12.5" fill="#888780" text-anchor="end">T2 增量 ÷ 50</text>
-<rect x="248.0" y="572.5" width="467.7" height="40.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
-<text x="481.8" y="597.5" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">157</text>
-<rect x="715.7" y="572.5" width="68.8" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="750.1" y="597.5" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">23.1</text>
-<rect x="784.5" y="572.5" width="186.1" height="40.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
-<text x="877.5" y="597.5" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">62.3</text>
-<rect x="970.6" y="572.5" width="324.2" height="40.0" rx="4" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.1"/>
-<text x="1132.7" y="597.5" font-size="13.5" fill="#633806" font-weight="600" text-anchor="middle">109</text>
-<text x="1304.8" y="597.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">351 MiB</text>
-<text x="234.0" y="652.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">斜率：每多 1 个</text>
-<text x="234.0" y="670.5" font-size="12.5" fill="#888780" text-anchor="end">对 N=1、10、50 拟合</text>
-<rect x="248.0" y="634.5" width="467.5" height="40.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
-<text x="481.7" y="659.5" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">157</text>
-<rect x="715.5" y="634.5" width="66.6" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="748.8" y="659.5" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">22.3</text>
-<rect x="782.1" y="634.5" width="186.2" height="40.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.1"/>
-<text x="875.2" y="659.5" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="middle">62.4</text>
-<rect x="968.3" y="634.5" width="325.4" height="40.0" rx="4" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.1"/>
-<text x="1131.0" y="659.5" font-size="13.5" fill="#633806" font-weight="600" text-anchor="middle">109</text>
-<text x="1303.7" y="659.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">350 MiB</text>
-<rect x="48.0" y="730.5" width="1504.0" height="40.0" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
-<text x="800.0" y="756.5" font-size="14.5" fill="#085041" font-weight="600" text-anchor="middle">大页 157 MiB：直接读 firecracker 的 smaps，与系统“大页已用”增量逐 MiB 吻合；不记在任何 cgroup 的内存账上</text>
-<rect x="48.0" y="786.5" width="1504.0" height="40.0" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.8"/>
-<text x="800.0" y="812.5" font-size="14.5" fill="#0C447C" font-weight="600" text-anchor="middle">后三段全部记在 orchestrator 所在的 Nomad cgroup 里（memory.max = 32 GiB）：三个 N 的增量严格线性，每个 193.7 MiB，残差不超过 4 MiB</text>
-<circle cx="63" cy="872.5" r="15" fill="#2C2C2A"/>
-<text x="63.0" y="878.0" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">3</text>
-<text x="90.0" y="879.5" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">为什么不是 2048 MiB</text>
-<text x="309.8" y="878.5" font-size="14.5" fill="#888780" text-anchor="start">从快照恢复后按需缺页：客户机碰到哪一页，宿主机才分配哪一个 2 MiB 大页</text>
-<rect x="48.0" y="923.5" width="22.0" height="14.0" rx="3" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
-<text x="78.0" y="935.5" font-size="14" fill="#5F5E5A" text-anchor="start">已落地的大页</text>
-<rect x="192.0" y="923.5" width="22.0" height="14.0" rx="3" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<text x="222.0" y="935.5" font-size="14" fill="#5F5E5A" text-anchor="start">映射了但没落地，不占物理内存</text>
-<line x1="248.0" y1="966.5" x2="248.0" y2="1022.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="248.0" y="1042.5" font-size="13" fill="#888780" text-anchor="middle">0 MiB</text>
-<line x1="546.5" y1="966.5" x2="546.5" y2="1022.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="546.5" y="1042.5" font-size="13" fill="#888780" text-anchor="middle">512 MiB</text>
-<line x1="845.0" y1="966.5" x2="845.0" y2="1022.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="845.0" y="1042.5" font-size="13" fill="#888780" text-anchor="middle">1,024 MiB</text>
-<line x1="1143.5" y1="966.5" x2="1143.5" y2="1022.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="1143.5" y="1042.5" font-size="13" fill="#888780" text-anchor="middle">1,536 MiB</text>
-<line x1="1442.0" y1="966.5" x2="1442.0" y2="1022.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="1442.0" y="1042.5" font-size="13" fill="#888780" text-anchor="middle">2,048 MiB</text>
-<text x="234.0" y="992.5" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">客户机地址空间</text>
-<text x="234.0" y="1010.5" font-size="12.5" fill="#888780" text-anchor="end">memory_mb = 2048</text>
-<rect x="248.0" y="972.5" width="91.3" height="44.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
-<text x="293.7" y="999.5" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">157</text>
-<rect x="339.3" y="972.5" width="1102.7" height="44.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.1"/>
-<text x="890.7" y="999.5" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">1,891</text>
-<text x="1452.0" y="999.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">2,048 MiB</text>
-<text x="48.0" y="1084.5" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">72 个沙箱的大页落地量：152–162 MiB</text>
-<text x="48.0" y="1106.5" font-size="13" fill="#888780" text-anchor="start">每个点是一个 firecracker 进程（两轮、五次测量）；虚线是斜率 157</text>
-<line x1="126.0" y1="1296.5" x2="762.0" y2="1296.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="116.0" y="1301.0" font-size="12.5" fill="#888780" text-anchor="end">140</text>
-<line x1="126.0" y1="1247.2" x2="762.0" y2="1247.2" stroke="#E8E6DF" stroke-width="1"/>
-<text x="116.0" y="1251.7" font-size="12.5" fill="#888780" text-anchor="end">150</text>
-<line x1="126.0" y1="1197.8" x2="762.0" y2="1197.8" stroke="#E8E6DF" stroke-width="1"/>
-<text x="116.0" y="1202.3" font-size="12.5" fill="#888780" text-anchor="end">160</text>
-<line x1="126.0" y1="1148.5" x2="762.0" y2="1148.5" stroke="#E8E6DF" stroke-width="1"/>
-<text x="116.0" y="1153.0" font-size="12.5" fill="#888780" text-anchor="end">170</text>
-<text x="116.0" y="1132.5" font-size="12.5" fill="#888780" text-anchor="end">MiB</text>
-<line x1="151.4" y1="1197.8" x2="227.8" y2="1197.8" stroke="#1D9E75" stroke-width="3"/>
-<circle cx="189.6" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="189.6" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">一轮 N=1</text>
-<line x1="278.6" y1="1206.7" x2="355.0" y2="1206.7" stroke="#1D9E75" stroke-width="3"/>
-<circle cx="288.2" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="294.5" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="300.9" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="307.3" cy="1188.0" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="313.6" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="320.0" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="326.3" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="332.7" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="339.1" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="345.4" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="316.8" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">一轮 N=10</text>
-<line x1="405.8" y1="1227.4" x2="482.2" y2="1227.4" stroke="#1D9E75" stroke-width="3"/>
-<circle cx="444.0" cy="1227.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="444.0" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">二轮 N=1</text>
-<line x1="533.0" y1="1206.7" x2="609.4" y2="1206.7" stroke="#1D9E75" stroke-width="3"/>
-<circle cx="542.6" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="548.9" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="555.3" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="561.7" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="568.0" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="574.4" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="580.7" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="587.1" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="593.5" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="599.8" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="571.2" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">二轮 N=10</text>
-<line x1="660.2" y1="1214.2" x2="736.6" y2="1214.2" stroke="#1D9E75" stroke-width="3"/>
-<circle cx="667.2" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="668.5" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="669.8" cy="1227.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="671.1" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="672.3" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="673.6" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="674.9" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="676.1" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="677.4" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="678.7" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="680.0" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="681.2" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="682.5" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="683.8" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="685.0" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="686.3" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="687.6" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="688.9" cy="1227.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="690.1" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="691.4" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="692.7" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="693.9" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="695.2" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="696.5" cy="1237.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="697.8" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="699.0" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="700.3" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="701.6" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="702.9" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="704.1" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="705.4" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="706.7" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="707.9" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="709.2" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="710.5" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="711.8" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="713.0" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="714.3" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="715.6" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="716.8" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="718.1" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="719.4" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="720.7" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="721.9" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="723.2" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="724.5" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="725.7" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="727.0" cy="1217.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="728.3" cy="1197.8" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<circle cx="729.6" cy="1207.7" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="698.4" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">二轮 N=50</text>
-<line x1="126.0" y1="1214.6" x2="762.0" y2="1214.6" stroke="#888780" stroke-width="1.2" stroke-dasharray="5 4"/>
-<text x="762.0" y="1207.6" font-size="12.5" fill="#888780" text-anchor="end"></text>
-<text x="828.0" y="1084.5" font-size="16.5" fill="#2C2C2A" font-weight="600" text-anchor="start">每个沙箱的普通内存不随 N 变</text>
-<text x="828.0" y="1106.5" font-size="13" fill="#888780" text-anchor="start">orchestrator cgroup 的 T2 增量 ÷ N</text>
-<line x1="906.0" y1="1278.0" x2="1542.0" y2="1278.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="896.0" y="1282.5" font-size="12.5" fill="#888780" text-anchor="end">160</text>
-<line x1="906.0" y1="1241.0" x2="1542.0" y2="1241.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="896.0" y="1245.5" font-size="12.5" fill="#888780" text-anchor="end">180</text>
-<line x1="906.0" y1="1204.0" x2="1542.0" y2="1204.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="896.0" y="1208.5" font-size="12.5" fill="#888780" text-anchor="end">200</text>
-<line x1="906.0" y1="1167.0" x2="1542.0" y2="1167.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="896.0" y="1171.5" font-size="12.5" fill="#888780" text-anchor="end">220</text>
-<text x="896.0" y="1132.5" font-size="12.5" fill="#888780" text-anchor="end">MiB</text>
-<line x1="948.4" y1="1186.4" x2="1075.6" y2="1186.4" stroke="#378ADD" stroke-width="3"/>
-<circle cx="1012.0" cy="1186.4" r="6" fill="#378ADD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="1012.0" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">N=1</text>
-<line x1="1160.4" y1="1214.1" x2="1287.6" y2="1214.1" stroke="#378ADD" stroke-width="3"/>
-<circle cx="1224.0" cy="1214.1" r="6" fill="#378ADD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="1224.0" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">N=10</text>
-<line x1="1372.4" y1="1215.1" x2="1499.6" y2="1215.1" stroke="#378ADD" stroke-width="3"/>
-<circle cx="1436.0" cy="1215.1" r="6" fill="#378ADD" stroke="#FFFFFF" stroke-width="1.4" fill-opacity="0.9"/>
-<text x="1436.0" y="1318.5" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">N=50</text>
-<line x1="906.0" y1="1215.6" x2="1542.0" y2="1215.6" stroke="#888780" stroke-width="1.2" stroke-dasharray="5 4"/>
-<text x="1542.0" y="1208.6" font-size="12.5" fill="#888780" text-anchor="end">斜率 194</text>
-<rect x="48.0" y="1366.5" width="480.0" height="79.5" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
-<text x="288.0" y="1398.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">大页预留增量 = 0</text>
-<text x="288.0" y="1426.5" font-size="14" fill="#0F6E56" text-anchor="middle">HugePages_Rsvd 始终是 129，没有按 2048 MiB 预先占坑</text>
-<rect x="560.0" y="1366.5" width="480.0" height="79.5" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
-<text x="800.0" y="1398.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">关闭后能还回去</text>
-<text x="800.0" y="1426.5" font-size="14" fill="#0F6E56" text-anchor="middle">大页和 page cache 立即归还；orchestrator 堆几分钟内回落</text>
-<rect x="1072.0" y="1366.5" width="480.0" height="79.5" rx="10" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1.2"/>
-<text x="1312.0" y="1398.7" font-size="16.5" fill="#085041" font-weight="600" text-anchor="middle">客户机里只用了 130 MiB</text>
-<text x="1312.0" y="1426.5" font-size="14" fill="#0F6E56" text-anchor="middle">free：used 68～71 + buff/cache 59，和宿主机大页量级一致</text>
-<circle cx="63" cy="1492.0" r="15" fill="#2C2C2A"/>
-<text x="63.0" y="1497.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">4</text>
-<text x="90.0" y="1499.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">并发容量：先到上限的是 cgroup，不是大页</text>
-<text x="505.6" y="1498.0" font-size="14.5" fill="#888780" text-anchor="start">按第二轮 N=50 测量前的基线计算</text>
-<rect x="48.0" y="1543.0" width="22.0" height="14.0" rx="3" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.2"/>
-<text x="78.0" y="1555.0" font-size="14" fill="#5F5E5A" text-anchor="start">orchestrator cgroup 32 GiB</text>
-<rect x="311.0" y="1543.0" width="22.0" height="14.0" rx="3" fill="#FAECE7" stroke="#D85A30" stroke-width="1.2"/>
-<text x="341.0" y="1555.0" font-size="14" fill="#5F5E5A" text-anchor="start">大页池：都用满</text>
-<rect x="469.0" y="1543.0" width="22.0" height="14.0" rx="3" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
-<text x="499.0" y="1555.0" font-size="14" fill="#5F5E5A" text-anchor="start">大页池：都空闲</text>
-<line x1="248.0" y1="1586.0" x2="248.0" y2="1886.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="248.0" y="1906.0" font-size="13" fill="#888780" text-anchor="middle">0 个</text>
-<line x1="461.2" y1="1586.0" x2="461.2" y2="1886.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="461.2" y="1906.0" font-size="13" fill="#888780" text-anchor="middle">500 个</text>
-<line x1="674.4" y1="1586.0" x2="674.4" y2="1886.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="674.4" y="1906.0" font-size="13" fill="#888780" text-anchor="middle">1,000 个</text>
-<line x1="887.6" y1="1586.0" x2="887.6" y2="1886.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="887.6" y="1906.0" font-size="13" fill="#888780" text-anchor="middle">1,500 个</text>
-<line x1="1100.9" y1="1586.0" x2="1100.9" y2="1886.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="1100.9" y="1906.0" font-size="13" fill="#888780" text-anchor="middle">2,000 个</text>
-<line x1="1314.1" y1="1586.0" x2="1314.1" y2="1886.0" stroke="#E8E6DF" stroke-width="1"/>
-<text x="1314.1" y="1906.0" font-size="13" fill="#888780" text-anchor="middle">2,500 个</text>
-<text x="234.0" y="1610.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">cgroup：开始回收</text>
-<text x="234.0" y="1628.0" font-size="12.5" fill="#888780" text-anchor="end">已有 15.1 GiB 旧缓存</text>
-<rect x="248.0" y="1592.0" width="38.0" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="267.0" y="1617.0" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">89</text>
-<text x="296.0" y="1617.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">89 个</text>
-<text x="234.0" y="1672.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">cgroup：旧缓存挤完</text>
-<text x="234.0" y="1690.0" font-size="12.5" fill="#888780" text-anchor="end">沙箱的页全部常驻</text>
-<rect x="248.0" y="1654.0" width="71.2" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="283.6" y="1679.0" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">167</text>
-<text x="329.2" y="1679.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">167 个</text>
-<text x="234.0" y="1734.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">cgroup：只算匿名</text>
-<text x="234.0" y="1752.0" font-size="12.5" fill="#888780" text-anchor="end">文件页全部可回收</text>
-<rect x="248.0" y="1716.0" width="522.8" height="40.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.1"/>
-<text x="509.4" y="1741.0" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="middle">1,226</text>
-<text x="780.8" y="1741.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">1,226 个</text>
-<text x="234.0" y="1796.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">大页池：都用满</text>
-<text x="234.0" y="1814.0" font-size="12.5" fill="#888780" text-anchor="end">每个 2048 MiB</text>
-<rect x="248.0" y="1778.0" width="83.2" height="40.0" rx="4" fill="#FAECE7" stroke="#D85A30" stroke-width="1.1"/>
-<text x="289.6" y="1803.0" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="middle">195</text>
-<text x="341.2" y="1803.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">195 个</text>
-<text x="234.0" y="1858.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">大页池：都空闲</text>
-<text x="234.0" y="1876.0" font-size="12.5" fill="#888780" text-anchor="end">每个 157 MiB</text>
-<rect x="248.0" y="1840.0" width="1089.1" height="40.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.1"/>
-<text x="792.5" y="1865.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">2,554</text>
-<text x="1347.1" y="1865.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="start">2,554 个</text>
-<rect x="48.0" y="1936.0" width="1504.0" height="40.0" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.8"/>
-<text x="800.0" y="1962.0" font-size="14.5" fill="#0C447C" font-weight="600" text-anchor="middle">约 89 个沙箱时 cgroup 用量碰到 32 GiB，内核开始挤掉旧 page cache；超过约 167 个，就得回收沙箱自己正在用的文件页，能否平稳要压测。只算匿名内存的话上限约 1226 个</text>
-<rect x="48.0" y="1992.0" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
-<text x="800.0" y="2018.0" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">想稳定支撑 X 个空闲沙箱：template-manager.hcl 的 memory 建议 ≥ 32 GiB（构建所需）+ X × 0.19 GiB；有负载的沙箱还要更多</text>
-<line x1="48" y1="2068.0" x2="1552" y2="2068.0" stroke="#E5E3DB" stroke-width="1"/>
-<text x="48.0" y="2094.0" font-size="13" fill="#888780" text-anchor="start">注：普通内存以 orchestrator cgroup 的 memory.current 为准，memory.stat 拆出 anon 和 file，余下的 4.2 MiB 内核对象并入橙色一段。全机 MemTotal−MemAvailable 第二轮受其他负载干扰，1 个沙箱时 Cached 就涨了 6.4 GiB，所以不用于计</text>
-<text x="48.0" y="2114.0" font-size="13" fill="#888780" text-anchor="start">算。原始报告在 benchmark/mem_results/ 下的 _r1、_r2 两个目录。</text>
+<rect width="1600" height="1399" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">空闲 2U2G 沙箱：每个让宿主机多用约 350 MiB，并发先撞上 orchestrator 的 32 GiB 内存上限</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">base 模板（ubuntu 22.04 + envd，cpu_count=2，memory_mb=2048）· 宿主机 2.4 TiB 内存，静态大页池 200064 × 2 MiB · 2026-11-10 两轮实测，N = 1、10、50，每次空闲 300 s，全部在宿主机侧读数</text>
+<rect x="48.0" y="128.0" width="361.0" height="138.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="68.0" y="174.0" font-size="30" fill="#085041" font-weight="700" text-anchor="start">350 MiB</text>
+<text x="68.0" y="204.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">每个空闲沙箱的边际内存</text>
+<text x="68.0" y="228.0" font-size="13" fill="#0F6E56" text-anchor="start">大页 157 + cgroup 普通内存 194；三个 N 拟合，偏差</text>
+<text x="68.0" y="247.0" font-size="13" fill="#0F6E56" text-anchor="start">≤ 4 MiB</text>
+<rect x="429.0" y="128.0" width="361.0" height="138.0" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+<text x="449.0" y="174.0" font-size="30" fill="#085041" font-weight="700" text-anchor="start">157 / 2048</text>
+<text x="449.0" y="204.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">客户机内存真正落地的 MiB</text>
+<text x="449.0" y="228.0" font-size="13" fill="#0F6E56" text-anchor="start">memory_mb 只是上限；按需缺页，不预留</text>
+<rect x="810.0" y="128.0" width="361.0" height="138.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<text x="830.0" y="174.0" font-size="30" fill="#712B13" font-weight="700" text-anchor="start">≈ 89 个</text>
+<text x="830.0" y="204.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">orchestrator cgroup 到 32 GiB</text>
+<text x="830.0" y="228.0" font-size="13" fill="#993C1D" text-anchor="start">开始回收旧缓存；超过约 167 个就要回收沙箱自己在</text>
+<text x="830.0" y="247.0" font-size="13" fill="#993C1D" text-anchor="start">用的页</text>
+<rect x="1191.0" y="128.0" width="361.0" height="138.0" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<text x="1211.0" y="174.0" font-size="30" fill="#712B13" font-weight="700" text-anchor="start">32 + 0.19·X GiB</text>
+<text x="1211.0" y="204.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="start">template-manager 的 memory 建议</text>
+<text x="1211.0" y="228.0" font-size="13" fill="#993C1D" text-anchor="start">X = 目标空闲沙箱数；有负载的沙箱还要更多</text>
+<circle cx="63" cy="312" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="317.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="319.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">一个空闲沙箱的 350 MiB 记在两本账上</text>
+<text x="464.1" y="318.0" font-size="14.5" fill="#888780" text-anchor="start">每段都是对 N = 1、10、50 拟合出的斜率</text>
+<line x1="49.0" y1="404.0" x2="719.3" y2="404.0" stroke="#1D9E75" stroke-width="2"/>
+<line x1="49.0" y1="404.0" x2="49.0" y2="414.0" stroke="#1D9E75" stroke-width="2"/>
+<line x1="719.3" y1="404.0" x2="719.3" y2="414.0" stroke="#1D9E75" stroke-width="2"/>
+<text x="50.0" y="392.0" font-size="15.5" fill="#085041" font-weight="600" text-anchor="start">大页池 · 157 MiB</text>
+<text x="189.6" y="392.0" font-size="13.5" fill="#888780" text-anchor="start">不计入任何 cgroup</text>
+<line x1="727.3" y1="404.0" x2="1551.0" y2="404.0" stroke="#378ADD" stroke-width="2"/>
+<line x1="727.3" y1="404.0" x2="727.3" y2="414.0" stroke="#378ADD" stroke-width="2"/>
+<line x1="1551.0" y1="404.0" x2="1551.0" y2="414.0" stroke="#378ADD" stroke-width="2"/>
+<text x="728.3" y="392.0" font-size="15.5" fill="#0C447C" font-weight="600" text-anchor="start">orchestrator 所在的 Nomad cgroup · 194 MiB</text>
+<text x="1090.2" y="392.0" font-size="13.5" fill="#888780" text-anchor="start">计入 memory.max = 32 GiB，超了会 OOM</text>
+<rect x="48.0" y="418.0" width="672.3" height="58.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="384.2" y="454.0" font-size="20" fill="#085041" font-weight="700" text-anchor="middle">157</text>
+<rect x="720.3" y="418.0" width="267.9" height="58.0" rx="4" fill="#EEEDFE" stroke="#7F77DD" stroke-width="1.2"/>
+<text x="854.2" y="454.0" font-size="20" fill="#3C3489" font-weight="700" text-anchor="middle">62</text>
+<rect x="988.2" y="418.0" width="450.0" height="58.0" rx="4" fill="#FAEEDA" stroke="#BA7517" stroke-width="1.2"/>
+<text x="1213.2" y="454.0" font-size="20" fill="#633806" font-weight="700" text-anchor="middle">105</text>
+<rect x="1438.2" y="418.0" width="95.8" height="58.0" rx="4" fill="#E6F1FB" stroke="#378ADD" stroke-width="1.2"/>
+<text x="1486.1" y="454.0" font-size="20" fill="#0C447C" font-weight="700" text-anchor="middle">22</text>
+<rect x="1534.0" y="418.0" width="18.0" height="58.0" rx="4" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
+<rect x="48.0" y="498.0" width="6.0" height="70.0" rx="3" fill="#1D9E75" stroke="#1D9E75" stroke-width="0"/>
+<text x="66.0" y="515.0" font-size="14.5" fill="#085041" font-weight="600" text-anchor="start">客户机内存（大页）  156.6 MiB</text>
+<text x="66.0" y="539.0" font-size="13" fill="#5F5E5A" text-anchor="start">firecracker smaps 直接读到；72 个沙箱都</text>
+<text x="66.0" y="558.0" font-size="13" fill="#5F5E5A" text-anchor="start">在 152–162</text>
+<rect x="351.6" y="498.0" width="6.0" height="70.0" rx="3" fill="#7F77DD" stroke="#7F77DD" stroke-width="0"/>
+<text x="369.6" y="515.0" font-size="14.5" fill="#3C3489" font-weight="600" text-anchor="start">沙箱目录文件页  62.4 MiB</text>
+<text x="369.6" y="539.0" font-size="13" fill="#5F5E5A" text-anchor="start">orchestrator mmap 的</text>
+<text x="369.6" y="558.0" font-size="13" fill="#5F5E5A" text-anchor="start">/orchestrator/sandbox 下每个沙箱的文</text>
+<text x="369.6" y="577.0" font-size="13" fill="#5F5E5A" text-anchor="start">件，与目录大小一致</text>
+<rect x="655.2" y="498.0" width="6.0" height="70.0" rx="3" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="673.2" y="515.0" font-size="14.5" fill="#633806" font-weight="600" text-anchor="start">其他 page cache  104.8 MiB</text>
+<text x="673.2" y="539.0" font-size="13" fill="#5F5E5A" text-anchor="start">非 mmap 的文件缓存，推测来自 rootfs 读</text>
+<text x="673.2" y="558.0" font-size="13" fill="#5F5E5A" text-anchor="start">写，未逐项确认</text>
+<rect x="958.8" y="498.0" width="6.0" height="70.0" rx="3" fill="#378ADD" stroke="#378ADD" stroke-width="0"/>
+<text x="976.8" y="515.0" font-size="14.5" fill="#0C447C" font-weight="600" text-anchor="start">匿名内存  22.3 MiB</text>
+<text x="976.8" y="539.0" font-size="13" fill="#5F5E5A" text-anchor="start">orchestrator 堆约 20、firecracker 约</text>
+<text x="976.8" y="558.0" font-size="13" fill="#5F5E5A" text-anchor="start">2；关闭后几分钟回落</text>
+<rect x="1262.4" y="498.0" width="6.0" height="70.0" rx="3" fill="#B4B2A9" stroke="#B4B2A9" stroke-width="0"/>
+<text x="1280.4" y="515.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">其他  4.2 MiB</text>
+<text x="1280.4" y="539.0" font-size="13" fill="#5F5E5A" text-anchor="start">内核对象等，= current − anon − file</text>
+<text x="48.0" y="624.0" font-size="14.5" fill="#2C2C2A" font-weight="600" text-anchor="start">客户机看到的 2048 MiB</text>
+<text x="48.0" y="643.0" font-size="12.5" fill="#888780" text-anchor="start">memory_mb = 2048</text>
+<rect x="258.0" y="611.0" width="98.2" height="30.0" rx="4" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="307.1" y="631.0" font-size="14" fill="#085041" font-weight="700" text-anchor="middle">157</text>
+<rect x="356.2" y="611.0" width="1185.8" height="30.0" rx="4" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"/>
+<text x="949.1" y="631.0" font-size="13.5" fill="#888780" text-anchor="middle">1891 MiB 映射了但客户机没碰过，不占物理内存（HugePages_Rsvd 增量 = 0）</text>
+<circle cx="63" cy="687" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="692.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="694.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">为什么能按“每个沙箱”算，以及按这个速度多少个会出问题</text>
+<text x="48.0" y="749.0" font-size="17" fill="#2C2C2A" font-weight="600" text-anchor="start">增量随 N 严格线性：斜率 = 每多一个沙箱的成本</text>
+<text x="48.0" y="773.0" font-size="13.5" fill="#888780" text-anchor="start">每个点是一次实测（T2 时刻相对基线的增量）；直线是最小二乘拟合，截距 12 MiB ≈ 没有一次性开销</text>
+<text x="828.0" y="749.0" font-size="17" fill="#2C2C2A" font-weight="600" text-anchor="start">沙箱越多，orchestrator cgroup 越接近 32 GiB</text>
+<text x="828.0" y="773.0" font-size="13.5" fill="#888780" text-anchor="start">按 N=50 那次的基线：cgroup 里已有 14.8 GiB 可回收的旧缓存，0.24 GiB 匿名内存</text>
+<line x1="102.0" y1="1127.0" x2="764.0" y2="1127.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="92.0" y="1131.5" font-size="13" fill="#888780" text-anchor="end">0</text>
+<line x1="102.0" y1="1051.0" x2="764.0" y2="1051.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="92.0" y="1055.5" font-size="13" fill="#888780" text-anchor="end">3</text>
+<line x1="102.0" y1="975.0" x2="764.0" y2="975.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="92.0" y="979.5" font-size="13" fill="#888780" text-anchor="end">6</text>
+<line x1="102.0" y1="899.0" x2="764.0" y2="899.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="92.0" y="903.5" font-size="13" fill="#888780" text-anchor="end">9</text>
+<line x1="102.0" y1="823.0" x2="764.0" y2="823.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="92.0" y="827.5" font-size="13" fill="#888780" text-anchor="end">12</text>
+<line x1="102.0" y1="1127.0" x2="102.0" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="102.0" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">0</text>
+<line x1="193.9" y1="1127.0" x2="193.9" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="193.9" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">10</text>
+<line x1="285.9" y1="1127.0" x2="285.9" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="285.9" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">20</text>
+<line x1="377.8" y1="1127.0" x2="377.8" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="377.8" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">30</text>
+<line x1="469.8" y1="1127.0" x2="469.8" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="469.8" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">40</text>
+<line x1="561.7" y1="1127.0" x2="561.7" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="561.7" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">50</text>
+<line x1="102.0" y1="1127.0" x2="764.0" y2="1127.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="92.0" y="805.0" font-size="12.5" fill="#888780" text-anchor="end">GiB</text>
+<text x="433.0" y="1169.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">空闲沙箱数 N</text>
+<polyline points="102.0,1126.7 561.7,887.1" fill="none" stroke="#378ADD" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="111.2" cy="1121.8" r="6.5" fill="#378ADD" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="193.9" cy="1078.9" r="6.5" fill="#378ADD" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="561.7" cy="887.0" r="6.5" fill="#378ADD" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<text x="575.7" y="892.1" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">cgroup 普通内存</text>
+<text x="575.7" y="911.1" font-size="13" fill="#185FA5" text-anchor="start">每个 193.7 MiB</text>
+<polyline points="102.0,1126.9 561.7,933.1" fill="none" stroke="#1D9E75" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="111.2" cy="1123.2" r="6.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="193.9" cy="1087.9" r="6.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<circle cx="561.7" cy="933.2" r="6.5" fill="#1D9E75" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<text x="575.7" y="938.1" font-size="14" fill="#085041" font-weight="600" text-anchor="start">大页</text>
+<text x="575.7" y="957.1" font-size="13" fill="#0F6E56" text-anchor="start">每个 156.6 MiB</text>
+<line x1="882.0" y1="1127.0" x2="1544.0" y2="1127.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="1131.5" font-size="13" fill="#888780" text-anchor="end">0</text>
+<line x1="882.0" y1="1076.3" x2="1544.0" y2="1076.3" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="1080.8" font-size="13" fill="#888780" text-anchor="end">8</text>
+<line x1="882.0" y1="1025.7" x2="1544.0" y2="1025.7" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="1030.2" font-size="13" fill="#888780" text-anchor="end">16</text>
+<line x1="882.0" y1="975.0" x2="1544.0" y2="975.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="979.5" font-size="13" fill="#888780" text-anchor="end">24</text>
+<line x1="882.0" y1="924.3" x2="1544.0" y2="924.3" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="928.8" font-size="13" fill="#888780" text-anchor="end">32</text>
+<line x1="882.0" y1="873.7" x2="1544.0" y2="873.7" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="878.2" font-size="13" fill="#888780" text-anchor="end">40</text>
+<line x1="882.0" y1="823.0" x2="1544.0" y2="823.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="872.0" y="827.5" font-size="13" fill="#888780" text-anchor="end">48</text>
+<line x1="882.0" y1="1127.0" x2="882.0" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="882.0" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">0</text>
+<line x1="1014.4" y1="1127.0" x2="1014.4" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1014.4" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">50</text>
+<line x1="1146.8" y1="1127.0" x2="1146.8" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1146.8" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">100</text>
+<line x1="1279.2" y1="1127.0" x2="1279.2" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1279.2" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">150</text>
+<line x1="1411.6" y1="1127.0" x2="1411.6" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1411.6" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">200</text>
+<line x1="1544.0" y1="1127.0" x2="1544.0" y2="1132.0" stroke="#B4B2A9" stroke-width="1"/>
+<text x="1544.0" y="1149.0" font-size="13" fill="#888780" text-anchor="middle">250</text>
+<line x1="882.0" y1="1127.0" x2="1544.0" y2="1127.0" stroke="#B4B2A9" stroke-width="1.2"/>
+<text x="872.0" y="805.0" font-size="12.5" fill="#888780" text-anchor="end">GiB</text>
+<text x="1213.0" y="1169.0" font-size="13.5" fill="#5F5E5A" text-anchor="middle">空闲沙箱数</text>
+<rect x="1117.7" y="823.0" width="206.5" height="304.0" rx="0" fill="#FAEEDA" stroke="#FAEEDA" stroke-width="0"/>
+<rect x="1324.2" y="823.0" width="219.8" height="304.0" rx="0" fill="#FAECE7" stroke="#FAECE7" stroke-width="0"/>
+<text x="999.8" y="845.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="middle">宽裕</text>
+<text x="1220.9" y="845.0" font-size="13.5" fill="#633806" font-weight="600" text-anchor="middle">挤掉旧缓存</text>
+<text x="1434.1" y="1038.3" font-size="13.5" fill="#712B13" font-weight="600" text-anchor="middle">回收沙箱在用的页</text>
+<text x="1434.1" y="1057.3" font-size="12.5" fill="#993C1D" text-anchor="middle">变慢，可能 OOM → api 503</text>
+<line x1="882.0" y1="924.3" x2="1544.0" y2="924.3" stroke="#A32D2D" stroke-width="2"/>
+<text x="890.0" y="916.3" font-size="13" fill="#A32D2D" font-weight="600" text-anchor="start">memory.max = 32 GiB</text>
+<polyline points="882.0,1031.6 1119.0,924.3" fill="none" stroke="#378ADD" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="1119.0,924.3 1342.9,823.0" fill="none" stroke="#378ADD" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 5"/>
+<circle cx="1119.0" cy="924.3" r="6.5" fill="#378ADD" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<line x1="1119.0" y1="932.3" x2="1119.0" y2="1127.0" stroke="#378ADD" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1119.0" y="1119.0" font-size="14" fill="#0C447C" font-weight="700" text-anchor="middle">89</text>
+<text x="903.2" y="1052.0" font-size="13.5" fill="#0C447C" font-weight="600" text-anchor="start">全部用量（含旧缓存）</text>
+<polyline points="882.0,1125.5 1326.5,924.3" fill="none" stroke="#7F77DD" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="1326.5,924.3 1544.0,825.9" fill="none" stroke="#7F77DD" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 5"/>
+<circle cx="1326.5" cy="924.3" r="6.5" fill="#7F77DD" stroke="#FFFFFF" stroke-width="2" fill-opacity="1.0"/>
+<line x1="1326.5" y1="932.3" x2="1326.5" y2="1127.0" stroke="#7F77DD" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="1326.5" y="1119.0" font-size="14" fill="#3C3489" font-weight="700" text-anchor="middle">167</text>
+<text x="1009.1" y="1098.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="start">必须常驻的部分</text>
+<rect x="48.0" y="1189.0" width="1504.0" height="40.0" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+<text x="800.0" y="1215.0" font-size="14.5" fill="#085041" font-weight="600" text-anchor="middle">大页池不是先到的瓶颈：空闲池 391 GiB，每个空闲沙箱 157 MiB 可放约 2554 个；即使每个都把 2048 MiB 用满也有 195 个，仍在 167 之后</text>
+<rect x="48.0" y="1245.0" width="1504.0" height="40.0" rx="8" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+<text x="800.0" y="1271.0" font-size="14.5" fill="#712B13" font-weight="600" text-anchor="middle">要稳定跑 X 个空闲沙箱：把 template-manager.hcl 的 memory 调到 ≥ 32 GiB（构建模板所需）+ X × 0.19 GiB，例如 500 个 ≈ 127 GiB</text>
+<line x1="48" y1="1321" x2="1552" y2="1321" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1347.0" font-size="13" fill="#888780" text-anchor="start">口径：普通内存以 orchestrator cgroup 的 memory.current 增量为准，memory.stat 拆出 anon、file；全机 MemTotal−MemAvailable 受同机其他负载干扰（1 个沙箱时 Cached 就涨了 6.4 GiB），不用于计算。关闭沙箱 60 s 后大页与 page cache</text>
+<text x="48.0" y="1367.0" font-size="13" fill="#888780" text-anchor="start">全部归还，orchestrator 堆几分钟内回落，未见泄漏。原始报告：benchmark/mem_results/20261110_base_2u2g_r1、_r2；算法见 空闲沙箱内存实测分析.md。</text>
 </svg>
