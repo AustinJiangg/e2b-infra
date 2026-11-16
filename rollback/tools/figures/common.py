@@ -24,7 +24,7 @@ chart_kit.ALIASES.update(sandbox="teal", native="coral", process="purple", commo
 
 REPO = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
 IMG = {"rollback": os.path.join(REPO, "rollback", "docs", "img"),
-       "process": os.path.join(REPO, "process-rollback", "docs", "img")}
+       "criu": os.path.join(REPO, "criu-rollback", "docs", "img")}
 
 
 def out(book, name):

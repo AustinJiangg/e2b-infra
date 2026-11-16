@@ -1,6 +1,6 @@
 # 手册生成与校验工具
 
-本目录用于把 `rollback/docs/`（以及 `process-rollback/docs/`）生成为一个可离线打开的 HTML，并存放两本手册配图的画图脚本。工具、配置和依赖清单均位于本仓库，不再依赖工作区的 `tmp/`，也不需要安装整个 Slidev 工程。
+本目录用于把 `rollback/docs/`（以及 `criu-rollback/docs/`）生成为一个可离线打开的 HTML，并存放两本手册配图的画图脚本。工具、配置和依赖清单均位于本仓库，不再依赖工作区的 `tmp/`，也不需要安装整个 Slidev 工程。
 
 这是 **WSL / 文档制作机器**上的工具，不是 RPM 或沙箱运行依赖。生成手册只需要 Python；Node.js 只有独立文章（`build_article.py`）用到。
 
@@ -65,17 +65,17 @@ rollback/tools/.venv/bin/python rollback/tools/test_code_stats.py
 进程级手册复用本目录的生成器、校验器、画图脚本和依赖，不另维护工具副本：
 
 ```bash
-bash rollback/tools/build.sh --book process-rollback --check
-bash rollback/tools/build.sh --book process-rollback
+bash rollback/tools/build.sh --book criu-rollback --check
+bash rollback/tools/build.sh --book criu-rollback
 ```
 
-输入为 `process-rollback/docs/`、`process-rollback/book.json`，默认输出 `process-rollback/dist/process-rollback-docs.html`。
+输入为 `criu-rollback/docs/`、`criu-rollback/book.json`，默认输出 `criu-rollback/dist/criu-rollback-docs.html`。
 gsd 不执行沙箱级代码规模统计；默认不带 `--book` 的行为保持不变。
 
 ## 代码规模统计
 
 HTML 构建会运行 `code_stats.py --check-docs`，核对分类清单、归档和正文统计块一致；这一步不需要 KASandbox 源码仓库。
-统计快照只引用固定 SHA，不把本轮文档制作代码或未提交的 `process-rollback/` 算进回滚功能。
+统计快照只引用固定 SHA，不把本轮文档制作代码或未提交的 `criu-rollback/` 算进回滚功能。
 
 重新统计时需要两个仓库均包含清单里的 Git 对象。以下命令在 `e2b-infra` 根目录运行；仓库可以位于任意路径：
 
@@ -98,7 +98,7 @@ Python docstring 用 AST 识别，其他代码行用固定版本 Pygments 词法
 
 - 手册不设版本号和日期，也不署名；`book.json` 只有书名、分篇清单和仓库链接配置。
 - `book.json` 的 `git_ref` 是手册外仓库链接（脚本、部署文档等）指向的分支，取 `main`，**不是被测二进制版本**；正文源码基准另在第 1 章说明。可以用 `DOC_GIT_REF` 临时覆盖。
-- 生成的 HTML 随仓库提交：沙箱级是 `rollback/dist/checkpoint-restore-docs.html`，进程级是 `process-rollback/dist/process-rollback-docs.html`，[单机部署文档](../../single-node-offline-deploy.md)里有下载链接。改了正文就重新生成并一起提交。
+- 生成的 HTML 随仓库提交：沙箱级是 `rollback/dist/checkpoint-restore-docs.html`，进程级是 `criu-rollback/dist/criu-rollback-docs.html`，[单机部署文档](../../single-node-offline-deploy.md)里有下载链接。改了正文就重新生成并一起提交。
 - 工具不会提交或推送。
 
 构建依赖由锁文件固定；相同正文、配置、依赖和环境变量应生成相同文件。原工作区 `tmp/` 中的旧工具继续保留，供尚未迁移的其他手册使用，但本手册入口不再调用它们。

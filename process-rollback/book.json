@@ -1,7 +1,0 @@
-{
-  "title": "进程级快照回滚技术手册",
-  "gh_repo": "https://github.com/AustinJiangg/e2b-infra",
-  "git_ref": "main",
-  "repo_docs_path": "process-rollback/docs",
-  "contents": "contents.json"
-}

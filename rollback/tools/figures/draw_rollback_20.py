@@ -5,7 +5,7 @@
 - 图 20-2：§6 体积修复前后（旧 920B），数字取自 §6.1 与 §6.3 的表格。
   颜色：修复前（驻留判据导出）coral，修复后（4 KiB 写跟踪差分）teal。
 
-本文件还提供三个通用面板，供 draw_rollback_19.py、draw_rollback_21.py、draw_process_D.py、draw_process_E.py 复用：
+本文件还提供三个通用面板，供 draw_rollback_19.py、draw_rollback_21.py、draw_criu_D.py、draw_criu_E.py 复用：
 - gbars：分组横条，每组 1～n 根条，值可以是区间 (lo, hi)，数值文字照原文写，支持对数 / 线性刻度；
 - dotrows：每行若干个点（或区间短条）画在一条非零起点的线性轴上，右侧固定列写原文数值；
 - tier_panel：横轴按档位顺序等距的折线面板，横轴下方用数值行写出每个点的原文数字。

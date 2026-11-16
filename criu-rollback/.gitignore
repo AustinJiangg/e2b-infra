@@ -1,0 +1,9 @@
+# dist/ 只提交单文件 HTML 手册（单机部署文档里给下载链接）和 dist/README.md
+dist/*
+!dist/README.md
+!dist/criu-rollback-docs.html
+__pycache__/
+# 起草材料保留在本机，不随手册发布
+/OUTLINE.md
+# 上机产生的完整日志与结果另行归档，入库摘要见 validation/
+/scripts/results/
