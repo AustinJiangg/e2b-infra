@@ -122,7 +122,7 @@ class ToolsTests(unittest.TestCase):
         self.assertIn('href="#d01-契约"', html)
         self.assertIn('id="d01-细节"', html)
         self.assertIn("data:image/svg+xml;base64,", html)
-        self.assertIn("图 01-1", html)
+        self.assertIn("图 1-1", html)       # 新版生成器去掉图号的前导零
         self.assertNotIn("</script><script>不应执行", html)
         self.assertIn("&lt;/script&gt;&lt;script&gt;不应执行", html)
 

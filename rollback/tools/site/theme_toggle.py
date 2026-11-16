@@ -2,8 +2,8 @@
 
 页面要做两件事：
   1. 配色写成 CSS 变量，深色在 prefers-color-scheme 和 [data-theme="dark"] 下各定义一次；
-  2. 把下面四段放进页面：head_script(key) 放 <head>，CSS 放样式表，BUTTON 放按钮的位置，
-     body_script(key) 放在按钮之后。key 是 localStorage 的键名，每个站点用自己的。
+  2. 把下面四段放进页面：head_script(key) 放 <head>，CSS 放样式表，BUTTON（或 button(label)，非中文界面用）放按钮的位置，
+     body_script(key[, to_light, to_dark]) 放在按钮之后。key 是 localStorage 的键名，每个站点用自己的。
 
 行为：
   - 按钮显示点击后会切到的主题：浅色时是月亮，深色时是太阳。
@@ -21,8 +21,13 @@ _MOON = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'
 _SUN = ('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41'
         'M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>')
 
-BUTTON = ('<button class="theme-toggle" id="theme-toggle" type="button" aria-label="深色模式" aria-pressed="false">'
-          + _ICON.format(cls="i-moon", shape=_MOON) + _ICON.format(cls="i-sun", shape=_SUN) + '</button>')
+def button(label="深色模式"):
+    """按钮的 HTML。label 是读屏软件读到的固定名称，界面不是中文时传对应语言。"""
+    return ('<button class="theme-toggle" id="theme-toggle" type="button" aria-label="%s" aria-pressed="false">' % label
+            + _ICON.format(cls="i-moon", shape=_MOON) + _ICON.format(cls="i-sun", shape=_SUN) + '</button>')
+
+
+BUTTON = button()
 
 CSS = """
 :root[data-theme="dark"]{color-scheme:dark}
@@ -40,7 +45,7 @@ def head_script(key):
             "if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>" % key)
 
 
-def body_script(key):
+def body_script(key, to_light="切换到浅色模式", to_dark="切换到深色模式"):
     return """(function(){
   var root=document.documentElement, btn=document.getElementById('theme-toggle'),
       sys=matchMedia('(prefers-color-scheme: dark)');
@@ -48,15 +53,15 @@ def body_script(key):
   function sync(){
     var d=dark();
     btn.setAttribute('aria-pressed',String(d));
-    btn.title=d?'切换到浅色模式':'切换到深色模式';
+    btn.title=d?'%(to_light)s':'%(to_dark)s';
   }
   btn.addEventListener('click',function(){
     var t=dark()?'light':'dark';
     root.dataset.theme=t;
-    try{localStorage.setItem('%s',t)}catch(e){}
+    try{localStorage.setItem('%(key)s',t)}catch(e){}
     sync();
   });
   sys.addEventListener('change',sync);
   sync();
 })();
-""" % key
+""" % {"key": key, "to_light": to_light, "to_dark": to_dark}
