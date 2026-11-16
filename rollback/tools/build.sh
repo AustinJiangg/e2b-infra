@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 校验并生成快照手册；默认沙箱级，也可指定 gsd。
+# 校验并生成快照手册；默认沙箱级，也可指定进程级。
 set -euo pipefail
 
 TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -8,9 +8,9 @@ BOOK_DIR=$ROLLBACK_DIR
 DOCS_PYTHON=${DOCS_PYTHON:-python3}
 
 usage() {
-  printf '%s\n' '用法：bash rollback/tools/build.sh [--book rollback|gsd] [--check | 输出.html]' \
+  printf '%s\n' '用法：bash rollback/tools/build.sh [--book rollback|process-rollback] [--check | 输出.html]' \
     '不带参数时写入 rollback/dist/checkpoint-restore-docs.html。' \
-    '--book gsd 使用 gsd/docs 和 gsd/book.json，默认输出 gsd/dist/gsd-checkpoint-restore-docs.html。' \
+    '--book process-rollback 使用 process-rollback/docs 和 process-rollback/book.json，默认输出 process-rollback/dist/process-rollback-docs.html。' \
     '--check 校验 Markdown 链接并试生成一遍、检查产物，不留下 HTML。' \
     '可用 DOCS_PYTHON 指定安装了 requirements.txt 的 Python 解释器。'
 }
@@ -18,7 +18,7 @@ usage() {
 if [ "${1:-}" = --book ]; then
   case "${2:-}" in
     rollback) ;;
-    gsd) BOOK_DIR=$(cd -- "$ROLLBACK_DIR/../gsd" && pwd) ;;
+    process-rollback) BOOK_DIR=$(cd -- "$ROLLBACK_DIR/../process-rollback" && pwd) ;;
     *) usage >&2; exit 2 ;;
   esac
   shift 2
@@ -47,7 +47,7 @@ fi
 
 DEFAULT_OUTPUT=$ROLLBACK_DIR/dist/checkpoint-restore-docs.html
 if [ "$BOOK_DIR" != "$ROLLBACK_DIR" ]; then
-  DEFAULT_OUTPUT=$BOOK_DIR/dist/gsd-checkpoint-restore-docs.html
+  DEFAULT_OUTPUT=$BOOK_DIR/dist/process-rollback-docs.html
 fi
 OUTPUT=${1:-$DEFAULT_OUTPUT}
 mkdir -p -- "$(dirname -- "$OUTPUT")"

@@ -3,7 +3,7 @@
 """e2b 原生 snapshot / resume 的分档耗时（每档独立沙箱，只放本档大小的负载）。
 
 口径与 gsd 的 demo_checkpoint_perf.py（per-tier-size）对齐，用于和下面两份数据并列：
-    920B 进程级：gsd/docs/20-results-and-gaps.md §3.4
+    920B 进程级：process-rollback/docs/20-results-and-gaps.md §3.4
     950 沙箱级 ：rollback/docs/18-950-performance.md §4
 
 为什么不用 native_snapshot_bench.py：它在同一个沙箱里预热到最大档再逐档覆写，

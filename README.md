@@ -9,7 +9,7 @@
 ## 快照回滚手册
 
 - [沙箱级快照回滚](rollback/README.md)：宿主侧恢复整台虚拟机。
-- [gsd 进程级快照回滚](gsd/README.md)：guest 内恢复用户进程与文件；已在 920B 验证，950 待验证。
+- [进程级快照回滚](process-rollback/README.md)：guest 内恢复用户进程与文件；已在 920B 验证，950 待验证。
 
 ## 部署包（e2b-deploy/）
 

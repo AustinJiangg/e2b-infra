@@ -1,6 +1,6 @@
 # 手册生成与校验工具
 
-本目录用于把 `rollback/docs/`（以及 `gsd/docs/`）生成为一个可离线打开的 HTML，并存放两本手册配图的画图脚本。工具、配置和依赖清单均位于本仓库，不再依赖工作区的 `tmp/`，也不需要安装整个 Slidev 工程。
+本目录用于把 `rollback/docs/`（以及 `process-rollback/docs/`）生成为一个可离线打开的 HTML，并存放两本手册配图的画图脚本。工具、配置和依赖清单均位于本仓库，不再依赖工作区的 `tmp/`，也不需要安装整个 Slidev 工程。
 
 这是 **WSL / 文档制作机器**上的工具，不是 RPM 或沙箱运行依赖。生成手册只需要 Python；Node.js 只有独立文章（`build_article.py`）用到。
 
@@ -62,20 +62,20 @@ rollback/tools/.venv/bin/python rollback/tools/test_code_stats.py
 
 构建也可以单独调用：`python3 rollback/tools/build_book.py rollback /tmp/checkpoint-restore-docs.html`，参数和 `book.json` 的键见该文件头。
 
-gsd 手册复用本目录的生成器、校验器、画图脚本和依赖，不另维护工具副本：
+进程级手册复用本目录的生成器、校验器、画图脚本和依赖，不另维护工具副本：
 
 ```bash
-bash rollback/tools/build.sh --book gsd --check
-bash rollback/tools/build.sh --book gsd
+bash rollback/tools/build.sh --book process-rollback --check
+bash rollback/tools/build.sh --book process-rollback
 ```
 
-输入为 `gsd/docs/`、`gsd/book.json`，默认输出 `gsd/dist/gsd-checkpoint-restore-docs.html`。
+输入为 `process-rollback/docs/`、`process-rollback/book.json`，默认输出 `process-rollback/dist/process-rollback-docs.html`。
 gsd 不执行沙箱级代码规模统计；默认不带 `--book` 的行为保持不变。
 
 ## 代码规模统计
 
 HTML 构建会运行 `code_stats.py --check-docs`，核对分类清单、归档和正文统计块一致；这一步不需要 KASandbox 源码仓库。
-统计快照只引用固定 SHA，不把本轮文档制作代码或未提交的 `gsd/` 算进回滚功能。
+统计快照只引用固定 SHA，不把本轮文档制作代码或未提交的 `process-rollback/` 算进回滚功能。
 
 重新统计时需要两个仓库均包含清单里的 Git 对象。以下命令在 `e2b-infra` 根目录运行；仓库可以位于任意路径：
 

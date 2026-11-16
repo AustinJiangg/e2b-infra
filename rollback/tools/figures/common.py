@@ -4,7 +4,7 @@
 - 颜色含义两本书统一：
     teal   = 沙箱级方案（本方案的 checkpoint / restore）
     coral  = 原生 pause / resume（重建、代价）
-    purple = 进程级方案（gsd、CRIU）
+    purple = 进程级方案（guest 内的 gsd 守护进程、CRIU）
     gray   = 共同部分
     blue   = 950 数据，amber = 920B 数据
 - 输出 docs/img/NN-k-中文名.svg，NN 是章号或附录字母，k 是该章内的图序号。
@@ -24,7 +24,7 @@ chart_kit.ALIASES.update(sandbox="teal", native="coral", process="purple", commo
 
 REPO = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
 IMG = {"rollback": os.path.join(REPO, "rollback", "docs", "img"),
-       "gsd": os.path.join(REPO, "gsd", "docs", "img")}
+       "process": os.path.join(REPO, "process-rollback", "docs", "img")}
 
 
 def out(book, name):

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""把一本手册（rollback 或 gsd）生成为一个单文件、可离线的 HTML。
+"""把一本手册（rollback 或 process-rollback）生成为一个单文件、可离线的 HTML。
 
 用法：
     python3 build_book.py <书目录> <输出.html>
     python3 build_book.py <书目录> --check        只检查，不留下产物
 
-<书目录> 是 rollback/ 或 gsd/，里面要有 docs/、book.json 和 book.json 指定的 contents.json。
+<书目录> 是 rollback/ 或 process-rollback/，里面要有 docs/、book.json 和 book.json 指定的 contents.json。
 排版由 site/build_docs_site.py 完成（复制自 md-docs-site skill，见 site/README.md）。
 本脚本只做手册专用的几件事：
 

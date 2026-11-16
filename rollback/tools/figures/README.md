@@ -1,6 +1,6 @@
 # 手册配图的画图脚本
 
-两本手册的配图都是 SVG，分别放在 `rollback/docs/img/` 和 `gsd/docs/img/`。每张图都由这里的一个 Python 脚本生成，不要手改 SVG。
+两本手册的配图都是 SVG，分别放在 `rollback/docs/img/` 和 `process-rollback/docs/img/`。每张图都由这里的一个 Python 脚本生成，不要手改 SVG。
 
 ## 文件
 
@@ -12,7 +12,7 @@
 
 有几个脚本会复用别的脚本里的函数：
 
-- 数据面板 `gbars`、`dotrows`、`tier_panel` 等定义在 `draw_rollback_20.py`，`draw_rollback_18/19/21.py` 和 `draw_gsd_20/D/E.py` 会导入它们，`draw_rollback_C.py` 则通过 `draw_rollback_21.py` 间接用到；
+- 数据面板 `gbars`、`dotrows`、`tier_panel` 等定义在 `draw_rollback_20.py`，`draw_rollback_18/19/21.py` 和 `draw_process_20/D/E.py` 会导入它们，`draw_rollback_C.py` 则通过 `draw_rollback_21.py` 间接用到；
 - `draw_rollback_04.py` 里的工具函数被 `draw_rollback_01/02.py` 导入。
 
 修改这些共用函数后，要把所有导入它们的脚本都重跑一遍。
