@@ -70,6 +70,8 @@ client-proxy 用的是同一份代理代码，在它的 job 里设 `PROXY_TRACE`
 | `DEFAULT_CACHE_DIR` | `${ORCHESTRATOR_BASE_PATH}/build` | 同上；产物盘就是它所在的文件系统 |
 | `FIRECRACKER_VERSIONS_DIR` | `/fc-versions` | FC 二进制按 `<它>/<模板记录的版本>/firecracker` 找（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)）；T38 用它指向注入版 FC |
 
+**宿主侧 veth 的名字与沙箱地址池。** 交付代码沿用上游：宿主侧 veth 叫 `veth-<槽位号>`（`slot.go` 的 `VethName()`），地址池用代码默认的 `10.11.0.0/16`、`10.12.0.0/16`。950 测试机上同时运行着 AgentENV，它的 iptables 规则按 `veth-+` 匹配网卡，e2b 的 veth 用原名会被这些规则命中，路由也会重叠。所以测试用的部署件（e2b-infra 的 RPM 补丁与 `.env`）把前缀改成 `e2bv-`，把地址池移到 `10.13.0.0/16`（`SANDBOXES_HOST_NETWORK_CIDR`）和 `10.14.0.0/16`（`SANDBOXES_VRT_NETWORK_CIDR`）。这是为测试机做的适配，不属于交付代码；本书里出现的 `e2bv-<n>`、`10.13`、`10.14` 都来自测试部署。宿主上没有其他按 `veth-` 匹配的网络组件时，不需要改。
+
 ## 3. 启动能力行
 
 orchestrator 启动时打一行 INFO `checkpoint capabilities`，同样的键和值还写进能力文件（[§3.1](#31-能力文件)）。每个值都是用运行时那组函数读出来的，不会出现"日志说一个值、实际按另一个值跑"。

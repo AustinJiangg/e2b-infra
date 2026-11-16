@@ -366,6 +366,7 @@ finally:
 
 - 三个运行文件的位置与 §3 相同，但 `install` 发现这些位置上已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 `/usr/bin`、`/fc-kernels` 和 `/fc-versions`。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。
 - 切栈不用 §4 的 `switch-gsd-new920b.sh`，由离线包的 `ops/950.sh` 完成：先把本机原有的 job 保存成基线（文件含密钥，只留在本机），切到进程级栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 `/health`；切回时恢复这份基线。
+- 离线包里的 orchestrator 带 `bc3cce913` 的改动：宿主侧 veth 从上游的 `veth-<n>` 改名为 `e2bv-<n>`。原因是 950 测试机上同时运行着 AgentENV，它的 iptables 规则按 `veth-+` 匹配网卡，e2b 的 veth 用原名会被这些规则命中；出于同一原因，沙箱地址池也移到 `10.13.0.0/16`、`10.14.0.0/16`，由预检核对。这是为测试机做的适配，交付代码不改前缀。
 - 只支持 orchestrator 与 template-manager 合并部署（`ORCHESTRATOR_SERVICES=orchestrator,template-manager`），其他形态由预检拒绝。
 - orchestrator 是动态链接的，需要 glibc 2.38 的符号；不满足时停在切栈之前，不替换系统 glibc。gsd 是静态链接的。
 - 基础镜像从离线归档导入 950 使用的镜像仓库，不重新构建；SDK 用随包的 wheel 离线安装进一个克隆出来的 conda 环境，不用 `PYTHONPATH`。
