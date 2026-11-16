@@ -1,6 +1,7 @@
-# 文档打包件是构建产物，不入库；只留 dist/README.md（怎么重新打包）
+# dist/ 只提交单文件 HTML 手册（单机部署文档里给下载链接）和 dist/README.md
 dist/*
 !dist/README.md
+!dist/process-rollback-docs.html
 __pycache__/
 # 起草材料保留在本机，不随手册发布
 /OUTLINE.md

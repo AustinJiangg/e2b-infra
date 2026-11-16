@@ -167,7 +167,7 @@ def build():
 <header class="topbar"><span class="brand">E2B / 技术解读</span><button type="button" class="theme-toggle" aria-label="切换配色">
 <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14A8.5 8.5 0 0 1 10 3.5 8.5 8.5 0 1 0 20.5 14Z"/></svg>
 <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
-</button></header><main>{body}<p class="footer">E2B 沙箱级快照回滚 · 技术解读 · v0.1.0</p></main><script>{theme_js}</script></body></html>'''
+</button></header><main>{body}<p class="footer">E2B 沙箱级快照回滚 · 技术解读</p></main><script>{theme_js}</script></body></html>'''
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(output, encoding='utf-8')
     print(f'Article: {OUT}\nChinese characters: {count}; performance rows: {len(rows)}; figures: 4; bytes: {len(output.encode())}')

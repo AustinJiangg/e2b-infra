@@ -4,7 +4,7 @@
 用 overlayfs 热切层回滚文件。本目录是这套功能的**技术手册与验证材料**；
 实现代码在 KASandbox_0904 的 `process-rollback-dev` 分支（gsd 守护进程、orchestrator 注入、Python SDK、guest 内核补丁同仓），不在这里重复存放。
 
-> **v1.0.0**（2026-11-07）　·　代码基准 `process-rollback-dev@bc3cce913`
+> 代码基准 `process-rollback-dev@bc3cce913`
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
@@ -14,7 +14,7 @@
 | [`diagrams/`](diagrams/README.md) | 只有一页说明：本手册的图在 `docs/img/`，画图脚本在 `rollback/tools/figures/` | 想找图或改图的人 |
 | [`dist/`](dist/README.md) | 文档打包件（单文件 HTML）与重新打包的命令。构建产物，只有 `docs/` 是源 | 要把手册发给别人的人 |
 
-`contents.json` 是目录，`book.json` 是打包用的书目信息（书名、版本、日期），改版时与 `docs/README.md` 开头的信息块一起改。
+`contents.json` 是目录，`book.json` 是打包用的书目信息（书名和仓库链接）。手册不设版本号和日期，也不署名。
 
 ## 源码与脚本
 

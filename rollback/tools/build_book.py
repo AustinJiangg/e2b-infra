@@ -13,16 +13,14 @@
 2. 正文里不允许出现 mermaid 代码块（生成器不渲染它）。图一律画成 SVG 放在 docs/img/，
    画图脚本在 tools/figures/；
 3. 指向手册以外的相对链接（脚本、部署文档等）在单文件里打不开：
-   给了 gh_repo 和 git_ref 时改写成钉在该提交上的 GitHub 地址，否则降级为不可点击的文字；
+   给了 gh_repo 和 git_ref 时改写成该分支或提交上的 GitHub 地址，否则降级为不可点击的文字；
 4. 检查产物：生成器的警告、未解析的本地链接、未内嵌的图片、页内跳转目标都必须为 0。
 
 book.json 的键：
     title           书名，必填
-    version         版本号，必填
-    date            日期，必填
     contents        分篇清单文件名，必填
     gh_repo         手册以外的链接改写到的仓库地址，如 https://github.com/<组织>/<仓库>
-    git_ref         上述链接钉住的提交或标签；环境变量 DOC_GIT_REF 优先
+    git_ref         上述链接指向的分支或提交，一般是 main；环境变量 DOC_GIT_REF 优先
     repo_docs_path  docs 目录在仓库里的路径，如 rollback/docs，用来换算仓库内路径
     unpublished     仓库内路径前缀的列表：落在这些前缀下的链接即使有 git_ref 也降级成文字
 """
@@ -38,7 +36,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 TOOLS = Path(__file__).resolve().parent
-KEYS = {'title', 'version', 'date', 'contents', 'gh_repo', 'git_ref', 'repo_docs_path', 'unpublished'}
+KEYS = {'title', 'contents', 'gh_repo', 'git_ref', 'repo_docs_path', 'unpublished'}
 
 
 def fail(msg):
@@ -56,7 +54,7 @@ if not docs.is_dir() or not cfg_path.is_file():
 cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
 if set(cfg) - KEYS:
     fail(f'{cfg_path}: 不认识的键 {sorted(set(cfg) - KEYS)}')
-for k in ('title', 'version', 'date', 'contents'):
+for k in ('title', 'contents'):
     if not cfg.get(k):
         fail(f'{cfg_path}: 缺少 {k}')
 gh_repo = cfg.get('gh_repo', '')
@@ -148,7 +146,7 @@ try:
     out = stage_root / 'out.html' if check_only else Path(sys.argv[2]).resolve()
     r = subprocess.run([sys.executable, str(TOOLS / 'site' / 'build_docs_site.py'),
                         '--docs', str(stage), '--out', str(out), '--title', cfg['title'],
-                        '--subtitle', f'{cfg["version"]} · {cfg["date"]}', '--groups', str(groups_path)],
+                        '--groups', str(groups_path)],
                        capture_output=True, text=True)
     sys.stdout.write(r.stdout)
     sys.stderr.write(r.stderr)

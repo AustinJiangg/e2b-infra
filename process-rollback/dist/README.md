@@ -30,11 +30,11 @@ DOCS_PYTHON="$PWD/rollback/tools/.venv/bin/python" bash rollback/tools/build.sh 
 
 ## 输入与交付
 
-- 正文为 [`docs/`](../docs/README.md)，书名、版本、日期、署名及仓库链接配置在 [`book.json`](../book.json)。
+- 正文为 [`docs/`](../docs/README.md)，书名和仓库链接配置在 [`book.json`](../book.json)。手册不设版本号和日期，也不署名。
 - 配图是 `docs/img/` 下的 SVG，由 `rollback/tools/figures/draw_process_*.py` 生成；正文里不再有 Mermaid 代码块，出现了构建会报错。
 - HTML 包含正文、样式、主题切换脚本和内嵌的 SVG，可在离线浏览器打开，也可打印为 PDF。
-- HTML 是构建产物，不入库；不直接编辑，不维护 ZIP / tar.gz 打包脚本。
-- 同一轮修改同步 `book.json`、总 README 和正文目录中的版本与日期。相同输入、依赖和配置应生成相同内容。
-- `git_ref` 是手册外链接的发布基准，与被测 gsd 二进制或 SDK 的提交号分别记录。本次尚未固定发布标签，因此外部相对链接在单文件 HTML 中显示为路径提示。
+- HTML 随仓库提交，[单机部署文档](../../single-node-offline-deploy.md)里有下载链接；改了正文就重新生成并一起提交。不直接编辑 HTML，不生成 ZIP / tar.gz。
+- 相同输入、依赖和配置应生成相同内容。
+- `git_ref` 是手册外链接（脚本、验证摘要等）指向的 GitHub 分支，取 `main`，与被测 gsd 二进制或 SDK 的提交号无关。
 
-构建过程不提交、不推送，也不创建 Release。920B 验证摘要见 [`validation/`](../validation/README.md)。
+构建过程不提交、不推送。920B 验证摘要见 [`validation/`](../validation/README.md)。

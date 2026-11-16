@@ -5,6 +5,12 @@
 
 > 约定：本机 IP 记作 `SERVER_IP`，示例用 `61.47.17.182`，请替换成你自己的。
 
+> 快照回滚技术手册（单文件 HTML，下载后双击用浏览器打开，不联网）：
+> - 沙箱级：[`rollback/dist/checkpoint-restore-docs.html`](rollback/dist/checkpoint-restore-docs.html)
+> - 进程级：[`process-rollback/dist/process-rollback-docs.html`](process-rollback/dist/process-rollback-docs.html)
+>
+> 在 GitHub 上点开后用右上角的下载按钮（Download raw file）保存；克隆了仓库的话直接打开这两个文件即可。
+
 ---
 
 ## 0. 前置条件

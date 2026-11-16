@@ -9,7 +9,7 @@
 | 文件 | 用途 |
 |---|---|
 | `../contents.json` | 分篇、章序与文字附录清单；构建时检查遗漏和重复 |
-| `../book.json` | 书名、版本、日期和仓库链接基准，键见 `build_book.py` 文件头 |
+| `../book.json` | 书名和仓库链接，键见 `build_book.py` 文件头 |
 | `build.sh` | 统一入口：先校验链接，再生成 HTML 并检查产物 |
 | `build_book.py` | 手册构建：按分篇清单排目录、把手册外链接改写成 GitHub 地址、拒绝 Mermaid 代码块，调用 `site/` 排版，最后检查产物（生成器警告、未解析链接、未内嵌图片、页内跳转目标都须为 0） |
 | `site/` | 排版生成器，复制自 md-docs-site skill，不在这里修改，来源见 `site/README.md` |
@@ -23,7 +23,7 @@
 | `../stats/code_stats_scope.json` | 固定 SHA、逐文件分类及副本排除规则 |
 | `../stats/code-volume.json` | 已复核的统计归档；导读与附录 D 表格共用的数据来源 |
 
-旧 `pack_docs.py` 不迁入：新 Release 只附一个 HTML，不再生成或发布 ZIP / tar.gz。
+不生成 ZIP / tar.gz：交付只有单文件 HTML。
 
 ## 安装依赖
 
@@ -94,12 +94,11 @@ python3 rollback/tools/code_stats.py --check-docs
 Python docstring 用 AST 识别，其他代码行用固定版本 Pygments 词法识别；字符串按宿主语言计数。
 导读与附录中 `code-stats` 标记之间的内容由脚本维护，避免手改数字；完整口径见 [附录 D](../docs/D-code-size.md)。
 
-## 版本与发布
+## 链接与产物
 
-- 每轮手册修改完成后，自动把末位版本号加1（例如`v0.5.0`→`v0.5.1`），小幅文字、配图或阅读功能变更也适用。同一轮校验和重复构建沿用本轮版本，不因单纯重新构建而加号。同步`rollback/book.json`、`rollback/docs/README.md`及当前版本索引，日期使用本轮修改日期。
-- `book.json` 的 `git_ref` 是手册外仓库链接的固定基准，**不是被测二进制版本**。本阶段使用不移动的发布标签 `docs-v0.5.6`，使结果摘要与工具链接指向同一发布源码；正文源码基准另在第1章说明。可以用 `DOC_GIT_REF` 显式覆盖，覆盖后生成的文件不再与原发布件逐字节相同。
-- 工具不会提交、推送、建标签或上传 Release；构建和发布是两个独立动作。
-- 本阶段 Release 上传手册 `checkpoint-restore-docs.html`、独立文章 `sandbox-rollback-article.html` 与两者的 `SHA256SUMS`。GitHub 自动显示的源码 ZIP / tar.gz 入口由平台提供，不是手动上传的附件。
-- 迁移工具不修改已发布的 `docs-v0.4.7` 标签或 HTML，也不删除历史 Release 的附件。
+- 手册不设版本号和日期，也不署名；`book.json` 只有书名、分篇清单和仓库链接配置。
+- `book.json` 的 `git_ref` 是手册外仓库链接（脚本、部署文档等）指向的分支，取 `main`，**不是被测二进制版本**；正文源码基准另在第 1 章说明。可以用 `DOC_GIT_REF` 临时覆盖。
+- 生成的 HTML 随仓库提交：沙箱级是 `rollback/dist/checkpoint-restore-docs.html`，进程级是 `process-rollback/dist/process-rollback-docs.html`，[单机部署文档](../../single-node-offline-deploy.md)里有下载链接。改了正文就重新生成并一起提交。
+- 工具不会提交或推送。
 
 构建依赖由锁文件固定；相同正文、配置、依赖和环境变量应生成相同文件。原工作区 `tmp/` 中的旧工具继续保留，供尚未迁移的其他手册使用，但本手册入口不再调用它们。

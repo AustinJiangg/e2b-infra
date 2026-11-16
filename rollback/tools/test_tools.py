@@ -92,7 +92,7 @@ class ToolsTests(unittest.TestCase):
             "parts": [{"title": "第一篇", "chapters": list(chapters)}], "appendices": [],
         }, ensure_ascii=False))
         self.write("book/book.json", json.dumps({
-            "title": "测试手册", "version": "v1", "date": "2026-11-07", "contents": "contents.json",
+            "title": "测试手册", "contents": "contents.json",
             "repo_docs_path": "book/docs", **(config or {}),
         }, ensure_ascii=False))
         return self.root / "book"
@@ -117,7 +117,6 @@ class ToolsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         html = out.read_text(encoding="utf-8")
         self.assertIn("测试手册", html)
-        self.assertIn("v1 · 2026-11-07", html)
         self.assertLess(html.index('href="#d02"'), html.index('href="#d01"'))   # 按分篇清单排
         self.assertIn('href="#d01-契约"', html)
         self.assertIn('id="d01-细节"', html)

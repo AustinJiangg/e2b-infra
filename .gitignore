@@ -20,7 +20,8 @@ rollback/slides/dist/
 rollback/slides/.slidev/
 rollback/slides/.local-libs/
 
-# 4) rollback/dist/ 是 rollback/docs/ 的构建产物（单文件 HTML + zip + tar.gz）。
-# 每次重新生成都会产生一个几 MB 的全新二进制 blob，进 git 只会让仓库越来越胖。
-# 分发走 GitHub Release，源在 rollback/docs/。
-rollback/dist/
+# 4) rollback/dist/ 是 rollback/docs/ 的构建产物。只提交单文件 HTML 手册（单机部署文档里给下载链接）
+# 和说明；旧的 zip、tar.gz、PDF、文章 HTML 等留在本地，不入库。
+rollback/dist/*
+!rollback/dist/README.md
+!rollback/dist/checkpoint-restore-docs.html
