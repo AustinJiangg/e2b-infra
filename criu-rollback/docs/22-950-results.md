@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：待填。** 950 的进程级尚未运行。本章的表由离线包跑完之后填写，现在所有单元格都是 `待填`，没有任何数字。这是填写 950 结果的唯一位置。
+> **状态：待填。** 950 的进程级尚未运行。本章的表由 `criu-rollback/deploy/950.sh all` 跑完之后填写，现在所有单元格都是 `待填`，没有任何数字。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -16,15 +16,15 @@
 
 ## 1. 结果从哪里来
 
-离线包的入口是 `ops/950.sh`。验证相关的三步：
+入口是仓库里的 `criu-rollback/deploy/950.sh`，在仓库根目录执行 `bash criu-rollback/deploy/950.sh all`，全部结果打成一个包 `criu-rollback/deploy/results/<时间>-all.tar.gz`。包里与验证相关的三部分：
 
-| 入口 | 内容 | 结果目录 |
+| `all` 里的步骤 | 内容 | 包内目录 |
 |---|---|---|
-| `bash ops/950.sh acceptance` | guest 自检、`verify_gsd.py`、`verify_fixes.py`、`verify_multitree.py --skip V12`、`verify_clear_refs_race.py`、`demo_checkpoint_perf.py` 三轮 | `results/<时间>-acceptance/` |
-| `bash ops/950.sh stress` | `probe_whiteout_bug.py` 七个用例，然后 all、noworkers、multitree、deldense 四组 | `results/<时间>-stress/` |
-| `bash ops/950.sh sandbox`，再 `python ops/sandbox_smoke.py` | 切回沙箱级并冒烟 | `results/sandbox-smoke/` |
+| 验收（也可单独 `950.sh acceptance`） | guest 自检、`verify_gsd.py`、`verify_fixes.py`、`verify_multitree.py --skip V12`、`verify_clear_refs_race.py`、`demo_checkpoint_perf.py` 三轮 | `acceptance/` |
+| 压测（也可单独 `950.sh stress`） | `probe_whiteout_bug.py` 七个用例，然后 all、noworkers、multitree、deldense 四组 | `stress/` |
+| 切回沙箱级并冒烟（也可单独 `950.sh sandbox`、`950.sh smoke`） | 切回后用原模板试建沙箱，再跑沙箱级冒烟 | `sandbox-smoke/` |
 
-两个结果目录里都有 `summary.json`（每一步的命令和状态、判定 `verdict`、机器名、起止时间、Python 与 SDK 路径）和 `deliverables.sha256`（三个运行文件的 sha256）。`acceptance` 的 `summary.json` 还有 `slow_calls` 和 `skipped`。下面各表的"来源"列写的都是相对这两个目录的文件名。
+包里另有 `all.log`（每步进度与结论）、`summary.json`（每步状态与用时）和 `netcheck.txt`（切换前后宿主上非 e2b 网络配置的比对）。验收和压测两个目录里都有 `summary.json`（每一步的命令和状态、判定 `verdict`、机器名、起止时间、Python 与 SDK 路径）和 `deliverables.sha256`（三个运行文件的 sha256）。`acceptance` 的 `summary.json` 还有 `slow_calls` 和 `skipped`。下面各表的"来源"列写的都是相对这两个目录的文件名。
 
 分档性能的三轮结果用 `criu-rollback/scripts/acceptance/summarize_checkpoint_perf.py` 校验并汇总，命令见 [验证摘要](../validation/README.md)。950 的摘要另建带平台与日期的目录，放在 `criu-rollback/validation/` 下，不覆盖 920B 的目录。
 
@@ -206,7 +206,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 |---|---|---|
 | `sandbox` 切换 | `待填` | 入口输出 |
 | `status` 显示的二进制与 `/health` | `待填` | 入口输出 |
-| `sandbox_smoke.py` PASS / FAIL / SKIP | `待填` | `results/sandbox-smoke/` 下的 `SUMMARY.md` |
+| `sandbox_smoke.py` PASS / FAIL / SKIP | `待填` | 包内 `sandbox-smoke/` 下的 `SUMMARY.md` |
 
 ---
 
@@ -216,7 +216,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 **产物与模板。**
 
-1. `deliverables.sha256` 里 gsd、orchestrator、guest 内核三个 sha256 与离线包 `manifest.json` 一致，acceptance 和 stress 两个目录也互相一致。
+1. `deliverables.sha256` 里 gsd、orchestrator、guest 内核三个 sha256 与 `criu-rollback/deploy/manifest.json` 里的 `sha256` 一致（是去掉调试段后的版本），acceptance 和 stress 两个目录也互相一致。
 2. `base-gsd` 是在 950 的进程级栈下新建的，不是沙箱级模板，也不是从别的机器带来的；建模板时没有加 `--use-cache`。
 3. guest 自检通过：`gsd -commit` 为 `259f1a25c`，内核构建标识为 `#4 SMP Thu Oct  8 20:06:40 CST 2026`，CRIU 为 4.2.1，THP 为 `[never]`，`rcu_expedited` 为 1，vCPU 为 2。
 4. 客户端用的是带 checkpoint 接口的进程级 SDK，`summary.json` 的 `sdk` 落在进程级 conda 环境里。
@@ -250,7 +250,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 ## 本章要点
 
 - 950 的进程级尚未运行，本章所有单元格都是 `待填`。
-- 结果由 `ops/950.sh acceptance`、`stress` 和回切冒烟产生，每张表的来源文件都已写明。
+- 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。
 - 950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。
 - 填数之前按 §8 逐条核对，这里是之后填写 950 结果的唯一位置。

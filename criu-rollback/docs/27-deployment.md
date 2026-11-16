@@ -215,7 +215,17 @@ orchestrator 监听固定端口（新 920B 上是 5008），同一台机器同�
 
 ### 4.1 切栈脚本
 
-新 920B 是 RPM 部署，orchestrator 由 nomad 的 job `template-manager-system` 拉起。把它换成进程级版，本质上是提交一份改过的 job 定义。这件事由随手册附带的 `scripts/ops/switch-gsd-new920b.sh` 完成：
+新 920B 是 RPM 部署，orchestrator 由 nomad 的 job `template-manager-system` 拉起。把它换成进程级版，本质上是提交一份改过的 job 定义。
+
+**日常切换用仓库里的 `criu-rollback/deploy/950.sh`（§7）。** 新 920B 也用它。它在本节脚本的基础上多做了四件事：
+
+- 从入库的压缩产物展开三个运行文件并核对；
+
+- 第一次使用时自己保存基线；
+- 切换后等到能真正建出沙箱才返回；
+- 切到进程级时，检查 `base-gsd` 是否还能用，不能用就重建。
+
+本节介绍的 `scripts/ops/switch-gsd-new920b.sh` 是开发阶段写的，切换的核心做法与 `950.sh` 相同。现在保留它，是因为 [18](18-testing-and-debug-kernel.md) 临时换调试内核时要用它的 `GSD_KDIR`。它读的基线 job 是事先手工存的，**每次重新部署之后都要重存一份**，否则会把旧部署的配置提交回去。用法如下：
 
 ```bash
 bash scripts/ops/switch-gsd-new920b.sh status   # 只看现状，不改任何东西
@@ -362,31 +372,54 @@ finally:
 
 950 上**尚未运行**，本书没有 950 的进程级结果，跑完之后填进 [22](22-950-results.md)。进程级快照回滚的设计不依赖 950 独有的硬件特性（它的脏页跟踪在 guest 内核里用软件完成），按理同样的部件可以直接部署，但这只是推断，兼容性要在 950 上确认。
 
-950 上不走 §2 的构建，用预先构建好的离线包部署。同一套入口已于 2026-11-06 在新 920B 上完整走过一遍（结果见 [19](19-920b-functional.md) 的"2026-11-06 全流程复测"一节），在 950 上还没有执行。与本章前面各节的差别是：
+950 上不走 §2 的构建，用仓库里 `criu-rollback/deploy/` 下预先构建好的产物部署：`git pull` 之后在仓库根目录执行即可，不需要另外拷贝文件。这套入口最早以独立离线包的形式于 2026-11-06 在新 920B 上完整走过一遍（结果见 [19](19-920b-functional.md) 的"2026-11-06 全流程复测"一节），2026-11-16 并入仓库后又在新 920B 上从头演练过（见 `criu-rollback/deploy/README.md` 第 14 节），在 950 上还没有执行。与本章前面各节的差别是：
+
+- 三个运行文件以 xz 压缩入库，orchestrator 和 gsd 用 `strip -g` 去掉了 DWARF 调试段，代码段与验收版逐字节相同。镜像的前两层取仓库根目录已有的 `ubuntu-22.04-custom.tar.gz`，只有 CRIU 那一层单独入库。第一步把它们展开到 `criu-rollback/deploy/.work/`，按 `manifest.json` 核对 SHA256 和镜像 ID。
 
 - 三个运行文件的位置与 §3 相同，但 `install` 发现这些位置上已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 `/usr/bin`、`/fc-kernels` 和 `/fc-versions`。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。
-- 切栈不用 §4 的 `switch-gsd-new920b.sh`，由离线包的 `ops/950.sh` 完成：先把本机原有的 job 保存成基线（文件含密钥，只留在本机），切到进程级栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 `/health`；切回时恢复这份基线。
-- 离线包里的 orchestrator 带 `bc3cce913` 的改动：宿主侧 veth 从上游的 `veth-<n>` 改名为 `e2bv-<n>`。原因是 950 测试机上同时运行着 AgentENV，它的 iptables 规则按 `veth-+` 匹配网卡，e2b 的 veth 用原名会被这些规则命中；出于同一原因，沙箱地址池也移到 `10.13.0.0/16`、`10.14.0.0/16`，由预检核对。这是为测试机做的适配，交付代码不改前缀。
+- 切栈不用 §4 的 `switch-gsd-new920b.sh`，由 `criu-rollback/deploy/950.sh` 完成：
+  - 先把本机原有的 job 保存成基线。文件含密钥，只留在本机。
+  - 切到进程级栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 `/health`。
+  - 切回时恢复这份基线。
+  - 已经是目标栈时不重启服务。
+  - 切换后反复试建沙箱，直到成功才返回，不靠估计等待时间。
+- 入库的 orchestrator 带 `bc3cce913` 的改动：宿主侧 veth 从上游的 `veth-<n>` 改名为 `e2bv-<n>`。原因是 950 测试机上同时运行着 AgentENV，它的 iptables 规则按 `veth-+` 匹配网卡，e2b 的 veth 用原名会被这些规则命中；出于同一原因，沙箱地址池也移到 `10.13.0.0/16`、`10.14.0.0/16`，由预检核对。这是为测试机做的适配，交付代码不改前缀。
 - 只支持 orchestrator 与 template-manager 合并部署（`ORCHESTRATOR_SERVICES=orchestrator,template-manager`），其他形态由预检拒绝。
 - orchestrator 是动态链接的，需要 glibc 2.38 的符号；不满足时停在切栈之前，不替换系统 glibc。gsd 是静态链接的。
-- 基础镜像从离线归档导入 950 使用的镜像仓库，不重新构建；SDK 用随包的 wheel 离线安装进一个克隆出来的 conda 环境，不用 `PYTHONPATH`。
+- 基础镜像在现场拼出后导入 950 使用的镜像仓库，不重新构建；SDK 用入库的 wheel 离线安装进一个克隆出来的 conda 环境，不用 `PYTHONPATH`。
 
-步骤按下表的顺序执行，命令都在离线包目录下以 root 运行：
+首次部署只需要一条命令，在 e2b-infra 仓库根目录以 root 运行：
+
+```bash
+bash criu-rollback/deploy/950.sh all
+```
+
+它按下表的顺序做完全部步骤，不需要激活 conda 环境，也不需要估等待时间。
+
+- **失败或中断**：处理完原因后再执行同一条命令，会从停下的那一步继续，做完的验收、压测不会重做。验收或压测失败时，先删掉由 `base-gsd` 起的测试沙箱，再自动切回沙箱级。
+- **网络比对**：切换前后各抓一次宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则做比对，用来确认同机的 AgentENV 没有受影响。
+- **结果**：最后把全部结果打成一个压缩包。
+- **演练**：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑。
+- **网络命名空间**：每次重启 orchestrator 会留下约 300 个，`all` 重启两次。积累多了按 `single-node-offline-deploy.md` 用 `build.sh --recycle-netns` 清理。
+
+以后日常切换用 `bash criu-rollback/deploy/950.sh gsd` 和 `bash criu-rollback/deploy/950.sh sandbox`。切到进程级时，`base-gsd` 不在或建不出沙箱，会自动重建。
+
+下表是 `all` 依次做的事，也可以逐条单独执行。命令列写的是 `bash criu-rollback/deploy/950.sh` 后面的参数，`ops/` 指 `criu-rollback/deploy/ops/`：
 
 | 步 | 命令 | 做什么 |
 |---|---|---|
-| 1 | `bash ops/950.sh verify` | 校验包内全部文件的 SHA256 |
-| 2 | `bash ops/950.sh install-sdk` | 在克隆出的 conda 环境里离线安装 SDK，并跑 SDK 请求头的单测 |
-| 3 | `bash ops/950.sh preflight` | 只读预检：架构、KVM、命令、动态库、gsd 提交号、job 结构、沙箱地址池环境变量、运行中的进程与 `/health`、活沙箱、SDK 与依赖 |
-| 4 | `bash ops/import-image.sh` | 导入镜像、在不联网的临时容器里检查 CRIU 与预装包、推送到镜像仓库 |
-| 5 | `bash ops/950.sh save-baseline` | 保存本机原有的 job、二进制路径与 SHA256；已有基线时拒绝覆盖 |
-| 6 | `bash ops/950.sh install` | 把三个文件放到 `/fc-gsd/` |
-| 7 | `bash ops/950.sh gsd`，再 `bash ops/950.sh status` | 切到进程级栈并确认；返回后等 1～2 分钟再建沙箱 |
+| 1 | `verify`、`unpack` | 校验部署目录的 SHA256；展开三个运行文件和镜像，按清单核对 |
+| 2 | `install-sdk` | 在克隆出的 conda 环境里离线安装 SDK，并跑 SDK 请求头的单测 |
+| 3 | `preflight` | 只读预检：架构、KVM、命令、动态库、gsd 提交号、job 结构、沙箱地址池环境变量、运行中的进程与 `/health`、活沙箱、SDK 与依赖 |
+| 4 | `ops/import-image.sh` | 导入镜像、在不联网的临时容器里检查 CRIU 与预装包、推送到镜像仓库 |
+| 5 | `save-baseline` | 保存本机原有的 job、二进制路径与 SHA256；已有基线时拒绝覆盖 |
+| 6 | `install` | 把三个文件放到 `/fc-gsd/` |
+| 7 | `gsd`，再 `status` | 切到进程级栈并确认；等到能建沙箱才返回，`base-gsd` 不可用时自动重建 |
 | 8 | `python criu-rollback/scripts/build_template.py --alias base-gsd --cpu 2 --memory 2048 --image "$GSD_TEMPLATE_IMAGE"` | 在进程级栈下建模板，不用缓存 |
-| 9 | `bash ops/950.sh acceptance`、`bash ops/950.sh stress` | 验收与压测，见 [30](30-acceptance-runbook.md) §8 |
-| 10 | `bash ops/950.sh sandbox` | 切回本机原有的 job；随后在原有的 SDK 环境里跑 `python ops/sandbox_smoke.py --template base`（模板名按本机） |
+| 9 | `acceptance`、`stress` | 验收与压测，见 [30](30-acceptance-runbook.md) §8 |
+| 10 | `sandbox` | 切回本机原有的 job；随后用原有的 SDK 环境跑 `smoke`（即 `rollback/scripts/950/run.sh smoke`，模板名按本机） |
 
-第 8 步的 `GSD_TEMPLATE_IMAGE` 与第 4 步用的镜像引用相同，默认是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`。§6 的自检在第 9 步由 `ops/guest_check.py` 完成。
+第 8 步的 `GSD_TEMPLATE_IMAGE` 与第 4 步用的镜像引用相同，默认是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`。§6 的自检在第 9 步由 `ops/guest_check.py` 完成。逐条执行时，第 2、9、10 步会自动使用对应的 conda 环境。
 
 ---
 
@@ -403,7 +436,7 @@ finally:
 | 基础层缓存键里的 `"gsd"` | `packages/orchestrator/internal/template/build/phases/base/hash.go:55` |
 | 内核构建脚本、固定基线、config、补丁 | `fc-kernels/build.sh`、`fc-kernels/kernel_base_tags.txt`、`fc-kernels/configs/arm64/6.1.158.config`、`fc-kernels/patches/6.1.158/` |
 | 基础镜像 | `packages/gsd/docker/Dockerfile.criu421` |
-| 切栈脚本 | 随手册附带的 `scripts/ops/switch-gsd-new920b.sh`（文件头注释即布局说明） |
+| 切栈脚本 | 日常与 950：`criu-rollback/deploy/950.sh`（实现在同目录 `ops/` 的 `stack.py`、`flow.py`、`unpack.py`）；换调试内核：随手册附带的 `scripts/ops/switch-gsd-new920b.sh`（文件头注释即布局说明） |
 
 ---
 
@@ -416,4 +449,4 @@ finally:
 - 切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。
 - 模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。
 - 部署后到 guest 里核对：`gsd -commit`、内核版本串、透明大页为 `[never]`、`rcu_expedited` 为 1、`/health` 为 ok、CRIU 4.2.1、`/` 为 755、`/tmp` 在 overlay 上；然后转 [30](30-acceptance-runbook.md) 做验收。
-- 950 尚未运行。部署用离线包，流程见 §7，结果填在 [22](22-950-results.md)。
+- 950 尚未运行。部署用仓库里的 `criu-rollback/deploy/`，`git pull` 后一条命令 `bash criu-rollback/deploy/950.sh all` 做完全流程，日常切换用 `950.sh gsd` / `sandbox`，流程见 §7，结果填在 [22](22-950-results.md)。

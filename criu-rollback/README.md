@@ -1,13 +1,14 @@
-# 进程级快照回滚：手册与验证工具
+# 进程级快照回滚（criu-rollback）：部署入口、手册与验证工具
 
 在沙箱不停机的前提下，把沙箱里的**用户进程和根文件系统**退回过去某一时刻：在 guest 内由守护进程 gsd 用 CRIU 保存与恢复进程，
-用 overlayfs 热切层回滚文件。本目录是这套功能的**技术手册与验证材料**；
+用 overlayfs 热切层回滚文件。本目录是这套功能的**部署入口、技术手册与验证材料**；
 实现代码在 KASandbox_0904 的 `criu-rollback-dev` 分支（gsd 守护进程、orchestrator 注入、Python SDK、guest 内核补丁同仓），不在这里重复存放。
 
 > 代码基准 `criu-rollback-dev@bc3cce913`
 
 | 路径 | 内容 | 给谁 |
 |---|---|---|
+| [`deploy/`](deploy/README.md) | **部署与切换入口**：在已部署沙箱级的机器上 `bash criu-rollback/deploy/950.sh all` 一条命令切到进程级、验收、切回；日常切换用 `gsd` / `sandbox`。三个运行文件、镜像的 CRIU 层、SDK wheel 压缩入库 | 运维、上机验收的人 |
 | [`docs/`](docs/README.md) | **《进程级快照回滚技术手册》**，30 章加 5 个附录，分六篇：导论与基础 → 设计与实现 → 性能原理 → 验证与实测 → 与沙箱级对比 → 使用与运维 | 首要入口 |
 | [`scripts/`](scripts/README.md) | **全部测试脚本**：`acceptance/` 功能验证与性能、`stress/` 压测与看门狗、`probes/` 探针、`ops/` 切栈脚本、`kernel/` 调试内核的 config 与构建说明 | 验收方（`acceptance/`）；接手开发的人（其余） |
 | [`validation/`](validation/README.md) | 已复核的结果摘要、环境版本与历史修复依据。完整日志与原始结果不入库 | 要核对数字的人 |

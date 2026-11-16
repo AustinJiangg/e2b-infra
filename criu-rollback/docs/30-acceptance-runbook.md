@@ -344,16 +344,16 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 
 950 上尚未运行，本章的步骤没有在 950 上走过，结果填进 [22](22-950-results.md)。可以预先确定的有：gsd 只支持 arm64 的 guest（[04](04-goals-and-tradeoffs.md)），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"在那之前无从谈起。
 
-部署步骤见 [27](27-deployment.md) §7。验收由离线包的入口执行，顺序和判据与本章相同，由入口自动判读，不需要手工 grep：
+部署步骤见 [27](27-deployment.md) §7。验收由 `criu-rollback/deploy/950.sh` 执行（`all` 会依次跑下面两步），顺序和判据与本章相同，由入口自动判读，不需要手工 grep：
 
 | 入口 | 内容 | 判据 |
 |---|---|---|
-| `bash ops/950.sh acceptance` | §3 的部署自检（`ops/guest_check.py`）→ `verify_gsd.py base-gsd 8` → `verify_fixes.py` → `verify_multitree.py --skip V12` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 | 同 §2 的表。遇到非零返回码或内容判据失败就停止，写 `summary.json`。首次部署没有对照模板，跳过 V12 |
-| `bash ops/950.sh stress` | `probe_whiteout_bug.py` 七个用例，再顺序跑 all、noworkers、multitree、deldense 四组，`STALL` 为 150 秒 | 同 §5.2 的判据表。任何一组失败就停止后续组；取不到串口输出不算通过 |
+| `bash criu-rollback/deploy/950.sh acceptance` | §3 的部署自检（`ops/guest_check.py`）→ `verify_gsd.py base-gsd 8` → `verify_fixes.py` → `verify_multitree.py --skip V12` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 | 同 §2 的表。遇到非零返回码或内容判据失败就停止，写 `summary.json`。首次部署没有对照模板，跳过 V12 |
+| `bash criu-rollback/deploy/950.sh stress` | `probe_whiteout_bug.py` 七个用例，再顺序跑 all、noworkers、multitree、deldense 四组，`STALL` 为 150 秒 | 同 §5.2 的判据表。任何一组失败就停止后续组；取不到串口输出不算通过 |
 
-两点与本章的做法不同：SDK 用激活 conda 环境里的解释器，不设 `PYTHONPATH`；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。
+两点与本章的做法不同：SDK 用进程级 conda 环境里的解释器（入口自动选用，不需要激活），不设 `PYTHONPATH`；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。
 
-输出目录默认是 `results/<时间>-acceptance/` 和 `results/<时间>-stress/`，可以用 `--out` 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 `criu-rollback/scripts/.env`、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 [22](22-950-results.md)。
+单独执行时输出目录默认是 `criu-rollback/deploy/results/<时间>-acceptance/` 和 `…-stress/`，可以用 `--out` 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 `criu-rollback/scripts/.env`、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 [22](22-950-results.md)。
 
 ---
 

@@ -1,0 +1,61 @@
+{
+  "finished_at": "2026-10-16T15:35:50.486036+08:00",
+  "artifact_sha256": "gsd 与内核未变；orchestrator 重编为 259f1a25c-e2bv，SHA256 151308ba59fa5785686b51b0940919889b641e5a5fbbd1beb2b9da4272715832",
+  "image_archive": "PASS: gzip integrity, manifest/config identity, arm64, all layers present",
+  "image_dependency_check": "PASS on 920B with --network none: CRIU 4.2.1 and all required packages",
+  "sdk_source_match": "PASS: all 374 tracked files match dcca61266; no additional files",
+  "sdk_header_tests": {
+    "PASS": 7,
+    "FAIL": 0,
+    "environment": "920B temporary conda clone with wheel-installed SDK; no PYTHONPATH; no HTTP calls"
+  },
+  "stack_unit_tests": {
+    "PASS": 6,
+    "FAIL": 0,
+    "environments": [
+      "WSL",
+      "920B relocated Python"
+    ]
+  },
+  "result_parser_checks": {
+    "PASS": 8,
+    "FAIL": 0,
+    "environment": "WSL synthetic PASS/FAIL outputs; no sandboxes"
+  },
+  "bash_and_python_syntax": "PASS",
+  "nomad_structure": "PASS: checked on 920B; no job content exported",
+  "950_live_deployment": "NOT RUN",
+  "950_acceptance": "NOT RUN",
+  "remote_stack_switch": "PASS on 920B 2026-11-06: sandbox -> gsd -> sandbox",
+  "credentials_included": false,
+  "sdk_wheel": "PASS: pure Python wheel all source files / RECORD / ZIP checks; installed successfully using pip in offline clone",
+  "conda_clone_install": "PASS on 920B: offline --copy clone of jll-e2b to a disposable jll-e2b-gsd prefix; wheel install with --no-index --no-deps; original SDK hashes unchanged; conda switch back verified; temporary clone removed",
+  "sdk_install_guard_tests": {
+    "PASS": 6,
+    "FAIL": 0,
+    "environment": "WSL: original/base/unactivated/overridden environments refused; target accepted; wheel/source/RECORD verified"
+  },
+  "performance_script_update": {
+    "date": "2026-10-16",
+    "schema_version": 2,
+    "measurement_mode": "per-tier-size",
+    "benchmark_regression_tests": {
+      "PASS": 11,
+      "FAIL": 0
+    },
+    "acceptance_parser_tests": {
+      "PASS": 6,
+      "FAIL": 0
+    },
+    "scope": "本地真实负载子进程（0/1MiB）与模拟沙箱流程；不调用远程服务。",
+    "live_benchmark": {
+      "920B": "PASS: 2026-10-16, 3 runs x 6 tiers; 18 restores with full payload/file verification, SDK/journal equal.",
+      "950": "NOT RUN",
+      "result_path": "/home/j30059180/projects/deltabox/gsd-stack/per-tier-20261016-v2/results",
+      "journal_capture_fix": "Bounded retry after RPC outside timing window; completion matched by checkpoint ID and operation."
+    }
+  },
+  "updated_at": "2026-11-06",
+  "920b_acceptance": "PASS",
+  "920b_stress": "PASS"
+}

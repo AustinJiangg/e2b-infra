@@ -1,0 +1,31 @@
+tar: ops/check_python.py: time stamp 2026-10-16 15:30:30 is 363.767563 s in the future
+tar: ops/install_sdk.py: time stamp 2026-10-16 15:30:30 is 363.76748763 s in the future
+tar: ops/950.sh: time stamp 2026-10-16 15:30:30 is 363.76743855 s in the future
+tar: ops/stack.py: time stamp 2026-10-16 15:30:30 is 363.76740277 s in the future
+tar: ops/run_tests.py: time stamp 2026-10-16 15:30:30 is 363.76735376 s in the future
+tar: ops/build_sdk_wheel.py: time stamp 2026-10-16 15:30:30 is 363.7673267 s in the future
+tar: ops/sandbox_smoke.py: time stamp 2026-10-16 15:32:46 is 499.76729998 s in the future
+tar: ops: time stamp 2026-10-16 15:30:30 is 363.76725309 s in the future
+tar: sdk/e2b-2.19.0+gsd.dcca61266-py3-none-any.whl: time stamp 2026-10-16 15:30:30 is 363.61706777 s in the future
+tar: sdk: time stamp 2026-10-16 15:30:30 is 363.61704184 s in the future
+tar: gsd950-conda-install-test.sh: time stamp 2026-10-16 15:34:26 is 599.57186237 s in the future
+offline conda clone: PASS
+仅替换 SDK 的目标环境: /home/j30059180/projects/deltabox/gsd-stack/offline-conda-check.R2HEJF/jll-e2b-gsd
+Processing ./sdk/e2b-2.19.0+gsd.dcca61266-py3-none-any.whl
+Installing collected packages: e2b
+  Attempting uninstall: e2b
+    Found existing installation: e2b 2.20.0
+    Uninstalling e2b-2.20.0:
+      Successfully uninstalled e2b-2.20.0
+Successfully installed e2b-2.19.0+gsd.dcca61266
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Python: 3.12.14
+conda 环境: /home/j30059180/projects/deltabox/gsd-stack/offline-conda-check.R2HEJF/jll-e2b-gsd
+SDK: /home/j30059180/projects/deltabox/gsd-stack/offline-conda-check.R2HEJF/jll-e2b-gsd/lib/python3.12/site-packages/e2b/__init__.py
+GSD SDK 与依赖检查 PASS
+SDK header tests: PASS 7 / FAIL 0
+GSD SDK 离线安装完成。后续 conda activate jll-e2b-gsd 后直接运行 python。
+installed SDK: 2.19.0+gsd.dcca61266
+SDK import from activated clone site-packages: PASS
+original jll-e2b SDK file hashes unchanged: PASS
+conda switch back to jll-e2b SDK 2.20.0: PASS

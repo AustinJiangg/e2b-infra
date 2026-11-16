@@ -11043,7 +11043,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>未查清的记录有一处：候选内核上两次 checkpoint 返回 <code>internal</code>（U-02），之后没有再出现。</li>
 </ul><nav class="pager" data-n="21"></nav></article><article id="v22" class="doc" hidden><h1 id="d22-950-结果">950 结果</h1>
 <blockquote>
-<p><strong>状态：待填。</strong> 950 的进程级尚未运行。本章的表由离线包跑完之后填写，现在所有单元格都是 <code>待填</code>，没有任何数字。这是填写 950 结果的唯一位置。</p>
+<p><strong>状态：待填。</strong> 950 的进程级尚未运行。本章的表由 <code>criu-rollback/deploy/950.sh all</code> 跑完之后填写，现在所有单元格都是 <code>待填</code>，没有任何数字。这是填写 950 结果的唯一位置。</p>
 </blockquote>
 <h2 id="d22-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -11055,34 +11055,34 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p>本章不给通过阈值。950 的第一轮结果是它自己的基线，920B 的耗时不能作为 950 的通过标准。四组压测和功能验收的判据在 <a href="#d18">18</a>，表的结构与 <a href="#d19">19</a>、<a href="#d20">20</a> §1、<a href="#d21">21</a> §2 相同，以便并排阅读。同一流程在新 920B 上跑出的结果就是那几节。</p>
 <hr />
 <h2 id="d22-1-结果从哪里来">1. 结果从哪里来</h2>
-<p>离线包的入口是 <code>ops/950.sh</code>。验证相关的三步：</p>
+<p>入口是仓库里的 <code>criu-rollback/deploy/950.sh</code>，在仓库根目录执行 <code>bash criu-rollback/deploy/950.sh all</code>，全部结果打成一个包 <code>criu-rollback/deploy/results/&lt;时间&gt;-all.tar.gz</code>。包里与验证相关的三部分：</p>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>入口</th>
+<th><code>all</code> 里的步骤</th>
 <th>内容</th>
-<th>结果目录</th>
+<th>包内目录</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>bash ops/950.sh acceptance</code></td>
+<td>验收（也可单独 <code>950.sh acceptance</code>）</td>
 <td>guest 自检、<code>verify_gsd.py</code>、<code>verify_fixes.py</code>、<code>verify_multitree.py --skip V12</code>、<code>verify_clear_refs_race.py</code>、<code>demo_checkpoint_perf.py</code> 三轮</td>
-<td><code>results/&lt;时间&gt;-acceptance/</code></td>
+<td><code>acceptance/</code></td>
 </tr>
 <tr>
-<td><code>bash ops/950.sh stress</code></td>
+<td>压测（也可单独 <code>950.sh stress</code>）</td>
 <td><code>probe_whiteout_bug.py</code> 七个用例，然后 all、noworkers、multitree、deldense 四组</td>
-<td><code>results/&lt;时间&gt;-stress/</code></td>
+<td><code>stress/</code></td>
 </tr>
 <tr>
-<td><code>bash ops/950.sh sandbox</code>，再 <code>python ops/sandbox_smoke.py</code></td>
-<td>切回沙箱级并冒烟</td>
-<td><code>results/sandbox-smoke/</code></td>
+<td>切回沙箱级并冒烟（也可单独 <code>950.sh sandbox</code>、<code>950.sh smoke</code>）</td>
+<td>切回后用原模板试建沙箱，再跑沙箱级冒烟</td>
+<td><code>sandbox-smoke/</code></td>
 </tr>
 </tbody>
 </table></div>
-<p>两个结果目录里都有 <code>summary.json</code>（每一步的命令和状态、判定 <code>verdict</code>、机器名、起止时间、Python 与 SDK 路径）和 <code>deliverables.sha256</code>（三个运行文件的 sha256）。<code>acceptance</code> 的 <code>summary.json</code> 还有 <code>slow_calls</code> 和 <code>skipped</code>。下面各表的"来源"列写的都是相对这两个目录的文件名。</p>
+<p>包里另有 <code>all.log</code>（每步进度与结论）、<code>summary.json</code>（每步状态与用时）和 <code>netcheck.txt</code>（切换前后宿主上非 e2b 网络配置的比对）。验收和压测两个目录里都有 <code>summary.json</code>（每一步的命令和状态、判定 <code>verdict</code>、机器名、起止时间、Python 与 SDK 路径）和 <code>deliverables.sha256</code>（三个运行文件的 sha256）。<code>acceptance</code> 的 <code>summary.json</code> 还有 <code>slow_calls</code> 和 <code>skipped</code>。下面各表的"来源"列写的都是相对这两个目录的文件名。</p>
 <p>分档性能的三轮结果用 <code>criu-rollback/scripts/acceptance/summarize_checkpoint_perf.py</code> 校验并汇总，命令见 <a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/validation/README.md">验证摘要</a>。950 的摘要另建带平台与日期的目录，放在 <code>criu-rollback/validation/</code> 下，不覆盖 920B 的目录。</p>
 <p>结果里有几项不进入这些文件，要在运行时另外记下：机器名、起止时间、宿主内核版本、未跑的项目和回切冒烟结果。回传时不带 <code>criu-rollback/scripts/.env</code>、状态目录、Nomad job JSON 和登录配置。</p>
 <hr />
@@ -11860,7 +11860,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tr>
 <td><code>sandbox_smoke.py</code> PASS / FAIL / SKIP</td>
 <td><code>待填</code></td>
-<td><code>results/sandbox-smoke/</code> 下的 <code>SUMMARY.md</code></td>
+<td>包内 <code>sandbox-smoke/</code> 下的 <code>SUMMARY.md</code></td>
 </tr>
 </tbody>
 </table></div>
@@ -11869,7 +11869,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p>下面每一条都要在填表之前确认。有一条不符，先查原因，不把这轮结果填进来。</p>
 <p><strong>产物与模板。</strong></p>
 <ol>
-<li><code>deliverables.sha256</code> 里 gsd、orchestrator、guest 内核三个 sha256 与离线包 <code>manifest.json</code> 一致，acceptance 和 stress 两个目录也互相一致。</li>
+<li><code>deliverables.sha256</code> 里 gsd、orchestrator、guest 内核三个 sha256 与 <code>criu-rollback/deploy/manifest.json</code> 里的 <code>sha256</code> 一致（是去掉调试段后的版本），acceptance 和 stress 两个目录也互相一致。</li>
 <li><code>base-gsd</code> 是在 950 的进程级栈下新建的，不是沙箱级模板，也不是从别的机器带来的；建模板时没有加 <code>--use-cache</code>。</li>
 <li>guest 自检通过：<code>gsd -commit</code> 为 <code>259f1a25c</code>，内核构建标识为 <code>#4 SMP Thu Oct  8 20:06:40 CST 2026</code>，CRIU 为 4.2.1，THP 为 <code>[never]</code>，<code>rcu_expedited</code> 为 1，vCPU 为 2。</li>
 <li>客户端用的是带 checkpoint 接口的进程级 SDK，<code>summary.json</code> 的 <code>sdk</code> 落在进程级 conda 环境里。</li>
@@ -11902,7 +11902,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <h2 id="d22-本章要点">本章要点</h2>
 <ul>
 <li>950 的进程级尚未运行，本章所有单元格都是 <code>待填</code>。</li>
-<li>结果由 <code>ops/950.sh acceptance</code>、<code>stress</code> 和回切冒烟产生，每张表的来源文件都已写明。</li>
+<li>结果由 <code>criu-rollback/deploy/950.sh all</code> 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。</li>
 <li>表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。</li>
 <li>950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。</li>
 <li>填数之前按 §8 逐条核对，这里是之后填写 950 结果的唯一位置。</li>
@@ -14533,7 +14533,19 @@ docker<span class="w"> </span>push<span class="w"> </span>&lt;镜像仓库&gt;/e
 <hr />
 <h2 id="d27-4-切到进程级栈">4. 切到进程级栈</h2>
 <h3 id="d27-41-切栈脚本">4.1 切栈脚本</h3>
-<p>新 920B 是 RPM 部署，orchestrator 由 nomad 的 job <code>template-manager-system</code> 拉起。把它换成进程级版，本质上是提交一份改过的 job 定义。这件事由随手册附带的 <code>scripts/ops/switch-gsd-new920b.sh</code> 完成：</p>
+<p>新 920B 是 RPM 部署，orchestrator 由 nomad 的 job <code>template-manager-system</code> 拉起。把它换成进程级版，本质上是提交一份改过的 job 定义。</p>
+<p><strong>日常切换用仓库里的 <code>criu-rollback/deploy/950.sh</code>（§7）。</strong> 新 920B 也用它。它在本节脚本的基础上多做了四件事：</p>
+<ul>
+<li>
+<p>从入库的压缩产物展开三个运行文件并核对；</p>
+</li>
+<li>
+<p>第一次使用时自己保存基线；</p>
+</li>
+<li>切换后等到能真正建出沙箱才返回；</li>
+<li>切到进程级时，检查 <code>base-gsd</code> 是否还能用，不能用就重建。</li>
+</ul>
+<p>本节介绍的 <code>scripts/ops/switch-gsd-new920b.sh</code> 是开发阶段写的，切换的核心做法与 <code>950.sh</code> 相同。现在保留它，是因为 <a href="#d18">18</a> 临时换调试内核时要用它的 <code>GSD_KDIR</code>。它读的基线 job 是事先手工存的，<strong>每次重新部署之后都要重存一份</strong>，否则会把旧部署的配置提交回去。用法如下：</p>
 <div class="hl"><pre><span></span><code>bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </span>status<span class="w">   </span><span class="c1"># 只看现状，不改任何东西</span>
 bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </span>gsd<span class="w">      </span><span class="c1"># 切到进程级栈</span>
 </code></pre></div>
@@ -14704,16 +14716,41 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <hr />
 <h2 id="d27-7-950">7. 950</h2>
 <p>950 上<strong>尚未运行</strong>，本书没有 950 的进程级结果，跑完之后填进 <a href="#d22">22</a>。进程级快照回滚的设计不依赖 950 独有的硬件特性（它的脏页跟踪在 guest 内核里用软件完成），按理同样的部件可以直接部署，但这只是推断，兼容性要在 950 上确认。</p>
-<p>950 上不走 §2 的构建，用预先构建好的离线包部署。同一套入口已于 2026-11-06 在新 920B 上完整走过一遍（结果见 <a href="#d19">19</a> 的"2026-11-06 全流程复测"一节），在 950 上还没有执行。与本章前面各节的差别是：</p>
+<p>950 上不走 §2 的构建，用仓库里 <code>criu-rollback/deploy/</code> 下预先构建好的产物部署：<code>git pull</code> 之后在仓库根目录执行即可，不需要另外拷贝文件。这套入口最早以独立离线包的形式于 2026-11-06 在新 920B 上完整走过一遍（结果见 <a href="#d19">19</a> 的"2026-11-06 全流程复测"一节），2026-11-16 并入仓库后又在新 920B 上从头演练过（见 <code>criu-rollback/deploy/README.md</code> 第 14 节），在 950 上还没有执行。与本章前面各节的差别是：</p>
 <ul>
-<li>三个运行文件的位置与 §3 相同，但 <code>install</code> 发现这些位置上已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 <code>/usr/bin</code>、<code>/fc-kernels</code> 和 <code>/fc-versions</code>。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。</li>
-<li>切栈不用 §4 的 <code>switch-gsd-new920b.sh</code>，由离线包的 <code>ops/950.sh</code> 完成：先把本机原有的 job 保存成基线（文件含密钥，只留在本机），切到进程级栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 <code>/health</code>；切回时恢复这份基线。</li>
-<li>离线包里的 orchestrator 带 <code>bc3cce913</code> 的改动：宿主侧 veth 从上游的 <code>veth-&lt;n&gt;</code> 改名为 <code>e2bv-&lt;n&gt;</code>。原因是 950 测试机上同时运行着 AgentENV，它的 iptables 规则按 <code>veth-+</code> 匹配网卡，e2b 的 veth 用原名会被这些规则命中；出于同一原因，沙箱地址池也移到 <code>10.13.0.0/16</code>、<code>10.14.0.0/16</code>，由预检核对。这是为测试机做的适配，交付代码不改前缀。</li>
+<li>
+<p>三个运行文件以 xz 压缩入库，orchestrator 和 gsd 用 <code>strip -g</code> 去掉了 DWARF 调试段，代码段与验收版逐字节相同。镜像的前两层取仓库根目录已有的 <code>ubuntu-22.04-custom.tar.gz</code>，只有 CRIU 那一层单独入库。第一步把它们展开到 <code>criu-rollback/deploy/.work/</code>，按 <code>manifest.json</code> 核对 SHA256 和镜像 ID。</p>
+</li>
+<li>
+<p>三个运行文件的位置与 §3 相同，但 <code>install</code> 发现这些位置上已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 <code>/usr/bin</code>、<code>/fc-kernels</code> 和 <code>/fc-versions</code>。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。</p>
+</li>
+<li>切栈不用 §4 的 <code>switch-gsd-new920b.sh</code>，由 <code>criu-rollback/deploy/950.sh</code> 完成：<ul>
+<li>先把本机原有的 job 保存成基线。文件含密钥，只留在本机。</li>
+<li>切到进程级栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 <code>/health</code>。</li>
+<li>切回时恢复这份基线。</li>
+<li>已经是目标栈时不重启服务。</li>
+<li>切换后反复试建沙箱，直到成功才返回，不靠估计等待时间。</li>
+</ul>
+</li>
+<li>入库的 orchestrator 带 <code>bc3cce913</code> 的改动：宿主侧 veth 从上游的 <code>veth-&lt;n&gt;</code> 改名为 <code>e2bv-&lt;n&gt;</code>。原因是 950 测试机上同时运行着 AgentENV，它的 iptables 规则按 <code>veth-+</code> 匹配网卡，e2b 的 veth 用原名会被这些规则命中；出于同一原因，沙箱地址池也移到 <code>10.13.0.0/16</code>、<code>10.14.0.0/16</code>，由预检核对。这是为测试机做的适配，交付代码不改前缀。</li>
 <li>只支持 orchestrator 与 template-manager 合并部署（<code>ORCHESTRATOR_SERVICES=orchestrator,template-manager</code>），其他形态由预检拒绝。</li>
 <li>orchestrator 是动态链接的，需要 glibc 2.38 的符号；不满足时停在切栈之前，不替换系统 glibc。gsd 是静态链接的。</li>
-<li>基础镜像从离线归档导入 950 使用的镜像仓库，不重新构建；SDK 用随包的 wheel 离线安装进一个克隆出来的 conda 环境，不用 <code>PYTHONPATH</code>。</li>
+<li>基础镜像在现场拼出后导入 950 使用的镜像仓库，不重新构建；SDK 用入库的 wheel 离线安装进一个克隆出来的 conda 环境，不用 <code>PYTHONPATH</code>。</li>
 </ul>
-<p>步骤按下表的顺序执行，命令都在离线包目录下以 root 运行：</p>
+<p>首次部署只需要一条命令，在 e2b-infra 仓库根目录以 root 运行：</p>
+<div class="hl"><pre><span></span><code>bash<span class="w"> </span>criu-rollback/deploy/950.sh<span class="w"> </span>all
+</code></pre></div>
+
+<p>它按下表的顺序做完全部步骤，不需要激活 conda 环境，也不需要估等待时间。</p>
+<ul>
+<li><strong>失败或中断</strong>：处理完原因后再执行同一条命令，会从停下的那一步继续，做完的验收、压测不会重做。验收或压测失败时，先删掉由 <code>base-gsd</code> 起的测试沙箱，再自动切回沙箱级。</li>
+<li><strong>网络比对</strong>：切换前后各抓一次宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则做比对，用来确认同机的 AgentENV 没有受影响。</li>
+<li><strong>结果</strong>：最后把全部结果打成一个压缩包。</li>
+<li><strong>演练</strong>：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑。</li>
+<li><strong>网络命名空间</strong>：每次重启 orchestrator 会留下约 300 个，<code>all</code> 重启两次。积累多了按 <code>single-node-offline-deploy.md</code> 用 <code>build.sh --recycle-netns</code> 清理。</li>
+</ul>
+<p>以后日常切换用 <code>bash criu-rollback/deploy/950.sh gsd</code> 和 <code>bash criu-rollback/deploy/950.sh sandbox</code>。切到进程级时，<code>base-gsd</code> 不在或建不出沙箱，会自动重建。</p>
+<p>下表是 <code>all</code> 依次做的事，也可以逐条单独执行。命令列写的是 <code>bash criu-rollback/deploy/950.sh</code> 后面的参数，<code>ops/</code> 指 <code>criu-rollback/deploy/ops/</code>：</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -14725,38 +14762,38 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <tbody>
 <tr>
 <td>1</td>
-<td><code>bash ops/950.sh verify</code></td>
-<td>校验包内全部文件的 SHA256</td>
+<td><code>verify</code>、<code>unpack</code></td>
+<td>校验部署目录的 SHA256；展开三个运行文件和镜像，按清单核对</td>
 </tr>
 <tr>
 <td>2</td>
-<td><code>bash ops/950.sh install-sdk</code></td>
+<td><code>install-sdk</code></td>
 <td>在克隆出的 conda 环境里离线安装 SDK，并跑 SDK 请求头的单测</td>
 </tr>
 <tr>
 <td>3</td>
-<td><code>bash ops/950.sh preflight</code></td>
+<td><code>preflight</code></td>
 <td>只读预检：架构、KVM、命令、动态库、gsd 提交号、job 结构、沙箱地址池环境变量、运行中的进程与 <code>/health</code>、活沙箱、SDK 与依赖</td>
 </tr>
 <tr>
 <td>4</td>
-<td><code>bash ops/import-image.sh</code></td>
+<td><code>ops/import-image.sh</code></td>
 <td>导入镜像、在不联网的临时容器里检查 CRIU 与预装包、推送到镜像仓库</td>
 </tr>
 <tr>
 <td>5</td>
-<td><code>bash ops/950.sh save-baseline</code></td>
+<td><code>save-baseline</code></td>
 <td>保存本机原有的 job、二进制路径与 SHA256；已有基线时拒绝覆盖</td>
 </tr>
 <tr>
 <td>6</td>
-<td><code>bash ops/950.sh install</code></td>
+<td><code>install</code></td>
 <td>把三个文件放到 <code>/fc-gsd/</code></td>
 </tr>
 <tr>
 <td>7</td>
-<td><code>bash ops/950.sh gsd</code>，再 <code>bash ops/950.sh status</code></td>
-<td>切到进程级栈并确认；返回后等 1～2 分钟再建沙箱</td>
+<td><code>gsd</code>，再 <code>status</code></td>
+<td>切到进程级栈并确认；等到能建沙箱才返回，<code>base-gsd</code> 不可用时自动重建</td>
 </tr>
 <tr>
 <td>8</td>
@@ -14765,17 +14802,17 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 </tr>
 <tr>
 <td>9</td>
-<td><code>bash ops/950.sh acceptance</code>、<code>bash ops/950.sh stress</code></td>
+<td><code>acceptance</code>、<code>stress</code></td>
 <td>验收与压测，见 <a href="#d30">30</a> §8</td>
 </tr>
 <tr>
 <td>10</td>
-<td><code>bash ops/950.sh sandbox</code></td>
-<td>切回本机原有的 job；随后在原有的 SDK 环境里跑 <code>python ops/sandbox_smoke.py --template base</code>（模板名按本机）</td>
+<td><code>sandbox</code></td>
+<td>切回本机原有的 job；随后用原有的 SDK 环境跑 <code>smoke</code>（即 <code>rollback/scripts/950/run.sh smoke</code>，模板名按本机）</td>
 </tr>
 </tbody>
 </table></div>
-<p>第 8 步的 <code>GSD_TEMPLATE_IMAGE</code> 与第 4 步用的镜像引用相同，默认是 <code>harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421</code>。§6 的自检在第 9 步由 <code>ops/guest_check.py</code> 完成。</p>
+<p>第 8 步的 <code>GSD_TEMPLATE_IMAGE</code> 与第 4 步用的镜像引用相同，默认是 <code>harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421</code>。§6 的自检在第 9 步由 <code>ops/guest_check.py</code> 完成。逐条执行时，第 2、9、10 步会自动使用对应的 conda 环境。</p>
 <hr />
 <h2 id="d27-代码位置">代码位置</h2>
 <div class="tw"><table>
@@ -14824,7 +14861,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 </tr>
 <tr>
 <td>切栈脚本</td>
-<td>随手册附带的 <code>scripts/ops/switch-gsd-new920b.sh</code>（文件头注释即布局说明）</td>
+<td>日常与 950：<code>criu-rollback/deploy/950.sh</code>（实现在同目录 <code>ops/</code> 的 <code>stack.py</code>、<code>flow.py</code>、<code>unpack.py</code>）；换调试内核：随手册附带的 <code>scripts/ops/switch-gsd-new920b.sh</code>（文件头注释即布局说明）</td>
 </tr>
 </tbody>
 </table></div>
@@ -14838,7 +14875,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <li>切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。</li>
 <li>模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。</li>
 <li>部署后到 guest 里核对：<code>gsd -commit</code>、内核版本串、透明大页为 <code>[never]</code>、<code>rcu_expedited</code> 为 1、<code>/health</code> 为 ok、CRIU 4.2.1、<code>/</code> 为 755、<code>/tmp</code> 在 overlay 上；然后转 <a href="#d30">30</a> 做验收。</li>
-<li>950 尚未运行。部署用离线包，流程见 §7，结果填在 <a href="#d22">22</a>。</li>
+<li>950 尚未运行。部署用仓库里的 <code>criu-rollback/deploy/</code>，<code>git pull</code> 后一条命令 <code>bash criu-rollback/deploy/950.sh all</code> 做完全流程，日常切换用 <code>950.sh gsd</code> / <code>sandbox</code>，流程见 §7，结果填在 <a href="#d22">22</a>。</li>
 </ul><nav class="pager" data-n="27"></nav></article><article id="v28" class="doc" hidden><h1 id="d28-配置与可观测性">配置与可观测性</h1>
 <h2 id="d28-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -16931,7 +16968,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <hr />
 <h2 id="d30-8-950">8. 950</h2>
 <p>950 上尚未运行，本章的步骤没有在 950 上走过，结果填进 <a href="#d22">22</a>。可以预先确定的有：gsd 只支持 arm64 的 guest（<a href="#d04">04</a>），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"在那之前无从谈起。</p>
-<p>部署步骤见 <a href="#d27">27</a> §7。验收由离线包的入口执行，顺序和判据与本章相同，由入口自动判读，不需要手工 grep：</p>
+<p>部署步骤见 <a href="#d27">27</a> §7。验收由 <code>criu-rollback/deploy/950.sh</code> 执行（<code>all</code> 会依次跑下面两步），顺序和判据与本章相同，由入口自动判读，不需要手工 grep：</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -16942,19 +16979,19 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 </thead>
 <tbody>
 <tr>
-<td><code>bash ops/950.sh acceptance</code></td>
+<td><code>bash criu-rollback/deploy/950.sh acceptance</code></td>
 <td>§3 的部署自检（<code>ops/guest_check.py</code>）→ <code>verify_gsd.py base-gsd 8</code> → <code>verify_fixes.py</code> → <code>verify_multitree.py --skip V12</code> → <code>verify_clear_refs_race.py</code> → <code>demo_checkpoint_perf.py</code> 三次</td>
 <td>同 §2 的表。遇到非零返回码或内容判据失败就停止，写 <code>summary.json</code>。首次部署没有对照模板，跳过 V12</td>
 </tr>
 <tr>
-<td><code>bash ops/950.sh stress</code></td>
+<td><code>bash criu-rollback/deploy/950.sh stress</code></td>
 <td><code>probe_whiteout_bug.py</code> 七个用例，再顺序跑 all、noworkers、multitree、deldense 四组，<code>STALL</code> 为 150 秒</td>
 <td>同 §5.2 的判据表。任何一组失败就停止后续组；取不到串口输出不算通过</td>
 </tr>
 </tbody>
 </table></div>
-<p>两点与本章的做法不同：SDK 用激活 conda 环境里的解释器，不设 <code>PYTHONPATH</code>；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。</p>
-<p>输出目录默认是 <code>results/&lt;时间&gt;-acceptance/</code> 和 <code>results/&lt;时间&gt;-stress/</code>，可以用 <code>--out</code> 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 <code>criu-rollback/scripts/.env</code>、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 <a href="#d22">22</a>。</p>
+<p>两点与本章的做法不同：SDK 用进程级 conda 环境里的解释器（入口自动选用，不需要激活），不设 <code>PYTHONPATH</code>；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。</p>
+<p>单独执行时输出目录默认是 <code>criu-rollback/deploy/results/&lt;时间&gt;-acceptance/</code> 和 <code>…-stress/</code>，可以用 <code>--out</code> 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 <code>criu-rollback/scripts/.env</code>、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 <a href="#d22">22</a>。</p>
 <hr />
 <h2 id="d30-本章要点">本章要点</h2>
 <ul>

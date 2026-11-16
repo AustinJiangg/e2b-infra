@@ -1,0 +1,111 @@
+{
+  "name": "criu-rollback deploy",
+  "updated_at": "2026-11-16",
+  "release_commit": "259f1a25c531ca75b82955087121a15713cc6b5b",
+  "orchestrator_commit": "259f1a25c-e2bv",
+  "orchestrator_note": "criu-rollback-dev 259f1a25c 加 bc3cce913 的 slot.go 改动（宿主侧网卡前缀 e2bv-），补丁见 provenance/orchestrator-e2bv-veth-prefix.patch",
+  "sdk_commit": "dcca6126632c150e86445cc065b5f302550b3937",
+  "strip_note": "orchestrator 与 gsd 由已验收的二进制执行 GNU strip -g（binutils 2.41）得到：只去掉 DWARF 调试段，保留符号表；.text/.rodata/.data/.noptrdata/.gopclntab/.go.buildinfo 与加载段逐字节相同，BuildID 与提交号不变",
+  "artifacts": {
+    "orchestrator": {
+      "packed": "artifacts/orchestrator.xz",
+      "path": "orchestrator",
+      "mode": "755",
+      "size": 96010040,
+      "sha256": "063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870",
+      "unstripped_sha256": "151308ba59fa5785686b51b0940919889b641e5a5fbbd1beb2b9da4272715832"
+    },
+    "gsd": {
+      "packed": "artifacts/gsd.xz",
+      "path": "gsd",
+      "mode": "755",
+      "size": 9543232,
+      "sha256": "421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe",
+      "unstripped_sha256": "a38b0db90c309abe4a7e1b4ad6b9180c2f257cbe204c4a982190b2b4b04894bb"
+    },
+    "kernel": {
+      "packed": "artifacts/vmlinux.bin.xz",
+      "path": "kernels/vmlinux-6.1.158/vmlinux.bin",
+      "mode": "644",
+      "size": 23054848,
+      "sha256": "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+    }
+  },
+  "image": {
+    "ref": "ubuntu:22.04-custom-criu421",
+    "image_id": "7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab",
+    "config": "artifacts/image/config.json",
+    "manifest": "artifacts/image/manifest.json",
+    "repositories": "artifacts/image/repositories",
+    "extra": {
+      "index.json": "artifacts/image/index.json",
+      "oci-layout": "artifacts/image/oci-layout",
+      "blobs/sha256/8eaeb7f0c72c2755f112f647eb169e278321c28be9539f89314cb34298b06c1b": "artifacts/image/8eaeb7f0c72c2755f112f647eb169e278321c28be9539f89314cb34298b06c1b",
+      "blobs/sha256/af478d24c05d0e7564e0789564da6e2c06f27b9474d5407076cd45c025d52613": "artifacts/image/af478d24c05d0e7564e0789564da6e2c06f27b9474d5407076cd45c025d52613"
+    },
+    "layers": [
+      {
+        "diff_id": "sha256:b3f74c31dcaee85c6efbb1c8b30081ee1e7f2b11e841d4492217caa7d1681539",
+        "source": "base"
+      },
+      {
+        "diff_id": "sha256:1c3c85f7573e1919aa420a9ea9806458f569cd0518b45760347ab26e6f9df005",
+        "source": "base"
+      },
+      {
+        "diff_id": "sha256:31747abf6f6b975c73ad19f5b49a6e0f0c1e8b7742b71eb10970a52b19045a91",
+        "source": "artifacts/image/criu421-layer.tar.xz"
+      }
+    ],
+    "base_note": "前两层取仓库根目录 ubuntu-22.04-custom.tar.gz",
+    "architecture": "arm64",
+    "criu": "4.2.1",
+    "offline_packages_checked": [
+      "systemd",
+      "systemd-sysv",
+      "openssh-server",
+      "sudo",
+      "chrony",
+      "linuxptp",
+      "socat",
+      "curl",
+      "ca-certificates",
+      "python3"
+    ]
+  },
+  "host_requirements": {
+    "architecture": "aarch64",
+    "orchestrator_max_required_glibc": "2.38",
+    "source_glibc": "2.38",
+    "orchestrator_libraries": [
+      "libc.so.6",
+      "libresolv.so.2",
+      "/lib/ld-linux-aarch64.so.1"
+    ]
+  },
+  "python": {
+    "strategy": "conda-clone-on-950",
+    "source_env": "jll-e2b",
+    "target_env": "jll-e2b-gsd",
+    "clone_command": "conda create --offline --copy --name jll-e2b-gsd --clone jll-e2b --yes",
+    "version": "继承950原jll-e2b的Python版本，不随包携带解释器",
+    "sdk_wheel": "sdk/e2b-2.19.0+gsd.dcca61266-py3-none-any.whl",
+    "sdk_version": "2.19.0+gsd.dcca61266",
+    "runtime": "脚本直接调用对应 conda 环境的解释器，不需要激活，不设置 PYTHONPATH"
+  },
+  "performance_script": {
+    "updated_on": "2026-10-16",
+    "schema_version": 2,
+    "measurement_mode": "per-tier-size",
+    "payload_mem_mib": [
+      0,
+      12,
+      24,
+      48,
+      96,
+      192
+    ],
+    "restore_path": "modified-child-to-full-baseline",
+    "validation": "2026-10-16 新920B三轮六档实测PASS：18次恢复完整内存与文件校验通过，SDK/journal一致；本地11项脚本回归与6项验收判读测试通过。950尚未运行新版脚本。"
+  }
+}
