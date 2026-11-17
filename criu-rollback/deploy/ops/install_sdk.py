@@ -8,7 +8,7 @@ import zipfile
 from email.parser import BytesParser
 
 ROOT = Path(__file__).resolve().parents[1]  # deploy/
-VERSION = "2.19.0+gsd.dcca61266"
+VERSION = "2.19.0+gsd.daae6968f"
 
 
 def guard():

@@ -5,8 +5,8 @@
 做法是**整文件覆盖**，不是字符串替换。payload/ 下的目录结构就是 site-packages
 里的结构，装的时候原样铺过去。
 
-为什么不用打补丁的方式：这一版一共动 21 个文件，其中 12 个是全新文件，
-只有 9 个是改上游既有文件。对着上游源码做字符串替换，上游一改版就可能替换错地方
+为什么不用打补丁的方式：这一版一共动 22 个文件，其中 12 个是全新文件，
+只有 10 个是改上游既有文件。对着上游源码做字符串替换，上游一改版就可能替换错地方
 而且不报错。整文件覆盖是版本锁死的 —— 只对 e2b==2.20.0 有效，装之前先核版本，
 对不上就停，不会悄悄装出一个半吊子。
 
@@ -43,6 +43,10 @@ UPSTREAM_FILES = {
     # checkpoint 的四个 RPC 一个都不能重放，关掉重试（retries=0）要改的就是这里；
     # 错误体里的 reason、Retry-After 也是它读出来的。
     "e2b_connect/client.py",
+    # 共享连接池的 keepalive 上限默认改成等于最大连接数：httpcore 1.0.x 在连接总数超过
+    # 上限时会关掉刚分给别的线程的连接，多线程并发 restore 时请求读到已关闭的 socket，
+    # 报 EBADF 或一直等到超时（920B 4800 次 restore 里 6 次，950 一次等满 300 s）。
+    "e2b/api/__init__.py",
 }
 
 # 要清 __pycache__ 的包目录。漏一个就会加载到旧字节码，看起来像没装上。
@@ -271,6 +275,7 @@ def do_install(sp, force):
     n = sum(drop_pycache(os.path.join(sp, d)) for d in PACKAGE_DIRS)
     print("  清了 %d 个 __pycache__（不清会加载到旧字节码）" % n)
     verify(sp)
+    reapply_http_patch()
     print("✓ checkpoint/restore SDK 已装好")
 
 
@@ -304,6 +309,26 @@ def do_uninstall(sp):
     print("✓ 还原了 %d 个上游文件，删了 %d 个新增文件" % (restored, removed))
 
 
+# 自建部署的 build.sh 在本脚本之后执行 patch_e2b.py，把 SDK 的 https 改成 http。部署之后单独
+# 重跑本脚本（例如拿到新版覆盖层）会把被覆盖的文件改回 https，所以装完自己再执行一次；
+# patch_e2b.py 只做精确替换，重复执行没有副作用。找不到它（不是自建部署）就不做。
+HTTP_PATCH = ("/opt/e2b-infra/patch_e2b.py", os.path.join(HERE, "..", "..", "..", "patch_e2b.py"))
+
+
+def reapply_http_patch():
+    for p in HTTP_PATCH:
+        if os.path.isfile(p):
+            import subprocess
+            print("执行 %s（https → http，与部署时相同）" % os.path.normpath(p))
+            subprocess.run([sys.executable, p], check=True)
+            return
+
+
+def same_content(a, b):
+    """比对时不计 patch_e2b.py 的 https → http 替换。"""
+    return a.replace(b"https", b"http") == b.replace(b"https", b"http")
+
+
 def do_check(sp):
     print("site-packages: %s" % sp)
     print("已装的 e2b   : %s（payload 针对 %s）" % (installed_version(), PINNED))
@@ -313,7 +338,15 @@ def do_check(sp):
         for r in missing[:10]:
             print("    " + r)
     else:
-        print("payload 的 %d 个文件都在位" % len(payload_files()))
+        # 在位还不够：上游本来就有的文件（例如 e2b/api/__init__.py）内容可能还是旧的
+        stale = [r for r in payload_files()
+                 if not same_content(open(os.path.join(sp, r), "rb").read(), open(os.path.join(PAYLOAD, r), "rb").read())]
+        if stale:
+            print("payload 的 %d 个文件都在，但 %d 个内容不是这一版，需要重新执行 install.py：" % (len(payload_files()), len(stale)))
+            for r in stale[:10]:
+                print("    " + r)
+            return
+        print("payload 的 %d 个文件都在位，内容与这一版一致" % len(payload_files()))
         verify(sp)
 
 

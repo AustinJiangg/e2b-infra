@@ -305,9 +305,10 @@ def run(ctx):
     expect(ctx, "A 的产物目录没了", a_dir_gone, "不存在",
            "没了：%s" % dir_a if a_dir_gone else "还在：%s" % dir_a, BASIS)
 
-    # 重启后旧沙箱的 FC 可能还没退出：920B 2026-11-16 手工复现两次，health 回 200 之后 2 s 还在、10 s 内退出；
-    # 但 test950 extended 演练三次都是 90 s 后仍在（原因未查，见 test950/README.md §5）。
-    # 等它最多 90 s 再判，等了多久记下来
+    # 重启后旧沙箱的 FC 可能还没退出。2026-11-17 在 920B 查实：nomad job restart 时 orchestrator 关网络池
+    # 超过 30 s 的 kill_timeout 被 SIGKILL，FC 在自己的进程组里不随之退出、被 init 收养；RPM 2026.09-3 的
+    # orchestrator 启动时不清理它们，所以一直留着。2026.09-4 起启动时结束这些 FC（fc/orphans.go），
+    # 新 orchestrator 起来后几秒内就没了。等它最多 90 s 再判，等了多久记下来
     t_left = time.monotonic()
     left = common.fc_processes(box_a.id)
     while left and time.monotonic() - t_left < 90:

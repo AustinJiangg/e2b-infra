@@ -98,7 +98,7 @@ criu-rollback/deploy/
     orchestrator.xz  gsd.xz  vmlinux.bin.xz
     image/criu421-layer.tar.xz      镜像的 CRIU 层；配置、清单等小文件同目录
   sdk/
-    e2b-2.19.0+gsd.dcca61266-py3-none-any.whl  可离线安装的进程级 SDK（版本号是发布时定的，不随改名变化）
+    e2b-2.19.0+gsd.daae6968f-py3-none-any.whl  可离线安装的进程级 SDK（版本号的 gsd. 前缀是发布时定的，不随改名变化）
     test_gsd_headers.py             SDK 自带的鉴权头测试，安装后离线执行
   ops/
     unpack.py                       展开运行文件、拼镜像并核对
@@ -143,15 +143,16 @@ criu-rollback/deploy/
 
 | 内容 | 版本 |
 |---|---|
-| gsd / guest 内核 | 手册已验证的 `259f1a25c` 发布产物。gsd 经 `strip -g`，SHA256 `421597e5…`（去调试段前 `a38b0db9…`）；内核未改，`b81306e7…` |
+| gsd | criu-rollback-dev `daae6968f`（`259f1a25c` 之上修了 restore 层切换的空间预留、checkpoint 预检的内存余量、根盘写满时报 `resource_exhausted`、restore 之后的第一次 checkpoint 保持增量，见第 14 节）。经 `strip -g`，SHA256 `1a0a3b67…`（去调试段前 `8033476a…`）；之前的 `421597e5…`（950 现装）、`3f28abd0…`（`7cdadccf2`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉 |
+| guest 内核 | 手册已验证的 `259f1a25c` 发布产物，未改，`b81306e7…` |
 | orchestrator | `259f1a25c-e2bv`：在 `259f1a25c` 上只把宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`。经 `strip -g`，SHA256 `063e580e…`（去调试段前 `151308ba…`）。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
-| SDK | 与 `dcca61266` 的 SDK 逐文件一致；包含后续流量 token 修复 |
+| SDK | criu-rollback-dev `daae6968f` 的 `py-sdk/e2b`、`py-sdk/e2b_connect` 逐文件打包；含流量 token、`Sandbox.connect` 路由头、共享连接池 keepalive 上限三处修复 |
 | 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1。镜像配置摘要 `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab`（docker 传统存储显示的 image ID），OCI 清单摘要 `b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165`（containerd 镜像存储显示的 image ID） |
 | Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
-| SDK wheel | `2.19.0+gsd.dcca61266`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
+| SDK wheel | `2.19.0+gsd.daae6968f`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
-SDK 与二进制的提交号不同是有意的：`dcca61266` 只是在发布版之后修复 SDK 给 gsd 转发流量 token，二进制不变。
+gsd、SDK 是 `daae6968f`，orchestrator 与内核仍是 `259f1a25c` 那一版：这一轮只改了 guest 里的 gsd 和客户端 SDK。
 
 `overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。
 
@@ -362,6 +363,29 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-18：restore 之后的第一次 checkpoint 保持增量（gsd 换版本，`daae6968f`）
+
+- **修了什么。** 之前 restore 之后的第一次 checkpoint 总是把整个进程全量写出：CRIU 4.2.1 的 PID 复用检测看到进程启动时间晚于父镜像的 dump 时刻，就不用父镜像，而 restore 出来的进程正是这样。现在 gsd 在 restore 之后先清 soft-dirty，再为下一次 dump 建替身父目录（inventory 的 dump 时刻改到恢复之后），见进程级手册第 12 章 §6、第 16 章 L-18。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`：gsd 换掉、SDK 重装（内容没变，版本号跟着发布提交走）、模板按 gsd 版本重建。
+- **920B 实测。** 256 MiB 进程一页不改，restore 之后的第一次 checkpoint 从 260.8 MiB、约 120 ms 降到 0.1 MiB；`verify_restore_incremental.py`（新加进 `950.sh acceptance`）30 轮每轮 restore 到这份增量，整块内存 SHA256 全部一致，替身目录一代接一代；`verify_clear_refs_race.py` 30 轮 0 漏页；CRIU 日志里不再有 `Pid reuse`。
+
+### 2026-11-17：修复三个进程级缺陷和 SDK 连接池问题（gsd、SDK 换版本，`7cdadccf2`）
+
+- **修了什么。** ① 根盘写满时 restore 报 `data_loss`：层切换 ioctl 在内核里要重建 `<workdir>/work`，盘满就失败，而这时用户进程已经杀了。gsd 现在在层目录里常驻 4 MiB 预留文件，切换前释放给内核用，切换后补回；补不回来时，下一次 restore 在杀进程之前按 `f_bavail` 看剩余空间（`f_bfree` 含 ext4 给元数据留的约 16 MiB，盘满时也不为 0，不能用），不够就以 `resource_exhausted` 拒绝，什么都不改；根盘写满时 restore 仍能做（建 restore 目录遇到 ENOSPC 就先用预留空间），因为 restore 正是丢掉多写数据的办法；根盘写满引起的 checkpoint 失败（建目录、层切换、criu dump）都写明 nothing was changed，报 `resource_exhausted` 而不是 `internal`。② 容量预检挡不住 OOM：预检原来只要求镜像放得下，现在还要求 dump 之后 guest 至少留 MemTotal 的 1/8（不少于 64 MiB）。③ SDK 的 `Sandbox.connect` 不带 `E2b-Sandbox-Id` 头，取回的对象做 checkpoint 被代理打回。④ SDK 共享连接池在多线程下会关掉刚分给别的线程的连接（沙箱级手册第 21 章 §2.3），keepalive 上限默认改成与最大连接数相同。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu` 即可：SDK 版本不是这一版就离线重装；`/fc-criu/gsd` 是 manifest 里登记的上一版就直接换掉；模板记录着建它用的 gsd，版本对不上就重建（基线目录下 `template-gsd-base-criu.sha256`，没有记录的旧模板也重建一次）。orchestrator、内核、镜像不变。
+- **920B 实测。** 先把 920B 的进程级现场退回到 950 当前的样子（gsd `421597e5…`、SDK `dcca61266`、没有模板版本记录），再执行 `950.sh criu`：SDK 自动重装、gsd 被换掉、模板因为没有版本记录而重建，用时约 20 s。之后各项：
+
+| 项 | 修复前（2026-11-17 演练） | 修复后 |
+|---|---|---|
+| `deldense-capacity` 1000 轮，按 `--capacity` 判 | 4 次 restore `data_loss`，之后 degraded 拒绝 create | PASS：`data_loss` 0；失败的 280 次全是安全失败（278 次 `resource_exhausted`，2 次写明 nothing was changed）；校验 646 次一致 |
+| 根盘写满时 restore 回较早的 checkpoint | 准备阶段建不出目录，被拒绝 | 成功 |
+| `multitree-capacity` 1000 轮 | 约第 306 轮 guest OOM 杀用户进程 | PASS：38 次 create 被预检以 `resource_exhausted` 拒绝，无 OOM，校验 0 失败 |
+| 兼容矩阵 | BROKEN 4（B3、B4、B6/B7、E1） | OK 15 / REFUSED 1 / BROKEN 0 |
+| `950.sh acceptance`、`950.sh stress` | PASS | PASS |
+
+- **压测脚本同时改了三处。** `stress_delete_dense.py` 加 `--capacity`（容量耗尽那组的判据：只允许安全失败，用户侧 ENOSPC 算预期）；收尾时把 gsd 日志里 criu 的报错归类存成 `deldense-criu-errors.txt`；两个压测里被恢复的用户进程写在 `/dev/shm` 的心跳和错误记录改成定长（`/dev/shm` 不回滚，进程在 dump 时开着的文件大小一变，restore 就会按 L-10 失败，这是测试自己踩到的已知限制，920B 上出现过 1 次）。
+
 
 ### 2026-11-17：推送改走 Harbor 的 http 端口（950 上推送 504）
 

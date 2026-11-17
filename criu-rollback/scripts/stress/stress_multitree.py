@@ -112,7 +112,10 @@ while True:
     logf.write(b"%07d\n" % m)
     wr_cnt(m)
     n = m
-    with open(hb, "w") as f: f.write("%d %.3f" % (n, time.time()))
+    # 定长原地覆盖：/dev/shm 不回滚，被恢复的进程若在 dump 时正开着它，restore 时 criu 要求
+    # 文件大小与 dump 时相同（不同就报 bad size，进程已经杀了，只能 data_loss）
+    fd = os.open(hb, os.O_WRONLY | os.O_CREAT, 0o666)
+    os.pwrite(fd, ("%d %.3f" % (n, time.time())).ljust(40).encode(), 0); os.close(fd)
     time.sleep(0.1)
 '''
 NAMES = ["a", "b", "c"]

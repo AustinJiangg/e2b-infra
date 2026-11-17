@@ -3,7 +3,7 @@
 
 Name:           e2b-infra
 Version:        %{tag}
-Release:        3
+Release:        4
 Summary:        E2B Infra – sandbox runtime (ARM-adapted)
 License:        MIT
 URL:            https://github.com/e2b-dev/infra
@@ -166,6 +166,13 @@ chmod -R a+rX %{buildroot}/opt/e2b-infra/helm
 /opt/e2b-infra/dep/.env
 
 %changelog
+* Tue Nov 17 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-4
+- orchestrator: end leftover firecracker processes at startup (nomad job restart
+  SIGKILLs the orchestrator after the kill timeout; its VMs, in their own process
+  group, were re-parented to init and stayed)
+- checkpoint SDK overlay: keepalive limit of the shared connection pool equals
+  max connections (httpcore closed connections handed to another thread)
+
 * Fri Apr 24 2026 fly_1997 <flylove7@outlook.com> - 2026.09-3
 - add auto-deploy
 

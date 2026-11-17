@@ -19,6 +19,19 @@ class FlowTests(unittest.TestCase):
         for text in ("veth-1", "eth0", "-A FORWARD -i br-agent -j ACCEPT", "10.11.0.0/16 dev br0"):
             self.assertFalse(flow.E2B_NET.search(text), text)
 
+    def test_template_rebuilt_when_gsd_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fc, state = Path(tmp) / "fc", Path(tmp) / "state"
+            fc.mkdir()
+            (fc / "gsd").write_bytes(b"gsd v1")
+            with patch.dict("os.environ", {"CRIU_FC": str(fc), "CRIU_STATE_DIR": str(state)}):
+                self.assertIn("未记录的旧版", flow.template_gsd_stale())
+                with patch.object(flow, "build_template"):
+                    flow.build_template_marked(Path(tmp))
+                self.assertIsNone(flow.template_gsd_stale())
+                (fc / "gsd").write_bytes(b"gsd v2")
+                self.assertIn("现在的 gsd", flow.template_gsd_stale())
+
     def test_transient_errors(self):
         self.assertTrue(flow.TRANSIENT.search("500: Failed to place sandbox"))
         self.assertTrue(flow.TRANSIENT.search("503 Error when getting available build client"))

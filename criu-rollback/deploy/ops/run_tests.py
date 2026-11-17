@@ -97,6 +97,12 @@ def check_race(text):
                                    and r["sha_eq"] and not r["wedged"] for r in rows), "竞态漏页或有效轮次不符")
 
 
+def check_restore_incremental(text):
+    data = json.loads((OUT / "restore_incremental.json").read_text())
+    require(data["verdict"] == "PASS" and len(data["rows"]) == 20,
+            "restore 之后的增量 checkpoint 不正确或不是增量（见 restore_incremental.json）")
+
+
 def check_perf(name, text):
     data = json.loads((OUT / (name + ".json")).read_text())
     require(data.get("schema_version") == 2 and data.get("measurement_mode") == "per-tier-size"
@@ -134,9 +140,15 @@ def check_stress(directory):
     data = json.loads(candidates[0].read_text())
     if candidates[0].name == "stress-summary.json":
         require(not data["dmesg_new_hits"], "dmesg 新报错")
-        require(not {k: v for k, v in data["worker_errs_by_errno"].items() if v and k not in ("ENOENT", "ESTALE")}, "worker 意外错误")
+        # append 组 1000 轮会把根盘写满：6 个 worker 是 restore 管不到的 root 进程，一直追加，盘满后
+        # checkpoint 和 restore 都只能安全拒绝（resource_exhausted，nothing was changed），worker 报
+        # ENOSPC。这一组按容量耗尽判：只允许这些安全失败（进程级手册第 16 章 L-19）。
+        capacity = directory.name == "append"
+        worker_ok = ("ENOENT", "ESTALE", "ENOSPC") if capacity else ("ENOENT", "ESTALE")
+        gsd_ok = ("create:resource_exhausted", "restore:resource_exhausted") if capacity else ("create:resource_exhausted",)
+        require(not {k: v for k, v in data["worker_errs_by_errno"].items() if v and k not in worker_ok}, "worker 意外错误")
         require(not {k: v for k, v in data["worker_heartbeat_age_s"].items() if v > 10}, "worker 心跳超时")
-        require(not {k: v for k, v in data["gsd_ops"]["errors"].items() if v and k != "create:resource_exhausted"}, "gsd 意外错误")
+        require(not {k: v for k, v in data["gsd_ops"]["errors"].items() if v and k not in gsd_ok}, "gsd 意外错误")
     else:
         require(data.get("verdict") == "PASS" and not data.get("unexpected_errors"), "压测 verdict 不通过")
         require(not data.get("dmesg_hits"), "压测 dmesg 命中")
@@ -233,6 +245,9 @@ try:
         step("clear_refs_race", [sys.executable, "acceptance/verify_clear_refs_race.py", "--template", TEMPLATE,
                                  "--rounds", "30", "--pages", "4096", "--rate", "100000",
                                  "--jsonl", str(OUT / "clear_refs_race.jsonl")], check_race)
+        step("restore_incremental", [sys.executable, "acceptance/verify_restore_incremental.py", "--template", TEMPLATE,
+                                     "--rounds", "20", "--out", str(OUT / "restore_incremental.json")],
+             check_restore_incremental)
         for i in range(1, 4):
             name = "perf-run%d" % i
             env = dict(os.environ, THP="never", OUT_JSON=str(OUT / (name + ".json")))
@@ -255,7 +270,7 @@ try:
             keep_going(stress_group, "deldense-seed%d" % seed, "stress_delete_dense.py", "deldense", 200,
                        ["--seed", str(seed)])
         keep_going(stress_group, "multitree-capacity", "stress_multitree.py", "multitree", 1000, [])
-        keep_going(stress_group, "deldense-capacity", "stress_delete_dense.py", "deldense", 1000, [])
+        keep_going(stress_group, "deldense-capacity", "stress_delete_dense.py", "deldense", 1000, ["--capacity"])
         for seed in range(1, 6):
             for name in ("all", "noworkers"):
                 keep_going(stress_group, "%s-seed%d" % (name, seed), "stress_overlay_ckpt.py", "stress", 300,

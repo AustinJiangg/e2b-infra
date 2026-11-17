@@ -18512,6 +18512,165 @@ index 2630a5adf..bfbf2a80a 100644
  func (p *Process) ExportMemory(
  	ctx context.Context,
  	include *bitset.BitSet,
+diff --git a/packages/orchestrator/internal/sandbox/fc/orphans.go b/packages/orchestrator/internal/sandbox/fc/orphans.go
+new file mode 100644
+index 000000000..ed3b61367
+--- /dev/null
++++ b/packages/orchestrator/internal/sandbox/fc/orphans.go
+@@ -0,0 +1,153 @@
++package fc
++
++import (
++	"bytes"
++	"context"
++	"os"
++	"path/filepath"
++	"regexp"
++	"strconv"
++	"strings"
++	"syscall"
++	"time"
++
++	"go.uber.org/zap"
++
++	"github.com/e2b-dev/infra/packages/shared/pkg/logger"
++)
++
++// Leftover Firecracker processes from an orchestrator that did not shut down
++// cleanly.
++//
++// Firecracker runs in its own process group, so when the orchestrator is
++// killed -- `nomad job restart` sends SIGKILL once the kill timeout runs out,
++// and closing the network pool alone can take longer than that -- the VMs
++// are not taken down with it. They are re-parented to init and keep their
++// memory and network slot for as long as the host runs, because nothing that
++// starts later knows about them.
++//
++// Ported from the deltabox branch (fc/orphans.go, 2026-07), without gopsutil
++// and with one extra condition: only processes whose parent is init are
++// touched, so the VMs of an orchestrator that is still alive are never
++// mistaken for leftovers.
++
++const (
++	orphanTermTimeout = 1 * time.Second
++	orphanKillWait    = 2 * time.Second
++)
++
++// orphanFCSockRe matches the --api-sock path SandboxFiles creates:
++// fc-{sandboxID}-{randomID}.sock.
++var orphanFCSockRe = regexp.MustCompile(`^\S*/fc-[^/\s]+-[^/\s]+\.sock$`)
++
++// procRoot is /proc; a variable so a test can point it at a fake tree.
++var procRoot = "/proc"
++
++// KillOrphanedProcesses terminates leftover Firecracker processes started by
++// an earlier orchestrator: the binary lives under firecrackerVersionsDir, the
++// API socket is fc-{sandboxID}-{randomID}.sock, and the parent is init. It
++// returns how many were found.
++func KillOrphanedProcesses(ctx context.Context, firecrackerVersionsDir string) int {
++	targets := findOrphanedFirecrackers(firecrackerVersionsDir)
++	if len(targets) == 0 {
++		return 0
++	}
++
++	logger.L().Warn(ctx, "killing orphaned firecracker processes", zap.Ints("pids", targets))
++	signalAll(targets, syscall.SIGTERM)
++	waitGone(targets, orphanTermTimeout)
++	signalAll(targets, syscall.SIGKILL)
++	if left := waitGone(targets, orphanKillWait); len(left) > 0 {
++		logger.L().Warn(ctx, "orphaned firecracker processes still present after SIGKILL", zap.Ints("pids", left))
++	}
++
++	return len(targets)
++}
++
++func findOrphanedFirecrackers(firecrackerVersionsDir string) []int {
++	entries, err := os.ReadDir(procRoot)
++	if err != nil {
++		return nil
++	}
++	var out []int
++	for _, e := range entries {
++		pid, err := strconv.Atoi(e.Name())
++		if err != nil || pid <= 1 {
++			continue
++		}
++		cmdline, err := os.ReadFile(filepath.Join(procRoot, e.Name(), "cmdline"))
++		if err != nil || !isOrphanCandidate(cmdline, firecrackerVersionsDir) {
++			continue
++		}
++		stat, err := os.ReadFile(filepath.Join(procRoot, e.Name(), "stat"))
++		if err != nil || parentPID(stat) != 1 {
++			continue
++		}
++		out = append(out, pid)
++	}
++
++	return out
++}
++
++// isOrphanCandidate reports whether a NUL-separated command line is a
++// Firecracker this orchestrator would have started.
++func isOrphanCandidate(cmdline []byte, firecrackerVersionsDir string) bool {
++	args := strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")
++	if len(args) < 3 || firecrackerVersionsDir == "" {
++		return false
++	}
++	dir := strings.TrimRight(firecrackerVersionsDir, "/") + "/"
++	if !strings.HasPrefix(args[0], dir) || filepath.Base(args[0]) != FirecrackerBinaryName {
++		return false
++	}
++	for i := 1; i+1 < len(args); i++ {
++		if args[i] == "--api-sock" && orphanFCSockRe.MatchString(args[i+1]) {
++			return true
++		}
++	}
++
++	return false
++}
++
++// parentPID reads the ppid from /proc/<pid>/stat. The command name in
++// parentheses may contain spaces, so fields are counted after the last ')'.
++func parentPID(stat []byte) int {
++	i := bytes.LastIndexByte(stat, ')')
++	if i < 0 {
++		return -1
++	}
++	f := strings.Fields(string(stat[i+1:]))
++	if len(f) < 2 {
++		return -1
++	}
++	ppid, err := strconv.Atoi(f[1])
++	if err != nil {
++		return -1
++	}
++
++	return ppid
++}
++
++func signalAll(pids []int, sig syscall.Signal) {
++	for _, pid := range pids {
++		_ = syscall.Kill(pid, sig)
++	}
++}
++
++// waitGone waits until every pid has exited or the timeout passes and
++// returns the ones still there.
++func waitGone(pids []int, timeout time.Duration) []int {
++	deadline := time.Now().Add(timeout)
++	for {
++		var left []int
++		for _, pid := range pids {
++			if syscall.Kill(pid, 0) == nil {
++				left = append(left, pid)
++			}
++		}
++		if len(left) == 0 || time.Now().After(deadline) {
++			return left
++		}
++		time.Sleep(50 * time.Millisecond)
++	}
++}
 diff --git a/packages/orchestrator/internal/sandbox/fc/process.go b/packages/orchestrator/internal/sandbox/fc/process.go
 index 687d14e48..c6a060cd9 100644
 --- a/packages/orchestrator/internal/sandbox/fc/process.go
@@ -22161,7 +22320,7 @@ index 76202a81a..516185a6d 100644
  echo "Finished configuration script"
 +
 diff --git a/packages/orchestrator/main.go b/packages/orchestrator/main.go
-index 049067509..356d7321e 100644
+index 049067509..715edd16c 100644
 --- a/packages/orchestrator/main.go
 +++ b/packages/orchestrator/main.go
 @@ -9,6 +9,7 @@ import (
@@ -22246,7 +22405,18 @@ index 049067509..356d7321e 100644
  	startService("sandbox proxy", func() error {
  		err := sandboxProxy.Start(ctx)
  		if errors.Is(err, http.ErrServerClosed) {
-@@ -715,3 +746,53 @@ func newStorage(ctx context.Context, nodeID string, config network.Config) (netw
+@@ -419,6 +450,10 @@ func run(config cfg.Config) (success bool) {
+ 	if err != nil {
+ 		logger.L().Fatal(ctx, "failed to create device pool", zap.Error(err))
+ 	}
++	// An earlier orchestrator that was killed (nomad kill timeout) leaves its
++	// Firecracker processes behind, re-parented to init; end them before
++	// serving (fc/orphans.go).
++	fc.KillOrphanedProcesses(ctx, config.FirecrackerVersionsDir)
+ 	startService("nbd device pool", func() error {
+ 		devicePool.Populate(ctx)
+ 
+@@ -715,3 +750,53 @@ func newStorage(ctx context.Context, nodeID string, config network.Config) (netw
  
  	return network.NewStorageKV(nodeID, config)
  }

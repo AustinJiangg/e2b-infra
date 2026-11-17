@@ -186,7 +186,7 @@ def preflight():
     require(check.returncode == 0 and "not found" not in libs and "GLIBC_" not in libs,
             "orchestrator 运行库不兼容:\n" + libs)
     print(libs.strip())
-    require(run(str(FC / "gsd"), "-commit").strip() == "259f1a25c", "gsd 提交号不符")
+    require(run(str(FC / "gsd"), "-commit").strip() == unpack.manifest()["artifacts"]["gsd"].get("commit", "259f1a25c"), "gsd 提交号不符")
     doc = load_job()
     group, task = select_task(doc)
     print("task:", group["Name"], "/", task["Name"], "binary:", binary(task))
@@ -219,6 +219,33 @@ def save_baseline():
     (STATE / "baseline.sha256").write_text(sha(STATE / "baseline.json") + "\n")
     os.chmod(STATE / "baseline.sha256", 0o600)
     print("已保存本机沙箱级基线（含密钥，只留在本机，不打印）:", STATE)
+
+
+def baseline_redeployed():
+    """沙箱级重新部署过（RPM 升级、build.sh 重装）时返回原因：基线记录的二进制与现在 job 里运行的
+    不同，而现在确实是沙箱级、服务健康。其余情况返回 None。"""
+    STATE = state()
+    ident_p = STATE / "baseline.identity.json"
+    if not ident_p.exists():
+        return None
+    ident = json.loads(ident_p.read_text())
+    if Path(ident["exe"]).is_file() and sha(ident["exe"]) == ident["sha256"]:
+        return None
+    active = processes()
+    if len(active) != 1 or is_criu(active[0]["exe"]) or not health():
+        return None
+    return "沙箱级二进制已由 %s 换成 %s（重新部署过）" % (ident["sha256"][:12], active[0]["sha256"][:12])
+
+
+def refresh_baseline(reason):
+    """重新部署之后：旧基线带时间戳留作备份，按现在的沙箱级 job 重新保存。"""
+    STATE = state()
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for name in ("baseline.json", "baseline.sha256", "baseline.identity.json"):
+        if (STATE / name).exists():
+            os.replace(STATE / name, STATE / ("%s.before-%s" % (name, stamp)))
+    print(reason + "，旧基线已改名为 *.before-%s，重新保存" % stamp)
+    save_baseline()
 
 
 def baseline():
@@ -260,14 +287,22 @@ def install():
 def place_files():
     baseline()
     unpack.unpack()
-    # 已存在且内容不同就停，不覆盖现场另一轮进程级产物。
+    # 已存在且内容不同就停，不覆盖现场另一轮进程级产物。例外是 manifest 里这一项的 replaces：
+    # 以前交付过、被这一版取代的版本（gsd 修复后升级），可以直接换掉。
+    replaces = {item["path"]: set(item.get("replaces", [])) for item in unpack.manifest()["artifacts"].values()}
+    stale = []
     for name in FILES:
         dst = hfc() / name
-        require(not dst.exists() or sha(dst) == sha(FC / name), "现场文件与交付版本不同，拒绝覆盖: " + str(dst))
+        if not dst.exists() or sha(dst) == sha(FC / name):
+            continue
+        require(sha(dst) in replaces.get(name, ()), "现场文件与交付版本不同，拒绝覆盖: " + str(dst))
+        stale.append(name)
     for name in FILES:
         # 内容相同就不重写：重写会换掉正在运行的 orchestrator 的文件，进程路径变成 "(deleted)"。
-        if (hfc() / name).exists():
+        if (hfc() / name).exists() and name not in stale:
             continue
+        if name in stale:
+            print("换掉旧版 %s（%s → %s）" % (hfc() / name, sha(hfc() / name)[:12], sha(FC / name)[:12]))
         subprocess.run(["install", "-D", "-m", "644" if name.endswith(".bin") else "755",
                         str(FC / name), str(hfc() / name)], check=True)
     print("三个运行文件落位完成:", hfc())

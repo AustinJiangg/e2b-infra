@@ -42,7 +42,7 @@ print(json.dumps({
     print(json.dumps(data, ensure_ascii=False, indent=2))
     expected = json.loads((ROOT / "manifest.json").read_text())
     checks = {
-        "commit": data["commit"] == "259f1a25c",
+        "commit": data["commit"] == expected["artifacts"]["gsd"].get("commit", "259f1a25c"),
         "gsd_sha256": data["gsd_sha256"] == expected["artifacts"]["gsd"]["sha256"],
         "kernel": "6.1.158+" in data["kernel"] and "#4 SMP Thu Oct  8 20:06:40 CST 2026" in data["kernel"],
         "thp": "[never]" in data["thp"], "rcu": data["rcu"] == "1",

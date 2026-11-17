@@ -41,6 +41,10 @@ ap.add_argument("--rounds", type=int, default=200)
 ap.add_argument("--workers", type=int, default=4)
 ap.add_argument("--seed", type=int, default=20261008)
 ap.add_argument("--outdir", default=".")
+ap.add_argument("--capacity", action="store_true",
+                help="容量耗尽模式（1000 轮那组）：根盘写满后用户侧的 ENOSPC 算预期；checkpoint / restore 允许失败，"
+                     "但只能是安全失败（resource_exhausted 或信息里写明 nothing was changed），data_loss 与随之而来的 "
+                     "degraded 拒绝一律判 FAIL")
 args = ap.parse_args()
 random.seed(args.seed)
 os.makedirs(args.outdir, exist_ok=True)
@@ -197,6 +201,21 @@ USER_PY = r'''
 import os, time
 d = "/home/user/dd/user"; os.makedirs(d, exist_ok=True)
 N = 40
+# /dev/shm 不回滚。被恢复的进程若在 dump 时正开着这里的文件，restore 时 criu 要求文件大小与
+# dump 时相同，不同就报 bad size（进程已经杀了，只能 data_loss）。所以心跳定长原地覆盖，
+# 错误记录预先分配成定长、从第一个 NUL 处接着写，大小始终不变；读的一方去掉 NUL。
+BADCAP = 1 << 16
+def shm_put(path, text, width=40):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
+    os.pwrite(fd, text.ljust(width)[:width].encode(), 0); os.close(fd)
+def shm_append(path, line):
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o666)
+    data = os.pread(fd, BADCAP, 0); off = data.find(b"\0")
+    if off >= 0:
+        os.pwrite(fd, line.encode()[:BADCAP - off], off)
+    os.close(fd)
+fd = os.open("/dev/shm/dd/user.bad", os.O_RDWR | os.O_CREAT, 0o666); os.ftruncate(fd, BADCAP); os.close(fd)
+shm_put("/dev/shm/dd/user.hb", "0 %.3f" % time.time())
 for i in range(N):
     open("%s/u%02d" % (d, i), "w").write("u")
 n = 0; gone = []
@@ -211,13 +230,11 @@ while True:
         if have != want:
             raise OSError(0, "listdir %d != %d" % (have, want))
     except OSError as e:
-        with open("/dev/shm/dd/user.bad", "a") as f:
-            f.write("%.3f n=%d %s %r\n" % (time.time(), n, p, e))
+        shm_append("/dev/shm/dd/user.bad", "%.3f n=%d %s %r\n" % (time.time(), n, p, e))
         # 重新对齐，避免一条错误刷屏
         gone = [("%s/u%02d" % (d, k)) for k in range(N) if not os.path.exists("%s/u%02d" % (d, k))]
     n += 1
-    with open("/dev/shm/dd/user.hb", "w") as f:
-        f.write("%d %.3f" % (n, time.time()))
+    shm_put("/dev/shm/dd/user.hb", "%d %.3f" % (n, time.time()))
     time.sleep(0.02)
 '''
 
@@ -242,6 +259,16 @@ def call(fn, *a):
         return True, fn(*a)
     except Exception as e:  # noqa: BLE001
         return False, e
+
+
+UNSAFE = {}
+
+
+def note_error(stats, k, e):
+    """记一次 gsd 错误；容量模式下另记不安全的失败（既不是 resource_exhausted，也没写明什么都没动）。"""
+    stats["errors"][k] = stats["errors"].get(k, 0) + 1
+    if not k.endswith(":resource_exhausted") and "nothing was changed" not in str(e):
+        UNSAFE[k] = UNSAFE.get(k, 0) + 1
 
 
 def ecode(e):
@@ -291,8 +318,8 @@ def workers_state():
 
 
 def user_state():
-    txt = out("cat /dev/shm/dd/user.hb 2>/dev/null; echo; date +%s.%N; ps -o pid=,stat=,args= -u user | grep user_dd.py | grep -v grep; "
-              "echo ==BAD; head -20 /dev/shm/dd/user.bad 2>/dev/null")
+    txt = out("cat /dev/shm/dd/user.hb 2>/dev/null || echo -1 0; echo; date +%s.%N; ps -o pid=,stat=,args= -u user | grep user_dd.py | grep -v grep; "
+              "echo ==BAD; tr -d '\\000' < /dev/shm/dd/user.bad 2>/dev/null | head -20")
     head, _, bad = txt.partition("==BAD")
     lines = head.strip().splitlines()
     hb = lines[0].split() if lines and lines[0].strip() else ["-1", "0"]
@@ -330,6 +357,10 @@ def main():
     def det(cmd, r, seed=0):
         rc, o, e = sh(f"python3 /dev/shm/det_dd.py {cmd} {seed}")
         if rc != 0:
+            if args.capacity and "No space left on device" in e:
+                # 根盘满了，测试自己的改动写不进去：容量模式下是预期的。这一轮不拍不校验。
+                stats["mutate_enospc"] = stats.get("mutate_enospc", 0) + 1
+                return None
             stats["mutate_fail"] += 1
             vfail(r, f"det {cmd}", f"rc={rc} stderr={e.strip()[-500:]}")
             return None
@@ -356,7 +387,7 @@ def main():
         oplog(f"r{r} create end ok={ok} {c.checkpoint_id if ok else str(c)[:200]}")
         if not ok:
             k = f"create:{ecode(c)}"
-            stats["errors"][k] = stats["errors"].get(k, 0) + 1
+            note_error(stats, k, c)
             err_samples.append(f"r{r} {k} {str(c)[:400]}")
             if ecode(c) == "resource_exhausted":
                 for v in [x for x in cps[3:-2]][:6]:
@@ -387,7 +418,7 @@ def main():
         oplog(f"r{r} restore end ok={ok} {'' if ok else str(c)[:200]}")
         if not ok:
             k = f"restore:{ecode(c)}"
-            stats["errors"][k] = stats["errors"].get(k, 0) + 1
+            note_error(stats, k, c)
             err_samples.append(f"r{r} {k} {str(c)[:600]}")
             return
         stats["restore_ok"] += 1
@@ -439,7 +470,7 @@ def main():
                     stats["delete_ok"] += 1
                 else:
                     k = f"delete:{ecode(c)}"
-                    stats["errors"][k] = stats["errors"].get(k, 0) + 1
+                    note_error(stats, k, c)
                     err_samples.append(f"r{r} {k} {str(c)[:300]}")
             else:
                 do_restore(r)
@@ -458,21 +489,37 @@ def main():
     marks = ovl_marks()
     dm = out("dmesg")
     save(f"{P}-dmesg-final.txt", dm)
+    # 失败的 checkpoint 带的 criu 日志尾部在汇总里被截短了，把 gsd 日志里 criu 的报错按条归类留下来
+    save(f"{P}-criu-errors.txt", out("journalctl -u gsd --no-pager -o cat | grep -oE 'Error \\([^)]*\\): [^\\\\\"]*' "
+                                      "| sed -E 's/[0-9]+/N/g' | sort | uniq -c | sort -rn | head -40"))
     hits = [l for l in dm.splitlines() if re.search(BAD_RE, l)]
     notes = [l for l in dm.splitlines() if re.search(NOTE_RE, l)]
     lock1 = lockdep()
     slab1 = slab()
     health = out("curl -s -m 5 http://127.0.0.1:49984/health")
     state = out("python3 - <<'EOF'\nimport json\nd=json.load(open('/var/lib/gsd/snapshots/state.json'))\nprint(json.dumps({'version': d.get('version'), 'checkpoints': len(d.get('checkpoints', [])), 'layers': len(d['overlay']['layers']), 'last_trees': len(d.get('last_trees', []))}))\nEOF")
-    unexpected_errno = {k: v for k, v in errs.items() if k.split(":")[1] not in EXPECTED_ERRNO}
+    expected_errno = EXPECTED_ERRNO | ({"ENOSPC"} if args.capacity else set())
+    unexpected_errno = {k: v for k, v in errs.items() if k.split(":")[1] not in expected_errno}
     stale_hb = {k: v for k, v in age.items() if v > 10}
-    unexpected = {k: v for k, v in stats["errors"].items() if k != "create:resource_exhausted"}
-    user_ok = (not us["bad"]) and len(us["procs"]) == 1 and us["procs"][0][0] == upid and not us["procs"][0][1].startswith("T") and us["hb_age"] < 10
+    if args.capacity:
+        unexpected = dict(UNSAFE)
+        # 根盘写满之后，用户进程自己的写入会失败，它记账里随后的 ENOENT 也是这个后果，
+        # 只看第一条 ENOSPC 之前的记录；数据是否正确由 det 的逐项校验判断。
+        user_bad = []
+        for l in us["bad"].splitlines():
+            if "No space left on device" in l:
+                break
+            if l.strip():
+                user_bad.append(l)
+    else:
+        unexpected = {k: v for k, v in stats["errors"].items() if k != "create:resource_exhausted"}
+        user_bad = us["bad"]
+    user_ok = (not user_bad) and len(us["procs"]) == 1 and us["procs"][0][0] == upid and not us["procs"][0][1].startswith("T") and us["hb_age"] < 10
     verdict = "PASS" if (stats["verify_fail"] == 0 and stats["mutate_fail"] == 0 and not hits and not notes and not unexpected and not unexpected_errno
                          and not stale_hb and len(age) == args.workers and user_ok
                          and "debug_locks: 0" not in lock1.replace("  ", " ") and '"ok"' in health) else "FAIL"
     summ = {"verdict": verdict, "sandbox": sb.sandbox_id, "template": args.template, "rounds": args.rounds, "workers": args.workers, "seed": args.seed,
-            "stats": stats, "unexpected_errors": unexpected, "error_samples": err_samples[:20], "verify_fail_samples": fails[:20],
+            "capacity": args.capacity, "stats": stats, "unexpected_errors": unexpected, "error_samples": err_samples[:20], "verify_fail_samples": fails[:20],
             "worker_ops": ops, "worker_ops_total": sum(ops.values()), "worker_errs": errs, "worker_unexpected_errno": unexpected_errno,
             "worker_heartbeat_age_s": age, "user": us, "user_ok": user_ok, "marks_end": marks,
             "dmesg_hits": hits[:40], "dmesg_notes": notes[:40], "dmesg_lines": len(dm.splitlines()),

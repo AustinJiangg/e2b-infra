@@ -47,7 +47,7 @@ REPO=$PWD
 
 # ③ 出 RPM，装到 /opt/e2b-infra（920B 上 rpmbuild 135 秒，安装 7 秒）
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
-rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm     # 已装过同版本或旧版时换成 rpm -Uvh --force
+rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm     # 已装过同版本或旧版时换成 rpm -Uvh --force
 
 # ④ 停 → 装 → 起（920B 上：-d 约 2 分钟，-i 约 20 秒，-s 约 2 分钟）
 #    -i 要在准备用来跑 SDK 的那个 Python 环境里执行；已有部署的机器先读下面「重新部署会丢什么」

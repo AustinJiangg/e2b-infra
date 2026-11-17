@@ -180,17 +180,39 @@ def build_template(logdir):
         raise RuntimeError("建模板失败，见 %s；先查镜像引用、Harbor 认证、gsd health（README 第 11 节）" % out)
 
 
+def template_gsd_mark():
+    """记录模板是用哪个 gsd 建的：gsd 在建模板时注入 guest，换了 gsd 不重建模板就还是旧的。"""
+    return paths.state_dir() / ("template-gsd-%s.sha256" % CRIU_TEMPLATE)
+
+
+def template_gsd_stale():
+    """模板里的 gsd 不是 /fc-criu/gsd 这一版（或没有记录）时返回原因，否则 None。"""
+    current = stack.sha(paths.host_fc() / "gsd")
+    mark = template_gsd_mark()
+    built = mark.read_text().strip() if mark.is_file() else ""
+    if built == current:
+        return None
+    return "模板 %s 里的 gsd 是 %s，现在的 gsd 是 %s" % (CRIU_TEMPLATE, built[:12] or "未记录的旧版", current[:12])
+
+
+def build_template_marked(logdir):
+    build_template(logdir)
+    mark = template_gsd_mark()
+    mark.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    mark.write_text(stack.sha(paths.host_fc() / "gsd") + "\n")
+
+
 def ensure_criu_template(logdir, force=False):
-    reason = "要求新建" if force else template_build_missing(CRIU_TEMPLATE)
+    reason = "要求新建" if force else (template_build_missing(CRIU_TEMPLATE) or template_gsd_stale())
     if reason:
         log(reason + "，建模板")
-        build_template(logdir)
+        build_template_marked(logdir)
         require(wait_sandbox(envs.CRIU_ENV, CRIU_TEMPLATE), "新建的模板建不出沙箱，查 orchestrator 日志")
         return
     if wait_sandbox(envs.CRIU_ENV, CRIU_TEMPLATE):
         return
     log("现有模板不可用，重建一次")
-    build_template(logdir)
+    build_template_marked(logdir)
     require(wait_sandbox(envs.CRIU_ENV, CRIU_TEMPLATE), "重建后的模板仍建不出沙箱，查 orchestrator 日志")
 
 
@@ -274,7 +296,13 @@ def daily(target):
     logdir.mkdir(parents=True, exist_ok=True)
     LOG = logdir / "switch.log"
     if target == "criu":
-        require(check_criu_python(), "进程级环境或 SDK 不对，先执行 bash criu-rollback/deploy/950.sh install-sdk")
+        # git pull 之后交付件可能换了版本：SDK 不是这一版就重装，gsd 是被取代的旧版就换掉
+        # （模板随后在 ensure_ready 里按 gsd 版本重建）。
+        ensure_python()
+        redeployed = stack.baseline_redeployed()
+        if redeployed:
+            stack.refresh_baseline(redeployed)
+        stack.place_files()
     switch_with_check(target, logdir)
     ensure_ready(target, logdir)
     log("完成：当前是%s栈，可以使用。客户端用 conda 环境 %s" % (
@@ -378,6 +406,9 @@ def do_step(key, run, again=False):
         elif cur == "sandbox":
             clear_e2b_sandboxes()
             stack.preflight()
+            redeployed = stack.baseline_redeployed()
+            if redeployed:
+                stack.refresh_baseline(redeployed)
         else:
             log("基线已存在，当前是进程级栈，跳过预检")
     elif key == "install":

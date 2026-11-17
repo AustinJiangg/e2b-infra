@@ -25,7 +25,7 @@ def check():
     marker = Path(e2b.__file__).parent / "_gsd_offline_install.json"
     if not marker.is_file() or json.loads(marker.read_text()).get("kind") != "gsd-process-checkpoint-sdk":
         raise RuntimeError("当前环境尚未安装进程级 SDK，执行 bash criu-rollback/deploy/950.sh install-sdk")
-    if metadata.version("e2b") != "2.19.0+gsd.dcca61266":
+    if metadata.version("e2b") != "2.19.0+gsd.daae6968f":
         raise RuntimeError("当前 e2b 发行包版本与交付不符")
     print("Python:", sys.version.split()[0])
     print("conda 环境:", sys.prefix)
