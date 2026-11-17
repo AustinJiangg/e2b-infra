@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 950 测试总入口（在 e2b-infra 仓库根目录执行），说明见 test950/README.md。
 #   bash test950.sh quick | standard | extended | long [--stack sandbox|criu] [--hours N] [--new]
+#   bash test950.sh native | compare [--stack sandbox|criu]   （性能对比，见 README 第 6 节）
 #   bash test950.sh status
 set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")" && pwd)

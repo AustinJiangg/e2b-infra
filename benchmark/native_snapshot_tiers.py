@@ -46,6 +46,7 @@ pause 模式另核对常驻进程的 pid 和启动时间，确认进程状态随
 """
 import argparse
 import glob
+import shutil
 import hashlib
 import json
 import logging
@@ -194,10 +195,29 @@ def export_sizes(cache, before):
                 groups.setdefault(name.split(token)[0], {})[kind] = os.path.join(cache, name)
     groups = {b: g for b, g in groups.items() if "memfile" in g}
     if not groups:
-        return None, None
-    g = max(groups.values(), key=lambda v: max(os.stat(p).st_mtime for p in v.values()))
+        return None, None, None
+    build = max(groups, key=lambda b: max(os.stat(p).st_mtime for p in groups[b].values()))
+    g = groups[build]
     mem, disk = alloc(g["memfile"]), alloc(g.get("rootfs.ext4", ""))
-    return (None if mem is None else mem / MIB), (None if disk is None else disk / MIB)
+    return (None if mem is None else mem / MIB), (None if disk is None else disk / MIB), build
+
+
+def remove_builds(storage, builds):
+    """删掉本沙箱的快照 build 在本地模板存储里的目录（STORAGE_PROVIDER=Local 时）。
+
+    每次 pause / create_snapshot 都产出一个新 build，沙箱结束后没人再用，但不会被自动删除。
+    模板存储在 tmpfs 上时（新 920B 的 /tmp/templates），这些文件记在 orchestrator 所在 Nomad
+    任务的内存 cgroup 上、回收不掉，一轮几百个样本就会让 orchestrator 因 cgroup OOM 被杀。
+    只删本脚本自己记下的 build id。"""
+    removed = 0
+    for build in builds:
+        if not storage or not build or "/" in build or build.startswith("."):
+            continue
+        path = os.path.join(storage, build)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+            removed += 1
+    return removed
 
 
 def provenance(args):
@@ -269,7 +289,8 @@ def pause_cycle(Sandbox, sb, ctx, kind, gen):
     want = read_state(sb, mem_mb, file_mb)
     before = list_cache(ctx["cache"])
     _, pause_ms = timed(sb.pause)
-    mem_exp, disk_exp = export_sizes(ctx["cache"], before)
+    mem_exp, disk_exp, build = export_sizes(ctx["cache"], before)
+    ctx["builds"].append(build)
     if ctx["settle_s"]:
         time.sleep(ctx["settle_s"])
     sb, resume_ms = timed(Sandbox.connect, ctx["sid"], timeout=SBX_TIMEOUT)
@@ -294,7 +315,8 @@ def snapshot_cycle(Sandbox, sb, ctx, kind, gen):
     want = read_state(sb, mem_mb, file_mb)
     before = list_cache(ctx["cache"])
     snap, snapshot_ms = timed(sb.create_snapshot)
-    mem_exp, disk_exp = export_sizes(ctx["cache"], before)
+    mem_exp, disk_exp, build = export_sizes(ctx["cache"], before)
+    ctx["builds"].append(build)
     nsb, resume_ms = None, None
     try:
         nsb, resume_ms = timed(Sandbox.create, template=snap.snapshot_id, timeout=600)
@@ -319,6 +341,7 @@ def run_sandbox(Sandbox, args, mode, total, pass_no, cache, result):
     """一个新沙箱：first 循环 + iters 个 repeat 循环。"""
     mem_mb, file_mb = split_tier(total)
     cycle = pause_cycle if mode == "pause" else snapshot_cycle
+    builds = []
     sb = Sandbox.create(template=args.template, timeout=SBX_TIMEOUT)
     sid = sb.sandbox_id
     try:
@@ -328,7 +351,7 @@ def run_sandbox(Sandbox, args, mode, total, pass_no, cache, result):
             result["provenance"].setdefault("firecracker_version", info.get("vmm_version"))
         pid, start = prepare(sb)
         ctx = {"sid": sid, "pid": pid, "proc_start": start, "mem_mb": mem_mb, "file_mb": file_mb,
-               "cache": cache, "settle_s": args.settle_ms / 1000}
+               "cache": cache, "settle_s": args.settle_ms / 1000, "builds": builds}
         for i in range(args.iters + 1):
             kind = "first" if i == 0 else "repeat"
             sb, row = cycle(Sandbox, sb, ctx, kind, "g%d-%d-%d" % (total, pass_no, i))
@@ -348,6 +371,8 @@ def run_sandbox(Sandbox, args, mode, total, pass_no, cache, result):
             sb.kill()
         except Exception as exc:  # 沙箱已不在时不掩盖原始错误
             LOG.warning("kill %s: %s", sid, exc)
+        if args.storage:
+            result["builds_removed"] = result.get("builds_removed", 0) + remove_builds(args.storage, builds)
 
 
 # ------------------------------------------------------------ 汇总
@@ -356,7 +381,8 @@ def stats(values):
     values = sorted(v for v in values if v is not None)
     if not values:
         return None
-    return {"n": len(values), "p50": statistics.median(values), "min": values[0], "max": values[-1]}
+    p90 = values[max(0, -(-9 * len(values) // 10) - 1)]   # 最近秩法
+    return {"n": len(values), "p50": statistics.median(values), "p90": p90, "min": values[0], "max": values[-1]}
 
 
 def summarize(samples):
@@ -381,16 +407,17 @@ def fmt(stat, key="p50"):
 
 def print_summary(result):
     prov = result["provenance"]
-    print("\n宿主 %s  内核 %s  orchestrator %s  脏页后端 %s  FC %s" % (
-        prov["hostname"], prov["kernel"], (prov["orchestrator_sha256"] or "?")[:16],
-        prov.get("dirty_tracking", "?"), prov.get("firecracker_version", "?")))
+    print("\n---- 汇总 ----")
+    print("宿主 %s  内核 %s  orchestrator %s %s  脏页后端 %s  FC %s  模板 %s" % (
+        prov["hostname"], prov["kernel"], prov.get("orchestrator_exe"), (prov["orchestrator_sha256"] or "?")[:16],
+        prov.get("dirty_tracking", "?"), prov.get("firecracker_version", "?"), result.get("template")))
     labels = {("pause", "repeat"): "pause 模式 repeat：改写本档后 pause → connect（对比用）",
               ("pause", "first"): "pause 模式 first：首次快照，含自启动以来全部写入（单列）",
               ("snapshot", "repeat"): "snapshot 模式 repeat：create_snapshot → 从快照新建沙箱（对比用）",
               ("snapshot", "first"): "snapshot 模式 first：首次快照（单列）"}
-    head = "%6s %10s %5s | %18s | %18s | %9s %13s %9s" % (
-        "总MiB", "内存/文件", "n", "快照 p50 [min,max]", "恢复 p50 [min,max]",
-        "就绪 p50", "内存读 前/后", "导出MiB")
+    head = "%6s %10s %5s | %24s | %24s | %9s %9s %13s %9s" % (
+        "总MiB", "内存/文件", "n", "快照 p50 / p90 [min,max]", "恢复 p50 / p90 [min,max]",
+        "connect", "就绪 p50", "内存读 前/后", "导出MiB")
     for key, label in labels.items():
         rows = [e for e in result["summary"] if (e["mode"], e["kind"]) == key]
         if not rows:
@@ -399,10 +426,10 @@ def print_summary(result):
         print(head)
         for e in rows:
             snap, res = e["snapshot_ms"], e["resume_ms"]
-            print("%6d %10s %5d | %7.1f [%.0f,%.0f] | %7.1f [%.0f,%.0f] | %9s %13s %9s" % (
+            print("%6d %10s %5d | %7.1f / %7.1f [%.0f,%.0f] | %7.1f / %7.1f [%.0f,%.0f] | %9s %9s %13s %9s" % (
                 e["total_mb"], "%d/%d" % (e["mem_mb"], e["file_mb"]), snap["n"],
-                snap["p50"], snap["min"], snap["max"], res["p50"], res["min"], res["max"],
-                fmt(e["ready_ms"]), "%s/%s" % (fmt(e["read_mem_before_ms"]), fmt(e["read_mem_after_ms"])),
+                snap["p50"], snap["p90"], snap["min"], snap["max"], res["p50"], res["p90"], res["min"], res["max"],
+                fmt(e["resume_call_ms"]), fmt(e["ready_ms"]), "%s/%s" % (fmt(e["read_mem_before_ms"]), fmt(e["read_mem_after_ms"])),
                 fmt(e["export_mem_mib"])))
     print("\n判定: %s（样本 %d，失败 %d）" % (
         result["verdict"], len(result["samples"]), sum(1 for s in result["samples"] if not s["ok"])))
@@ -419,6 +446,8 @@ def main():
     ap.add_argument("--env-file", help="KEY=VALUE 凭据文件；已导出的变量优先")
     ap.add_argument("--out", default="native-tiers-%s.json" % time.strftime("%Y%m%d-%H%M%S"))
     ap.add_argument("--smoke", action="store_true", help="只跑 0、16 两档，1 个沙箱 1 个 repeat")
+    ap.add_argument("--keep-builds", action="store_true",
+                    help="不删测试产生的快照 build（默认在本地存储时，每个沙箱结束后删掉它的 build）")
     args = ap.parse_args()
     if args.smoke:
         args.tiers, args.passes, args.iters = "0,16", 1, 1
@@ -435,6 +464,9 @@ def main():
     tiers = [int(t) for t in args.tiers.split(",")]
     _, env = orchestrator_proc()
     cache = os.path.join(env.get("ORCHESTRATOR_BASE_PATH", "/orchestrator"), "build") if env else None
+    args.storage = None
+    if env and env.get("STORAGE_PROVIDER", "Local") == "Local" and not args.keep_builds:
+        args.storage = env.get("LOCAL_TEMPLATE_STORAGE_BASE_PATH") or "/tmp/templates"
     result = {"schema_version": SCHEMA_VERSION, "measurement_mode": "native-per-tier-size",
               "template": args.template, "provenance": provenance(args),
               "samples": [], "summary": [], "verdict": "FAIL"}

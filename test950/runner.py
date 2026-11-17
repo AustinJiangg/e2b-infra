@@ -4,6 +4,7 @@
 不重写任何测试，只编排现有脚本：
   沙箱级  rollback/scripts/950/run.sh 的各档
   进程级  criu-rollback/deploy/950.sh 的 quick / acceptance / stress / stress-ext / soak
+另有两项单独的性能测量：native（原生 pause / resume）、compare（同一负载下的 checkpoint / restore）。
 切栈用 950.sh criu / sandbox，跑完停在沙箱级。只用标准库。
 结果都留在 test950/results/<时间>-<档>/，用 bash test950.sh report 打印到终端（不打包、不需要拷文件）。
 e2b 的网络命名空间超过 TEST950_NETNS_LIMIT（默认 1500）时，在下一步之前自动 950.sh recycle-netns。
@@ -39,6 +40,12 @@ def state_dir():
 NETNS_LIMIT = int(os.environ.get("TEST950_NETNS_LIMIT", "1500"))
 RESULTS = HERE / "results"
 LEVELS = ("quick", "standard", "extended", "long")
+# 与四档并列、单独执行的两项性能测量（不进 quick ⊂ standard ⊂ extended，也不进 long）：
+#   native   e2b 原生 pause / resume 分档（benchmark/native_snapshot_tiers.py），在所选栈上各跑一遍
+#   compare  同一负载下的 checkpoint / restore（benchmark/ckpt_same_workload.py），两套各跑一遍
+EXTRA = ("native", "compare")
+TEMPLATES = {"sandbox": os.environ.get("SANDBOX_TEMPLATE", "base"),
+             "criu": os.environ.get("CRIU_TEMPLATE", "base-criu")}
 STACKS = ("sandbox", "criu")
 
 # 每一步：(栈, 名字, 命令类型, 参数, 预估分钟)。命令类型 run = 沙箱级 run.sh，criu = 950.sh 的测试命令
@@ -65,7 +72,23 @@ CRIU_STEPS = {
 
 
 def plan(level, stacks, hours):
-    """按档展开步骤。quick ⊂ standard ⊂ extended；long 单独，只含长跑。"""
+    """按档展开步骤。quick ⊂ standard ⊂ extended；long 单独，只含长跑；native、compare 各自单独。"""
+    if level in EXTRA:
+        steps = []
+        for st in stacks:
+            if level == "native":
+                args = ["benchmark/native_snapshot_tiers.py", "--mode", "both", "--passes", "3", "--iters", "8",
+                        "--template", TEMPLATES[st]]
+                est = 25
+            else:
+                args = ["benchmark/ckpt_same_workload.py", "--stack", st, "--template", TEMPLATES[st]]
+                est = 30
+            steps.append({"id": "%s/%s" % (st, level), "stack": st, "kind": "py", "args": args,
+                          "est_min": est, "status": "待跑"})
+        if "criu" in stacks:
+            steps.append({"id": "sandbox/smoke-after", "stack": "sandbox", "kind": "run",
+                          "args": ["smoke"], "est_min": 3, "status": "待跑"})
+        return steps
     order = {"quick": ["quick"], "standard": ["standard"], "extended": ["standard", "extended"],
              "long": ["long"]}[level]
     steps = []
@@ -191,6 +214,22 @@ def ensure_stack(want, run_dir):
         raise RuntimeError("切到 %s 失败，见 %s" % (target, run_dir / ("switch-%s.log" % target)))
 
 
+def client_env(spec):
+    """某个 conda 环境的解释器，加上从 e2b_env 读出的客户端凭据（同 sandbox_smoke.py）。"""
+    command, env = envs.runtime(spec)
+    code = ("import os,sys; sys.path.insert(0, %r); from e2b_env import load_e2b_env; "
+            "os.environ.update(load_e2b_env()); print('\\n'.join('%%s=%%s' %% (k, os.environ[k]) "
+            "for k in ('E2B_API_URL','E2B_DOMAIN','E2B_HTTP_SSL','E2B_ACCESS_TOKEN','E2B_API_KEY')))"
+            % str(REPO / "criu-rollback" / "scripts"))
+    creds = subprocess.run(command + ["-c", code], env=env, capture_output=True, text=True)
+    if creds.returncode != 0:
+        raise RuntimeError("取客户端凭据失败：" + creds.stderr.strip()[-300:])
+    for line in creds.stdout.splitlines():
+        k, v = line.split("=", 1)
+        env[k] = v
+    return command, env
+
+
 def run_step(step, run_dir):
     out = run_dir / step["id"].replace("/", "-")
     logf = out.with_suffix(".log")
@@ -198,19 +237,14 @@ def run_step(step, run_dir):
         out.rename(out.with_name(out.name + "-old-" + datetime.now().strftime("%H%M%S")))
         if logf.exists():
             logf.rename(logf.with_name(logf.stem + "-old-" + datetime.now().strftime("%H%M%S") + ".log"))
-    if step["kind"] == "run":
-        # 沙箱级：用沙箱级 conda 环境的解释器；凭据由 e2b_env 读出后放进子进程环境（同 sandbox_smoke.py）
-        command, env = envs.runtime(envs.SANDBOX_ENV)
-        code = ("import os,sys; sys.path.insert(0, %r); from e2b_env import load_e2b_env; "
-                "os.environ.update(load_e2b_env()); print('\\n'.join('%%s=%%s' %% (k, os.environ[k]) "
-                "for k in ('E2B_API_URL','E2B_DOMAIN','E2B_HTTP_SSL','E2B_ACCESS_TOKEN','E2B_API_KEY')))"
-                % str(REPO / "criu-rollback" / "scripts"))
-        creds = subprocess.run(command + ["-c", code], env=env, capture_output=True, text=True)
-        if creds.returncode != 0:
-            raise RuntimeError("取客户端凭据失败：" + creds.stderr.strip()[-300:])
-        for line in creds.stdout.splitlines():
-            k, v = line.split("=", 1)
-            env[k] = v
+    if step["kind"] == "py":
+        # 性能脚本：用所测栈的 SDK 环境（两套 SDK 不能混用）
+        command, env = client_env(envs.SANDBOX_ENV if step["stack"] == "sandbox" else envs.CRIU_ENV)
+        out.mkdir(parents=True, exist_ok=True)
+        cmd = command + [str(REPO / step["args"][0])] + step["args"][1:] + ["--out", str(out / "result.json")]
+    elif step["kind"] == "run":
+        # 沙箱级：用沙箱级 conda 环境的解释器；凭据由 e2b_env 读出后放进子进程环境
+        command, env = client_env(envs.SANDBOX_ENV)
         env["NOMAD_TOKEN"] = nomad_token()
         out.mkdir(parents=True, exist_ok=True)
         cmd = ["bash", str(RUN_SH)] + step["args"] + ["--python", command[0], "--env-file", "/dev/null",
@@ -225,7 +259,14 @@ def run_step(step, run_dir):
 
 
 def outcome(step, rc, out):
-    """判读：run.sh 的退出码 = FAIL 项数；950.sh 的退出码 0 = 通过。附上各自的汇总位置。"""
+    """判读：run.sh 的退出码 = FAIL 项数；950.sh 与性能脚本的退出码 0 = 通过。附上各自的汇总位置。"""
+    if step["kind"] == "py":
+        res = out / "result.json"
+        if res.is_file():
+            data = json.loads(res.read_text())
+            return ("PASS" if rc == 0 else "FAIL"), "verdict %s%s" % (
+                data.get("verdict"), ("：" + data["error"][:200]) if data.get("error") else "")
+        return ("PASS" if rc == 0 else "FAIL"), "退出码 %d" % rc
     if step["kind"] == "run":
         summaries = sorted(out.glob("*/SUMMARY.md"))
         line = ""
@@ -440,12 +481,33 @@ def print_overview(run):
         print("-- %s" % s["id"])
         if s["kind"] == "run":
             report.print_run_sh(out)
+        elif s["kind"] == "py":
+            print_perf(run, s)
         else:
             report.print_criu(out)
     print("==== 结束 ====")
     print("某一步的细节（各项日志末尾、性能表）：bash test950.sh report 步骤名，例如")
     for s in data["steps"][:3]:
         print("  bash test950.sh report %s" % s["id"])
+
+
+def print_perf(run, step, indent=""):
+    """性能脚本：打印日志里“---- 汇总 ----”之后的表格（脚本自己打印的汇总）。"""
+    logf = run / (step["id"].replace("/", "-") + ".log")
+    if not logf.is_file():
+        print(indent + "（没有日志）")
+        return
+    text = logf.read_text(errors="replace").splitlines()
+    start = next((i for i, l in enumerate(text) if l.startswith("---- 汇总 ----")), None)
+    if start is None:
+        print(indent + "（没有汇总，日志末尾如下）")
+        for line in text[-15:]:
+            print(indent + report.clip(line))
+        return
+    for line in text[start + 1:]:
+        if line.startswith("结果文件"):
+            continue
+        print(indent + line)
 
 
 def print_report(args):
@@ -463,7 +525,12 @@ def print_report(args):
     if not out.is_dir():
         sys.exit("没有步骤 %s 的结果目录（用 bash test950.sh report files 看有哪些）" % args.target)
     print("==== test950 · %s · %s ====" % (run.name, args.target))
-    if args.target.startswith("sandbox/"):
+    step = next((s for s in json.loads((run / "run.json").read_text())["steps"] if s["id"] == args.target), None) \
+        if (run / "run.json").is_file() else None
+    if step and step["kind"] == "py":
+        print_perf(run, step)
+        report.show_file(run / (step["id"].replace("/", "-") + ".log"), args.lines, root=run)
+    elif args.target.startswith("sandbox/"):
         report.print_run_sh_detail(out, args.lines)
     else:
         report.print_criu_detail(out, args.lines)
@@ -473,7 +540,7 @@ def print_report(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("level", choices=LEVELS + ("status", "report"))
+    ap.add_argument("level", choices=LEVELS + EXTRA + ("status", "report"))
     ap.add_argument("target", nargs="?", help="report：步骤名（如 criu/stress-ext），或 files 列出全部文件")
     ap.add_argument("--run", help="report：结果目录名，默认最近一轮")
     ap.add_argument("--file", help="report：打印结果目录里的这个文件（相对路径）")

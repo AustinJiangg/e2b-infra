@@ -26,6 +26,16 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(steps[0]["args"], ["soak", "--hours", "2.5"])
         self.assertEqual(steps[0]["est_min"], 180)
 
+    def test_perf_commands_stand_alone(self):
+        # native、compare 不并入四档；每套一步，用各自的模板，进程级测完回沙箱级冒烟
+        self.assertEqual(self.ids("native", ["sandbox", "criu"]),
+                         ["sandbox/native", "criu/native", "sandbox/smoke-after"])
+        self.assertEqual(self.ids("compare", ["sandbox"]), ["sandbox/compare"])
+        steps = runner.plan("native", ["criu"], 4)
+        self.assertEqual(steps[0]["kind"], "py")
+        self.assertIn(runner.TEMPLATES["criu"], steps[0]["args"])
+        self.assertNotIn("criu/native", self.ids("extended", ["sandbox", "criu"]))
+
     def test_secret_filter(self):
         for name in ("job-before.json", ".job-cur.json", "job-restore.json", "x.env", "acl.token",
                      "baseline.json", "baseline.sha256"):
