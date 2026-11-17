@@ -3,6 +3,8 @@
 - 三个运行文件：xz 解压到 .work/fc/，按 manifest 核对 SHA256；
 - 镜像：前两层从仓库根目录的 ubuntu-22.04-custom.tar.gz 取，第三层（CRIU）从
   artifacts/image/criu421-layer.tar.xz 解压，加上原样保存的配置与清单，拼成 docker load 能读的归档。
+  归档同时带 docker 旧格式的 manifest.json 和 OCI 的 index.json 及其指向的清单 blob：传统存储读前者，
+  containerd 镜像存储（950 的 docker）读后者，缺了后者导入出来是 0B、架构为空的镜像。
   每层按 diff_id 核对，配置文件的 SHA256 就是镜像 ID，所以拼出的镜像与验收过的同一个。
 已展开且核对通过时直接返回。
 """
@@ -55,7 +57,13 @@ def unpacked_ok(m):
         if not p.is_file() or sha_file(p) != item["sha256"]:
             return False
     stamp = paths.WORK / "image" / "image-id"
-    return paths.IMAGE_TAR.is_file() and stamp.is_file() and stamp.read_text().strip() == m["image"]["image_id"]
+    return paths.IMAGE_TAR.is_file() and stamp.is_file() and stamp.read_text() == stamp_text(m)
+
+
+def stamp_text(m):
+    """镜像 ID 加归档里另放的条目名：入库文件增减（例如补上 OCI 清单）时旧归档会被重新拼。"""
+    img = m["image"]
+    return img["image_id"] + "\n" + "\n".join(sorted(img["extra"])) + "\n"
 
 
 def unpack_binaries(m):
@@ -113,7 +121,7 @@ def build_image(m):
             out.add(paths.ROOT / src, arcname=name)
     tmp.replace(paths.IMAGE_TAR)
     shutil.rmtree(layers_dir)
-    (paths.WORK / "image" / "image-id").write_text(img["image_id"] + "\n")
+    (paths.WORK / "image" / "image-id").write_text(stamp_text(m))
     print("拼出镜像", img["ref"], "ID", img["image_id"][:12], flush=True)
 
 

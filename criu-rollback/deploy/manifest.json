@@ -41,7 +41,9 @@
       "index.json": "artifacts/image/index.json",
       "oci-layout": "artifacts/image/oci-layout",
       "blobs/sha256/8eaeb7f0c72c2755f112f647eb169e278321c28be9539f89314cb34298b06c1b": "artifacts/image/8eaeb7f0c72c2755f112f647eb169e278321c28be9539f89314cb34298b06c1b",
-      "blobs/sha256/af478d24c05d0e7564e0789564da6e2c06f27b9474d5407076cd45c025d52613": "artifacts/image/af478d24c05d0e7564e0789564da6e2c06f27b9474d5407076cd45c025d52613"
+      "blobs/sha256/af478d24c05d0e7564e0789564da6e2c06f27b9474d5407076cd45c025d52613": "artifacts/image/af478d24c05d0e7564e0789564da6e2c06f27b9474d5407076cd45c025d52613",
+      "blobs/sha256/b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165": "artifacts/image/b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165",
+      "blobs/sha256/df1e24920d0fa2e23bc3bc8978e1244bc76e9eda19598382263cf3329ba03103": "artifacts/image/df1e24920d0fa2e23bc3bc8978e1244bc76e9eda19598382263cf3329ba03103"
     },
     "layers": [
       {

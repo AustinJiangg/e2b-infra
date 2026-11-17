@@ -147,7 +147,7 @@ criu-rollback/deploy/
 | orchestrator | `259f1a25c-e2bv`：在 `259f1a25c` 上只把宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`。经 `strip -g`，SHA256 `063e580e…`（去调试段前 `151308ba…`）。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
 | SDK | 与 `dcca61266` 的 SDK 逐文件一致；包含后续流量 token 修复 |
-| 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1，image ID `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab` |
+| 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1。镜像配置摘要 `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab`（docker 传统存储显示的 image ID），OCI 清单摘要 `b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165`（containerd 镜像存储显示的 image ID） |
 | Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
 | SDK wheel | `2.19.0+gsd.dcca61266`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
@@ -205,7 +205,9 @@ bash criu-rollback/deploy/950.sh preflight
 bash criu-rollback/deploy/ops/import-image.sh
 ```
 
-脚本先校验包，再 `docker load`，按确定的 image ID 在不联网的临时容器中检查 CRIU、curl、python3 和预装包，最后 tag/push 到 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`（引用不同时在 `ops/site.env` 写 `CRIU_TEMPLATE_IMAGE=`）。没登录过 Harbor 时先 `docker login harbor:443`。推送成功只证明导入端可访问；第 7 节模板构建成功才完成构建端拉取验证。
+脚本先校验包，再 `docker load`，按标签 `ubuntu:22.04-custom-criu421` 取导入后的镜像，核对它的 ID 是上表两个摘要之一、架构是 arm64，然后在不联网的临时容器中检查 CRIU、curl、python3 和预装包，最后 tag/push 到 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`（引用不同时在 `ops/site.env` 写 `CRIU_TEMPLATE_IMAGE=`）。没登录过 Harbor 时先 `docker login harbor:443`。推送成功只证明导入端可访问；第 7 节模板构建成功才完成构建端拉取验证。
+
+用哪种 docker 存储都行：`docker info --format '{{.Driver}} {{.DriverStatus}}'` 显示 `io.containerd.snapshotter.v1` 的是 containerd 镜像存储（950 是这种），显示 `overlay2` 的是传统存储（920B 是这种）。两种存储读归档里不同的清单文件，归档两种都带。
 
 ## 5. 核对客户端凭据
 
@@ -359,6 +361,17 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-17：补上镜像归档的 OCI 清单（950 上导入失败）
+
+- **现象。** 950 上 `all` 停在“导入镜像到 Harbor”：`docker load` 打印了 `Loaded image: ubuntu:22.04-custom-criu421`，随后按 image ID `7caae4a6…` 查镜像报 `No such image`。`docker images` 里这个镜像是 0B，架构为空，`docker run` 报 `content digest sha256:b7a2fdd2…: not found`。
+- **原因。** 950 的 docker 用 containerd 镜像存储（`docker info` 显示 `io.containerd.snapshotter.v1`），导入时读归档里的 `index.json`，它指向 OCI 清单 blob `b7a2fdd2…`。11-16 把离线包并入仓库时只留了 `manifest.json` 用到的文件，这个清单 blob 和一个旧格式层描述 `df1e2492…` 没有入库。920B 的 docker 用传统存储，只读 `manifest.json`，所以 920B 上没暴露。另外 containerd 存储把 OCI 清单摘要当 image ID，即使归档完整，按 `7caae4a6…` 也查不到。
+- **修改。**
+  - 两个 blob 从 920B 上同一镜像的 `docker save` 取回入库，SHA256 与 `index.json` 记录的一致；拼出的归档与 `docker save` 的条目名单完全相同。
+  - `.work/image/image-id` 改为记录镜像 ID 加归档条目名单，入库文件增减时旧归档自动重拼。
+  - `import-image.sh` 按标签取镜像，接受两种存储各自的 ID，并核对架构；导入前先去掉同名旧标签（上次留下的 0B 空镜像）。
+  - 单测新增：`index.json` 指向的清单、清单里的配置和各层都在归档里。
+- **920B 验证。** 用 docker 自带的 containerd 在临时 namespace 导入新归档：`complete (4/4)`、221.7 MiB、`linux/arm64`，验完删掉了这个 namespace。传统存储上 `import-image.sh` 完整通过，image ID 仍是 `7caae4a6…`，推送后仓库摘要仍是 `abc4b4b7…`。
 
 ### 2026-11-17：gsd 改名 criu，结果打印到终端，切栈前自动删 e2b 沙箱
 
