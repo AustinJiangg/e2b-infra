@@ -351,6 +351,14 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 | `bash criu-rollback/deploy/950.sh acceptance` | §3 的部署自检（`ops/guest_check.py`）→ `verify_gsd.py base-gsd 8` → `verify_fixes.py` → `verify_multitree.py --skip V12` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 | 同 §2 的表。遇到非零返回码或内容判据失败就停止，写 `summary.json`。首次部署没有对照模板，跳过 V12 |
 | `bash criu-rollback/deploy/950.sh stress` | `probe_whiteout_bug.py` 七个用例，再顺序跑 all、noworkers、multitree、deldense 四组，`STALL` 为 150 秒 | 同 §5.2 的判据表。任何一组失败就停止后续组；取不到串口输出不算通过 |
 
+`all` 之外还有三个测试命令，都要先在进程级栈上（先执行 `950.sh gsd`）。平时由仓库根的 `test950.sh` 按档调度，见 `test950/README.md`：
+
+| 入口 | 内容 | 判据 |
+|---|---|---|
+| `bash criu-rollback/deploy/950.sh quick` | 部署自检 + `verify_gsd.py base-gsd 8`，约 2 分钟，每次切栈或换二进制后用 | 同 §3、§4.1 |
+| `bash criu-rollback/deploy/950.sh stress-ext` | [18](18-testing-and-debug-kernel.md) §5.1 的八组（含 enospc）各 1000 轮；多棵树、删文件密集各 3 个种子 200 轮（容量以内），再各 1000 轮（`*-capacity`，把 guest 内存或根盘用满，看容量耗尽时是否仍安全失败）；all、noworkers 各 5 个种子 300 轮；最后跑兼容矩阵 `rollback/scripts/acceptance/compat_matrix.py`（含 checkpoint → pause → resume → restore，即 [16](16-known-limits.md) 的 T-09） | 压测同 §5.2；enospc 另判删掉填充后 checkpoint 与 restore 恢复、内容正确；兼容矩阵无 `BROKEN` |
+| `bash criu-rollback/deploy/950.sh soak --hours 4` | 一个沙箱、六个 worker、十种文件操作，按时长连续 checkpoint / restore / delete；前后记录宿主内存、netns、orchestrator fd 与根盘用量 | 同 §5.2；资源只记录不判 |
+
 两点与本章的做法不同：SDK 用进程级 conda 环境里的解释器（入口自动选用，不需要激活），不设 `PYTHONPATH`；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。
 
 单独执行时输出目录默认是 `criu-rollback/deploy/results/<时间>-acceptance/` 和 `…-stress/`，可以用 `--out` 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 `criu-rollback/scripts/.env`、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 [22](22-950-results.md)。

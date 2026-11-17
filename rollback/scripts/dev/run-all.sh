@@ -59,7 +59,7 @@ run 03-loop        python3 loop.py "$SCHEME" "$LOOPS"
 run 05-pause       python3 pause_verify.py
 # checkpoint/restore 与原生 create/connect/pause/kill 的组合矩阵：
 # 哪些能做、哪些是边界、有没有把原生能力弄坏。
-run 06-compat      python3 compat_matrix.py
+run 06-compat      python3 ../acceptance/compat_matrix.py --out "$OUT/compat.json"
 # 耗时基准：全量 vs 增量各档的分布、虚机冻结窗口、restore、持续速率。
 # 前三个脚本回答"对不对"，这个回答"多久" —— 是要拿去对性能指标、给客户看的那份数据。
 # 报告另落在 reports/bench-<方案>-<时间戳>/，路径记进本轮汇总。

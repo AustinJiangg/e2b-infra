@@ -244,7 +244,7 @@ orchestrator 依赖 FC 的 `PUT /snapshot/rollback` 与 `PUT /snapshot/save-dirt
 | 仓库根 `benchmark/` 下的 `native_snapshot_tiers.py`（单文件脚本，不依赖本目录） | 原生 pause / resume 每档独立沙箱的分档耗时 | [第 19 章](19-native-pause-resume.md)、[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱) |
 | `crtest/` | `crtest/crtest/cases/t11.py … t41.py`（20 个用例）、`crtest/crtest/common.py`、`tests/`（离线单测）、`sdktests/test_checkpoint_errors.py`、`portability/preflight-customer.sh`、`probe950/` | [第 16 章](16-test-methodology.md) |
 | `crtest/bench/` | `bench_tiers.py`、`compliance.py`、`analyze.py`、`serial_restore.py`、`hdbss_bench.py` | [第 16 章](16-test-methodology.md) |
-| `dev/`（共享 `lib.py`） | `correctness.py`、`pause_verify.py`、`compat_matrix.py`、`hdbss_evidence.py`（配 `cap_test.c`）、`loop.py`、`timing.py`、`bench-ckpt.py` + `freeze_probe.py`、`probe-ramp.py`、`01-check-host.sh` … `04-verify-runtime.sh`、`run-all.sh` | [第 16 章](16-test-methodology.md) |
+| `dev/`（共享 `lib.py`） | `correctness.py`、`pause_verify.py`、`hdbss_evidence.py`（配 `cap_test.c`）、`loop.py`、`timing.py`、`bench-ckpt.py` + `freeze_probe.py`、`probe-ramp.py`、`01-check-host.sh` … `04-verify-runtime.sh`、`run-all.sh` | [第 16 章](16-test-methodology.md) |
 | `probes/` | `pb2.py` … `pb5.py`、`probe_dirty.py`、`uffdwp_probe.c`：脏页判据的定向探针，不属于验收流程 | —— |
 
 ### 5.5 原生快照的精确增量（原生 pause 路径）

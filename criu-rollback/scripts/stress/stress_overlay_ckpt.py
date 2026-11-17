@@ -46,6 +46,8 @@ ap.add_argument("--seed", type=int, default=20260930)
 ap.add_argument("--ops", default="stat,read,lsroot,lsdeep,relcat,rells,reltouch,append,rename,scandir",
                 help="worker 的操作集合（逗号分隔），用来缩小触发内核问题的操作范围")
 ap.add_argument("--outdir", default=".")
+ap.add_argument("--seconds", type=float, default=0,
+                help="按时长跑：到点即停，--rounds 只作上限（长跑用，例如 --rounds 10000000 --seconds 14400）")
 ap.add_argument("--premask-whiteout", action="store_true", help="先删一个 base 镜像里的文件（/etc/legal），让内核缓存的共享 whiteout 落在开机时的 workdir 里（永不删除），掩盖修复前的内核上的一个 BUG（restore 后删下层文件 → may_delete BUG），以便看其余路径；默认不开")
 ap.add_argument("--pre-cmd", default=os.environ.get("STRESS_PRE_CMD", ""), help="沙箱起来后先用 root 跑一条命令（判别实验用，例如用一个 systemd-run 进程的 cwd 钉住开机时的 workdir）；默认取环境变量 STRESS_PRE_CMD，没有就不跑")
 args = ap.parse_args()
@@ -81,7 +83,8 @@ def save(name, text):
         f.write(text)
 
 
-sb = Sandbox.create(template=args.template, timeout=3600)
+sb = Sandbox.create(template=args.template, timeout=max(3600, int(args.seconds) + 1800))
+DEADLINE = time.time() + args.seconds if args.seconds > 0 else None
 log(f"sandbox {sb.sandbox_id} template={args.template} mode={args.mode}")
 if args.premask_whiteout:
     try:
@@ -300,7 +303,12 @@ def stress():
     stats = {"create_ok": 0, "restore_ok": 0, "delete_ok": 0, "errors": {}}
     err_samples = []
     lat = {"create": [], "restore": []}
+    rounds_done = 0
     for r in range(1, args.rounds + 1):
+        if DEADLINE and time.time() > DEADLINE:
+            log(f"到时长上限 {args.seconds:.0f} s，停在第 {r} 轮之前")
+            break
+        rounds_done = r
         x = random.random()
         if x < 0.45 or len(cps) < 2:
             sh(f"echo r{r} > /srv/st/round_{r % 7}.txt")
@@ -351,8 +359,10 @@ def stress():
                     err_samples.append(f"r{r} {k} {str(c)[:300]}")
         if r % 50 == 0 or r == args.rounds:
             dm = out("dmesg")
-            save(f"stress-dmesg-r{r:03d}.txt", dm)
             hits = [h for h in dmesg_hits(dm) if h not in pre_hits]
+            # 按时长长跑时轮数上万，只在有命中或每 1000 轮存一份，免得结果目录堆几百个文件
+            if not DEADLINE or hits or r % 1000 == 0:
+                save(f"stress-dmesg-r{r:03d}.txt", dm)
             ws = worker_stats()
             now = time.time()
             stale = {k: round(now - v["ts"], 1) for k, v in ws.items() if now - v["ts"] > 10}
@@ -385,7 +395,7 @@ def stress():
     if dg:
         save(f"{args.mode}-enotempty-diag.txt", dg)
     summary = {
-        "rounds": args.rounds, "workers": args.workers, "gsd_ops": stats, "ckpts_left": len(cps),
+        "rounds": rounds_done, "rounds_max": args.rounds, "seconds": args.seconds, "workers": args.workers, "gsd_ops": stats, "ckpts_left": len(cps),
         "lat_ms_p50": {k2: (sorted(v)[len(v) // 2] if v else None) for k2, v in lat.items()},
         "error_samples": err_samples[:30],
         "worker_ops_total": tot_ops, "worker_errs_by_op": errs, "worker_errs_by_errno": by_errno,

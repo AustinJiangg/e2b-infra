@@ -743,6 +743,10 @@ def orchestrator_pid_env():
             raw = open("/proc/%s/environ" % pid, "rb").read().decode("utf8", "replace")
         except OSError:
             continue
+        # Firecracker 是 orchestrator 的子进程，环境里同样带 ORCHESTRATOR_SERVICES，要先排除；
+        # 否则重启后旧沙箱的 FC 还没退出时，会被当成新的 orchestrator（2026-11-16 T18 误判）
+        if base.startswith("firecracker"):
+            continue
         if not (base.startswith("orchestrator") or base.startswith("template-manager")
                 or "ORCHESTRATOR_SERVICES=" in raw):
             continue

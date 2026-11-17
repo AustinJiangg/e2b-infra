@@ -51,6 +51,19 @@ class FlowTests(unittest.TestCase):
         self.assertNotIn("PYTHONPATH", env)
         self.assertTrue(env["PATH"].startswith(str(target / "bin")))
 
+    def test_roll_back_unless_sandbox(self):
+        # 切换中途失败、5008 上没有进程（current() 为 None）时也要回切；已是沙箱级才不动
+        for cur, expect in (("gsd", True), (None, True), ("sandbox", False)):
+            with patch.object(flow.stack, "current", return_value=cur), \
+                    patch.object(flow.stack, "switch") as sw, \
+                    patch.object(flow, "cleanup_test_sandboxes"), \
+                    patch.object(flow, "wait_firecracker_exit"), \
+                    patch.object(flow, "log"):
+                flow.roll_back()
+            self.assertEqual(sw.called, expect, cur)
+            if expect:
+                sw.assert_called_once_with("sandbox")
+
 
 if __name__ == "__main__":
     unittest.main()

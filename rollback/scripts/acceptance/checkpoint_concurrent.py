@@ -858,7 +858,8 @@ def stage_b(args, store, meter, results):
 def stage_d(args, store, meter, results):
     S, T = args.soak_sandboxes, args.soak_seconds
     log("\n===== D. 混合稳态：%d 个沙箱各自随机 create/restore/delete 跑 %d s，每次 restore 逐项验现场 =====" % (S, T))
-    boxes, errs, spawn_s = spawn(S, args.template, store, "d-")
+    # 沙箱寿命要盖住整段（默认 3600 s，--soak-seconds 更长时沙箱会中途被回收）
+    boxes, errs, spawn_s = spawn(S, args.template, store, "d-", timeout=max(3600, T + 1800))
     log("  建沙箱：%d 成功 %d 失败，%.1f s" % (len(boxes), len(errs), spawn_s))
     if not boxes:
         return

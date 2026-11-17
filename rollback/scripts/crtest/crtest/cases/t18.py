@@ -60,6 +60,7 @@ task 的 cgroup 整棵树杀，FC 跟着一起走。`switch-stack.sh` 因此在�
 NAME = "T18"
 
 import os
+import time
 
 from .. import common
 from ..common import Unmet, expect, log, note
@@ -304,7 +305,16 @@ def run(ctx):
     expect(ctx, "A 的产物目录没了", a_dir_gone, "不存在",
            "没了：%s" % dir_a if a_dir_gone else "还在：%s" % dir_a, BASIS)
 
+    # 重启后旧沙箱的 FC 可能还没退出：920B 2026-11-16 手工复现两次，health 回 200 之后 2 s 还在、10 s 内退出；
+    # 但 test950 extended 演练三次都是 90 s 后仍在（原因未查，见 test950/README.md §5）。
+    # 等它最多 90 s 再判，等了多久记下来
+    t_left = time.monotonic()
     left = common.fc_processes(box_a.id)
+    while left and time.monotonic() - t_left < 90:
+        time.sleep(2)
+        left = common.fc_processes(box_a.id)
+    note(ctx, "重启后 A 的 FC 进程退出用时", "记录项", "%.0f s%s" % (time.monotonic() - t_left,
+         "（90 s 后仍在）" if left else ""), BASIS)
     gone, detail = _connect_dead(ctx, box_a.id, "t18-a-dead")
     if pre_killed:
         note(ctx, "沙箱 A 已经不存在", "重启带走沙箱（本轮是我们自己先 kill 的，只作记录）",

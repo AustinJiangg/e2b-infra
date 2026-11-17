@@ -1,6 +1,6 @@
 # `rollback/scripts/acceptance/` —— 交付态验收脚本
 
-五个独立脚本，**互不依赖，也不依赖本目录以外的任何文件**：拷哪个 `.py` 到目标机就能跑哪个；
+六个独立脚本，**互不依赖，也不依赖本目录以外的任何文件**：拷哪个 `.py` 到目标机就能跑哪个；
 唯一例外是 `rolling_keep10.py`，它从同目录导入 `checkpoint_concurrent.py`，两个要一起拷。
 `dev/` 与 `crtest/` 那两套共享库、有开发态假设，和这里不要混用。
 
@@ -33,6 +33,7 @@ python3 /opt/e2b-infra/patch_e2b.py                        # 顺序不能反
 | `native_snapshot_bench.py` | e2b **原生** snapshot（`--mode pause` / `--mode snapshot`）的同一张档位表，外加 `touch` 懒加载列；三套横向对照里代表原生那套 | `--mode pause` | — | 约 44 s |
 | `checkpoint_concurrent.py` | 并发四段：**A** 跨沙箱扇出（N=1…16，barrier 对齐）、**B** 同沙箱多调用方争用、**D** 混合稳态、**C** 生命周期竞争 | `--stages A,B --fanout 1,2,4,8,16 --soak-seconds 180 --out x.json` | 各段表尾的对账行 | 随 `--fanout` / `--soak-seconds` |
 | `rolling_keep10.py` | 滚动保留长跑：S 个沙箱各自循环 dirty → checkpoint → 超过 `--keep` 个删最旧 → 按 `--restore-p` 概率 restore 到保留集合随机一个并逐项验现场；复用 `checkpoint_concurrent.py`（同目录导入）只替换其 D 段，参数与 JSON 格式同它；沙箱寿命由环境变量 `SPAWN_TIMEOUT`（默认 10800 s）给 | `--soak-sandboxes 16 --soak-seconds 1800 --keep 10 --restore-p 0.25 --keep-on-failure` | `restore 现场逐项验证：x/y 一致`、`abort：False` | 约 `--soak-seconds` |
+| `compat_matrix.py` | checkpoint / restore 与 e2b 原生生命周期操作（create / connect / pause / resume / kill）的兼容矩阵，六组 16 格，数据 `O_DIRECT` 读回比 sha256；两套方案都能跑（进程级用 `--template base-gsd`）。2026-11-16 从 `dev/` 移来，凭据从 `.env` 或环境变量取 | `--template base --out compat.json` | `✓ 没有 BROKEN` | 约 3 分钟 |
 
 ### `checkpoint_concurrent.py` 的两个坑
 

@@ -194,7 +194,7 @@ bash rollback/scripts/950/run.sh long
 | 10 | 非 restore 的流截断修复要两份代理都带上 | orchestrator 的沙箱代理与 client-proxy 共用同一段代理代码，部署件里两者都要是修复后的版本（[第 24 章 §11.3](24-api-semantics.md#113-两类流式截断要分清)、[附录 C §3.1](C-evolution-and-cases.md#31-流式命令偶发截断)） |
 | 11 | 字节配额默认关 | 是否在交付件里默认开、开多大待定；crtest 没有对应用例，端到端验证只在工作区脚本里做过 |
 | 12 | SDK 覆盖层自检 | 判据是“原有异常子类都在、映射表全是子类”，在两次部署件上重跑 smoke 都是 5 / 5（[附录 B §5](B-920b-results.md#5-部署后回归)） |
-| 13 | 开发态工具 | `correctness.py` 已在两次部署件上跑过，都是 ALL PASS（[附录 B §5](B-920b-results.md#5-部署后回归)）；`pause_verify.py`、`compat_matrix.py`、`loop.py`、`timing.py` 未在代码基准上跑 |
+| 13 | 开发态工具 | `correctness.py` 已在两次部署件上跑过，都是 ALL PASS（[附录 B §5](B-920b-results.md#5-部署后回归)）。`correctness.py`、`pause_verify.py`、`loop.py` 不在 950 上跑，覆盖关系见[第 16 章](16-test-methodology.md)的验证项总表；`compat_matrix.py` 已移到 `acceptance/`，由 `run.sh func` 运行；`timing.py` 未在代码基准上跑 |
 | 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-功能回归结果)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)，原生分档见 [第 19 章](19-native-pause-resume.md)，perf 的 12 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 21 章](21-concurrency-and-longrun.md)。smoke 已有能力文件自报 commit、SDK 与 FC 路径 hash，HDBSS 轮有二进制 hash 与 guest vCPU；perf / func 当轮二进制身份、原始 JSON / JSONL、`00-context.md`、源码 commit 与部署包的对应和介质仍待补。950 重启 / 注入 / 配额专项已跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 21 章 §3](21-concurrency-and-longrun.md#10-到-950-上要重测什么) |
 | 15 | HDBSS 与软件写保护的收益对照 | 已决定不做：950 上只量 HDBSS 自身的性能，不测写保护 |
 | 16 | 950 上的 HDBSS L3 证据落盘 | 已回传 2026-10-13 16:52 默认 order 1 的能力、自报、dmesg / FC 日志、冷 / 热写与 debugfs 退出计数，见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)；JSON / JSONL 尚未回传，不从文本推定长期表现 |
@@ -259,7 +259,7 @@ bash rollback/scripts/950/run.sh long
 | 原生 pause / resume 固定开销 | 待验证项：部分未归因 | 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；950 没有逐段数据；920B 上 resume 比对照慢的原因未查 |
 | 封层刷屏障与重复刷盘 | 待验证项 | V1–V3 均未验证 |
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复问题：根因或触发条件待定位 | 保留现象记录，需要针对负载复现 |
-| 950 空闲后 restore、`loop.py`、`correctness.py`、`pause_verify.py`、`compat_matrix.py` | 属于 950 专项覆盖 | 950 待测；前述开发态工具的代码基准状态见 §7 第 13 项 |
+| 950 空闲后 restore、`compat_matrix.py` | 属于 950 专项覆盖 | 950 待测，分别由 `run.sh idle` 与 `run.sh func` 运行；不在 950 上跑的开发态工具见 §7 第 13 项 |
 | 当前 950 二进制上的 T39、T41、`pb2.py` | 属于 950 专项覆盖 | 2026-10-13 的 T39、T41 通过，但该轮身份待补，不能证明 2026-11-06 的被测二进制 |
 
 待修复但不属于验证缺口的项，例如 delete 同步合并、conntrack 清扫长尾、netns 泄漏、客户端连接异常和偶发 GC 长暂停，状态见 [第 30 章 §1](30-status-and-directions.md#1-已知问题)。

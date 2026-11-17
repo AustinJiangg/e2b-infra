@@ -11082,6 +11082,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 </tbody>
 </table></div>
+<p><code>all</code> 之后的分档测试由仓库根的 <code>test950.sh</code> 调度（<code>test950/README.md</code>），结果包是 <code>test950/results/&lt;时间&gt;-&lt;档&gt;.tar.gz</code>，进程级各步的目录名为 <code>criu-&lt;命令&gt;</code>，内部结构与下面相同。extended 档另有 <code>criu-stress-ext/</code>（八组压测、多种子与兼容矩阵），long 档另有 <code>criu-soak/</code>（按时长的长跑与宿主资源前后对比）。</p>
 <p>包里另有 <code>all.log</code>（每步进度与结论）、<code>summary.json</code>（每步状态与用时）和 <code>netcheck.txt</code>（切换前后宿主上非 e2b 网络配置的比对）。验收和压测两个目录里都有 <code>summary.json</code>（每一步的命令和状态、判定 <code>verdict</code>、机器名、起止时间、Python 与 SDK 路径）和 <code>deliverables.sha256</code>（三个运行文件的 sha256）。<code>acceptance</code> 的 <code>summary.json</code> 还有 <code>slow_calls</code> 和 <code>skipped</code>。下面各表的"来源"列写的都是相对这两个目录的文件名。</p>
 <p>分档性能的三轮结果用 <code>criu-rollback/scripts/acceptance/summarize_checkpoint_perf.py</code> 校验并汇总，命令见 <a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/validation/README.md">验证摘要</a>。950 的摘要另建带平台与日期的目录，放在 <code>criu-rollback/validation/</code> 下，不覆盖 920B 的目录。</p>
 <p>结果里有几项不进入这些文件，要在运行时另外记下：机器名、起止时间、宿主内核版本、未跑的项目和回切冒烟结果。回传时不带 <code>criu-rollback/scripts/.env</code>、状态目录、Nomad job JSON 和登录配置。</p>
@@ -12099,8 +12100,18 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>沙箱 pause / resume 之后</td>
-<td>没有专门的结果</td>
-<td>设计上 gsd 连同内存一起被冻结再恢复、不重新加载状态（<a href="#d15">15</a>），但没有"pause → resume → restore"的实测验证（<a href="#d16">16</a> 的 T-09）</td>
+<td>2026-11-16 起有一项实测：兼容矩阵 B8（<code>rollback/scripts/acceptance/compat_matrix.py</code>，模板 <code>base-gsd</code>）在新 920B 上建 checkpoint、pause、resume，再用原 Sandbox 对象 restore，内容一致、账本跨 pause 保留（沙箱级则不保留）。只有这一种序列、单次</td>
+<td>设计上 gsd 连同内存一起被冻结再恢复（<a href="#d15">15</a>）；更多组合与次数没有覆盖；<code>connect</code> 取回的对象受上一行的 SDK 缺陷影响（<a href="#d16">16</a> 的 T-09）</td>
+</tr>
+<tr>
+<td>容量耗尽时的安全失败</td>
+<td>2026-11-17 新 920B 上 <code>950.sh stress-ext</code> 的两组 1000 轮（脚本删得少，checkpoint 不封顶）。<code>multitree-capacity</code>：snapshot store 涨到 2 GiB tmpfs 的 89%～93%，guest <code>MemAvailable</code> 降到 16～24 MiB，容量预检拒绝了一部分 create，但约第 306 轮 guest 发生 OOM，被杀的是用户进程（gsd 与 criu 的 <code>OOMScoreAdjust=-1000</code>，<a href="#d15">15</a> §7 说的正是这种情形）。<code>deldense-capacity</code>：层堆在根盘上，约第 685 轮根盘写满，此后多数 create / restore 以 <code>internal</code>（"nothing was changed"）安全失败，但另有 4 次 restore 返回 <code>data_loss</code>，即杀进程之后才失败。错误原文未留存</td>
+<td>容量预检对"估算值与 <code>MemAvailable</code> 接近"的情形没有余量，挡不住 OOM；根盘写满时 restore 不能保证所有可能失败的步骤都在提交点之前。200 轮（容量以内）三个种子都通过</td>
+</tr>
+<tr>
+<td>SDK <code>Sandbox.connect</code> 拿到的对象</td>
+<td>2026-11-16 新 920B 上查实：<code>_cls_connect_sandbox</code> 建连接配置时没有加 <code>E2b-Sandbox-Id</code> 头（<code>create</code> 路径有），client-proxy 按头定址，于是这个对象上的 checkpoint 调用全部被以 <code>missing header</code> 打回。兼容矩阵的 B3、B4、B6/B7、E1 因此判 BROKEN；用 pause 之前那个对象做 restore（B8）通过，即 <a href="#d16">16</a> 的 T-09 在真机上第一次走通</td>
+<td>用户 pause / resume 之后若用 <code>Sandbox.connect</code> 取回沙箱，checkpoint 功能不可用，需要修 SDK</td>
 </tr>
 <tr>
 <td>三处未查清的现象</td>
@@ -16987,6 +16998,33 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <td><code>bash criu-rollback/deploy/950.sh stress</code></td>
 <td><code>probe_whiteout_bug.py</code> 七个用例，再顺序跑 all、noworkers、multitree、deldense 四组，<code>STALL</code> 为 150 秒</td>
 <td>同 §5.2 的判据表。任何一组失败就停止后续组；取不到串口输出不算通过</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>all</code> 之外还有三个测试命令，都要先在进程级栈上（先执行 <code>950.sh gsd</code>）。平时由仓库根的 <code>test950.sh</code> 按档调度，见 <code>test950/README.md</code>：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>入口</th>
+<th>内容</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bash criu-rollback/deploy/950.sh quick</code></td>
+<td>部署自检 + <code>verify_gsd.py base-gsd 8</code>，约 2 分钟，每次切栈或换二进制后用</td>
+<td>同 §3、§4.1</td>
+</tr>
+<tr>
+<td><code>bash criu-rollback/deploy/950.sh stress-ext</code></td>
+<td><a href="#d18">18</a> §5.1 的八组（含 enospc）各 1000 轮；多棵树、删文件密集各 3 个种子 200 轮（容量以内），再各 1000 轮（<code>*-capacity</code>，把 guest 内存或根盘用满，看容量耗尽时是否仍安全失败）；all、noworkers 各 5 个种子 300 轮；最后跑兼容矩阵 <code>rollback/scripts/acceptance/compat_matrix.py</code>（含 checkpoint → pause → resume → restore，即 <a href="#d16">16</a> 的 T-09）</td>
+<td>压测同 §5.2；enospc 另判删掉填充后 checkpoint 与 restore 恢复、内容正确；兼容矩阵无 <code>BROKEN</code></td>
+</tr>
+<tr>
+<td><code>bash criu-rollback/deploy/950.sh soak --hours 4</code></td>
+<td>一个沙箱、六个 worker、十种文件操作，按时长连续 checkpoint / restore / delete；前后记录宿主内存、netns、orchestrator fd 与根盘用量</td>
+<td>同 §5.2；资源只记录不判</td>
 </tr>
 </tbody>
 </table></div>

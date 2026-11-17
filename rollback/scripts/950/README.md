@@ -169,15 +169,20 @@ bash run.sh smoke --python "$(command -v python3)"   # 在 build.sh -i 装 SDK �
 
 ---
 
-## 2. 五档各是什么
+## 2. 各档是什么
+
+> 在 950 上一般不直接调用本脚本，而是用仓库根的 `test950.sh` 按 quick / standard / extended / long 四档调度：它负责切栈、记录身份、续跑和打包（见 `test950/README.md`）。下表是它调用的各档。
 
 | 档 | 目标耗时 | 跑什么 | 判据 |
 |---|---|---|---|
 | `smoke` | ≤ 3 分钟 | 宿主预检、SDK 覆盖层自检、`checkpoint capabilities`（能力文件或日志行）、firecracker sha256、59 项功能正确性 | 5 项全 PASS |
-| `func` | ≤ 40 分钟 | crtest 里 16 个不需要重启服务端的用例 + SDK 异常语义 pytest | 17 项里 PASS + SKIP = 17，FAIL = 0 |
-| `perf` | ≤ 40 分钟 | 分档基准（短表）+ 达标判定、单沙箱串行 restore 长尾 n=100、并发 A/B 段 | 4 项无 FAIL，且达标表里各档 p50 在线内 |
+| `func` | ≤ 45 分钟 | crtest 里 16 个不需要重启服务端的用例 + 兼容矩阵 `acceptance/compat_matrix.py` + SDK 异常语义 pytest | 18 项里 FAIL = 0 |
+| `perf` | ≤ 40 分钟 | 分档基准（短表）+ 达标判定、单沙箱串行 restore 长尾 n=100、并发 A/B 段。加 `--full` 改跑分档全表 3 遍（约 60 分钟） | 4 项无 FAIL，且达标表里各档 p50 在线内 |
 | `hdbss` | 约 4 分钟（每个 order；扫描时每个 order 另加约 1 分钟重启） | HDBSS 证据（L1 / L2 / L3 + order 核实）、写密集基准、汇总表；`--orders` 扫 buffer 大小（见 [§2.4](#24-hdbss)） | 无 FAIL：checkpoint / restore 没失败、md5 一致、order 核实生效；性能数字不判。后端不是 `hdbss` 时整档 SKIP |
-| `long` | 不自动跑 | 只打印清单与命令（见 [§6](#6-长测清单)） | — |
+| `special` | 920B 上约 25 分钟 | T18 重启、T21 四条故障注入、T37 两道配额闸。逐条给 nomad job 的 task 加一个 env 并重启（共 8 次），每次等 API 接单再跑用例；全部跑完、中途失败或 Ctrl-C 都把 job 恢复成开跑前的定义。必须带 `--allow-restart`；机器上还有沙箱时还要 `--kill-sandboxes-ok`。T38 要特制的 FC，这里判 SKIP | 无 FAIL；SUMMARY 末尾「改 env 重启与 job 恢复」一节写明恢复结果 |
+| `idle` | 约 15 分钟 | 空闲之后的 restore：`crtest/bench/idle_restore.py`，按手册第 16 章 §7 的测法循环「空闲 T 秒 → checkpoint cpB → restore cpA → 删 cpB」，T = 0 / 0.5 / 2 / 5 / 10 s，另加「不拍 cpB」与「guest 忙循环」两组对照；每次 restore 后逐项校验 | restore 全部成功、现场一致；耗时只记录 |
+| `soak` | `--hours N`，默认 8 | 混合稳态 D 段与滚动保留 keep 10 各 16 个沙箱、各占总时长的 40%；T36 全规模（16 沙箱 × 1800 秒）；串行 restore 5000 次。前后各记一次宿主资源（内存、netns、nat 规则、conntrack、orchestrator RSS 与 fd、产物目录），写进 `resources.md` | 各项无 FAIL；资源只记录不判 |
+| `long` | 不自动跑 | 只打印清单与命令（见 [§6](#6-长测清单)）；其中的大部分已由 `soak` 自动跑 | — |
 
 ### 2.1 `smoke`
 
@@ -322,8 +327,7 @@ order 在那里不生效，核实降级为只核对两个进程的环境变量�
 
 ## 3. 跳过的用例及原因
 
-`func` 默认跳过四类，SUMMARY 里会逐条写明 SKIP 与原因。都保留了显式打开的能力，
-但**在交付态的 950 上都不建议跑**（前三类要改线上配置或重启，第四类要换 FC 二进制）：
+`func` 默认跳过四类，SUMMARY 里会逐条写明 SKIP 与原因。前三类由 `special` 档自动改 env、重启并恢复，在机器可以独占时跑；第四类要换 FC 二进制，950 上不跑：
 
 | 用例 | 为什么默认跳 | 要跑怎么办 |
 |---|---|---|
@@ -437,9 +441,8 @@ $PY ../acceptance/checkpoint_concurrent.py --stages D --soak-sandboxes 8 --soak-
 $PY ../acceptance/checkpoint_concurrent.py --stages C --lifecycle \
     --out "$OUT/concurrent-C.json" 2>&1 | tee "$OUT/concurrent-C.log"
 
-# ② 空闲之后的 restore 长尾：仓库里暂时没有对应脚本，这里不列命令。
-#    serial_restore.py 是背靠背连续 restore，没有"空闲 T 秒后再 restore"的参数；
-#    在它外面 sleep 不等于空闲后 restore。
+# ② 空闲之后的 restore：由 run.sh idle 档跑（crtest/bench/idle_restore.py，手册第 16 章 §7 的测法）。
+#    serial_restore.py 是背靠背连续 restore，在它外面 sleep 不等于空闲后 restore。
 
 # ③ 数千次循环：混合稳态全规模（16 沙箱 × 1800 秒）+ 串行 restore 5000 次
 $PY -m crtest T36 --env-file "$ENVF" --sandboxes 16 --seconds 1800 \

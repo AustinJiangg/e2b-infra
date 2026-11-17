@@ -6,7 +6,13 @@
 #   bash run.sh perf      性能分档 + 长尾 + 并发，≤ 40 分钟
 #   bash run.sh hdbss     HDBSS 专项：证据 + 写密集基准（920B kvm-wp 上流程实测约 4 分钟，基准
 #                         自带 14 分钟时限）；加 --orders 扫 buffer 大小，每个 order 多一次约 1 分钟的重启
-#   bash run.sh long      只打印长测清单与命令，不自动跑
+#   bash run.sh special   重启 / 故障注入 / 配额三类（T18、T21 四条、T37 两道闸）：逐条改 nomad job
+#                         的 env 并重启 orchestrator，跑完把 job 恢复原样。必须带 --allow-restart；
+#                         920B 上约 25 分钟（重启 8 次）
+#   bash run.sh idle      空闲之后的 restore（手册第 16 章 §7 的测法，七臂），约 15 分钟
+#   bash run.sh soak      长跑（--hours N，默认 8）：16 沙箱混合稳态、16 沙箱滚动保留、T36 全规模、
+#                         串行 restore 5000 次，前后对比宿主资源。机器要独占
+#   bash run.sh long      只打印长测清单与命令，不自动跑（soak 档会自动跑其中的大部分）
 #
 # 每次跑出一个 results/<YYYYmmdd-HHMMSS>-<档>/，里面一份 SUMMARY.md、每项一份
 # .log、脚本自己的 .json 产物。任一项 FAIL 则退出码非 0（= FAIL 项数）。
@@ -31,6 +37,8 @@
 #   --fault-cases     func 档把 T21/T38 也跑了（要求服务端带注入 env / 带注入特性的 FC）
 #   --quota-cases     func 档把 T37 也跑了（要求服务端带配额 env）
 #   -n N              perf 档串行 restore 的次数，默认 100
+#   --full            perf 档的分档基准改跑全表 3 遍（约 30 分钟），代替短表
+#   --hours N         soak 档的总时长（小时），默认 8
 #   --quick           perf 档只做「短试跑」：验证三个脚本跑得通，不是正式采数
 #                     （2 个档各 n=5、串行长尾 n=10、并发只 A 段两个 N），≤ 10 分钟；
 #                     hdbss 档同理（脏页量只 16 / 64 MB、每个组合 1 遍），920B 上实测约 20 秒
@@ -72,13 +80,15 @@ FORCE_NON_HDBSS=0
 KILL_SANDBOXES_OK=0
 HDBSS_ITERS=""
 JOB=""
+FULL=0
+HOURS=8
 RUN_ARGS="$*"
 
 die() { echo "错误：$*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-	smoke | func | perf | hdbss | long) TIER=$1; shift ;;
+	smoke | func | perf | hdbss | special | idle | soak | long) TIER=$1; shift ;;
 	--env-file) ENV_FILE=$2; shift 2 ;;
 	--deploy-dir) DEPLOY=$2; shift 2 ;;
 	--python) PY=$2; shift 2 ;;
@@ -93,6 +103,8 @@ while [ $# -gt 0 ]; do
 	--quota-cases) QUOTA_CASES=1; shift ;;
 	-n) SERIAL_N=$2; shift 2 ;;
 	--quick) QUICK=1; shift ;;
+	--full) FULL=1; shift ;;
+	--hours) HOURS=$2; shift 2 ;;
 	--orders) ORDERS=$2; shift 2 ;;
 	--force-non-hdbss) FORCE_NON_HDBSS=1; shift ;;
 	--kill-sandboxes-ok) KILL_SANDBOXES_OK=1; shift ;;
@@ -102,12 +114,17 @@ while [ $# -gt 0 ]; do
 	*) die "未知参数 $1（-h 看用法）" ;;
 	esac
 done
-[ -n "$TIER" ] || die "要给一个档：smoke / func / perf / hdbss / long"
-if [ -n "$ORDERS" ]; then
-	[ "$TIER" = hdbss ] || die "--orders 只用于 hdbss 档"
-	echo "$ORDERS" | grep -qE '^[0-9]+(,[0-9]+)*$' || die "--orders 要逗号分隔的整数，例如 --orders 1,2,4,6,9"
-	[ "$ALLOW_RESTART" = 1 ] ||
-		die "--orders 每个 order 都要重启 orchestrator，这台机器上所有沙箱都会没；确认要做就加 --allow-restart"
+[ -n "$TIER" ] || die "要给一个档：smoke / func / perf / hdbss / special / idle / soak / long"
+if [ -n "$ORDERS" ] || [ "$TIER" = special ]; then
+	if [ -n "$ORDERS" ]; then
+		[ "$TIER" = hdbss ] || die "--orders 只用于 hdbss 档"
+		echo "$ORDERS" | grep -qE '^[0-9]+(,[0-9]+)*$' || die "--orders 要逗号分隔的整数，例如 --orders 1,2,4,6,9"
+		[ "$ALLOW_RESTART" = 1 ] ||
+			die "--orders 每个 order 都要重启 orchestrator，这台机器上所有沙箱都会没；确认要做就加 --allow-restart"
+	else
+		[ "$ALLOW_RESTART" = 1 ] ||
+			die "special 档要逐条改 env 并重启 orchestrator 8 次，这台机器上所有沙箱都会没；确认要做就加 --allow-restart"
+	fi
 	# 第二道闸：机器上还有沙箱在跑就不扫（--allow-restart 只表示「知道要重启」，不表示
 	# 「知道现在有人在用」）。在建结果目录、碰 job 之前就判，用 pidof 数，不用 pgrep -f。
 	N_LIVE_FC=$(pidof firecracker | wc -w)
@@ -173,6 +190,7 @@ OUT="$RESULTS_ROOT/$TS-$TIER"
 mkdir -p "$OUT" || die "建不出 $OUT"
 SUMMARY="$OUT/SUMMARY.md"
 RUNLOG="$OUT/run.log"
+JOBLOG="$OUT/$TIER-job.log" # 改 job / 恢复 job 的记录（hdbss 档为 hdbss-job.log）
 
 exec 3>&1
 say() { echo "$*" | tee -a "$RUNLOG" >&3; }
@@ -268,13 +286,30 @@ key_capfile() {
 	done
 	echo "${out% }" | cut -c1-200
 }
+key_idle() { grep -aE '^  (0|0\.5|2|5|10|nockpt|busy) +[0-9]+ ' "$1" | awk '{printf "%s:%s ", $1, $3}' | sed 's/^/restore p50 ms：/' | cut -c1-200; }
 key_serial() { grep -a '客户端墙钟' "$1" | tail -1 | cut -c1-160; }
 key_compliance() { grep -a '^\*\*' "$1" | tail -1 | cut -c1-160; }
 key_hdbss() { grep -aE '^(关键:|前置不满足：|断言失败：)' "$1" | tail -1 | sed 's/^关键: *//; s/^前置不满足：//' | cut -c1-200; }
 
+# ---------------------------------------------------------------- 身份
+# 这一轮测的是哪个 orchestrator：按 exe 认（不用 pgrep -f），记路径与 sha256。
+# 10-13 那几轮缺的就是这一项，事后补不上，所以每一档开头都记。
+ORCH_EXE="（没找到 orchestrator / template-manager 进程）"; ORCH_SHA="-"
+for p in /proc/[0-9]*; do
+	exe=$(readlink "$p/exe" 2>/dev/null) || continue
+	case ${exe##*/} in orchestrator* | template-manager*) ORCH_EXE=$exe; break ;; esac
+done
+case $ORCH_EXE in
+*" (deleted)") ORCH_SHA="（运行中的文件已被替换，sha256 取不到）" ;;
+/*) [ -r "$ORCH_EXE" ] && ORCH_SHA=$(sha256sum "$ORCH_EXE" | cut -c1-64) ;;
+esac
+REPO_COMMIT=$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo "-")
+
 # ---------------------------------------------------------------- 开跑
 {
 	echo "档       : $TIER"
+	echo "orchestrator: $ORCH_EXE  sha256 $ORCH_SHA"
+	echo "仓库提交 : $REPO_COMMIT"
 	echo "时间     : $(date -Is)"
 	echo "主机     : $(hostname)  $(uname -m)  $(uname -r)"
 	echo "部署根   : $DEPLOY"
@@ -353,6 +388,7 @@ PYEOF
 job_version() { "$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["Job"].get("Version"))' "$1" 2>/dev/null; }
 
 # job_with_order <inspect.json> <out.json> <order>：order 为空 = 不改 Env（恢复用）。
+# 第三个参数写成 KEY=VALUE 时改的是这个变量（special 档用），不是 FC_HDBSS_ORDER。
 # 版本号之类的字段去掉，交给 nomad 重新分配，免得被当成过期提交拒绝。
 job_with_order() {
 	"$PY" - "$1" "$2" "$3" <<'PYEOF'
@@ -360,11 +396,12 @@ import json, os, sys
 src, dst, order = sys.argv[1:4]
 j = json.load(open(src))
 if order != "":
+    key, val = order.split("=", 1) if "=" in order else ("FC_HDBSS_ORDER", order)
     for g in j["Job"].get("TaskGroups") or []:
         for t in g.get("Tasks") or []:
             if t.get("Env") is None:
                 t["Env"] = {}
-            t["Env"]["FC_HDBSS_ORDER"] = order
+            t["Env"][key] = val
 for k in ("Version", "SubmitTime", "CreateIndex", "ModifyIndex", "JobModifyIndex", "Status",
           "StatusDescription", "Stable"):
     j["Job"].pop(k, None)
@@ -378,7 +415,8 @@ PYEOF
 # 提交 → 等旧进程退、新进程起、health 200、进程环境对得上。定义没变就不提交、不重启。
 # 返回 0 成功，1 失败。不放进子 shell：JOB_TOUCHED / JOB_SUBMITS 要留在本进程里。
 job_apply() {
-	local f=$1 want=$2 log=$3 old new="" port h="" i ok=0 cur="$OUT/.job-cur.json"
+	local f=$1 want=$2 log=$3 old new="" port h="" i ok=0 cur="$OUT/.job-cur.json" wkey=FC_HDBSS_ORDER wval=$2
+	case $want in *=*) wkey=${want%%=*}; wval=${want#*=} ;; esac
 	echo "## $(date +%T) job_apply $(basename "$f") 期望 FC_HDBSS_ORDER=${want:-（不核对）}" >>"$log"
 	if ! nomad job inspect "$JOB" >"$cur" 2>>"$log"; then
 		echo "nomad job inspect $JOB 失败" >>"$log"
@@ -412,7 +450,7 @@ job_apply() {
 		if [ -n "$new" ] && [ "$new" != "$old" ]; then
 			port=$(orch_port "$new")
 			h=$(orch_health "$port")
-			if [ "$h" = 200 ] && { [ -z "$want" ] || [ "$(penv "$new" FC_HDBSS_ORDER)" = "$want" ]; }; then
+			if [ "$h" = 200 ] && { [ -z "$want" ] || [ "$(penv "$new" "$wkey")" = "$wval" ]; }; then
 				echo "$(date +%T) 新进程就绪：pid ${old:-无} → $new，:$port/health=200，FC_HDBSS_ORDER=$(penv "$new" FC_HDBSS_ORDER)" >>"$log"
 				return 0
 			fi
@@ -436,11 +474,11 @@ hdbss_restore_job() {
 	say "== 恢复 job $JOB（扫描前的定义） =="
 	if [ "$JOB_TOUCHED" = 1 ]; then
 		if ! job_with_order "$OUT/job-before.json" "$OUT/job-restore.json" "" ||
-			! job_apply "$OUT/job-restore.json" "" "$OUT/hdbss-job.log"; then
+			! job_apply "$OUT/job-restore.json" "" "$JOBLOG"; then
 			ok=0
 		fi
 	fi
-	nomad job inspect "$JOB" >"$after" 2>>"$OUT/hdbss-job.log" || ok=0
+	nomad job inspect "$JOB" >"$after" 2>>"$JOBLOG" || ok=0
 	chmod 600 "$after" 2>/dev/null
 	job_view "$OUT/job-before.json" >"$OUT/job-before.view.txt" 2>/dev/null
 	job_view "$after" >"$OUT/job-after.view.txt" 2>/dev/null
@@ -454,13 +492,17 @@ hdbss_restore_job() {
 	dt=$(($(date +%s) - t0))
 	HDBSS_STATE="$OUT/job-state.md"
 	{
-		echo "## order 扫描与 job 恢复"
+		echo "## ${SCAN_TITLE:-order 扫描}与 job 恢复"
 		echo ""
 		echo "| 项 | 值 |"
 		echo "|---|---|"
 		echo "| nomad job | \`$JOB\` |"
-		echo "| 要扫的 order | $ORDERS |"
-		echo "| 测完的 order | ${ORDERS_DONE:-无} |"
+		if [ "$TIER" = special ]; then
+			echo "| 做完的环境变量 | ${ORDERS_DONE:-无} |"
+		else
+			echo "| 要扫的 order | $ORDERS |"
+			echo "| 测完的 order | ${ORDERS_DONE:-无} |"
+		fi
 		echo "| 是否被中断 | $([ "$INTERRUPTED" = 1 ] && echo '是（收到 INT / TERM）' || echo 否) |"
 		echo "| 提交 job 的次数 | $JOB_SUBMITS（含恢复那一次；每次换一个 orchestrator 进程） |"
 		echo "| 启动命令 + Env 与扫描前对比 | $([ -z "$diff_out" ] && echo '**完全相同**' || echo '**不同，见下**') |"
@@ -496,8 +538,8 @@ hdbss_restore_job() {
 		row "恢复 job \`$JOB\`" "PASS" "${dt}s" "启动命令与 Env 和扫描前完全相同；进程环境里 FC_HDBSS_ORDER=${cur_order:-未设}" "job-state.md"
 	else
 		N_FAIL=$((N_FAIL + 1))
-		say "  FAIL  job 没有恢复成扫描前的样子（${dt}s）—— 看 $HDBSS_STATE 与 hdbss-job.log"
-		row "恢复 job \`$JOB\`" "FAIL" "${dt}s" "没有恢复成扫描前的定义，手工恢复命令见 job-state.md" "hdbss-job.log"
+		say "  FAIL  job 没有恢复成扫描前的样子（${dt}s）—— 看 $HDBSS_STATE 与 $(basename "$JOBLOG")"
+		row "恢复 job \`$JOB\`" "FAIL" "${dt}s" "没有恢复成扫描前的定义，手工恢复命令见 job-state.md" "$(basename "$JOBLOG")"
 	fi
 }
 
@@ -696,6 +738,10 @@ func)
 			"要服务端带 CHECKPOINT_MIN_FREE_BYTES / CHECKPOINT_MAX_PER_SANDBOX 重启。要跑加 --quota-cases"
 	fi
 
+	# checkpoint / restore 与原生 pause / connect / kill 的组合矩阵
+	item "兼容矩阵 compat_matrix.py" "compat-matrix" 1800 key_tail -- \
+		"$PY" "$ACCEPT/compat_matrix.py" --template "$TEMPLATE" --out "$OUT/compat-matrix.json"
+
 	# SDK 异常语义：纯本地 pytest，打桩服务端，不建沙箱、不碰栈。
 	if "$PY" -c 'import pytest' >/dev/null 2>&1; then
 		item "SDK 异常语义 pytest test_checkpoint_errors.py" "sdk-errors" 600 key_pytest -- \
@@ -704,6 +750,176 @@ func)
 		skip "SDK 异常语义 pytest test_checkpoint_errors.py" \
 			"这个解释器没装 pytest（pip install pytest 之后重跑；950 能连外网）"
 	fi
+	;;
+
+# ================================================================ special
+special)
+	# 重启 / 故障注入 / 配额：这三类都要服务端带特定 env 重启。做法同 hdbss 的 order 扫描：
+	# 拿运行中的 job 定义，每条只在 task 的 Env 里加一个变量 → 提交 → 等就绪 → 跑用例；
+	# 全部跑完（含中途失败、Ctrl-C）把扫描前的定义原样提交回去。T38 要特制的 FC，不在这里跑。
+	command -v nomad >/dev/null 2>&1 || die "找不到 nomad 命令"
+	command -v curl >/dev/null 2>&1 || die "找不到 curl（等 orchestrator 就绪要用）"
+	if [ -z "${NOMAD_TOKEN:-}" ]; then
+		NOMAD_TOKEN=$(sed -n 's/^NOMAD_ACL_TOKEN=//p' "$DEPLOY/.env" 2>/dev/null | head -1 | tr -d "\"'")
+		[ -n "$NOMAD_TOKEN" ] || NOMAD_TOKEN=$(cat "${NOMAD_DATA_DIR:-/data/nomad}/acl.token" 2>/dev/null)
+	fi
+	export NOMAD_TOKEN
+	OPID=$(orch_pid) || die "没找到运行中的 orchestrator / template-manager 进程"
+	[ -n "$JOB" ] || JOB=$(penv "$OPID" NOMAD_JOB_ID)
+	[ -n "$JOB" ] || JOB=template-manager-system
+	SCAN_TITLE="改 env 重启"
+	# API 节点在 orchestrator 重启后要一两分钟才接单：用例开跑前先确认能建沙箱
+	api_ready() {
+		"$PY" - "$TEMPLATE" <<'PYEOF' >>"$JOBLOG" 2>&1
+import sys, time
+from e2b import Sandbox
+t0 = time.time(); last = None
+while time.time() - t0 < 300:
+    try:
+        Sandbox.create(template=sys.argv[1], timeout=60).kill()
+        print("API 接单（等了 %.0f s）" % (time.time() - t0)); sys.exit(0)
+    except Exception as e:
+        last = e; time.sleep(5)
+print("等了 300 s API 仍不接单：%s" % last); sys.exit(1)
+PYEOF
+	}
+	# with_env <KEY=VALUE> <名字>：改 env 并重启，成功返回 0
+	with_env() {
+		local kv=$1 t0
+		t0=$(date +%s)
+		say ""
+		say "== 改 job env：$kv 并重启 =="
+		if job_with_order "$OUT/job-before.json" "$OUT/job-env.json" "$kv" &&
+			job_apply "$OUT/job-env.json" "$kv" "$JOBLOG" && api_ready; then
+			N_PASS=$((N_PASS + 1))
+			say "  PASS  带 $kv 就绪（$(($(date +%s) - t0))s）"
+			row "改 job env：$kv 并重启" "PASS" "$(($(date +%s) - t0))s" "$(grep -a '新进程就绪\|API 接单' "$JOBLOG" | tail -1 | cut -c1-160)" "$(basename "$JOBLOG")"
+			return 0
+		fi
+		N_FAIL=$((N_FAIL + 1))
+		say "  FAIL  带 $kv 没就绪"
+		tail -5 "$JOBLOG" | sed 's/^/      /' | tee -a "$RUNLOG" >&3
+		row "改 job env：$kv 并重启" "FAIL" "$(($(date +%s) - t0))s" "没就绪，后面的项不跑" "$(basename "$JOBLOG")"
+		return 1
+	}
+	if ! nomad job inspect "$JOB" >"$OUT/job-before.json" 2>"$JOBLOG"; then
+		rm -f "$OUT/job-before.json"
+		N_FAIL=$((N_FAIL + 1))
+		say "  FAIL  nomad job inspect $JOB 失败（NOMAD_TOKEN 对吗？），没有改任何东西"
+		row "special 档" "FAIL" "-" "nomad job inspect $JOB 失败，没有改任何东西" "$(basename "$JOBLOG")"
+	else
+		chmod 600 "$OUT/job-before.json"
+		trap hdbss_restore_job EXIT
+		say ""
+		say "!! special 档：要重启 job $JOB 8 次（另加恢复 1 次）。"
+		say "   现在的 orchestrator：pid $OPID $(readlink "/proc/$OPID/exe")，活着的 firecracker $(live_fc) 个 —— 都会没。"
+		say "   改之前的定义已留底：$OUT/job-before.json"
+
+		# ① T18：重启后账本不过夜。重启命令用 nomad job restart，job 定义不变
+		[ -n "$RESTART_CMD" ] || RESTART_CMD="nomad job restart -yes $JOB"
+		export CRTEST_RESTART_CMD="$RESTART_CMD"
+		crtest_case T18 1800 --allow-restart --restart-cmd "$RESTART_CMD"
+		[ "$ITEM_RC" = 0 ] && ORDERS_DONE="T18（重启）"
+
+		# ② T21：四条注入，一次只能装一条
+		for fault in envd_timeout torn_assemble seal_move commit_late; do
+			[ "$INTERRUPTED" = 1 ] && { skip "crtest T21 --fault $fault" "被中断，没有跑"; continue; }
+			if with_env "CHECKPOINT_FAULT_INJECT=$fault"; then
+				item "crtest T21 --fault $fault" "crtest-T21-$fault" 900 key_crtest -- \
+					"${CRT[@]}" T21 "${COMMON[@]}" --out "$OUT/T21-$fault.json" --fault "$fault"
+				[ "$ITEM_RC" = 0 ] && ORDERS_DONE="$ORDERS_DONE、CHECKPOINT_FAULT_INJECT=$fault"
+			else
+				break
+			fi
+		done
+
+		# ③ T37：两道配额闸。水位给 10 TiB（任何盘都低于它，create / restore 都被拒）；条目上限给 2
+		for q in "disk_full CHECKPOINT_MIN_FREE_BYTES=10995116277760" "too_many CHECKPOINT_MAX_PER_SANDBOX=2"; do
+			set -- $q
+			[ "$INTERRUPTED" = 1 ] && { skip "crtest T37 --quota $1" "被中断，没有跑"; continue; }
+			if with_env "$2"; then
+				item "crtest T37 --quota $1" "crtest-T37-$1" 900 key_crtest -- \
+					"${CRT[@]}" T37 "${COMMON[@]}" --out "$OUT/T37-$1.json" --quota "$1"
+				[ "$ITEM_RC" = 0 ] && ORDERS_DONE="$ORDERS_DONE、$2"
+			else
+				break
+			fi
+		done
+		hdbss_restore_job
+		trap on_signal INT TERM
+		# 恢复 job 也是一次重启：等 API 接单再收尾，免得紧接着的测试建不出沙箱
+		api_ready || say "  !! 恢复 job 后 300 s 内 API 仍不接单，见 $(basename "$JOBLOG")"
+	fi
+	skip "crtest T38（FC 侧 faulted 路径）" \
+		"要 FC 带 cargo feature rollback-fault-inject；交付的 FC 不带，950 上不跑"
+	;;
+
+# ================================================================ idle
+idle)
+	# 测法同手册第 16 章 §7：空闲 0 / 0.5 / 2 / 5 / 10 s 五臂，加「不拍 cpB」与「guest 忙循环」两组对照
+	IDLE_ARGS=(); IDLE_TMO=3600
+	if [ "$QUICK" = 1 ]; then
+		say ""
+		say "!! --quick：短试跑，只验证脚本跑得通（三臂各 2 次），数字不能当结论。"
+		IDLE_ARGS=(--arms 0,2,nockpt --reps 2); IDLE_TMO=900
+	fi
+	item "空闲之后的 restore（手册第 16 章 §7 的七臂）" "idle-restore" "$IDLE_TMO" key_idle -- \
+		"$PY" "$CRTEST/bench/idle_restore.py" "${COMMON[@]}" "${IDLE_ARGS[@]}" \
+		--outdir "$OUT" --out "$OUT/idle-restore.json"
+	;;
+
+# ================================================================ soak
+soak)
+	# 总时长按 --hours 分给四项：混合稳态与滚动保留各 40%，其余是 T36 全规模（总时长的 10%，300～1800 秒）
+	# 与串行 restore 5000 次（时限为总时长的 15%）。前后各记一次宿主资源，比较是否走平。
+	echo "$HOURS" | grep -qE '^[0-9]+(\.[0-9]+)?$' || die "--hours 要一个数，例如 --hours 8"
+	SOAK_S=$(awk -v h="$HOURS" 'BEGIN{printf "%d", h*3600*0.4}')
+	SERIAL_MIN=$(awk -v h="$HOURS" 'BEGIN{printf "%d", h*60*0.15}')
+	[ "$SERIAL_MIN" -ge 10 ] || SERIAL_MIN=10
+	resources() { # resources <文件>：宿主资源快照
+		local p
+		p=$(orch_pid || true)
+		{
+			echo "time=$(date -Is)"
+			echo "MemAvailable_kB=$(awk '/MemAvailable/{print $2}' /proc/meminfo)"
+			echo "netns=$(ls /run/netns 2>/dev/null | wc -l)"
+			echo "firecracker=$(live_fc)"
+			echo "nat_rules=$(iptables -t nat -S 2>/dev/null | wc -l)"
+			echo "conntrack=$(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null || echo -)"
+			if [ -n "$p" ]; then
+				echo "orchestrator_pid=$p"
+				echo "orchestrator_rss_kB=$(awk '/VmRSS/{print $2}' "/proc/$p/status")"
+				echo "orchestrator_fds=$(ls "/proc/$p/fd" 2>/dev/null | wc -l)"
+			fi
+			echo "store_used_kB=$(du -sk "${STORE:-/orchestrator/build/checkpoints}" 2>/dev/null | cut -f1)"
+			echo "root_used_kB=$(df -k --output=used / | tail -1 | tr -d ' ')"
+		} >"$1"
+	}
+	resources "$OUT/resources-before.txt"
+	say "宿主资源（开跑前）：$(tr '\n' ' ' <"$OUT/resources-before.txt")"
+
+	item "混合稳态 D 段（16 沙箱 × ${SOAK_S}s）" "soak-concurrent-D" "$((SOAK_S + 3600))" key_tail -- \
+		"$PY" "$ACCEPT/checkpoint_concurrent.py" --template "$TEMPLATE" --stages D \
+		--soak-sandboxes 16 --soak-seconds "$SOAK_S" --out "$OUT/soak-concurrent-D.json"
+	item "滚动保留 keep 10（16 沙箱 × ${SOAK_S}s）" "soak-rolling" "$((SOAK_S + 3600))" key_tail -- \
+		env SPAWN_TIMEOUT=$((SOAK_S + 1800)) "$PY" "$ACCEPT/rolling_keep10.py" --template "$TEMPLATE" \
+		--soak-sandboxes 16 --soak-seconds "$SOAK_S" --out "$OUT/soak-rolling.json"
+	T36_S=$(awk -v h="$HOURS" 'BEGIN{s=h*3600*0.1; if (s>1800) s=1800; if (s<300) s=300; printf "%d", s}')
+	crtest_case T36 $((T36_S + 3600)) --sandboxes 16 --seconds "$T36_S"
+	item "串行 restore 5000 次" "soak-serial-5000" "$((SERIAL_MIN * 60 + 1800))" key_serial -- \
+		"$PY" "$CRTEST/bench/serial_restore.py" "${COMMON[@]}" -n 5000 --deadline-min "$SERIAL_MIN" \
+		--outdir "$OUT" --out "$OUT/soak-serial-5000.json"
+
+	resources "$OUT/resources-after.txt"
+	say "宿主资源（结束后）：$(tr '\n' ' ' <"$OUT/resources-after.txt")"
+	# 只记录不判：netns 每重启一次会漏一池（手册第 28 章 §9），本档不重启，增量应接近 0
+	{
+		echo "| 资源 | 开跑前 | 结束后 |"
+		echo "|---|---|---|"
+		join -t= <(sort "$OUT/resources-before.txt") <(sort "$OUT/resources-after.txt") |
+			awk -F= '$1!="time"{print "| " $1 " | " $2 " | " $3 " |"}'
+	} >"$OUT/resources.md"
+	row "宿主资源前后" "记录" "-" "见 resources.md（只记录不判）" "resources.md"
 	;;
 
 # ================================================================ perf
@@ -716,6 +932,10 @@ perf)
 		SERIAL_N=10
 		CONC_ARGS=(--stages A --fanout 1,4)
 		BENCH_TMO=900; SERIAL_TMO=600; CONC_TMO=900
+	elif [ "$FULL" = 1 ]; then
+		BENCH_ARGS=(--tier-set full --passes 3 --deadline-min 90)
+		CONC_ARGS=(--stages A,B --fanout 1,2,4,8,16 --same-threads 4 --same-rounds 5)
+		BENCH_TMO=6000; SERIAL_TMO=2400; CONC_TMO=2400
 	else
 		BENCH_ARGS=(--tier-set short --passes 2 --deadline-min 25)
 		CONC_ARGS=(--stages A,B --fanout 1,2,4,8,16 --same-threads 4 --same-rounds 5)
@@ -802,11 +1022,11 @@ hdbss)
 		OPID=$(orch_pid) || die "没找到运行中的 orchestrator / template-manager 进程"
 		[ -n "$JOB" ] || JOB=$(penv "$OPID" NOMAD_JOB_ID)
 		[ -n "$JOB" ] || JOB=template-manager-system
-		if ! nomad job inspect "$JOB" >"$OUT/job-before.json" 2>"$OUT/hdbss-job.log"; then
+		if ! nomad job inspect "$JOB" >"$OUT/job-before.json" 2>"$JOBLOG"; then
 			rm -f "$OUT/job-before.json"
 			N_FAIL=$((N_FAIL + 1))
 			say "  FAIL  order 扫描 —— nomad job inspect $JOB 失败（NOMAD_TOKEN 对吗？），没有改任何东西"
-			row "order 扫描（$ORDERS）" "FAIL" "-" "nomad job inspect $JOB 失败，没有改任何东西" "hdbss-job.log"
+			row "order 扫描（$ORDERS）" "FAIL" "-" "nomad job inspect $JOB 失败，没有改任何东西" "$(basename "$JOBLOG")"
 		else
 			chmod 600 "$OUT/job-before.json"
 			trap hdbss_restore_job EXIT
@@ -823,15 +1043,15 @@ hdbss)
 				say "== 切到 FC_HDBSS_ORDER=$o =="
 				t0=$(date +%s)
 				if job_with_order "$OUT/job-before.json" "$OUT/job-order$o.json" "$o" &&
-					job_apply "$OUT/job-order$o.json" "$o" "$OUT/hdbss-job.log"; then
+					job_apply "$OUT/job-order$o.json" "$o" "$JOBLOG"; then
 					N_PASS=$((N_PASS + 1))
 					say "  PASS  job 已带 FC_HDBSS_ORDER=$o 就绪（$(($(date +%s) - t0))s）"
-					row "改 job env：FC_HDBSS_ORDER=$o 并重启" "PASS" "$(($(date +%s) - t0))s" "$(grep -a '新进程就绪\|不提交、不重启' "$OUT/hdbss-job.log" | tail -1 | cut -c1-160)" "hdbss-job.log"
+					row "改 job env：FC_HDBSS_ORDER=$o 并重启" "PASS" "$(($(date +%s) - t0))s" "$(grep -a '新进程就绪\|不提交、不重启' "$JOBLOG" | tail -1 | cut -c1-160)" "$(basename "$JOBLOG")"
 				else
 					N_FAIL=$((N_FAIL + 1))
 					say "  FAIL  切到 FC_HDBSS_ORDER=$o 没成功，停止扫描，去恢复 job"
-					tail -5 "$OUT/hdbss-job.log" | sed 's/^/      /' | tee -a "$RUNLOG" >&3
-					row "改 job env：FC_HDBSS_ORDER=$o 并重启" "FAIL" "$(($(date +%s) - t0))s" "没就绪，停止扫描" "hdbss-job.log"
+					tail -5 "$JOBLOG" | sed 's/^/      /' | tee -a "$RUNLOG" >&3
+					row "改 job env：FC_HDBSS_ORDER=$o 并重启" "FAIL" "$(($(date +%s) - t0))s" "没就绪，停止扫描" "$(basename "$JOBLOG")"
 					break
 				fi
 				if [ "$INTERRUPTED" = 1 ]; then
@@ -877,6 +1097,8 @@ TOTAL=$((N_PASS + N_FAIL + N_SKIP))
 	echo "| 开跑 | $TS |
 | 收尾 | $(date +%Y%m%d-%H%M%S) |"
 	echo "| 主机 | $(hostname) · $(uname -m) · $(uname -r) |"
+	echo "| orchestrator | \`$ORCH_EXE\` · sha256 \`$ORCH_SHA\` |"
+	echo "| 仓库提交 | \`$REPO_COMMIT\` |"
 	echo "| 部署根 | \`$DEPLOY\` |"
 	echo "| env 文件 | \`$ENV_FILE\` |"
 	echo "| 解释器 | \`$PY\` · $("$PY" -V 2>&1) |"
@@ -900,6 +1122,16 @@ TOTAL=$((N_PASS + N_FAIL + N_SKIP))
 		echo "**结论：有 $N_FAIL 项 FAIL，逐项看对应 .log。**"
 	fi
 	echo ""
+	if [ "$TIER" = soak ] && [ -s "$OUT/resources.md" ]; then
+		echo "## 宿主资源前后"
+		echo ""
+		cat "$OUT/resources.md"
+		echo ""
+	fi
+	if [ "$TIER" = special ] && [ -n "${HDBSS_STATE:-}" ] && [ -s "$HDBSS_STATE" ]; then
+		cat "$HDBSS_STATE"
+		echo ""
+	fi
 	if [ "$TIER" = hdbss ]; then
 		if [ -s "$OUT/hdbss-table.md" ]; then
 			echo "## HDBSS 写密集基准"

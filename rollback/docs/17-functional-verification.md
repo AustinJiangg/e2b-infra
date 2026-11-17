@@ -139,11 +139,12 @@
 `BROKEN` 的后半句是这个脚本存在的理由：它要回答的不是"我们的功能好不好用"，而是"**我们有没有弄坏别人的功能**"。
 所以第一组是基线：先在没有 checkpoint 的沙箱上跑一遍 pause → resume，确认原生能力本来就是好的，后面才有资格说"是我们弄坏的"。
 
-六组 15 格：A 基线 1 格；B checkpoint 之后做原生操作 8 格；C restore 之后 3 格；
+六组 16 格：A 基线 1 格；B checkpoint 之后做原生操作 9 格（B8 与 B4 相同，只是改用 pause 之前那个 Sandbox 对象发 restore，2026-11-16 加入，用来区分服务端语义与 `connect` 拿到的新对象）；C restore 之后 3 格；
 D 连做三次 checkpoint（多层封存）之后 pause 1 格——[附录 C §2.2](C-evolution-and-cases.md#22-checkpoint-之后原生-pause封层丢了) 缺陷的本质是"当前层之下还有 N 个封存层"，一层测不透；
 E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 格。
-数据一律 `O_DIRECT` 读回 8 MiB 比 sha256。预期的两个 `REFUSED`：pause / resume 之后回不到之前的 checkpoint
+数据一律 `O_DIRECT` 读回 8 MiB 比 sha256。预期的三个 `REFUSED`：B4、B8 两格是同一条边界，pause / resume 之后回不到之前的 checkpoint
 （账本不跨 pause，[第 24 章 §3.1](24-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）；kill 之后不能 connect（e2b 原有行为，放进矩阵是为了让基线完整）。
+脚本 2026-11-16 移到 `acceptance/compat_matrix.py`，由 `run.sh func` 运行；同一份脚本也在进程级上跑（模板 `base-gsd`），那边的账本跨 pause 保留，B8 判 OK。
 
 ### 1.6 `hdbss_evidence.py`：能力不等于数据面
 

@@ -117,7 +117,7 @@ def main():
             print("      实际错误: %s" % str(e)[:120])
     check(sh(sbx, "echo ok") == "ok", "被拒绝之后沙箱仍然可用")
 
-    # 完整的组合矩阵（哪些能做、哪些是边界、有没有弄坏原生能力）在 compat_matrix.py。
+    # 完整的组合矩阵（哪些能做、哪些是边界、有没有弄坏原生能力）在 ../acceptance/compat_matrix.py。
 
     print("\n================ 汇总 ================")
     try:

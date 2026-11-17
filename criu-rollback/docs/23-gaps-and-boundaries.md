@@ -72,7 +72,9 @@
 | Python SDK 的单测 | 2026-10-08 的结果目录里没有 `py-sdk/tests/test_gsd_*.py` 的运行记录 | SDK 的行为由功能验证间接覆盖（所有脚本都经 SDK 调用），但单测本身在这一轮是否通过没有留档 |
 | cgroup 的 `favordynmods` | 未测 | [附录 D](D-restore-slowness-case.md) 里作为 `rcu_expedited` 之外的替代办法提到，效果未知 |
 | CRIU 不支持的特性 | 没有兼容清单 | 已知 stdout 接 journald 的进程、树间用 unix socket 相连的进程无法 dump；除此之外哪些常见程序会失败没有系统地试过 |
-| 沙箱 pause / resume 之后 | 没有专门的结果 | 设计上 gsd 连同内存一起被冻结再恢复、不重新加载状态（[15](15-state-concurrency-capacity.md)），但没有"pause → resume → restore"的实测验证（[16](16-known-limits.md) 的 T-09） |
+| 沙箱 pause / resume 之后 | 2026-11-16 起有一项实测：兼容矩阵 B8（`rollback/scripts/acceptance/compat_matrix.py`，模板 `base-gsd`）在新 920B 上建 checkpoint、pause、resume，再用原 Sandbox 对象 restore，内容一致、账本跨 pause 保留（沙箱级则不保留）。只有这一种序列、单次 | 设计上 gsd 连同内存一起被冻结再恢复（[15](15-state-concurrency-capacity.md)）；更多组合与次数没有覆盖；`connect` 取回的对象受上一行的 SDK 缺陷影响（[16](16-known-limits.md) 的 T-09） |
+| 容量耗尽时的安全失败 | 2026-11-17 新 920B 上 `950.sh stress-ext` 的两组 1000 轮（脚本删得少，checkpoint 不封顶）。`multitree-capacity`：snapshot store 涨到 2 GiB tmpfs 的 89%～93%，guest `MemAvailable` 降到 16～24 MiB，容量预检拒绝了一部分 create，但约第 306 轮 guest 发生 OOM，被杀的是用户进程（gsd 与 criu 的 `OOMScoreAdjust=-1000`，[15](15-state-concurrency-capacity.md) §7 说的正是这种情形）。`deldense-capacity`：层堆在根盘上，约第 685 轮根盘写满，此后多数 create / restore 以 `internal`（"nothing was changed"）安全失败，但另有 4 次 restore 返回 `data_loss`，即杀进程之后才失败。错误原文未留存 | 容量预检对"估算值与 `MemAvailable` 接近"的情形没有余量，挡不住 OOM；根盘写满时 restore 不能保证所有可能失败的步骤都在提交点之前。200 轮（容量以内）三个种子都通过 |
+| SDK `Sandbox.connect` 拿到的对象 | 2026-11-16 新 920B 上查实：`_cls_connect_sandbox` 建连接配置时没有加 `E2b-Sandbox-Id` 头（`create` 路径有），client-proxy 按头定址，于是这个对象上的 checkpoint 调用全部被以 `missing header` 打回。兼容矩阵的 B3、B4、B6/B7、E1 因此判 BROKEN；用 pause 之前那个对象做 restore（B8）通过，即 [16](16-known-limits.md) 的 T-09 在真机上第一次走通 | 用户 pause / resume 之后若用 `Sandbox.connect` 取回沙箱，checkpoint 功能不可用，需要修 SDK |
 | 三处未查清的现象 | 新沙箱首个请求偶发的长等待（2026-10-08 记到一次，[19](19-920b-functional.md) §2.2；落位后的复核又记到一次，[19](19-920b-functional.md) §1.3）；候选内核上未复现的两次 checkpoint `internal`（同一沙箱的第 174、177 轮，[21](21-920b-stress.md) §3.5）；修复后仍有的单发 `ENOTEMPTY` | 都不影响判定，原因未知，见 [16](16-known-limits.md) 的 U-01、U-02、U-03 |
 
 ---

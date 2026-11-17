@@ -24,6 +24,8 @@
 | 压测（也可单独 `950.sh stress`） | `probe_whiteout_bug.py` 七个用例，然后 all、noworkers、multitree、deldense 四组 | `stress/` |
 | 切回沙箱级并冒烟（也可单独 `950.sh sandbox`、`950.sh smoke`） | 切回后用原模板试建沙箱，再跑沙箱级冒烟 | `sandbox-smoke/` |
 
+`all` 之后的分档测试由仓库根的 `test950.sh` 调度（`test950/README.md`），结果包是 `test950/results/<时间>-<档>.tar.gz`，进程级各步的目录名为 `criu-<命令>`，内部结构与下面相同。extended 档另有 `criu-stress-ext/`（八组压测、多种子与兼容矩阵），long 档另有 `criu-soak/`（按时长的长跑与宿主资源前后对比）。
+
 包里另有 `all.log`（每步进度与结论）、`summary.json`（每步状态与用时）和 `netcheck.txt`（切换前后宿主上非 e2b 网络配置的比对）。验收和压测两个目录里都有 `summary.json`（每一步的命令和状态、判定 `verdict`、机器名、起止时间、Python 与 SDK 路径）和 `deliverables.sha256`（三个运行文件的 sha256）。`acceptance` 的 `summary.json` 还有 `slow_calls` 和 `skipped`。下面各表的"来源"列写的都是相对这两个目录的文件名。
 
 分档性能的三轮结果用 `criu-rollback/scripts/acceptance/summarize_checkpoint_perf.py` 校验并汇总，命令见 [验证摘要](../validation/README.md)。950 的摘要另建带平台与日期的目录，放在 `criu-rollback/validation/` 下，不覆盖 920B 的目录。

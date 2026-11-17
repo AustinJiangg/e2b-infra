@@ -18,11 +18,10 @@ hdbss_evidence.py   HDBSS 三级证据：能力 / FC 自报 / 数据面
 timing.py           耗时与存储：逐代 create、逐级 restore、链深 5/20/50 对照
 loop.py             稳定性：N 次回滚的成功率与分位数
 pause_verify.py     checkpoint 之后 pause/resume，磁盘数据必须原样回来（O_DIRECT 读回）
-compat_matrix.py    checkpoint/restore 与原生 create/connect/pause/kill 的组合矩阵
 bench-ckpt.py       耗时基准：全量 vs 增量各档分布、虚机冻结窗口、restore、持续速率
 probe-ramp.py       判别连打劣化是"链变深"还是"写得多"（把脏页量拉开做同样多次）
 freeze_probe.py     被 bench-ckpt.py 推进 guest 里跑的时钟采样器，用来量虚机冻结窗口
-run-all.sh          一条命令跑完一套（correctness → timing → loop → bench → pause → compat），产出一份报告
+run-all.sh          一条命令跑完一套（correctness → timing → loop → bench → pause → compat），产出一份报告；compat 调的是 ../acceptance/compat_matrix.py
 耗时基准结论.md      两套的耗时对照与三个发现（连打劣化 / cowextsize / 冻结窗口口径）
 数据卷与loop.md      为什么用 loop、三项调优、nodiscard 的坑、两台机器为什么不对称
 ```
@@ -117,7 +116,7 @@ bash run-all.sh ext4 /                     # 六个脚本一条龙，含 pause �
 
 # 也可以单独跑（两个都不需要参数，用上面那两个环境变量）：
 #   python3 pause_verify.py                # checkpoint 之后 pause/resume 的数据一致性
-#   python3 compat_matrix.py               # 与原生生命周期操作的兼容矩阵
+#   python3 ../acceptance/compat_matrix.py --template base --out compat.json   # 兼容矩阵（2026-11-16 移到 acceptance/）
 
 # --- XFS 套：950 上只能 loop，先造卷 ---
 bash 02-prepare-loop-volume.sh --fs xfs --mnt /mnt/xfsdev --size 300G

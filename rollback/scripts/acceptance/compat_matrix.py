@@ -1,35 +1,77 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""checkpoint/restore 与 e2b 原有沙箱生命周期操作的兼容性矩阵。
+"""checkpoint / restore 与 e2b 原生沙箱生命周期操作的兼容性矩阵。两套快照回滚都能跑。
 
-我们给 e2b 加了两个操作（checkpoint.create / checkpoint.restore），e2b 原本
-就有四个（create / connect / pause / kill，其中 connect 对已 pause 的沙箱等同
-resume）。这两组操作会互相影响 —— 都在动同一个沙箱的磁盘层栈和内存 ——
-但此前没有任何测试覆盖过它们的**组合**。
-
+我们给 e2b 加了 checkpoint.create / checkpoint.restore 两个操作，e2b 原本有 create / connect /
+pause / kill 四个（connect 对已 pause 的沙箱等同 resume）。两组操作动的是同一个沙箱，会互相影响。
 这个脚本把组合逐个跑一遍，每格给出三种判定之一：
 
     OK          能做，且做完之后沙箱和数据都对
     REFUSED     服务端明确拒绝（拒绝本身是安全的：没有留下半吊子状态）
-    BROKEN      能调用但结果不对，或者本该能做的原生操作被我们弄坏了
-                —— 这一类才是真问题
+    BROKEN      能调用但结果不对，或者本该能做的原生操作被弄坏了 —— 这一类才是真问题
 
-判定"数据对不对"一律用 O_DIRECT 读回 8 MiB 随机数据比 sha256：走 guest
-page cache 会把磁盘层的问题完全盖住（pause 那个 bug 当初就是这么假通过的）。
+判定"数据对不对"一律用 O_DIRECT 读回 8 MiB 随机数据比 sha256：走 guest page cache 会把磁盘层的
+问题完全盖住。
 
-用法（先按 README 的「完整流程」设好 E2B_API_URL / E2B_API_KEY）:
-    python3 compat_matrix.py
+只调用 SDK 的公开接口，所以同一份脚本在沙箱级（模板 base）和进程级（模板 base-gsd）上都能跑。
+进程级的 B 组就是手册里 T-09 那一条"checkpoint → pause → resume → restore"。B8 用 pause 之前
+那个 Sandbox 对象做 restore，B3～B7 用 connect 拿到的新对象：两者分开，是因为进程级 SDK 的
+connect 曾经漏带 E2b-Sandbox-Id 头，新对象上的 checkpoint 调用会被代理以 "missing header" 打回。
+这种打回是客户端的错误，判 BROKEN，不判 REFUSED。
+
+来历：rollback/scripts/dev/compat_matrix.py（09 月开发期），2026-11-16 去掉对 dev/lib.py 的依赖，
+加 --template / --out，并移到本目录。
+
+凭据：取环境变量 E2B_API_KEY 等；给了 --env-file 就先读它（不覆盖已导出的变量）。
+退出码：0 = 没有 BROKEN；1 = 有 BROKEN；2 = 脚本自身出错。
+
+用法：
+    python3 compat_matrix.py --template base --out /tmp/compat.json
+    python3 compat_matrix.py --template base-gsd --out /tmp/compat.json
 """
 import argparse
+import json
+import os
 import sys
+import time
 import traceback
 
-import lib
+
+def load_env_file(path):
+    for line in open(path, encoding="utf-8"):
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+def wait_for_api(template, tries=30, delay=4):
+    """刚重启的节点头几秒不接单，先探一下，免得第一项因为无关原因失败。"""
+    from e2b import Sandbox as S
+    last = None
+    for i in range(tries):
+        try:
+            S.create(template=template, timeout=60).kill()
+            return True
+        except Exception as e:
+            last = e
+            time.sleep(delay)
+    print("API 一直起不来: %s" % last, flush=True)
+    return False
+
 
 RESULTS = []
 
 
+OUT = None
+
+
 def record(case, verdict, detail=""):
+    # 代理因为请求头不全打回的不是服务端的拒绝，是客户端坏了
+    if verdict == "REFUSED" and "missing header" in detail:
+        verdict = "BROKEN"
+        detail = "客户端请求头不全，被代理打回：" + detail
     RESULTS.append((case, verdict, detail))
     mark = {"OK": "✓", "REFUSED": "·", "BROKEN": "✗"}.get(verdict, "?")
     print("  %s %-46s %-8s %s" % (mark, case, verdict, detail), flush=True)
@@ -57,9 +99,15 @@ def main():
     ap = argparse.ArgumentParser(description="checkpoint/restore 与原生生命周期操作的兼容性矩阵")
     ap.add_argument("--template", default="base")
     ap.add_argument("--timeout", type=int, default=1800)
+    ap.add_argument("--env-file", default=None)
+    ap.add_argument("--out", default=None, help="把矩阵写成 JSON")
     args = ap.parse_args()
+    if args.env_file:
+        load_env_file(args.env_file)
+    global OUT
+    OUT = args.out
 
-    if not lib.wait_for_api():
+    if not wait_for_api(args.template):
         sys.exit("API 一直没就绪，先查 nomad/api 状态")
     global Sandbox
     from e2b import Sandbox
@@ -81,7 +129,7 @@ def main():
                "数据一致" if ok else "数据不一致")
         s2.kill()
     except Exception as e:
-        record("A1 pause → connect（无 checkpoint）", "BROKEN", str(e)[:60])
+        record("A1 pause → connect（无 checkpoint）", "BROKEN", str(e)[:120])
 
     # ================================================================
     print("\n===== B. checkpoint 之后，原生操作还能不能做 =====")
@@ -102,7 +150,7 @@ def main():
         record("B2 checkpoint → pause → connect：磁盘数据", "OK" if ok else "BROKEN",
                "" if ok else "写入 %s 读回 %s" % (h, got))
     except Exception as e:
-        record("B2 checkpoint → pause → connect：磁盘数据", "BROKEN", str(e)[:60])
+        record("B2 checkpoint → pause → connect：磁盘数据", "BROKEN", str(e)[:120])
         s2 = None
 
     # B3 pause/resume 之后 checkpoint 账本还在不在
@@ -111,7 +159,7 @@ def main():
             lst = s2.checkpoint.list()
             record("B3 pause → connect 之后 checkpoint.list", "OK", "%d 个" % len(lst))
         except Exception as e:
-            record("B3 pause → connect 之后 checkpoint.list", "REFUSED", str(e)[:60])
+            record("B3 pause → connect 之后 checkpoint.list", "REFUSED", str(e)[:120])
         # B4 pause/resume 之后能不能 restore 回 pause 之前的 checkpoint
         try:
             s2.checkpoint.restore(ck.checkpoint_id)
@@ -120,7 +168,7 @@ def main():
             record("B4 pause → connect 之后 restore 旧 checkpoint",
                    "OK" if ok else "BROKEN", "" if ok else "数据不一致")
         except Exception as e:
-            record("B4 pause → connect 之后 restore 旧 checkpoint", "REFUSED", str(e)[:70])
+            record("B4 pause → connect 之后 restore 旧 checkpoint", "REFUSED", str(e)[:120])
         # B5 拒绝之后沙箱是否还活着（拒绝必须是干净的）
         record("B5 上一步之后沙箱仍然可用", "OK" if alive(s2) else "BROKEN")
         # B6 pause/resume 之后能不能【新建】 checkpoint
@@ -134,7 +182,16 @@ def main():
             record("B7 restore 到 pause 之后新建的 checkpoint",
                    "OK" if gone else "BROKEN", "b2 已回滚掉" if gone else "b2 仍在")
         except Exception as e:
-            record("B6/B7 pause → connect 之后新建并 restore", "REFUSED", str(e)[:70])
+            record("B6/B7 pause → connect 之后新建并 restore", "REFUSED", str(e)[:120])
+        # B8 同一条路径，但用 pause 之前那个 Sandbox 对象发 restore（不经 connect 的新对象）
+        try:
+            s.checkpoint.restore(ck.checkpoint_id)
+            got = sh(s, READ.format(n="b"))
+            ok = got == h and alive(s)
+            record("B8 pause → connect 之后用原对象 restore 旧 checkpoint",
+                   "OK" if ok else "BROKEN", "" if ok else "写入 %s 读回 %s" % (h, got))
+        except Exception as e:
+            record("B8 pause → connect 之后用原对象 restore 旧 checkpoint", "REFUSED", str(e)[:120])
         try:
             s2.kill()
         except Exception:
@@ -162,7 +219,7 @@ def main():
         except Exception:
             pass
     except Exception as e:
-        record("C2 restore → pause → connect", "BROKEN", str(e)[:60])
+        record("C2 restore → pause → connect", "BROKEN", str(e)[:120])
 
     # ================================================================
     print("\n===== D. 多次 checkpoint（多层封存）之后 pause =====")
@@ -183,7 +240,7 @@ def main():
         except Exception:
             pass
     except Exception as e:
-        record("D1 三次 checkpoint → pause → connect", "BROKEN", str(e)[:60])
+        record("D1 三次 checkpoint → pause → connect", "BROKEN", str(e)[:120])
 
     # ================================================================
     print("\n===== E. 反向：pause/resume 之后再走完整 checkpoint 流程 =====")
@@ -199,7 +256,7 @@ def main():
         record("E1 pause → connect → checkpoint → restore",
                "OK" if ok else "BROKEN", "" if ok else "数据不一致")
     except Exception as e:
-        record("E1 pause → connect → checkpoint → restore", "REFUSED", str(e)[:70])
+        record("E1 pause → connect → checkpoint → restore", "REFUSED", str(e)[:120])
     try:
         s5.kill()
     except Exception:
@@ -218,7 +275,7 @@ def main():
         except Exception:
             pass
     except Exception as e:
-        record("F1 kill 之后 connect", "REFUSED", str(e)[:50])
+        record("F1 kill 之后 connect", "REFUSED", str(e)[:120])
 
     # ================================================================
     print("\n================ 矩阵 ================")
@@ -226,6 +283,10 @@ def main():
     for case, verdict, detail in RESULTS:
         print("  %-*s  %-8s %s" % (w, case, verdict, detail))
     broken = [c for c, v, _ in RESULTS if v == "BROKEN"]
+    if OUT:
+        with open(OUT, "w") as f:
+            json.dump({"items": [{"case": c, "verdict": v, "detail": d} for c, v, d in RESULTS]},
+                      f, ensure_ascii=False, indent=1)
     refused = [c for c, v, _ in RESULTS if v == "REFUSED"]
     print("\n  OK %d 项 / REFUSED %d 项 / BROKEN %d 项"
           % (len(RESULTS) - len(broken) - len(refused), len(refused), len(broken)))

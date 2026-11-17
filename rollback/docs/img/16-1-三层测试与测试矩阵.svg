@@ -36,7 +36,7 @@
 <text x="431.3" y="436.2" font-size="13" fill="#5F5E5A" text-anchor="middle">#[cfg(test)]、SDK 的 py-sdk/tests</text>
 <rect x="664.7" y="364.0" width="422.7" height="85.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
 <text x="876.0" y="399.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">rollback/scripts/acceptance/</text>
-<text x="876.0" y="426.2" font-size="13" fill="#5F5E5A" text-anchor="middle">五个单文件脚本，互不依赖；外加 rolling_keep10.py</text>
+<text x="876.0" y="426.2" font-size="13" fill="#5F5E5A" text-anchor="middle">六个单文件脚本，互不依赖；外加 rolling_keep10.py</text>
 <rect x="1109.3" y="364.0" width="422.7" height="85.5" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
 <text x="1320.7" y="399.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">rollback/scripts/crtest/、dev/</text>
 <text x="1320.7" y="426.2" font-size="13" fill="#5F5E5A" text-anchor="middle">crtest 20 个用例 + 基准；dev 是共享 lib.py 的工具箱</text>
@@ -55,11 +55,12 @@
 <text x="431.3" y="613.5" font-size="15" fill="#5F5E5A" font-weight="600" text-anchor="middle">不进测试矩阵</text>
 <text x="431.3" y="635.5" font-size="15" fill="#5F5E5A" font-weight="600" text-anchor="middle">守着的不变量见第 11、29 章</text>
 <rect x="664.7" y="575.0" width="422.7" height="89.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<text x="876.0" y="612.1" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">checkpoint_verify.py：59 项</text>
-<text x="876.0" y="638.9" font-size="13" fill="#5F5E5A" text-anchor="middle">checkpoint_concurrent.py：A/B 短时并发、D 段长稳</text>
+<text x="876.0" y="602.1" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">checkpoint_verify.py：59 项</text>
+<text x="876.0" y="628.9" font-size="13" fill="#5F5E5A" text-anchor="middle">checkpoint_concurrent.py：A/B 短时并发、D 段长稳；</text>
+<text x="876.0" y="648.9" font-size="13" fill="#5F5E5A" text-anchor="middle">compat_matrix.py：原生生命周期兼容</text>
 <rect x="1109.3" y="575.0" width="422.7" height="89.0" rx="10" fill="#F7F6F2" stroke="#B4B2A9" stroke-width="1.2"/>
-<text x="1320.7" y="600.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">correctness.py、pause_verify.py、</text>
-<text x="1320.7" y="623.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">compat_matrix.py、loop.py、hdbss_evidence.py</text>
+<text x="1320.7" y="600.3" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">correctness.py、pause_verify.py、loop.py、</text>
+<text x="1320.7" y="623.8" font-size="15.5" fill="#2C2C2A" font-weight="600" text-anchor="middle">hdbss_evidence.py</text>
 <text x="1320.7" y="650.7" font-size="13" fill="#5F5E5A" text-anchor="middle">crtest T11–T41（含 T36、T39、T40、T41）、sdktests</text>
 <circle cx="63" cy="730.0" r="15" fill="#2C2C2A"/>
 <text x="63.0" y="735.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>

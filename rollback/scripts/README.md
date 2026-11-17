@@ -93,7 +93,7 @@ python3 -m crtest T25 --out t25.json
 
 宿主自检（`01-check-host.sh` + `cap_test.c`）、造数据卷（`02-prepare-loop-volume.sh`）、
 两套之间切换二进制与 env（`03-switch.sh`、`hcl_env.py`）、切换后冒烟（`04-verify-runtime.sh`）、
-正确性与稳定性（`correctness.py`、`loop.py`、`pause_verify.py`、`compat_matrix.py`）、
+正确性与稳定性（`correctness.py`、`loop.py`、`pause_verify.py`）、
 耗时与劣化（`timing.py`、`bench-ckpt.py`、`probe-ramp.py`、`freeze_probe.py`）、
 HDBSS 三级证据（`hdbss_evidence.py`）、一条龙（`run-all.sh`）。
 逐脚本说明、判据速查、两套 env 怎么配，全在 [`dev/README.md`](dev/README.md)；
@@ -112,7 +112,7 @@ HDBSS 三级证据（`hdbss_evidence.py`）、一条龙（`run-all.sh`）。
 |---|---|
 | 树语义：线性 / 前滚 / 分叉 / 删除 / 失败语义 | `dev/correctness.py`、`acceptance/checkpoint_verify.py` |
 | checkpoint 之后 pause/resume 不丢封层数据 | `dev/pause_verify.py` |
-| 与原生生命周期操作（create/connect/pause/kill）的兼容矩阵 | `dev/compat_matrix.py` |
+| 与原生生命周期操作（create/connect/pause/kill）的兼容矩阵 | `acceptance/compat_matrix.py` |
 | 200 次连续回滚的成功率 | `dev/loop.py` |
 | 原生精确增量的**正确性**（跨代 4KB 拼接）与**体积** | `probes/pb5.py`、`probes/pb4.py`、`probes/pb2.py` |
 | 退路：追踪关掉能退回全量 | `dev/timing.py`（`mem_mode` 一列）、`probes/probe_dirty.py` |

@@ -47,7 +47,7 @@ case "${1:-help}" in
   unpack)
     exec "$(host_python)" "$ROOT/ops/unpack.py"
     ;;
-  all|gsd|sandbox|install-sdk|acceptance|stress|smoke)
+  all|gsd|sandbox|install-sdk|quick|acceptance|stress|stress-ext|soak|smoke)
     need_root; load_site
     exec "$(host_python)" "$ROOT/ops/flow.py" "$@"
     ;;
@@ -60,6 +60,10 @@ case "${1:-help}" in
   status         只看当前是哪一套
 以下是 all 里的单步，一般不需要单独用：
   verify  unpack  install-sdk  preflight  save-baseline  install  acceptance  stress  smoke
+以下是 all 之外的测试（要先在进程级栈上，即先执行 gsd；平时用仓库根的 test950.sh 统一调度）：
+  quick          部署自检 + verify_gsd，约 2 分钟
+  stress-ext     八组压测各 1000 轮、多种子、兼容矩阵，约 40 分钟
+  soak [--hours N]  一个沙箱里按时长连续压测，默认 4 小时
 USAGE
     ;;
 esac

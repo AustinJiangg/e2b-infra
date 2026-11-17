@@ -243,8 +243,8 @@ def fresh(path):
     return path
 
 
-def run_tests(mode, out):
-    r = envs.run(envs.GSD_ENV, [OPS / "run_tests.py", mode, "--out", fresh(out)])
+def run_tests(mode, out, extra=()):
+    r = envs.run(envs.GSD_ENV, [OPS / "run_tests.py", mode, "--out", fresh(out)] + list(extra))
     require(r.returncode == 0, "%s 未通过，见 %s/summary.json" % (mode, out))
 
 
@@ -371,8 +371,11 @@ def wait_firecracker_exit(seconds=60):
 
 
 def roll_back():
-    """测试失败后回到沙箱级：先删本轮测试沙箱，再等其余 firecracker 退出（最多 6 分钟）。"""
-    if stack.current() != "gsd":
+    """测试失败后回到沙箱级：先删本轮测试沙箱，再等其余 firecracker 退出（最多 6 分钟）。
+
+    只要 5008 上不是正好一个沙箱级进程就回切。切换中途失败时 5008 上可能一个进程都没有
+    （current() 为 None），这时同样要回切，否则 950 会停在没有服务的状态。"""
+    if stack.current() == "sandbox":
         return
     log("测试失败，回切沙箱级，保持 950 原服务可用")
     cleanup_test_sandboxes()
@@ -440,7 +443,9 @@ def all_flow(new):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("action", choices=("all", "gsd", "sandbox", "install-sdk", "acceptance", "stress", "smoke"))
+    parser.add_argument("action", choices=("all", "gsd", "sandbox", "install-sdk", "quick", "acceptance", "stress",
+                                           "stress-ext", "soak", "smoke"))
+    parser.add_argument("--hours", type=float, default=4.0, help="soak：时长（小时）")
     parser.add_argument("--new", action="store_true", help="all：不续跑，开始新一轮")
     parser.add_argument("--out", type=Path, help="acceptance / stress / smoke 的结果目录（必须尚不存在）")
     args = parser.parse_args()
@@ -452,10 +457,10 @@ def main():
         daily(args.action)
     elif args.action == "install-sdk":
         ensure_python()
-    elif args.action in ("acceptance", "stress"):
+    elif args.action in ("quick", "acceptance", "stress", "stress-ext", "soak"):
         out = args.out or RESULTS / (stamp + "-" + args.action)
         require(not out.exists(), "结果目录已存在: %s" % out)
-        run_tests(args.action, out)
+        run_tests(args.action, out, ["--hours", str(args.hours)] if args.action == "soak" else [])
     elif args.action == "smoke":
         out = args.out or RESULTS / (stamp + "-sandbox-smoke")
         require(not out.exists(), "结果目录已存在: %s" % out)

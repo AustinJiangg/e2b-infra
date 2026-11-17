@@ -56,12 +56,12 @@
 |---|---|---|---|---|
 | 快照 / 恢复后照常干活；内存、文件、删除、权限位、进程都回到那一刻 | `acceptance/checkpoint_verify.py` | 末行 `✓ 59 项校验全部通过。` | 已跑，2026-11-06 部署上 59 项通过 | 2026-10-15 smoke 中通过并归档（[第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)） |
 | 部署前提与二进制配套 | `run.sh smoke` 的预检、SDK、能力与 FC 身份采集 | 预检无 FAIL；选定 FC 接口与交付件 hash 核对 | 已通过，五项全过，预检 WARN 1 为无 HDBSS | 2026-10-15 五项全部通过并归档（[第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)）；FC 版本判定依据为部署脚本 |
-| 树语义：线性 / 前滚 / 分叉跨 LCA / 删除与合并（compact / fold） / 失败 | `dev/correctness.py ext4` | 末行 `ALL PASS` | 已跑（部署版） | 待测 |
-| checkpoint 之后原生 pause，磁盘与内存完好 | `dev/pause_verify.py`（磁盘）；crtest T39（内存与盘上标记） | `O_DIRECT` 读回一致；内存 md5 一致 | T39 已跑，含 2026-11-06 func；`pause_verify.py` 未在代码基准上跑 | T39 通过并归档；`pause_verify.py` 待测 |
-| 不弄坏原生生命周期 | `dev/compat_matrix.py`；crtest T41 | 无 `BROKEN` | T41 已跑，含 2026-11-06 func | T41 通过并归档（外部出网未测）；`compat_matrix.py` 待测 |
+| 树语义：线性 / 前滚 / 分叉跨 LCA / 删除与合并（compact / fold） / 失败 | `dev/correctness.py ext4`（开发态） | 末行 `ALL PASS` | 已跑（部署版） | 不在 950 上跑：直链与前滚由 `checkpoint_verify.py` 覆盖，分叉由 T15、深链随机回滚由 T22、删除与隐藏层合并由 T36 和滚动保留覆盖，失败路径由 T21 覆盖 |
+| checkpoint 之后原生 pause，磁盘与内存完好 | crtest T39（内存与盘上标记）；`acceptance/compat_matrix.py` 的 B2、D1（`O_DIRECT` 读回） | 内存 md5 一致；`O_DIRECT` 读回一致 | T39 已跑，含 2026-11-06 func | T39 通过并归档；开发态的 `dev/pause_verify.py` 与这两项重复，不在 950 上跑 |
+| 不弄坏原生生命周期 | `acceptance/compat_matrix.py`（`run.sh func` 里跑）；crtest T41 | 无 `BROKEN` | T41 已跑，含 2026-11-06 func；`compat_matrix.py` 待演练 | T41 通过并归档（外部出网未测）；`compat_matrix.py` 待测 |
 | 原生 pause / resume 分档耗时与导出体积 | `benchmark/native_snapshot_tiers.py` | 判定 PASS，内容与进程校验全过 | 2026-11-06 精确增量与对照构建各 216 个样本（[第 19 章](19-native-pause-resume.md)） | 2026-11-06 pause 模式 108 个样本（[第 19 章](19-native-pause-resume.md)）；`create_snapshot()` 路径待测 |
 | HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 默认 order 1 的能力、自报、启用日志、数据面与 MD5 文本证据已归档（[第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)）；未扫描其他 order |
-| 稳定性：数百次交替回滚 | `dev/loop.py ext4` | `failures: 0` | 未跑；由长测覆盖（见下） | 待测 |
+| 稳定性：数百次交替回滚 | `crtest/bench/serial_restore.py`（perf 档 100 次，soak 档 5000 次） | 全部成功、抽验一致 | 5000 次已跑 | 100 次已归档；5000 次待测。开发态的 `dev/loop.py` 与它重复，不在 950 上跑 |
 | 盲区、边界、故障注入 | crtest T11–T41 | 各用例三段式断言 | 默认 16 个用例 2026-11-06 通过；重启类与注入类在 `3539c45df` 上单独跑过 | 默认 16 个用例通过并归档（[第 17 章 §3](17-functional-verification.md#3-功能回归结果)）；T18 / T21 / T37 / T38 跳过，重启 / 注入 / 配额专项未测 |
 | 短时并发：跨沙箱扩展性与同沙箱争用 | `acceptance/checkpoint_concurrent.py` A/B 段 | A 逐项校验；B 结合 RPC、命令错误与操作后状态 | 已跑 | 2026-10-13 文本已归档，见 [第 21 章 §1](21-concurrency-and-longrun.md#2-950-短时并发2026-10-13-ab)；B 的命令异常单列 |
 | 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（[第 21 章 §2](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；全规模、D 段与小时级长稳仍缺结果 |
@@ -342,7 +342,7 @@ restore 表里另有一列"读盘"（`materialize_disk_read_mb` 与 `fc_rollback
 
 ## 7. 空闲后 restore 与串口的专项测法
 
-这两项不在 `rollback/scripts/` 的脚本里，数据来自定向复现工具。这里记测法和每一组对照的用意，便于复测时对齐口径：
+空闲后 restore 的数据原先来自定向复现工具，2026-11-16 起按下面的测法收进 `crtest/bench/idle_restore.py`（`run.sh idle`）；串口段仍不在 `rollback/scripts/` 的脚本里。这里记测法和每一组对照的用意，便于复测时对齐口径：
 
 - **空闲后 restore**：同一沙箱串行。先拍 cpA 作目标，然后循环"sleep T 秒 → checkpoint cpB → restore cpA → 删 cpB"，
   T 取 0 / 0.5 / 2 / 5 / 10 s，看 restore 耗时是否随空闲时长上涨。另两组对照各拆一个变量：

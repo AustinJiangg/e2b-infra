@@ -38,6 +38,8 @@ bash criu-rollback/deploy/950.sh all
 
 920B 上全程约 11 分钟，不需要手动 `conda activate`，也不需要估等待时间。
 
+**之后的测试**：在仓库根目录用 `bash test950.sh quick|standard|extended|long`，它按档调用本目录的 `950.sh quick|acceptance|stress|stress-ext|soak` 和沙箱级的 `run.sh`，并负责切栈、记录身份、续跑和打包，说明见 [`test950/README.md`](../../test950/README.md)。
+
 跑之前要具备的条件：
 
 - 950 上已有原沙箱级的 conda 环境 `jll-e2b`，conda 装在常见位置（`/root/miniforge3`、`/root/miniconda3` 等）。位置特殊时在 `criu-rollback/deploy/ops/site.env` 写 `CONDA_EXE=`。
