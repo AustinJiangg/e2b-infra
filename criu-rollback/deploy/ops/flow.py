@@ -367,7 +367,7 @@ def do_step(key, run, again=False):
             log("CRIU_SKIP_IMAGE_IMPORT=1：镜像已在别的机器导入，跳过")
             return
         r = subprocess.run(["bash", str(OPS / "import-image.sh")], env=dict(os.environ, CRIU_TEMPLATE_IMAGE=IMAGE))
-        require(r.returncode == 0, "镜像导入失败；没登录 Harbor 时先 docker login harbor:443，再重跑")
+        require(r.returncode == 0, "镜像导入失败，原因见上面的输出")
     elif key == "baseline":
         cur = stack.current()
         if not (stack.state() / "baseline.json").exists():

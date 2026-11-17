@@ -48,7 +48,7 @@ bash criu-rollback/deploy/950.sh all
 - 沙箱级已部署好，原模板 `base` 能建沙箱（`build.sh -s` 不建模板，要按单机部署文档在 `benchmark/` 下执行 `build_template.py`）。
 - 原沙箱级的 conda 环境 `jll-e2b`，conda 装在常见位置（`/root/miniforge3`、`/root/miniconda3` 等）。位置特殊时在 `criu-rollback/deploy/ops/site.env` 写 `CONDA_EXE=`。
 - 客户端凭据：默认读 root 的 `~/.e2b/config.json`（部署首次初始化数据库时写入），没有时按第 5 节放 `criu-rollback/scripts/.env`。
-- Harbor：没登录过的话，先执行一次 `docker login harbor:443`。没有 Docker、镜像在别的机器导入时，在 `ops/site.env` 写 `CRIU_SKIP_IMAGE_IMPORT=1`。
+- Harbor：推送走 `SERVER_IP:2900`（`build.sh` 部署时已登录过这个地址）。没有 Docker、镜像在别的机器导入时，在 `ops/site.env` 写 `CRIU_SKIP_IMAGE_IMPORT=1`。
 - 部署不是默认形态（job 名、端口等）时，先按第 2 节准备 `ops/site.env`。
 
 **中途停下怎么办。** 按 Ctrl-C、断网或某一步失败，都只要处理完原因后再执行同一条 `bash criu-rollback/deploy/950.sh all`。它会从停下的那一步继续，已经做完的镜像导入、验收、压测、冒烟不会重做。
@@ -205,7 +205,7 @@ bash criu-rollback/deploy/950.sh preflight
 bash criu-rollback/deploy/ops/import-image.sh
 ```
 
-脚本先校验包，再 `docker load`，按标签 `ubuntu:22.04-custom-criu421` 取导入后的镜像，核对它的 ID 是上表两个摘要之一、架构是 arm64，然后在不联网的临时容器中检查 CRIU、curl、python3 和预装包，最后 tag/push 到 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`（引用不同时在 `ops/site.env` 写 `CRIU_TEMPLATE_IMAGE=`）。没登录过 Harbor 时先 `docker login harbor:443`。推送成功只证明导入端可访问；第 7 节模板构建成功才完成构建端拉取验证。
+脚本先校验包，再 `docker load`，按标签 `ubuntu:22.04-custom-criu421` 取导入后的镜像，核对它的 ID 是上表两个摘要之一、架构是 arm64，然后在不联网的临时容器中检查 CRIU、curl、python3 和预装包，最后 tag/push。模板引用的是 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`（不同时在 `ops/site.env` 写 `CRIU_TEMPLATE_IMAGE=`），推送却走 Harbor 的 http 端口 `SERVER_IP:2900/e2b-orchestration/...`，`SERVER_IP` 取自 `/opt/e2b-infra/dep/.env`，与 `build.sh` 推基础镜像的做法相同。原因：`harbor` 这个名字只在本机 `/etc/hosts` 里，docker daemon 配了代理时它不在 `NO_PROXY` 中，推 `harbor:443` 会被转给代理，回 `504 Gateway Time-out`。两个地址是同一个仓库。推送地址要另指定时写 `CRIU_PUSH_IMAGE=`；报 unauthorized 时对推送地址 `docker login`。推送成功只证明导入端可访问；第 7 节模板构建成功才完成构建端拉取验证。
 
 用哪种 docker 存储都行：`docker info --format '{{.Driver}} {{.DriverStatus}}'` 显示 `io.containerd.snapshotter.v1` 的是 containerd 镜像存储（950 是这种），显示 `overlay2` 的是传统存储（920B 是这种）。两种存储读归档里不同的清单文件，归档两种都带。
 
@@ -361,6 +361,12 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-17：推送改走 Harbor 的 http 端口（950 上推送 504）
+
+- **现象。** 补上 OCI 清单后，950 上导入和容器内检查都通过，`docker push harbor:443/...` 报 `Head "https://harbor:443/v2/...": Gateway Time-out`。
+- **原因。** 与 `build.sh` 推基础镜像时注释里写的是同一件事：950 的 docker daemon 配了代理，`harbor` 只在本机 `/etc/hosts` 里，不在 `NO_PROXY` 中，请求被转给代理。
+- **修改。** `import-image.sh` 推送到 `SERVER_IP:2900/e2b-orchestration/ubuntu:22.04-custom-criu421`，模板仍引用 `harbor:443/...`；可用 `CRIU_PUSH_IMAGE` 另指定。920B 上推送到 `192.168.45.47:2900/...` 后，仓库摘要仍是 `abc4b4b7…`。
 
 ### 2026-11-17：补上镜像归档的 OCI 清单（950 上导入失败）
 

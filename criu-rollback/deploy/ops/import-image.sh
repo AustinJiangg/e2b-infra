@@ -28,6 +28,24 @@ docker run --pull=never --rm --network none --entrypoint /bin/sh "$REF" -ec '
     dpkg-query -W "$p"
   done
 '
-docker tag "$REF" "$TARGET"
-docker push "$TARGET"
-echo "镜像已推送到 $TARGET；后续用完全相同的引用建模板。"
+# 推送地址：模板引用 harbor:443/... 时，推送改走 Harbor 的 http 端口 <SERVER_IP>:2900，与 build.sh 推基础镜像
+# 相同。harbor 这个名字只在本机 /etc/hosts 里，docker daemon 配了 HTTP(S)_PROXY 时它不在 NO_PROXY 里，
+# 推 harbor:443 会被转给代理、回 504 Gateway Time-out（950 就是这样）。两个地址是同一个仓库，
+# 模板照样用 harbor:443/... 拉（orchestrator 拉镜像不走 docker daemon 的代理）。
+PUSH=${CRIU_PUSH_IMAGE:-}
+if [ -z "$PUSH" ]; then
+  PUSH=$TARGET
+  case $TARGET in
+    harbor:443/*)
+      ip=$(grep -E '^(export )?SERVER_IP=' "${E2B_DEPLOY_ENV:-/opt/e2b-infra/dep/.env}" 2>/dev/null | head -1 | grep -oE '[0-9]+([.][0-9]+){3}' || true)
+      [ -n "$ip" ] && PUSH=$ip:${HARBOR_HTTP_PORT:-2900}/${TARGET#harbor:443/}
+      ;;
+  esac
+fi
+docker tag "$REF" "$PUSH"
+if ! docker push "$PUSH"; then
+  echo "推送 $PUSH 失败。报 unauthorized 时先 docker login ${PUSH%%/*}；报 Gateway Time-out 是请求被 docker 的代理转走了，" >&2
+  echo "在 ops/site.env 写 CRIU_PUSH_IMAGE=本机IP:2900/e2b-orchestration/ubuntu:22.04-custom-criu421 改走 http 端口" >&2
+  exit 1
+fi
+echo "镜像已推送到 $PUSH；模板引用 $TARGET（同一个 Harbor 仓库）。"
