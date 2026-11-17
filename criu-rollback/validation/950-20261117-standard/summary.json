@@ -1,0 +1,246 @@
+{
+  "platform": "950",
+  "host": "141.61.11.24 (localhost.localdomain)",
+  "host_kernel": "6.6.0-159.4.3.154.oe2403sp4.aarch64",
+  "date": "2026-11-17",
+  "run": "test950/results/20261117-161710-standard/criu-acceptance（留在 950 上）",
+  "repo_commit": "c27b6f8",
+  "gsd_commit": "259f1a25c",
+  "sha256": {
+    "gsd": "421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe",
+    "orchestrator": "063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870",
+    "vmlinux": "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+  },
+  "source": "test950.sh standard 结束后用 handbook_extract.py 对 criu-acceptance 目录取数的终端输出，由三份 perf-run JSON 算出；数值保留一位小数，原始 JSON 未取回，所以没有来源哈希",
+  "schema_version": 2,
+  "measurement_mode": "per-tier-size",
+  "restore_path": "modified-child-to-full-baseline",
+  "restore_checks_passed": 18,
+  "max_sdk_journal_diff_ms": 0.0,
+  "verdict": "PASS",
+  "tiers": [
+    {
+      "total_mib": 0,
+      "mem_mib": 0,
+      "file_mib": 0,
+      "server_total_ms": {
+        "full_baseline": [
+          16.9,
+          17.6,
+          36.2
+        ],
+        "incremental": [
+          7.3,
+          7.9,
+          7.6
+        ],
+        "restore": [
+          8.0,
+          7.5,
+          7.7
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 17.6,
+        "incremental": 7.6,
+        "restore": 7.7
+      },
+      "wall_p50_ms": {
+        "full_baseline": 21.3,
+        "incremental": 9.4,
+        "restore": 9.7
+      },
+      "rss_mib": [
+        11.6,
+        11.6,
+        11.6
+      ]
+    },
+    {
+      "total_mib": 16,
+      "mem_mib": 12,
+      "file_mib": 4,
+      "server_total_ms": {
+        "full_baseline": [
+          23.4,
+          22.3,
+          27.8
+        ],
+        "incremental": [
+          11.8,
+          12.7,
+          13.1
+        ],
+        "restore": [
+          11.5,
+          12.8,
+          15.6
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 23.4,
+        "incremental": 12.7,
+        "restore": 12.8
+      },
+      "wall_p50_ms": {
+        "full_baseline": 26.8,
+        "incremental": 14.9,
+        "restore": 15.1
+      },
+      "rss_mib": [
+        24.8,
+        24.7,
+        24.8
+      ]
+    },
+    {
+      "total_mib": 32,
+      "mem_mib": 24,
+      "file_mib": 8,
+      "server_total_ms": {
+        "full_baseline": [
+          29.2,
+          28.8,
+          31.1
+        ],
+        "incremental": [
+          20.5,
+          20.7,
+          22.4
+        ],
+        "restore": [
+          22.1,
+          19.1,
+          21.8
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 29.2,
+        "incremental": 20.7,
+        "restore": 21.8
+      },
+      "wall_p50_ms": {
+        "full_baseline": 33.2,
+        "incremental": 23.0,
+        "restore": 24.1
+      },
+      "rss_mib": [
+        36.8,
+        36.8,
+        36.8
+      ]
+    },
+    {
+      "total_mib": 64,
+      "mem_mib": 48,
+      "file_mib": 16,
+      "server_total_ms": {
+        "full_baseline": [
+          39.7,
+          44.2,
+          37.5
+        ],
+        "incremental": [
+          32.0,
+          41.7,
+          30.5
+        ],
+        "restore": [
+          29.9,
+          30.4,
+          26.1
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 39.7,
+        "incremental": 32.0,
+        "restore": 29.9
+      },
+      "wall_p50_ms": {
+        "full_baseline": 43.2,
+        "incremental": 34.1,
+        "restore": 31.9
+      },
+      "rss_mib": [
+        60.8,
+        60.8,
+        60.8
+      ]
+    },
+    {
+      "total_mib": 128,
+      "mem_mib": 96,
+      "file_mib": 32,
+      "server_total_ms": {
+        "full_baseline": [
+          56.2,
+          58.4,
+          54.2
+        ],
+        "incremental": [
+          52.3,
+          47.9,
+          49.4
+        ],
+        "restore": [
+          46.1,
+          44.7,
+          45.4
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 56.2,
+        "incremental": 49.4,
+        "restore": 45.4
+      },
+      "wall_p50_ms": {
+        "full_baseline": 59.8,
+        "incremental": 51.7,
+        "restore": 47.5
+      },
+      "rss_mib": [
+        108.8,
+        108.8,
+        108.8
+      ]
+    },
+    {
+      "total_mib": 256,
+      "mem_mib": 192,
+      "file_mib": 64,
+      "server_total_ms": {
+        "full_baseline": [
+          96.5,
+          99.2,
+          95.5
+        ],
+        "incremental": [
+          88.8,
+          89.4,
+          86.6
+        ],
+        "restore": [
+          80.6,
+          79.7,
+          78.8
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 96.5,
+        "incremental": 88.8,
+        "restore": 79.7
+      },
+      "wall_p50_ms": {
+        "full_baseline": 100.1,
+        "incremental": 91.0,
+        "restore": 82.4
+      },
+      "rss_mib": [
+        204.8,
+        204.7,
+        204.8
+      ]
+    }
+  ],
+  "note": "同一天第二轮；第一轮是 ../950-20261117/。沙箱级的同机分档在 16:48 起的 sandbox-perf 步骤，进程级验收 17:03:01 开始"
+}

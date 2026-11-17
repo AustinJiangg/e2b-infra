@@ -176,5 +176,5 @@
 <text x="1058.5" y="1250.0" font-size="13.5" fill="#085041" text-anchor="middle">49.5</text>
 <text x="1227.5" y="1250.0" font-size="13.5" fill="#085041" text-anchor="middle">71.8</text>
 <line x1="48" y1="1292" x2="1352" y2="1292" stroke="#E5E3DB" stroke-width="1"/>
-<text x="48.0" y="1318.0" font-size="13" fill="#888780" text-anchor="start">注：沙箱级 p99 只列在数值表里，未画线；n ≤ 100 时 p99 即最大值。进程级 n = 3 没有 p99，三轮的最小值～最大值见正文表。第一次全量两侧不是同一个量，不在图中（§4.5）。950 的进程级尚未测（§5）。</text>
+<text x="48.0" y="1318.0" font-size="13" fill="#888780" text-anchor="start">注：沙箱级 p99 只列在数值表里，未画线；n ≤ 100 时 p99 即最大值。进程级 n = 3 没有 p99，三轮的最小值～最大值见正文表。第一次全量两侧不是同一个量，不在图中（§4.5）。950 的同机对比见 §5 与图 24-4。</text>
 </svg>

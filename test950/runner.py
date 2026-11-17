@@ -44,9 +44,10 @@ STACKS = ("sandbox", "criu")
 # 每一步：(栈, 名字, 命令类型, 参数, 预估分钟)。命令类型 run = 沙箱级 run.sh，criu = 950.sh 的测试命令
 SANDBOX_STEPS = {
     "quick": [("smoke", "run", ["smoke"], 3)],
-    "standard": [("smoke", "run", ["smoke"], 3),
-                 ("func", "run", ["func"], 45),
-                 ("perf", "run", ["perf"], 40),
+    # standard 的预估按 950 2026-11-17 实测：smoke 1、func 18.5、perf 9、hdbss 4 分钟，留少量余量
+    "standard": [("smoke", "run", ["smoke"], 2),
+                 ("func", "run", ["func"], 20),
+                 ("perf", "run", ["perf"], 12),
                  ("hdbss", "run", ["hdbss"], 5)],
     "extended": [("special", "run", ["special", "--allow-restart", "--kill-sandboxes-ok"], 30),
                  ("hdbss-orders", "run", ["hdbss", "--orders", "1,9", "--allow-restart", "--kill-sandboxes-ok"], 15),
@@ -56,8 +57,8 @@ SANDBOX_STEPS = {
 }
 CRIU_STEPS = {
     "quick": [("quick", "criu", ["quick"], 2)],
-    "standard": [("acceptance", "criu", ["acceptance"], 5),
-                 ("stress", "criu", ["stress"], 5)],
+    "standard": [("acceptance", "criu", ["acceptance"], 4),   # 950 实测 3 分 09 秒
+                 ("stress", "criu", ["stress"], 5)],          # 950 实测 3 分 52 秒，另有 netns 清理约 2 分钟
     "extended": [("stress-ext", "criu", ["stress-ext"], 45)],
     "long": [("soak", "criu", ["soak", "--hours", "{hours}"], None)],
 }

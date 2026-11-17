@@ -111,7 +111,7 @@ orchestrator 启动时把同样的内容再写进一个文件（`internal/checkp
   | `pid` | 写这个文件的 orchestrator 进程号（950 测试部署里是 `template-manager` 进程） |
   | `started_at` | 该进程的启动时间，RFC3339 |
   | `version` | orchestrator 的版本号（`main.go` 的 `version`） |
-  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。950 的 2026-10-15 smoke 自报 `4853232`（[第 17 章](17-functional-verification.md)）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
+  | `commit` | 构建时注入的提交（`main.go` 的 `commitSHA`；构建没注入时为空串）。950 的 2026-11-17 smoke 自报 `4853232`（[第 17 章](17-functional-verification.md)）；标签有值也须核对源码 / RPM 对应，不能代替二进制 sha256（[第 25 章 §4](25-build-and-self-check.md#4-版本配对)） |
 
 - **何时写**：每次启动写一次，先写同目录下的临时文件、再改名覆盖旧文件，读到的要么是上次启动的整份、要么是这次的整份。
   写成功打 INFO `capabilities file written`（字段 `path`）；写失败只打 WARN `failed to write the capabilities file; the log line above is the only copy`，启动照常。

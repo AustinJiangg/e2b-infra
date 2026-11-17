@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1298" viewBox="0 0 1400 1298" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Source Han Sans SC',sans-serif">
+<defs>
+</defs>
+<rect width="1400" height="1298" fill="#FFFFFF"/>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">950 同机：两套方案的增量 checkpoint 与 restore 客户端墙钟随档位变化</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">950（Kunpeng 950 7592C），2026-11-17 test950.sh standard 同一轮：沙箱级 16:48 起，进程级 17:03 起。客户端墙钟，单位 ms；进程级取三轮中位数。沙箱级每档 n = 30（0～</text>
+<text x="48.0" y="120.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">32 MiB）、20（64～256 MiB）；进程级每档 n = 3。两侧的内存与文件负载、沙箱与次序、模板和脏页后端（hdbss 与 soft-dirty）都不同（§4.6），图中的高低只描述这组实测。</text>
+<line x1="48.0" y1="140.0" x2="74.0" y2="140.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="82.0" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">沙箱级 p50</text>
+<line x1="183.3" y1="140.0" x2="209.3" y2="140.0" stroke="#7F77DD" stroke-width="2.6"/>
+<text x="217.3" y="145.0" font-size="14" fill="#5F5E5A" text-anchor="start">进程级 p50</text>
+<circle cx="63" cy="202" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="207.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">1</text>
+<text x="90.0" y="209.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">增量 checkpoint</text>
+<text x="271.8" y="208.0" font-size="14.5" fill="#888780" text-anchor="start">§5.1；横轴是总改动量，按档位等距排列</text>
+<line x1="298.0" y1="534.0" x2="1312.0" y2="534.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="538.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="298.0" y1="478.0" x2="1312.0" y2="478.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="482.5" font-size="12.5" fill="#888780" text-anchor="end">25</text>
+<line x1="298.0" y1="422.0" x2="1312.0" y2="422.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="426.5" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="298.0" y1="366.0" x2="1312.0" y2="366.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="370.5" font-size="12.5" fill="#888780" text-anchor="end">75</text>
+<line x1="298.0" y1="310.0" x2="1312.0" y2="310.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="314.5" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="298.0" y1="254.0" x2="1312.0" y2="254.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="258.5" font-size="12.5" fill="#888780" text-anchor="end">125</text>
+<text x="288.0" y="242.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="382.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">0 MiB</text>
+<text x="551.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 MiB</text>
+<text x="720.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">32 MiB</text>
+<text x="889.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">64 MiB</text>
+<text x="1058.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">128 MiB</text>
+<text x="1227.5" y="560.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">256 MiB</text>
+<polyline points="382.5,484.5 551.5,475.3 720.5,461.6 889.5,439.5 1058.5,399.4 1227.5,294.3" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="484.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="475.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="461.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="439.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="399.4" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="294.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="382.5,512.9 551.5,500.6 720.5,482.5 889.5,457.6 1058.5,418.2 1227.5,330.2" fill="none" stroke="#7F77DD" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="512.9" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="500.6" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="482.5" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="457.6" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="418.2" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="330.2" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<text x="382.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 0 / 0</text>
+<text x="551.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 12 / 4</text>
+<text x="720.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 24 / 8</text>
+<text x="889.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 48 / 16</text>
+<text x="1058.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 96 / 32</text>
+<text x="1227.5" y="580.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 192 / 64</text>
+<line x1="48.0" y1="592.0" x2="1312.0" y2="592.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="617.0" x2="70.0" y2="617.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="78.0" y="622.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">沙箱级 p50</text>
+<text x="382.5" y="622.0" font-size="13.5" fill="#085041" text-anchor="middle">22.1</text>
+<text x="551.5" y="622.0" font-size="13.5" fill="#085041" text-anchor="middle">26.2</text>
+<text x="720.5" y="622.0" font-size="13.5" fill="#085041" text-anchor="middle">32.3</text>
+<text x="889.5" y="622.0" font-size="13.5" fill="#085041" text-anchor="middle">42.2</text>
+<text x="1058.5" y="622.0" font-size="13.5" fill="#085041" text-anchor="middle">60.1</text>
+<text x="1227.5" y="622.0" font-size="13.5" fill="#085041" text-anchor="middle">107.0</text>
+<line x1="48.0" y1="643.0" x2="70.0" y2="643.0" stroke="#7F77DD" stroke-width="2.6"/>
+<text x="78.0" y="648.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="start">进程级 p50</text>
+<text x="382.5" y="648.0" font-size="13.5" fill="#3C3489" text-anchor="middle">9.4</text>
+<text x="551.5" y="648.0" font-size="13.5" fill="#3C3489" text-anchor="middle">14.9</text>
+<text x="720.5" y="648.0" font-size="13.5" fill="#3C3489" text-anchor="middle">23.0</text>
+<text x="889.5" y="648.0" font-size="13.5" fill="#3C3489" text-anchor="middle">34.1</text>
+<text x="1058.5" y="648.0" font-size="13.5" fill="#3C3489" text-anchor="middle">51.7</text>
+<text x="1227.5" y="648.0" font-size="13.5" fill="#3C3489" text-anchor="middle">91.0</text>
+<text x="78.0" y="674.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">沙箱级 p99（未画线）</text>
+<text x="382.5" y="674.0" font-size="13.5" fill="#085041" text-anchor="middle">31.1</text>
+<text x="551.5" y="674.0" font-size="13.5" fill="#085041" text-anchor="middle">40.1</text>
+<text x="720.5" y="674.0" font-size="13.5" fill="#085041" text-anchor="middle">45.1</text>
+<text x="889.5" y="674.0" font-size="13.5" fill="#085041" text-anchor="middle">58.0</text>
+<text x="1058.5" y="674.0" font-size="13.5" fill="#085041" text-anchor="middle">89.6</text>
+<text x="1227.5" y="674.0" font-size="13.5" fill="#085041" text-anchor="middle">151.5</text>
+<circle cx="63" cy="726" r="15" fill="#2C2C2A"/>
+<text x="63.0" y="731.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
+<text x="90.0" y="733.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">restore</text>
+<text x="190.9" y="732.0" font-size="14.5" fill="#888780" text-anchor="start">§5.1，改动之后回到全量基点；横轴是总改动量，按档位等距排列</text>
+<line x1="298.0" y1="1058.0" x2="1312.0" y2="1058.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="1062.5" font-size="12.5" fill="#888780" text-anchor="end">0</text>
+<line x1="298.0" y1="1002.0" x2="1312.0" y2="1002.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="1006.5" font-size="12.5" fill="#888780" text-anchor="end">25</text>
+<line x1="298.0" y1="946.0" x2="1312.0" y2="946.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="950.5" font-size="12.5" fill="#888780" text-anchor="end">50</text>
+<line x1="298.0" y1="890.0" x2="1312.0" y2="890.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="894.5" font-size="12.5" fill="#888780" text-anchor="end">75</text>
+<line x1="298.0" y1="834.0" x2="1312.0" y2="834.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="838.5" font-size="12.5" fill="#888780" text-anchor="end">100</text>
+<line x1="298.0" y1="778.0" x2="1312.0" y2="778.0" stroke="#E8E6DF" stroke-width="1"/>
+<text x="288.0" y="782.5" font-size="12.5" fill="#888780" text-anchor="end">125</text>
+<text x="288.0" y="766.0" font-size="12.5" fill="#888780" text-anchor="end">ms</text>
+<text x="382.5" y="1084.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">0 MiB</text>
+<text x="551.5" y="1084.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">16 MiB</text>
+<text x="720.5" y="1084.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">32 MiB</text>
+<text x="889.5" y="1084.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">64 MiB</text>
+<text x="1058.5" y="1084.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">128 MiB</text>
+<text x="1227.5" y="1084.0" font-size="14" fill="#2C2C2A" font-weight="600" text-anchor="middle">256 MiB</text>
+<polyline points="382.5,1010.3 551.5,998.9 720.5,991.5 889.5,972.2 1058.5,904.6 1227.5,849.2" fill="none" stroke="#1D9E75" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="1010.3" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="998.9" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="991.5" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="972.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="904.6" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="849.2" r="6" fill="#1D9E75" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<polyline points="382.5,1036.3 551.5,1024.2 720.5,1004.0 889.5,986.5 1058.5,951.6 1227.5,873.4" fill="none" stroke="#7F77DD" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="382.5" cy="1036.3" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="551.5" cy="1024.2" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="720.5" cy="1004.0" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="889.5" cy="986.5" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1058.5" cy="951.6" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<circle cx="1227.5" cy="873.4" r="6" fill="#7F77DD" stroke="#FFFFFF" stroke-width="1.6" fill-opacity="1.0"/>
+<text x="382.5" y="1104.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 0 / 0</text>
+<text x="551.5" y="1104.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 12 / 4</text>
+<text x="720.5" y="1104.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 24 / 8</text>
+<text x="889.5" y="1104.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 48 / 16</text>
+<text x="1058.5" y="1104.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 96 / 32</text>
+<text x="1227.5" y="1104.0" font-size="12.5" fill="#888780" text-anchor="middle">内存 / 文件 192 / 64</text>
+<line x1="48.0" y1="1116.0" x2="1312.0" y2="1116.0" stroke="#E8E6DF" stroke-width="1"/>
+<line x1="48.0" y1="1141.0" x2="70.0" y2="1141.0" stroke="#1D9E75" stroke-width="2.6"/>
+<text x="78.0" y="1146.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">沙箱级 p50</text>
+<text x="382.5" y="1146.0" font-size="13.5" fill="#085041" text-anchor="middle">21.3</text>
+<text x="551.5" y="1146.0" font-size="13.5" fill="#085041" text-anchor="middle">26.4</text>
+<text x="720.5" y="1146.0" font-size="13.5" fill="#085041" text-anchor="middle">29.7</text>
+<text x="889.5" y="1146.0" font-size="13.5" fill="#085041" text-anchor="middle">38.3</text>
+<text x="1058.5" y="1146.0" font-size="13.5" fill="#085041" text-anchor="middle">68.5</text>
+<text x="1227.5" y="1146.0" font-size="13.5" fill="#085041" text-anchor="middle">93.2</text>
+<line x1="48.0" y1="1167.0" x2="70.0" y2="1167.0" stroke="#7F77DD" stroke-width="2.6"/>
+<text x="78.0" y="1172.0" font-size="13.5" fill="#3C3489" font-weight="600" text-anchor="start">进程级 p50</text>
+<text x="382.5" y="1172.0" font-size="13.5" fill="#3C3489" text-anchor="middle">9.7</text>
+<text x="551.5" y="1172.0" font-size="13.5" fill="#3C3489" text-anchor="middle">15.1</text>
+<text x="720.5" y="1172.0" font-size="13.5" fill="#3C3489" text-anchor="middle">24.1</text>
+<text x="889.5" y="1172.0" font-size="13.5" fill="#3C3489" text-anchor="middle">31.9</text>
+<text x="1058.5" y="1172.0" font-size="13.5" fill="#3C3489" text-anchor="middle">47.5</text>
+<text x="1227.5" y="1172.0" font-size="13.5" fill="#3C3489" text-anchor="middle">82.4</text>
+<text x="78.0" y="1198.0" font-size="13.5" fill="#085041" font-weight="600" text-anchor="start">沙箱级 p99（未画线）</text>
+<text x="382.5" y="1198.0" font-size="13.5" fill="#085041" text-anchor="middle">32.2</text>
+<text x="551.5" y="1198.0" font-size="13.5" fill="#085041" text-anchor="middle">36.7</text>
+<text x="720.5" y="1198.0" font-size="13.5" fill="#085041" text-anchor="middle">38.7</text>
+<text x="889.5" y="1198.0" font-size="13.5" fill="#085041" text-anchor="middle">56.9</text>
+<text x="1058.5" y="1198.0" font-size="13.5" fill="#085041" text-anchor="middle">94.1</text>
+<text x="1227.5" y="1198.0" font-size="13.5" fill="#085041" text-anchor="middle">128.2</text>
+<line x1="48" y1="1240" x2="1352" y2="1240" stroke="#E5E3DB" stroke-width="1"/>
+<text x="48.0" y="1266.0" font-size="13" fill="#888780" text-anchor="start">注：沙箱级 p99 只列在数值表里，未画线；n ≤ 30 时 p99 即最大值。进程级 n = 3 没有 p99。第一次全量两侧不是同一个量，不在图中。</text>
+</svg>

@@ -11,16 +11,16 @@ from draw_rollback_20 import tier_panel
 
 TIERS = ["0", "16", "32", "64", "128", "256"]   # 档（总改动 MiB）
 
-# 来源：rollback/docs/19-native-pause-resume.md §5.1 表（第 185～190 行）。客户端墙钟 p50，ms。
-# checkpoint / restore 列即 rollback/docs/18-950-performance.md §4 表混合 0～256 档（第 86～93 行），
+# 来源：rollback/docs/19-native-pause-resume.md §5.1 表。客户端墙钟 p50，ms。
+# checkpoint / restore 列即 rollback/docs/18-950-performance.md §4 表混合 0～256 档（2026-11-17），
 # 每档 n 取自同一表：30 / 30 / 30 / 20 / 20 / 20。pause / resume 为本章 §3.1 的 repeat，每档 n = 15。
 P950 = {
-    "checkpoint": [17.2, 23.8, 30.5, 41.4, 73.0, 125.5],
+    "checkpoint": [22.1, 26.2, 32.3, 42.2, 60.1, 107.0],
     "pause": [251.9, 262.7, 284.6, 308.8, 346.8, 429.9],
-    "save_ratio": [14.6, 11.0, 9.3, 7.5, 4.8, 3.4],          # 正文表“倍数”列（pause / checkpoint）
-    "restore": [22.4, 30.4, 36.4, 46.0, 67.8, 105.6],
+    "save_ratio": [11.4, 10.0, 8.8, 7.3, 5.8, 4.0],          # 正文表“倍数”列（pause / checkpoint）
+    "restore": [21.3, 26.4, 29.7, 38.3, 68.5, 93.2],
     "resume": [109.3, 107.2, 108.8, 106.1, 108.9, 120.7],
-    "restore_ratio": [4.9, 3.5, 3.0, 2.3, 1.6, 1.1],          # 正文表“倍数”列（resume / restore）
+    "restore_ratio": [5.1, 4.1, 3.7, 2.8, 1.6, 1.3],          # 正文表“倍数”列（resume / restore）
     "ck_n": [30, 30, 30, 20, 20, 20],
 }
 
@@ -64,13 +64,13 @@ def two_panels(d, data, rec_ylim, rec_ticks, ratios):
 def fig_950():
     d = Chart()
     d.header("950：checkpoint / restore 与原生 pause / resume 按档的 p50",
-             "950，客户端墙钟 p50，ms。checkpoint / restore 取第 18 章 §4 混合档（2026-10-13，内核 6.6.0-159.4.12.166.oe2403sp4，"
-             "部署身份待补，每档 n = 30 或 20）；pause / resume 取本章 §3.1（2026-11-06，hdbss，每档 n = 15）。"
-             "两组负载构造和宿主条件不同，只说明量级，不能当作同条件的精确倍数。横轴按档位顺序等距排列。")
+             "950，客户端墙钟 p50，ms。checkpoint / restore 取第 18 章 §4 混合档（2026-11-17，每档 n = 30 或 20）；"
+             "pause / resume 取本章 §3.1（2026-11-06，hdbss，每档 n = 15）。两轮的宿主内核与 orchestrator sha256 相同，"
+             "但负载构造不同，只说明量级，不能当作同条件的精确倍数。横轴按档位顺序等距排列。")
     d.y += 10
     d.legend_row([("checkpoint / restore（本方案）", "sandbox", "line"), ("原生 pause / resume", "native", "line")])
     two_panels(d, P950, (0, 140), [0, 20, 40, 60, 80, 100, 120, 140], ratios=True)
-    d.footer("注：横轴是档（总改动 MiB，内存:文件 = 3:1）。256 MiB 档 restore 105.6 与 resume 120.7 接近，含义不同："
+    d.footer("注：横轴是档（总改动 MiB，内存:文件 = 3:1）。256 MiB 档 restore 93.2 与 resume 120.7 同一量级，含义不同："
              "restore 返回时内存已写回、保留原 Firecracker 进程、之前的 checkpoint 仍然有效；resume 返回时页还没有加载，"
              "之后读这些页要再付约 112 ms，并换一代新进程，之前的 checkpoint 全部失效。")
     d.save(out("rollback", "19-1-950原生与checkpoint按档"))

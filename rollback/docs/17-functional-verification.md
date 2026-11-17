@@ -6,7 +6,7 @@
 - 列出每个正确性脚本和 crtest 用例测什么、硬判什么。
 - 按功能给出 950 与 920B 的实测结果，并分开写已通过、已跳过和不能下结论的部分。
 
-950 各轮结论与验证边界见 [950 测试结果摘要](../evidence/950/README.md)。原始日志只保留在本地 `rollback/scripts/950/results/`，由 Git 忽略，不提交或分发；尚未回传的 JSON/JSONL 与部署身份仍属验证缺口。开发分支单测见 [第 29 章](29-development.md)，920B 的历史专项证据见[附录 B](B-920b-results.md)。
+950 的结果来自 2026-11-17 在 950（141.61.11.24）上跑的 `bash test950.sh standard`，各轮结论与验证边界见 [950 测试结果摘要](../evidence/950/README.md)。原始日志与 JSON 只保留在被测机上，不提交或分发。开发分支单测见 [第 29 章](29-development.md)，920B 的历史专项证据见[附录 B](B-920b-results.md)。
 
 ## 1. 正确性脚本的判据
 
@@ -217,23 +217,27 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 
 ## 3. 功能回归结果
 
-`run.sh func` 的 17 个 PASS 由 16 个 crtest 用例和 1 项 SDK pytest 组成，不是只有 17 条底层检查。950 和 920B 各有一轮完整结果，两轮都是 **PASS 17 · FAIL 0 · SKIP 4**（共 21 项）。
+`run.sh func` 由 16 个默认 crtest 用例、1 项 SDK pytest 和 4 个需要专门开关的用例组成，不是只有 17 条底层检查。950 和 920B 各有一轮完整结果：
+
+- 950 是 **PASS 17 · FAIL 0 · SKIP 5**（共 22 项）。16 个默认用例全过；多出的 1 个 SKIP 是 SDK pytest，因为客户端环境没装 pytest。
+- 920B 是 **PASS 17 · FAIL 0 · SKIP 4**（共 21 项）。
 
 ### 3.1 两轮的条件
 
 | 条件 | 950 | 920B |
 |---|---|---|
-| 结果来源 | `rollback/scripts/950/results/20261013-163056-func/`：`SUMMARY.md`、`run.log`、16 份 `crtest-T*.log`、`sdk-errors.log` | 2026-11-06 一轮的 `SUMMARY.md`，结果时间戳 `20261107-052057`。逐用例日志与 JSON 未归档 |
-| 起止（+08:00） | 2026-10-13 16:30:56–16:48:43，约 17 分 47 秒 | 宿主时钟 2026-11-07 05:20:57–05:38:39 |
-| 主机 / 宿主内核 | `slot6`、aarch64；`6.6.0-159.4.12.166.oe2403sp4.aarch64` | aarch64；`6.6.0-159.4.3.154.oe2403sp4.aarch64` |
-| 部署与客户端 | 部署根 `/opt/e2b-infra`；Python 3.14.6；模板 `base`、私有沙箱 | 部署根 `/opt/e2b-infra`；Python 3.12.14；模板 `base` |
-| 后端 / 产物盘 | 16 份用例日志均自报 **`hdbss` / FC 1.12.1**；`/orchestrator/build/checkpoints`、ext4、块设备标签 `openeuler-root` | `SUMMARY.md` 不含后端与产物盘。同一部署约 30 分钟后的 smoke 自报 KVM 写保护、FC 1.12.1、ext4，见 [§4.1](#41-两个平台的-smoke) |
-| 范围 | 默认参数，未使用 `--quick`，未加重启、故障注入与配额专项开关 | 默认范围，四行 SKIP 的原因与 950 相同 |
-| 汇总 | **PASS 17 · FAIL 0 · SKIP 4** | **PASS 17 · FAIL 0 · SKIP 4** |
+| 结果来源 | `test950.sh standard` 的 `sandbox/func` 步骤，950 上 `test950/results/20261117-161710-standard/sandbox-func/20261117-163014-func/`：`SUMMARY.md`、16 份 `crtest-T*.log` 与各用例 JSON。终端回传的是汇总、T13 / T36 / T40 全文和各用例的只记录行 | 2026-11-06 一轮的 `SUMMARY.md`，结果时间戳 `20261107-052057`。逐用例日志与 JSON 未归档 |
+| 起止（+08:00） | 2026-11-17 16:30:14–16:48:47，18 分 33 秒。16:18 第一次开跑，16:21 因他人使用机器手动中断，16:30 从头重跑这一步 | 宿主时钟 2026-11-07 05:20:57–05:38:39 |
+| 机器 / 宿主内核 | Kunpeng 950 7592C、384 CPU、2261 GB；`6.6.0-159.4.3.154.oe2403sp4.aarch64` | aarch64；`6.6.0-159.4.3.154.oe2403sp4.aarch64` |
+| 部署与身份 | 部署根 `/opt/e2b-infra`；orchestrator `/usr/bin/template-manager` sha256 `a5d03902…`；FC `18f3faa7…`（自报 1.12.1）；身份由 `test950.sh` 在本轮开始时记录 | 部署根 `/opt/e2b-infra`；身份见 [§3.4](#34-结论边界) |
+| 客户端 / 模板 | conda 环境 `jll-e2b`，Python 3.14，e2b SDK 2.20.0；模板 `base`、私有沙箱 | Python 3.12.14；模板 `base` |
+| 后端 / 产物盘 | 各用例日志自报 **`hdbss` / FC 1.12.1**；`/orchestrator/build/checkpoints`、ext4、块设备 `openeuler-root` | `SUMMARY.md` 不含后端与产物盘。同一部署约 30 分钟后的 smoke 自报 KVM 写保护、FC 1.12.1、ext4，见 [§4.1](#41-两个平台的-smoke) |
+| 范围 | 默认参数，未加重启、故障注入与配额专项开关 | 默认范围，四行专项 SKIP 的原因与 950 相同 |
+| 汇总 | **PASS 17 · FAIL 0 · SKIP 5** | **PASS 17 · FAIL 0 · SKIP 4** |
 
 ### 3.2 按功能的结果
 
-下表是用例日志末行的**硬断言通过数**，不把只记录曲线、参考值的 `note` 算作通过断言。950 日志末尾“原始数据：…（…条断言）”统计的是包含 `note` 的记录数，所以可能更大，不是统计矛盾。950 的 16 份用例日志，通过行与逐条 `✓` 交叉核对，共 **863 条硬断言通过**；920B 的数字取自 `SUMMARY.md` 的逐项记录，没有日志可做同样的交叉核对。
+下表是用例日志末行的**硬断言通过数**，不把只记录曲线、参考值的 `note` 算作通过断言。950 日志末尾“原始数据：…（…条断言）”统计的是包含 `note` 的记录数，所以可能更大，不是统计矛盾（例如 T36 末行 110 条、JSON 113 条）。950 的 16 个用例共 **863 条硬断言通过**；920B 的数字取自 `SUMMARY.md` 的逐项记录，没有日志可做同样的交叉核对。
 
 | 功能 | 用例与验证内容 | 950 | 920B |
 |---|---|---|---|
@@ -253,9 +257,11 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 | 跨沙箱与稳态 | T40 restore 返回后立即请求 | 17 | 17 |
 | 原生生命周期 | T39 checkpoint 后原生 pause / resume | 26 | 26 |
 | 原生生命周期 | T41 无 checkpoint 的原生生命周期 | 60 | 60 |
-| SDK 异常语义 | `test_checkpoint_errors.py`（pytest，单独计） | 67 passed | 67 passed |
+| SDK 异常语义 | `test_checkpoint_errors.py`（pytest，单独计） | 未跑（SKIP） | 67 passed |
 
 T12 两轮相差 1 条，原因在用例本身：它对风暴后残留的每个 checkpoint 各断言一次“还能回”，残留数随每次运行的并发交错变化，所以断言数不是常数。
+
+各用例的耗时（括号内为硬断言数）：T12 5 s（12）、T15 5 s（84）、T22 7 s（77）、T24 10 s（12）、T34 10 s（70）、T32 14 s（18）、T39 15 s（26）、T26 24 s（63）、T23 26 s（19）、T14 47 s（92）、T41 62 s（60）、T40 119 s（17）、T25 151 s（81）、T36 174 s（110）、T13 191 s（78）、T11 242 s（44）。
 
 按功能看，这两轮证明了：
 
@@ -263,37 +269,56 @@ T12 两轮相差 1 条，原因在用例本身：它对风暴后残留的每个 
 - **账本与生命周期**：同沙箱多调用方的 checkpoint 账本能够收敛；checkpoint / restore 进行中 kill 或 pause，服务端不崩，资源被回收。
 - **恢复后的运行状态**：恢复后命令、回环连接、新连接、定时器和串口仍可工作。
 - **成本结构**：`fc_bitmap` 各档 p50 极差 < 2 倍、`fc_memory` 随脏集单调不降的判据成立，链深增长后运行期读的前置条件成立。曲线只记录，不作断言。
-- **跨沙箱与稳态**：T36 的混合操作和 T40 的恢复后请求没有发现不一致。950 的负载分布与时序见 [第 21 章](21-concurrency-and-longrun.md)，不与 perf 的固定改动量分档混算。
+- **跨沙箱与稳态**：T36 的混合操作和 T40 的恢复后请求没有发现不一致。950 的负载分布与时序见 [第 21 章 §3](21-concurrency-and-longrun.md)，不与 perf 的固定改动量分档混算。
 - **原生生命周期**：本次测试覆盖的原生 pause / resume 路径没有被破坏，包括 checkpoint 之后再 pause 的三个场景。
-- **SDK 异常语义**：10 个 checkpoint 异常类与 `.reason` 的映射符合预期。
+- **SDK 异常语义**：920B 上 10 个 checkpoint 异常类与 `.reason` 的映射符合预期；950 这一轮未跑，见 [§3.3](#33-跳过项)。
+
+950 各用例的只记录项（参考值，不判定）：
+
+| 用例 | 只记录的观测 |
+|---|---|
+| T11 | 5 轮在途 checkpoint / restore 都成功；第 3、4 轮在 `beta_pause` 之后再连接沙箱，得到 `SandboxException: 500: Failed to place sandbox`。用例把“唤醒可用”和“明确报错”都算合格；这个错误文字没有说明沙箱处于暂停状态，对调用方不够明确 |
+| T13 | N = 1 / 2 / 4 时受害沙箱 restore 客户端 p50 为 0.091 / 0.075 / 0.063 s，frozen p50 为 84.9 / 69.8 / 57.2 ms；心跳 p99 都是 10.1 ms |
+| T14 | checkpoint 客户端 p50 / max 0.188 / 0.340 s；restore 0.102 / 0.135 s |
+| T15 | restore 客户端 p50 / max 0.024 / 0.042 s |
+| T22 | 建链 checkpoint 客户端 p50 / max 0.018 / 0.279 s |
+| T23 | 流式写进行中的 checkpoint 客户端耗时 0.204 s |
+| T24 | 三轮宿主机 conntrack 计数 806 → 667、733 → 727、762 → 729；服务端 conntrack 段第 1 轮 4.28 ms，后两轮 0 ms |
+| T25 | restore 客户端 p50 / max 0.054 / 0.097 s；服务端 frozen p50 / max 46.9 / 90.6 ms |
+| T26 | 串口写 4 KB 耗时 p50 restore 前 / 后都是 28.0 ms |
+| T32 | 脏集 0 / 64 / 256 MB 的 restore 客户端 p50 为 0.016 / 0.032 / 0.076 s，frozen p50 为 11.4 / 27.7 / 70.7 ms |
+| T34 | 链深 0 / 20 / 50 的冷读吞吐（3 遍中位数）：after-create 3979 / 2403 / 2157 MB/s；链深 20、50 的 after-restore 2200 / 2234 MB/s；相对最浅最多 1.84 倍，软线 3 倍内 |
+| T36 | 1323 次操作 0 失败，跑动中 `list` 与账本对不上 0 次 |
+| T39 | 三个场景的服务端导出日志都是 `source=tracked+accumulated`、`trusted=True`，导出 31974～33581 页 |
+| T40 | 400 条请求截断 0、409 0、其它失败 0；restore 200 次 0 失败 |
+| T41 | pause / resume 墙钟约 0.39～0.42 / 0.11 s；三个场景的出网连接因沙箱默认私有而跳过 |
 
 ### 3.3 跳过项
 
-两轮跳过同样四项。四行 SKIP 是默认测试的预期范围，**不是四个功能失败，也不计通过**。
+两轮都跳过同样四个专项用例；950 另外跳过了 SDK pytest。SKIP 是默认测试的预期范围或环境条件，**不是功能失败，也不计通过**。
 
-| 顶层 SKIP | 为什么默认跳过 | 950 | 920B 的 2026-11-06 一轮 |
+| 顶层 SKIP | 为什么跳过 | 950 | 920B 的 2026-11-06 一轮 |
 |---|---|---|---|
 | T18：orchestrator 重启后账本不跨重启 | 要重启 orchestrator，全机沙箱都会消失 | 未验证 | 未验证 |
 | T21：四条服务端故障注入 | 要带 `CHECKPOINT_FAULT_INJECT` 重启 | 未验证 | 未验证 |
 | T37：磁盘水位与个数配额 | 要带 `CHECKPOINT_MIN_FREE_BYTES` / `CHECKPOINT_MAX_PER_SANDBOX` 重启 | 未验证 | 未验证 |
 | T38：FC 过提交点后的 faulted 路径 | 要专用 `rollback-fault-inject` 构建和 `FC_ROLLBACK_FAULT_INJECT=post_commit`，交付的 FC 不带 | 未验证 | 未验证 |
+| SDK 异常语义 pytest | 客户端 conda 环境 `jll-e2b` 没装 pytest。本轮结束后已补装 pytest 9.2.0，下一轮会执行 | 未验证 | 已跑，67 passed |
 
-920B 上这四项有更早的专项结果：10 项全过，跑在 `3539c45df` 上，见[附录 B §4](B-920b-results.md#4-重启与注入类)。它不是 2026-11-06 部署的结果，更不能写成 950 已测。
+920B 上前四项有更早的专项结果：10 项全过，跑在 `3539c45df` 上，见[附录 B §4](B-920b-results.md#4-重启与注入类)。它不是 2026-11-06 部署的结果，更不能写成 950 已测。
 
 用例内部还有范围限制：950 的 T41 外部出网连接未测（私有沙箱且未指定 `--external`），已验的是 guest 内回环与本次生命周期场景；T34 的链深 0 没有可恢复目标，其 after-restore 是不适用项，不额外增加顶层 SKIP 数。920B 这一轮没有用例日志，这两项内部范围无法逐项核对。
 
 ### 3.4 结论边界
 
-**功能通过不等于所有性能达标。** 例如 950 上 T14 写密集并发的 restore 墙钟 p50 / max 为 112 / 131 ms，T32 的 256 MB 档墙钟 p50 为 104 ms。它们记录的是各自不同的负载，不按耗时判功能失败，也不并入 [第 18 章](18-950-performance.md) 的 perf 分档。不能把 func 的 PASS 解释成所有恢复都在 100 ms 内。
+**功能通过不等于所有性能达标。** 例如 950 上 T14 写密集并发的 restore 墙钟 p50 / max 为 102 / 135 ms，超过 100 ms 参考线。它记录的是写密集并发负载，不按耗时判功能失败，也不并入 [第 18 章](18-950-performance.md) 的 perf 分档。不能把 func 的 PASS 解释成所有恢复都在 100 ms 内。
 
-**两个平台的 PASS 不能互相替代。** 950 用 HDBSS，920B 用 KVM 写保护，内核、部署和被测二进制也不同。920B 的结果不能写成 950 已测，950 的结果也不能写成 920B 已测。
+**两个平台的 PASS 不能互相替代。** 950 用 HDBSS，920B 用 KVM 写保护，被测二进制也不同。920B 的结果不能写成 950 已测，950 的结果也不能写成 920B 已测。
 
-**身份缺口。**
+**身份与回传边界。**
 
-- 950 这一轮没有各用例 JSON，无法独立重算操作分位数与逐请求对齐；也没有该轮完整二进制 sha256、源码与部署包的对应或实际模板规格。2026-10-15 smoke 与 2026-10-13 HDBSS 专项的身份记录各自证明采集当时的状态，不能直接追认这一轮。
+- 950 这一轮的部署身份（orchestrator 与 FC 的 sha256、宿主内核、机器型号）由 `test950.sh` 在同一轮记录；各用例 JSON 留在被测机上，没有回传，本节的分位数取自用例日志，未独立重算。
 - 920B 这一轮只归档了 `SUMMARY.md`，其中没有二进制 sha256。同一部署约 30 分钟后的进程 sha256 是 `3064cda85b6d37ca046a386be4e036c1a6323a7414128feb7c9babc22d0d9ad7`，这只是旁证：两轮之间 orchestrator 重启过（能力文件 `started_at` 为 2026-11-07 05:50:33）。它也不是[第 19 章](19-native-pause-resume.md)原生分档使用的 `10d1d5f8…`。
-
-**日志噪声。** 950 的 SDK 日志有 **1461 条 warning，全部是 Python 3.14 下 `pytest-asyncio` 使用已弃用 asyncio 接口的 `DeprecationWarning`**，不是 1461 次快照失败，未影响 67 项通过；这也不代表测试依赖没有后续兼容维护需求。920B 这一轮用 Python 3.12.14，`SUMMARY.md` 只记 `67 passed in 28.21s`。
 
 **长稳不能由短测替代。** 小时级长跑、滚动保留与资源收敛都不能由 120 s 混合运行替代。
 
@@ -303,32 +328,30 @@ T12 两轮相差 1 条，原因在用例本身：它对风暴后残留的每个 
 
 ### 4.1 两个平台的 smoke
 
-| 检查项 | 950（`20261015-121331-smoke`） | 920B（`20261107-055059-smoke`） |
+| 检查项 | 950（standard 的 `sandbox/smoke`） | 920B（`20261107-055059-smoke`） |
 |---|---|---|
-| 汇总 | **PASS 5 · FAIL 0 · SKIP 0** | **PASS 5 · FAIL 0 · SKIP 0** |
-| 起止（+08:00） | 2026-10-15 12:13:31–12:14:29，58 s | 宿主时钟 2026-11-07 05:50:59–05:51:44 |
-| 主机与内核 | `slot6`、aarch64；`6.6.0-159.4.12.166.oe2403sp4.aarch64` | aarch64；`6.6.0-159.4.3.154.oe2403sp4.aarch64` |
-| 部署与客户端 | 部署根 `/opt/e2b-infra`，Python 3.14.6，模板 `base` | 部署根 `/opt/e2b-infra`，Python 3.12.14，模板 `base` |
-| 宿主预检 | **PASS 19 / WARN 0 / FAIL 0**；HDBSS 能力探针、内核与模块、产物盘、选定 FC 的回滚接口等检查通过，用时 17 s | **PASS 18 / WARN 1 / FAIL 0**；WARN 是 `KVM cap 502`，本机无 HDBSS，属于平台事实 |
-| SDK 覆盖层自检 | PASS；`e2b==2.20.0`、21 个 payload 文件在位；干净子进程自检通过，含 `mem_mode`、异常族、超时与四个 RPC 不重放；httpx 0.28.1 | PASS；`e2b` 2.20.0、21 个 payload 文件在位；干净子进程自检通过 |
-| 能力文件 | PASS；文件对应当前进程 PID 49316；`track_dirty_pages=true`，来源为硬件能力 502；`fault_inject=[]` | PASS；`track_dirty_pages=true`，来源为 `FC_TRACK_DIRTY_PAGES="true"`；`fault_inject=[]` |
+| 汇总 | **PASS 5 · FAIL 0 · SKIP 0**；standard 最后一步回切后又跑一次 `sandbox/smoke-after`，同样 PASS 5 | **PASS 5 · FAIL 0 · SKIP 0** |
+| 起止（+08:00） | 2026-11-17 16:17:10–16:18:01，50 s；smoke-after 17:13:24–17:14:18，54 s | 宿主时钟 2026-11-07 05:50:59–05:51:44 |
+| 机器与内核 | Kunpeng 950 7592C；`6.6.0-159.4.3.154.oe2403sp4.aarch64` | aarch64；`6.6.0-159.4.3.154.oe2403sp4.aarch64` |
+| 部署与客户端 | 部署根 `/opt/e2b-infra`，Python 3.14（`jll-e2b`），模板 `base` | 部署根 `/opt/e2b-infra`，Python 3.12.14，模板 `base` |
+| 宿主预检 | **PASS 19 / WARN 0 / FAIL 0**；HDBSS 能力探针、内核与模块、产物盘、选定 FC 的回滚接口等检查通过 | **PASS 18 / WARN 1 / FAIL 0**；WARN 是 `KVM cap 502`，本机无 HDBSS，属于平台事实 |
+| SDK 覆盖层自检 | PASS；`e2b` 2.20.0 带 checkpoint，httpx 0.28.1 | PASS；`e2b` 2.20.0、21 个 payload 文件在位；干净子进程自检通过 |
+| 能力文件 | PASS；文件对应当前进程 PID 3153919；`track_dirty_pages=true`，来源为硬件能力 502；`fault_inject=[]` | PASS；`track_dirty_pages=true`，来源为 `FC_TRACK_DIRTY_PAGES="true"`；`fault_inject=[]` |
 | FC 身份采集与核对 | PASS；预检选定 `v1.13.1` 目录，回滚 API 检查通过；该路径与部署件的完整 sha256 一致，见 §4.2 | PASS；在用 `v1.13.1`，sha256 同为 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9` |
-| `checkpoint_verify.py` | **PASS**；**59 / 59**；FC 自报 HDBSS、产物 ext4；1 次全量、2 次增量，10 次 restore 的目标现场全部一致，用时 31 s | **PASS**；**59 项校验全部通过**；FC 自报 KVM 写保护、FC 1.12.1、产物 ext4，用时 30 s |
+| `checkpoint_verify.py` | **PASS**；**59 / 59**（项数为 59 而不是 57，说明 `mem_mode` 判据生效） | **PASS**；**59 项校验全部通过**；FC 自报 KVM 写保护、FC 1.12.1、产物 ext4，用时 30 s |
 
-950 另有一轮更早的 smoke：`20261013-160739-smoke` 为 4 PASS / 1 FAIL / 0 SKIP，预检发现所选 Firecracker 版本缺少回滚接口，同时确认另一部署版本含接口，正确性 59 项通过。这个 FAIL 按原样保留，不改写为通过。后面按部署脚本选择版本的那一轮才是上表的结果。
-
-950 的来源是结果目录里的 `SUMMARY.md`、`run.log`、`preflight.log`、`sdk-check.log`、`capabilities.log`、`fc-sha256.log` 与 `checkpoint_verify.log`。两轮身份条件各自成立，不把 smoke 的身份直接补填到同平台的 perf、func。
+950 的来源是 smoke 结果目录里的 `preflight.log`、`capabilities.log`、`fc-sha256.log` 与 `test950.sh report` 的汇总；`sdk-check.log` 与 `checkpoint_verify.log` 全文没有回传。
 
 ### 4.2 宿主与版本配套（950）
 
-HDBSS 探针记录 `check_extension=1`，临时 VM 的 **`KVM_ENABLE_CAP` 成功**；`/dev/kvm` 可读写，GICv3，
-KVM / userfaultfd、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参数为 512。
-产物目录 `/orchestrator/build/checkpoints` 在 ext4 上，盘余量 **559G**，缓存与产物盘同源。
-`vhost_net` 未加载，按当前 Firecracker 直接使用 tap 的实现记为 INFO，不是部署依赖；未指定 `--hugepages`，不据此保证某个预期并发规模的大页容量。
+HDBSS 探针记录 `check_extension=1`，**`KVM_ENABLE_CAP` 成功**，结论为增量快照（`mem_mode=incremental`）；`CONFIG_ARM64_HDBSS=y`。
+`/dev/kvm` 可读写，GICv3（split EOI/Deactivate 模式），`CONFIG_KVM`、`CONFIG_USERFAULTFD`、运行时 `/dev/userfaultfd`、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参数为 512。
+产物目录 `/orchestrator/build/checkpoints` 在 ext4 上，盘余量 **799G**，缓存与产物盘同源（`/dev/mapper/openeuler-root`，封层 rename 零拷贝）。
+`vhost_net` 未加载，按当前 Firecracker 直接使用 tap 的实现记为 INFO，不是部署依赖。大页为 2048 kB × 32768 页，开跑时空闲 32730 页；未指定 `--hugepages`，不据此保证某个预期并发规模的大页容量。
 
 预检的 `在用的 FC 版本` 为 **`v1.13.1`**，依据是部署脚本 `/opt/e2b-infra/init-client.sh` 中的 `FIRECRACKER_VERSION=1.13.1`；
 预检时没有活着的 FC 进程，api 也未显式设置默认版本，**不是从运行中 FC 的 `/proc/<pid>/exe` 取得路径**。
-选定文件的 `SaveDirtyBitmap` / `RollbackSnapshot` 字符串计数为 2 / 3；其余未使用版本目录仅作 INFO 列示，不参与配套判定。
+选定文件的 `SaveDirtyBitmap` / `RollbackSnapshot` 字符串计数为 2 / 3；`/opt/e2b-infra/bin/firecracker` 仅作 INFO 列示，orchestrator 不从那里取。
 自报版本 `FC 1.12.1` 与目录查找键 `v1.13.1` 的区别见 [第 25 章 §4](25-build-and-self-check.md#4-版本配对)。
 
 | 核对路径 | 完整 sha256 |
@@ -336,23 +359,23 @@ KVM / userfaultfd、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参
 | `/fc-versions/v1.13.1/firecracker` | `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9` |
 | `/opt/e2b-infra/bin/firecracker` | `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9` |
 
-`SUMMARY.md` 的 FC 行显示选定的 `v1.13.1` 路径与完整 hash，全部路径在 `fc-sha256.log` 中。
 脚本的 sha256 项负责身份采集，并不自动比对预期 hash；这里结合预检接口检查、交付件 hash 与功能结果核对，不只依赖该项 PASS。
+
+预检第 10 节列出运行中 orchestrator 的环境：`FC_TRACK_DIRTY_PAGES`、`FC_HDBSS_ORDER`、`FC_HDBSS_REQUIRED`、`CHECKPOINT_FULL_ROOT`、`CHECKPOINT_LOCK_WAIT_TIMEOUT`、`CHECKPOINT_FC_CALL_TIMEOUT`、`CHECKPOINT_FAULT_INJECT`、`ORCHESTRATOR_BASE_PATH`、`FIRECRACKER_VERSIONS_DIR`、`HOST_KERNELS_DIR` 全部未设，用默认值；`ORCHESTRATOR_SERVICES=orchestrator,template-manager`。
 
 ### 4.3 正确性与配置证据（950）
 
-每代改内存 128 MB、根文件系统文件 32 MB，建 A / B / C 三代；执行 C → B → A 逐级回退、A → C 前滚、A / C 交替 3 轮，
+`checkpoint_verify.py` 按默认参数，每代改内存 128 MB、根文件系统文件 32 MB，建 A / B / C 三代；执行 C → B → A 逐级回退、A → C 前滚、A / C 交替 3 轮，
 再杀掉原有心跳进程并恢复到 A，共 **10 次 restore**。每次恢复比对 11 项现场，包含内存与文件内容、删除文件复活、目录、权限位、进程 PID 与启动时刻；
-在检查点及指定恢复阶段确认命令、读写、新进程与心跳可用，**59 项校验全部通过**，测试沙箱最终删除。
-首次 checkpoint 为 `full`，后续两次均为 `incremental`；这既验证恢复内容，也保留了增量实际生效的判据。
+在检查点及指定恢复阶段确认命令、读写、新进程与心跳可用，**59 项校验全部通过**。59 项里包含首次 checkpoint 为 `full`、后续两次为 `incremental` 的两条判据。
 
-能力文件自报 `version=0.1.0`、`commit=4853232`、启动时间 `2026-10-13T11:54:13+08:00`；该启动时间不是 smoke 的执行时间。
+能力文件自报 `version=0.1.0`、`commit=4853232`、启动时间 `2026-11-17T15:52:20+08:00`、PID 3153919；该启动时间不是 smoke 的执行时间。
 配置为 `compact=true`、每次最多合并 8 个、`debug_index=false`、个数与字节上限均 0、最低余量 4294967296 字节，
-`lock_wait_timeout=1m0s`、`fc_call_timeout=2m0s`。`FC_TRACK_DIRTY_PAGES` 与 `FC_HDBSS_ORDER` 均未显式设置；
-能力文件说明脏页跟踪由硬件能力自动开启，不能误写为显式设了 `FC_TRACK_DIRTY_PAGES=true`。
+`lock_wait_timeout=1m0s`、`fc_call_timeout=2m0s`，各项来源均为 `default`。`FC_TRACK_DIRTY_PAGES` 与 `FC_HDBSS_ORDER` 均未显式设置；
+能力文件 `track_dirty_pages_reason=hardware dirty state tracking present (KVM capability 502)` 说明脏页跟踪由硬件能力自动开启，不能误写为显式设了 `FC_TRACK_DIRTY_PAGES=true`。
 
 **验收范围：** smoke 的宿主预检、SDK 自检、能力信息、FC 配套检查及正确性均通过；不替代重启 / 故障注入专项、小时级长稳或所有模板的覆盖。
-`commit=4853232` 是程序自报标签，源码与部署包的对应仍需核实；身份记录仅证明采集当时的状态。
+`commit=4853232` 是程序自报标签，源码与部署包的对应仍需核实。
 这一轮只有 2 次增量与 10 次恢复，不并入 perf 的正式分档、p99 或长期统计，性能数字以 [第 18 章](18-950-performance.md) 与 [第 21 章](21-concurrency-and-longrun.md) 为准。
 
 ## 本章要点
@@ -360,7 +383,7 @@ KVM / userfaultfd、NBD、tun 与 `/dev/net/tun` 等检查通过。NBD 槽位参
 - 正确性不能用“没报错”判定。证据分内存标记、内存大块、磁盘标记与大文件、进程四重，每一重排除一类假象；进程身份最难伪造。
 - `checkpoint_verify.py` 走一条直链共 59 项，并先自证三代现场确实不同；树语义由 `correctness.py` 负责。
 - crtest 把硬判和只记录分开：能从语义推出唯一正确答案的才硬判，依赖负载与机器的量只记录。
-- 默认功能回归在 950 和 920B 上都是 PASS 17 · FAIL 0 · SKIP 4。两轮都跳过 T18、T21、T37、T38，这四项在 950 上没有结果。
+- 默认功能回归的 16 个 crtest 用例在 950 和 920B 上都全部通过，950 共 863 条硬断言。两轮都跳过 T18、T21、T37、T38，这四项在 950 上没有结果；950 这一轮还没跑 SDK 异常语义 pytest。
 - smoke 在 950 和 920B 上都是五项全过，`checkpoint_verify.py` 都是 59 项通过。
 - 流程成功、断言通过与性能达标是三个独立判断；一个平台的结果不能写成另一个平台已测。
-- 950 func 缺用例 JSON 和完整身份，920B 的 func 只归档了 `SUMMARY.md`，这些缺口要继续标明。
+- 950 的部署身份已在同一轮记录；用例 JSON 未回传，920B 的 func 只归档了 `SUMMARY.md`，这些边界要继续标明。

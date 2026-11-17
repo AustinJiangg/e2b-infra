@@ -48,7 +48,7 @@
 | # | 前提 | 怎么查 | 不满足时 |
 |---|---|---|---|
 | 1 | aarch64；回滚路径（GIC 清线、vCPU 重置、HDBSS）只在 aarch64 上实现 | `uname -m` | 不能用 |
-| 2 | 宿主内核：openEuler 24.03 LTS-SP4，带 KVM 与 userfaultfd；920B 历史实测为 `6.6.0-159.4.3.154.oe2403sp4.aarch64`，950 的 2026-10-13 实测为 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | `uname -r`；`grep -E 'CONFIG_KVM=\|CONFIG_USERFAULTFD=' /boot/config-$(uname -r)` | 换内核后第 6 项的 `nbd.ko` 也要重编 |
+| 2 | 宿主内核：openEuler 24.03 LTS-SP4，带 KVM 与 userfaultfd；920B 与 950（2026-11-17）实测都是 `6.6.0-159.4.3.154.oe2403sp4.aarch64` | `uname -r`；`grep -E 'CONFIG_KVM=\|CONFIG_USERFAULTFD=' /boot/config-$(uname -r)` | 换内核后第 6 项的 `nbd.ko` 也要重编 |
 | 3 | `/dev/kvm` 存在且 root 可读写；KVM 跑在 VHE 模式 | `ls -l /dev/kvm`；`dmesg \| grep -Ei 'kvm.*VHE mode initialized'` | 沙箱起不来；非 VHE 时 HDBSS 启用会被内核拒绝 |
 | 4 | **HDBSS**：内核编了 `CONFIG_ARM64_HDBSS=y`，并且 CPU 支持 KVM 能力502；仅有内核配置不足 | 核对内核配置、当前能力文件的 `track_dirty_pages` 与原因，以及实际FC后端；辅助预检可真开探针 | 若未探到能力且未显式开跟踪，则为`off`，checkpoint全量；只有已武装跟踪而FC启用HDBSS失败时，才按`FC_HDBSS_REQUIRED`决定拒绝或退回`kvm-wp` |
 | 5 | GICv3 | `preflight-customer.sh` 第 2 节 | v2 未实测 |
@@ -81,7 +81,7 @@ orchestrator、Firecracker 和 Python SDK 从选定的 KASandbox 版本配对。
 
 orchestrator按 `$FIRECRACKER_VERSIONS_DIR/<模板记录的FC版本>/firecracker` 选择文件。950 测试部署的模板查找键是 `v1.13.1`，二进制自报上游基线版本为 `1.12.1`；两种字符串均不能单独证明包含本特性。要核对的是模板实际选择的路径和构建哈希，不要替换一个与模板无关的目录。
 
-950的2026-10-15 smoke已核对选定路径、回滚接口、部署产物哈希与功能；详见[第 17 章](17-functional-verification.md)。能力文件自报的 `commit=4853232` 仍需与源码、RPM 对应核实，不代替二进制哈希。RPM 路径样例在 [附录 E §6](E-environment-and-tools.md#6-rpm-部署的路径示例)。
+950 的 2026-11-17 smoke 已核对选定路径、回滚接口、部署产物哈希与功能；详见[第 17 章](17-functional-verification.md)。能力文件自报的 `commit=4853232` 仍需与源码、RPM 对应核实，不代替二进制哈希。RPM 路径样例在 [附录 E §6](E-environment-and-tools.md#6-rpm-部署的路径示例)。
 
 | 配法 | 表现 |
 |---|---|

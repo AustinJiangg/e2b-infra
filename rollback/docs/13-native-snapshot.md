@@ -247,7 +247,7 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 
 ### 6.3 与 checkpoint / restore 的差别
 
-本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（[第 9 章](09-in-place-rollback.md)）。§6.1、§6.2 里进程退出、KVM 销毁、NBD 断开、进程启动、加载 `snapfile` 这些固定步骤都不会发生，所以这部分固定开销不计入 checkpoint / restore。举一个量级：950 上（2026-10-13，混合负载 0 MiB 档，墙钟 p50，见 [第 18 章](18-950-performance.md)）checkpoint / restore 是 17.2 / 22.4 ms。
+本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（[第 9 章](09-in-place-rollback.md)）。§6.1、§6.2 里进程退出、KVM 销毁、NBD 断开、进程启动、加载 `snapfile` 这些固定步骤都不会发生，所以这部分固定开销不计入 checkpoint / restore。举一个量级：950 上（2026-11-17，混合负载 0 MiB 档，墙钟 p50，见 [第 18 章](18-950-performance.md)）checkpoint / restore 是 22.1 / 21.3 ms。
 
 这不是"原生实现得慢"：原生要产出能离开这个进程、这台宿主的自足快照，停掉并重建进程是这个目标的一部分（[§7](#7-它擅长什么)）。
 

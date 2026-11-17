@@ -60,10 +60,10 @@ bash test950.sh report
 
 低档是高档的子集：quick ⊂ standard ⊂ extended。long 单独成档，只包含长跑；应当先跑过 extended，再跑 long。两套都测时，最后会切回沙箱级，再跑一次沙箱级冒烟。
 
-| 档 | 沙箱级 | 进程级 | 920B 实测耗时 |
+| 档 | 沙箱级 | 进程级 | 实测耗时 |
 |---|---|---|---|
 | quick | `run.sh smoke`：预检、SDK 自检、能力、FC 身份、59 项正确性 | `950.sh quick`：部署自检 + `verify_gsd.py` | 5 分钟（沙箱级 smoke 45 秒、进程级 5 秒，其余是两次切栈各约 70 秒） |
-| standard | `smoke` + `func`（16 个用例、兼容矩阵、SDK 异常语义）+ `perf` + `hdbss`（当前 order） | `acceptance` + `stress`，即 `950.sh all` 里的验收与四组压测 | 32 分钟（func 18 分钟、perf 2 分钟、进程级验收 3.6 分钟、压测 3 分钟） |
+| standard | `smoke` + `func`（16 个用例、兼容矩阵、SDK 异常语义）+ `perf` + `hdbss`（当前 order） | `acceptance` + `stress`，即 `950.sh all` 里的验收与四组压测 | 920B 32 分钟（func 18 分钟、perf 2 分钟、进程级验收 3.6 分钟、压测 3 分钟）。950 约 49 分钟（smoke 50 秒、func 18.5 分、perf 9 分、hdbss 4 分、进程级验收 3 分、压测 4 分，另有切栈和 netns 清理；perf 里的并发 N=16 因一次 300 s 超时多用了约 5 分钟） |
 | extended | 在 standard 之上加：<br>`special`：T18 重启、T21 四条注入、T37 两道配额，逐条改 env 并重启，共 8 次；<br>`hdbss --orders 1,9`；<br>`perf --full`：分档全表 3 遍；<br>`idle`：空闲后 restore，测法同沙箱级手册第 16 章 §7 | 在 standard 之上加 `stress-ext`：<br>八组压测各 1000 轮（含 enospc）；<br>多棵树、删文件密集各 3 个种子 200 轮，再各跑一次 1000 轮的容量耗尽（`*-capacity`）；<br>all、noworkers 各 5 个种子；<br>兼容矩阵（checkpoint → pause → resume → restore） | 1 小时 50 分（另加两次切栈）：沙箱级 func 18 分、special 9.5 分（重启 8 次）、perf --full 6 分、idle 9.5 分；进程级 stress-ext 51 分。950 上 hdbss 两项不再 SKIP，约多 20 分钟 |
 | long | `run.sh soak`：16 沙箱混合稳态与 16 沙箱滚动保留各占时长的 40%，再加 T36 全规模、串行 restore 5000 次，前后对比宿主资源 | `950.sh soak`：一个沙箱里按时长连续 checkpoint / restore / delete，前后对比宿主资源 | `--hours 0.25` 试跑 37 分钟（沙箱级 20 分、进程级 15 分）；默认 4 小时时两套共约 9 小时 |
 
@@ -115,13 +115,14 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 ## 5. 已知会 FAIL 的项
 
-2026-11-16～17 在新 920B 上逐档演练，下面几项在修复前会判 FAIL，结果里看到它们不必另查：
+2026-11-16～17 在新 920B 上逐档演练、11-17 在 950 上跑 standard，下面几项在修复前会判 FAIL，结果里看到它们不必另查：
 
 | 步骤 | 项 | 原因 | 状态 |
 |---|---|---|---|
 | `criu/stress-ext` | `compat_matrix` 的 B3、B4、B6/B7、E1 | 进程级 SDK 的 `Sandbox.connect` 没带 `E2b-Sandbox-Id` 头，代理以 `missing header` 打回 checkpoint 请求。用原 Sandbox 对象做 pause → resume → restore（B8）通过 | 产品缺陷，待修 SDK |
 | `criu/stress-ext` | `multitree-capacity` | 1000 轮把 snapshot store 涨到 guest 内存的九成，容量预检没挡住，guest OOM 杀了用户进程 | 产品缺陷，见进程级手册第 23 章 |
 | `criu/stress-ext` | `deldense-capacity` | 1000 轮把根盘写满，多数失败是安全的（`internal`，"nothing was changed"），但有 4 次 restore 返回 `data_loss` | 产品缺陷，见进程级手册第 23 章 |
+| `sandbox/perf` | 并发 `checkpoint_concurrent.py` | 950 上 A 段 N=16 有 1 次 restore 服务端约 140 ms 已完成并写回应答，客户端没收到，等满 300 s 超时（2026-11-17）；数据未受影响。丢在 orchestrator 代理、client-proxy、SDK 之间，见沙箱级手册第 21 章 §2.3 | 待查，计划在 920B 循环复现 |
 | `sandbox/special` | `crtest T18` | `nomad job restart` 原地重启后，旧沙箱的 Firecracker 进程 90 秒后仍在。手工复现两次都在 10 秒内退出，原因未查 | 待查 |
 
 `stress-ext` 里各组互不依赖，一组失败不影响其余组的结果。

@@ -64,8 +64,8 @@ bash rollback/scripts/950/run.sh long
 - **59 还是 57。** 57 说明 SDK 没有 `mem_mode` 字段，"是不是增量"那两条断言被跳过——这轮仍是有效的正确性验收，但**不能证明用的是增量**。重装覆盖层（先 `install.py`，后 `patch_e2b.py`）。
 - **脏页后端。** `checkpoint_verify.log` 开头 `脏页后端 : …` 是 Firecracker 自己报的：950 应为 HDBSS（硬件标脏），显式开跟踪的无 HDBSS 机器为 KVM 写保护。能力行只回答"开没开"，回答不了这一项。
 
-**950 smoke 已有五项全部通过的实测归档。** `20261015-121331-smoke` 为 PASS 5 / FAIL 0 / SKIP 0，宿主预检 19 / 0 / 0、正确性 59 / 59。
-这一轮根据部署脚本选定 `v1.13.1`，接口检查、SDK、能力信息与 FC hash 核对通过。更早的 `20261013-160739-smoke` 为 4 PASS / 1 FAIL / 0 SKIP，FAIL 按原样保留。920B 的一轮为 PASS 5 / FAIL 0 / SKIP 0，预检 18 / 1 / 0，WARN 是本机无 HDBSS。完整条件与证据见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)。
+**950 smoke 已有五项全部通过的实测归档。** 2026-11-17 `test950.sh standard` 开头的 smoke 为 PASS 5 / FAIL 0 / SKIP 0，宿主预检 19 / 0 / 0、正确性 59 / 59；结尾回切后的 smoke-after 同样 PASS 5。
+这一轮根据部署脚本选定 `v1.13.1`，接口检查、SDK、能力信息与 FC hash 核对通过。920B 的一轮为 PASS 5 / FAIL 0 / SKIP 0，预检 18 / 1 / 0，WARN 是本机无 HDBSS。完整条件与证据见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)。
 
 ## 4. func
 
@@ -86,7 +86,7 @@ bash rollback/scripts/950/run.sh long
 **在线业务机器上不建议跑这四条**（要改线上配置、重启或换 FC）。它们在 920B 上有 `3539c45df` 的专项结果（[附录 B §4](B-920b-results.md#4-重启与注入类)），在 950 上没有结果，结论里要写明未验证。
 解释器里没装 pytest 时那一项也判 SKIP，装上后重跑：`python3 -m pip install "pytest>=7.4,<8" "pytest-asyncio>=0.23,<0.24"`。
 
-**默认 func 在两个平台都有实测**：950 的 `20261013-163056-func` 和 920B 的 2026-11-06 一轮都是 PASS 17 · FAIL 0 · SKIP 4，四类重启 / 注入 / 配额项按计划跳过。
+**默认 func 在两个平台都有实测**：950 的 2026-11-17 一轮为 PASS 17 · FAIL 0 · SKIP 5，16 个 crtest 用例全过，四类重启 / 注入 / 配额项按计划跳过，SDK 异常语义 pytest 因客户端未装 pytest 跳过；920B 的 2026-11-06 一轮为 PASS 17 · FAIL 0 · SKIP 4。
 逐项与 warning 的解释见 [第 17 章 §3](17-functional-verification.md#3-功能回归结果)，950 的混合短稳态与恢复后立即命令见 [第 21 章 §2](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)。
 判读时既看 PASS，也核对 T36 / T40 的失败记录项；不能将默认短测的通过写成小时级长稳，或写成所有负载的 restore 均满足 100 ms。
 
@@ -107,7 +107,7 @@ bash rollback/scripts/950/run.sh long
 
 判读时还要看：`analyze.log` 里各档 `mem_mode` 应全为 `incremental`；数字所在平台（920B 为 `kvm-wp`、950 为 `hdbss`）写进留档。
 950的结果与判定见[第 18 章](18-950-performance.md)，920B历史分档见[第 20 章 §2](20-920b-performance.md#2-分档基准与判定)。
-950 的 `20261013-161100-perf` 中，`SUMMARY.md` 四项 PASS 与性能超线同时成立；并发 B 还记录了跨 restore 的 guest 命令异常，需读其明细，不能只据退出码写“整轮无异常”。
+950 的 2026-11-17 perf 中，分档、达标判定、串行三项 PASS 与性能超线同时成立；并发项 FAIL，原因是 A 段 N=16 的 1 次 restore 应答丢失（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)）。并发 B 还记录了跨 restore 的 guest 命令异常，需读其明细，不能只据退出码写“整轮无异常”。
 
 ### 5.1 hdbss 档：HDBSS 专项
 
@@ -141,7 +141,7 @@ bash rollback/scripts/950/run.sh hdbss --python "$PY" --orders 1,2,4,6,9 --allow
 
 基准有 14 分钟的总时限，到点即停并在结果里标注未跑完。流程已在无 HDBSS 的 920B 上带 `--force-non-hdbss` 跑通（后端 `kvm-wp`）：完整一轮 239 秒，1024 MB 档在 2 vCPU / 2048 MB 模板里放得下；`--orders 1,2` 的短试跑 217 秒，每次改 env 重启到就绪 45–53 秒，扫描后 job 的启动命令与 Env 和扫描前完全相同。这些是流程耗时，不是 HDBSS 的性能。
 
-**950 默认 order 1 的完整专项已有文本归档**，来源为 `20261013-165204-hdbss`：启用证据、写密集实测及统计边界见
+**950 默认 order 1 的完整专项已有文本归档**，来源为 2026-11-17 standard 的 `sandbox/hdbss` 步骤（`20261117-165758-hdbss`）：启用证据、写密集实测及统计边界见
 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)。这一轮无 `--quick`、无 order 扫描、无重启；
 其他 order 的性能和扫描恢复流程不能由它推定。L3 的冷/热比需与退出数及启用日志一起读，不能只因比值大于 1 就判定 HDBSS 失效。
 
@@ -195,14 +195,14 @@ bash rollback/scripts/950/run.sh long
 | 11 | 字节配额默认关 | 是否在交付件里默认开、开多大待定；crtest 没有对应用例，端到端验证只在工作区脚本里做过 |
 | 12 | SDK 覆盖层自检 | 判据是“原有异常子类都在、映射表全是子类”，在两次部署件上重跑 smoke 都是 5 / 5（[附录 B §5](B-920b-results.md#5-部署后回归)） |
 | 13 | 开发态工具 | `correctness.py` 已在两次部署件上跑过，都是 ALL PASS（[附录 B §5](B-920b-results.md#5-部署后回归)）。`correctness.py`、`pause_verify.py`、`loop.py` 不在 950 上跑，覆盖关系见[第 16 章](16-test-methodology.md)的验证项总表；`compat_matrix.py` 已移到 `acceptance/`，由 `run.sh func` 运行；`timing.py` 未在代码基准上跑 |
-| 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-功能回归结果)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)，原生分档见 [第 19 章](19-native-pause-resume.md)，perf 的 12 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 21 章](21-concurrency-and-longrun.md)。smoke 已有能力文件自报 commit、SDK 与 FC 路径 hash，HDBSS 轮有二进制 hash 与 guest vCPU；perf / func 当轮二进制身份、原始 JSON / JSONL、`00-context.md`、源码 commit 与部署包的对应和介质仍待补。950 重启 / 注入 / 配额专项已跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 21 章 §3](21-concurrency-and-longrun.md#10-到-950-上要重测什么) |
+| 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-功能回归结果)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)，原生分档见 [第 19 章](19-native-pause-resume.md)，perf 的 12 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 21 章](21-concurrency-and-longrun.md)。2026-11-17 standard 一轮的 orchestrator 与 FC sha256、宿主内核和机器型号由 `test950.sh` 在同一轮记录；原始 JSON / JSONL 未回传，源码 commit 与部署包的对应仍待核实。950 重启 / 注入 / 配额专项已跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 21 章 §3](21-concurrency-and-longrun.md#10-到-950-上要重测什么) |
 | 15 | HDBSS 与软件写保护的收益对照 | 已决定不做：950 上只量 HDBSS 自身的性能，不测写保护 |
-| 16 | 950 上的 HDBSS L3 证据落盘 | 已回传 2026-10-13 16:52 默认 order 1 的能力、自报、dmesg / FC 日志、冷 / 热写与 debugfs 退出计数，见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)；JSON / JSONL 尚未回传，不从文本推定长期表现 |
+| 16 | 950 上的 HDBSS L3 证据落盘 | 已回传 2026-11-17 16:58 默认 order 1 的能力、自报、dmesg / FC 日志、冷 / 热写与 debugfs 退出计数，见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)；JSON / JSONL 尚未回传，不从文本推定长期表现 |
 | 17 | `FC_HDBSS_ORDER` 取值对比 | 已确认默认 order 1 生效；已跑的只有 `run.sh hdbss`，没有 `--orders`，其他 order 比较仍待补。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`（[§5.1](#51-hdbss-档hdbss-专项)） |
 | 18 | 跨树回滚 | 有单元测试（丢失 epoch 后跨树 restore 三种 sidecar 形态），无端到端用例 |
 | 19 | HDBSS 在 vCPU 创建之后武装 | 只靠调用点位置保证，没有断言 |
 | 20 | 条件标签留档 | 每轮必须记全机型、脏页后端、产物盘、模板、二进制 sha、脚本参数；漏记的数据事后补不上 |
-| 21 | 原生 pause / resume | 950 与 920B 分档已测（[第 19 章](19-native-pause-resume.md)）。950 的 `create_snapshot()` 路径、逐段拆分、不开跟踪的对照，以及当前被测二进制上的 T39、T41、`pb2.py` 待补。pause 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；920B 上 resume 比对照慢 25.1～36.0 ms，原因未查 |
+| 21 | 原生 pause / resume | 950 与 920B 分档已测（[第 19 章](19-native-pause-resume.md)）。950 的 `create_snapshot()` 路径、逐段拆分、不开跟踪的对照，以及 `pb2.py` 待补；T39、T41 已在同一二进制上通过（2026-11-17 func）。pause 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；920B 上 resume 比对照慢 25.1～36.0 ms，原因未查 |
 | 22 | 封层刷屏障与重复刷盘 | V1–V3 均未验证，现状、依据和测法见 [第 30 章 §2.2](30-status-and-directions.md#22-读代码发现的待验证项) |
 | 23 | 部署脚本的 80 → 3002 转发劫持 hyperloop 请求 | `build.sh` 装的 `nat PREROUTING --dport 80 -j REDIRECT --to-port 3002` 不限入口网卡、排在各槽位的 hyperloop 规则（→ 5010）前面，guest 发往 hyperloop 的请求全被转给 client-proxy：hyperloop 这条链路实际不通，client-proxy 在 16 沙箱负载下每秒约 900 条 `invalid host`，long11 两小时写出约 9.1 GB 日志。不影响 checkpoint / restore 的结果。2026-09-30 决定暂不改，改法是给该规则加 `! -i veth+`（[附录 C §6](C-evolution-and-cases.md#6-80-端口的转发规则劫持-hyperloop-请求)） |
 
@@ -222,13 +222,13 @@ bash rollback/scripts/950/run.sh long
 
 | 内容 | 950 | 920B | 证据 |
 |---|---|---|---|
-| 部署预检与直链正确性（smoke） | 2026-10-15：PASS 5，59 / 59。2026-10-13 首轮 4 PASS / 1 FAIL 按原样保留 | 2026-11-06 部署：PASS 5，59 项通过，预检 WARN 1（无 HDBSS） | [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收) |
-| 默认功能回归（func） | 2026-10-13：PASS 17 / FAIL 0 / SKIP 4，863 条硬断言，SDK 67 passed | 2026-11-06：PASS 17 / FAIL 0 / SKIP 4，SDK 67 passed | [第 17 章 §3](17-functional-verification.md#3-功能回归结果) |
-| 分档性能 | 2026-10-13：十二档 270 次迭代，判定见第 18 章 | 全表 3 遍 1040 次迭代 | [第 18 章](18-950-performance.md)、[第 20 章 §2](20-920b-performance.md#2-分档基准与判定) |
+| 部署预检与直链正确性（smoke） | 2026-11-17：PASS 5，59 / 59；结尾 smoke-after 同样 PASS 5 | 2026-11-06 部署：PASS 5，59 项通过，预检 WARN 1（无 HDBSS） | [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收) |
+| 默认功能回归（func） | 2026-11-17：PASS 17 / FAIL 0 / SKIP 5，16 个用例 863 条硬断言；SDK pytest 未跑 | 2026-11-06：PASS 17 / FAIL 0 / SKIP 4，SDK 67 passed | [第 17 章 §3](17-functional-verification.md#3-功能回归结果) |
+| 分档性能 | 2026-11-17：十二档 270 次迭代，判定见第 18 章 | 全表 3 遍 1040 次迭代 | [第 18 章](18-950-performance.md)、[第 20 章 §2](20-920b-performance.md#2-分档基准与判定) |
 | 同点串行 restore | 100 次 | 5000 次 | [第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)、[第 20 章 §3](20-920b-performance.md#3-单沙箱串行与空闲后-restore) |
 | HDBSS | 默认 order 1：69 次增量迭代，MD5 不一致 0 | 无 HDBSS，只作负样本与流程验证 | [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测) |
 | 原生 pause / resume 分档 | 2026-11-06：pause 模式 108 个样本，失败 0 | 2026-11-06：精确增量与对照构建各 216 个样本，失败 0，含 snapshot 模式 | [第 19 章](19-native-pause-resume.md) |
-| 短时并发与短稳态 | A/B 段、T36 4 沙箱 × 120 s、T40 | A/B 段、T36、T40 | [第 21 章](21-concurrency-and-longrun.md) |
+| 短时并发与短稳态 | A/B 段（N=16 有 1 次 restore 应答丢失）、T36 4 沙箱 × 120 s、T40 | A/B 段、T36、T40 | [第 21 章](21-concurrency-and-longrun.md) |
 | 长跑、滚动保留与资源走平 | 无结果 | 历史长测，含 T36 全规模 | [附录 B §10](B-920b-results.md#10-最终版的结果) |
 | 重启、配额、故障注入 | 无结果 | `3539c45df` 上 10 项全过 | [附录 B §4](B-920b-results.md#4-重启与注入类) |
 | 单元测试与属性测试 | 不在 950 上跑 | 在代码仓库里跑 | [附录 B §2](B-920b-results.md#2-总表)、[第 29 章](29-development.md) |
@@ -253,14 +253,15 @@ bash rollback/scripts/950/run.sh long
 | 项 | 第 30 章类别 | 现状 |
 |---|---|---|
 | 950 长期运行与专项覆盖 | 待验证项 | 已有默认功能、短时并发与混合短稳态证据；小时级长跑、滚动保留、资源收敛以及重启 / 注入 / 配额专项待补 |
-| 950 部署身份、原始数据与 HDBSS 覆盖 | 待验证项 | 各轮身份分别核对；perf、func 的二进制身份与 JSON / JSONL 未回传；其他 order 待补 |
+| 950 部署身份、原始数据与 HDBSS 覆盖 | 待验证项 | 2026-11-17 一轮身份已记录；JSON / JSONL 未回传；其他 order 待补 |
 | 跨树回滚与 HDBSS 武装时序 | 待验证项 | 前者有单元测试，缺端到端用例；后者由调用点位置保证，缺断言 |
 | 视图块数与装配成本增长 | 待验证项 | 长跑末尾块数尚未饱和，需要更长实测确认走势 |
 | 原生 pause / resume 固定开销 | 待验证项：部分未归因 | 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；950 没有逐段数据；920B 上 resume 比对照慢的原因未查 |
 | 封层刷屏障与重复刷盘 | 待验证项 | V1–V3 均未验证 |
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复问题：根因或触发条件待定位 | 保留现象记录，需要针对负载复现 |
-| 950 空闲后 restore、`compat_matrix.py` | 属于 950 专项覆盖 | 950 待测，分别由 `run.sh idle` 与 `run.sh func` 运行；不在 950 上跑的开发态工具见 §7 第 13 项 |
-| 当前 950 二进制上的 T39、T41、`pb2.py` | 属于 950 专项覆盖 | 2026-10-13 的 T39、T41 通过，但该轮身份待补，不能证明 2026-11-06 的被测二进制 |
+| restore 应答丢失 | 待修复问题：丢失位置待定位 | 950 并发 N=16 出现 1 次，服务端已完成、客户端等满 300 s；计划在 920B 循环复现并打开 client-proxy 调试日志（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)） |
+| 950 空闲后 restore | 属于 950 专项覆盖 | 950 待测，由 `run.sh idle` 运行；`compat_matrix.py` 已在 2026-11-17 func 中跑过（OK 13 / REFUSED 3 / BROKEN 0）；不在 950 上跑的开发态工具见 §7 第 13 项 |
+| 当前 950 二进制上的 `pb2.py` | 属于 950 专项覆盖 | T39、T41 已在 `a5d03902…` 上通过（2026-11-17 func）；`pb2.py` 待跑 |
 
 待修复但不属于验证缺口的项，例如 delete 同步合并、conntrack 清扫长尾、netns 泄漏、客户端连接异常和偶发 GC 长暂停，状态见 [第 30 章 §1](30-status-and-directions.md#1-已知问题)。
 

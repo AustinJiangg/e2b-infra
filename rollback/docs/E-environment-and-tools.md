@@ -8,16 +8,23 @@
 
 | 条件或配置 | 已有证据 | 含义 |
 |---|---|---|
-| 系统 | 950，`slot6`，aarch64；2026-10-13 宿主内核 `6.6.0-159.4.12.166.oe2403sp4.aarch64` | 平台前提见 [第 25 章](25-build-and-self-check.md)，具体型号和拓扑只采用实际回传值 |
-| 内存产物 | perf 两遍首次全量均为 2048 MiB；实际模板其他字段按各轮记录 | 不从 920B 模板推定 950 未留档字段 |
-| 存储 | `/orchestrator/build/checkpoints`、ext4；下层介质在 perf 轮未核实 | 路径可不同，需满足文件系统与同盘条件 |
-| `FC_TRACK_DIRTY_PAGES` | 默认未设置时，orchestrator 探测 KVM 能力 502；smoke 能力文件实际记录见第 17 章 | 以启动能力与结果核对是否启用，不仅查看环境变量 |
-| HDBSS 后端 | perf/func 等日志自报 `hdbss`，专项另有内核与 FC 启用证据 | 能力探测、FC 自报与数据面证据分别核对 |
-| `FC_HDBSS_ORDER` | HDBSS 专项默认 order 1；未扫描其他 order | 默认和可选值查第 26 章，不把未测 order 写成已验证 |
-| 2026-10-15 smoke有效配置 | `track_dirty_pages=true`（硬件能力502）；`compact=true`、最多合并8个；`debug_index=false`；数量/字节上限均0；最低余量4294967296字节；`fault_inject=[]` | 这是该次能力文件记录，不追认更早perf/func；对应配置语义查第26章 |
+| 机器 | Kunpeng 950 7592C，2.3 GHz（最低 1.2 GHz）；2 路 × 96 核 × 2 线程 = 384 CPU；4 个 NUMA 节点；内存 2261 GB | 2026-11-17 `lscpu`、`free -g` 回传；地址 141.61.11.24 |
+| 系统与内核 | openEuler 24.03 (LTS-SP4)；宿主内核 `6.6.0-159.4.3.154.oe2403sp4.aarch64`；GICv3；`CONFIG_ARM64_HDBSS=y` | 平台前提见 [第 25 章](25-build-and-self-check.md) |
+| 编排与容器 | Nomad v1.11.2、Consul v1.21.4、docker 29.7.2 | 部署方式的版本，不是功能前提 |
+| 大页 | 2048 kB × 32768 页（64 GiB），开跑时空闲 32730 页 | 预检只记录，不据此保证某个并发规模的容量 |
+| 内存产物 | 模板 `base`：guest 2 vCPU、可见内存 1990 MiB；全量内存产物 2048 MiB | 不从 920B 模板推定 950 未留档字段 |
+| 存储 | `/orchestrator/build/checkpoints` 在根盘 `/dev/mapper/openeuler-root`（LVM，ext4，1.1 TB，开跑时 798 GB 可用）；缓存盘与产物盘同源 | 路径可不同，需满足文件系统与同盘条件 |
+| 被测二进制 | orchestrator `/usr/bin/template-manager` sha256 `a5d03902afd56e84c4cd956bf73b3bb9d40c4049d736a51985d4d5c7927289a8`（能力文件自报 commit `4853232`）；FC `/fc-versions/v1.13.1/firecracker` sha256 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9`，自报 1.12.1 | 2026-11-17 standard 与 2026-11-06 原生分档用的是同一份 orchestrator |
+| 客户端 | conda 环境 `jll-e2b`：Python 3.14、e2b SDK 2.20.0、httpx 0.28.1 | 在被测宿主上运行 |
+| `FC_TRACK_DIRTY_PAGES` | 未设置；orchestrator 探测 KVM 能力 502 后自动开启，能力文件 `track_dirty_pages_reason=hardware dirty state tracking present (KVM capability 502)` | 以启动能力与结果核对是否启用，不仅查看环境变量 |
+| HDBSS 后端 | 各用例与基准日志自报 `hdbss`，HDBSS 专项另有内核与 FC 启用证据 | 能力探测、FC 自报与数据面证据分别核对 |
+| `FC_HDBSS_ORDER` | 未设置，默认 order 1；未扫描其他 order | 默认和可选值查第 26 章，不把未测 order 写成已验证 |
+| smoke 有效配置 | `track_dirty_pages=true`（硬件能力 502）；`compact=true`、最多合并 8 个；`debug_index=false`；数量 / 字节上限均 0；最低余量 4294967296 字节；`fault_inject=[]`；各项来源均为 `default` | 对应配置语义查第 26 章 |
 | 950 测试部署方式 | `/opt/e2b-infra`、RPM、Nomad、SDK 覆盖层 | 只说明测试环境，不要求采用此安装方法 |
 
-配置总表在[第 26 章](26-configuration-and-capacity.md)。perf、HDBSS、func 和 smoke 的身份分别在各自结果中记录，不能互相追认。
+2026-10 曾在另一台 950（主机名 `slot6`，宿主内核 `6.6.0-159.4.12.166`）上测过一轮。那台机器与上表不是同一台，其数据已由 2026-11-17 一轮取代，不再引用。
+
+配置总表在[第 26 章](26-configuration-and-capacity.md)。smoke、func、perf、HDBSS 出自同一轮 `test950.sh standard`，期间 orchestrator 没有重启（能力文件启动时间 15:52:20，早于本轮开始）。
 
 ## 2. 测试环境与沙箱规格
 
@@ -110,14 +117,14 @@ python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 
 | 轮次 | 时间 | 手册位置 | 当前归档范围 |
 |---|---|---|---|
-| 950 perf | 2026-10-13 16:11 | 第 18、21 章 | 分档、串行 restore、A/B 短时并发文本；JSON/JSONL 与部分身份待补 |
-| 950 func | 2026-10-13 16:30 | 第 17、21 章 | 默认功能用例、SDK 异常、混合短稳态与恢复后立即请求文本 |
-| 950 HDBSS | 2026-10-13 16:52 | 第 18 章 | 默认 order 1、三级证据、写密集负载与该轮二进制哈希 |
-| 950 smoke | 2026-10-15 12:13 | 第 17 章 | 5 项通过、能力文件、SDK 自检、FC 路径哈希和 59 项正确性 |
+| 950 standard：smoke | 2026-11-17 16:17 | 第 17 章 | 5 项通过、预检全文、能力文件、FC 路径哈希和 59 项正确性；结尾 smoke-after 同样 5 项通过 |
+| 950 standard：func | 2026-11-17 16:30 | 第 17、21 章 | 16 个默认用例全过；T13 / T36 / T40 全文与各用例只记录项；SDK pytest 未跑 |
+| 950 standard：perf | 2026-11-17 16:48 | 第 18、21 章 | 分档、达标判定、串行 restore、A/B 并发；A 段 N=16 的 96 个操作起止时间；JSON / JSONL 未回传 |
+| 950 standard：HDBSS | 2026-11-17 16:58 | 第 18 章 | 默认 order 1、三级证据、写密集负载 |
 | 950 原生分档 | 2026-11-06 | 第 19 章 | 原生 pause / resume 六档，每档 15 个 repeat、3 个 first，共 108 样本；身份与原始 JSON 已回传 |
 | 920B 历史与开发验证 | 对应各轮原始日期 | 附录 B | 功能、分档、原生增量、并发、小时级长测和部署后回归 |
 
-脚本与环境材料保留在工具仓库；950 各轮测试的结论见 [结果摘要](../evidence/950/README.md)（其中 2026-10-13 的 smoke 一轮有 1 项 FAIL，保留原记录），原始日志仅保留在本地 `rollback/scripts/950/results/`。主要条件、数据与判据已经进入本手册。
+脚本与环境材料保留在工具仓库；950 各轮测试的结论见 [结果摘要](../evidence/950/README.md)，原始日志与 JSON 只保留在被测机的 `test950/results/` 下。主要条件、数据与判据已经进入本手册。
 
 ## 6. RPM 部署的路径示例
 

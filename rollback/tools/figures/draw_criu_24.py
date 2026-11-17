@@ -224,8 +224,50 @@ def d24_3():
         T = [("沙箱级 p99（未画线）", "teal", CMP920[op]["沙箱级 p99"], "none")]
         tier_chart(d, xl, xs, S, (0, 125), table_only=T)
     d.footer("注：沙箱级 p99 只列在数值表里，未画线；n ≤ 100 时 p99 即最大值。进程级 n = 3 没有 p99，三轮的最小值～最大值见正文表。"
-             "第一次全量两侧不是同一个量，不在图中（§4.5）。950 的进程级尚未测（§5）。")
+             "第一次全量两侧不是同一个量，不在图中（§4.5）。950 的同机对比见 §5 与图 24-4。")
     d.save(out("criu", "24-3-920B同平台对比"))
 
 
+
+# ---------------------------------------------------------------- 24-4 950 同机对比
+# 数据（以后只改这里）。客户端墙钟，单位 ms。
+# 来源：criu-rollback/docs/24-vs-sandbox-level.md §5.1 表（2026-11-17 test950.sh standard 同一轮）
+CMP950 = {
+    "增量 checkpoint": {
+        "沙箱级 p50": [22.1, 26.2, 32.3, 42.2, 60.1, 107.0],
+        "沙箱级 p99": [31.1, 40.1, 45.1, 58.0, 89.6, 151.5],
+        "进程级 p50": [9.4, 14.9, 23.0, 34.1, 51.7, 91.0],
+    },
+    "restore": {
+        "沙箱级 p50": [21.3, 26.4, 29.7, 38.3, 68.5, 93.2],
+        "沙箱级 p99": [32.2, 36.7, 38.7, 56.9, 94.1, 128.2],
+        "进程级 p50": [9.7, 15.1, 24.1, 31.9, 47.5, 82.4],
+    },
+}
+CMP950_N = "沙箱级每档 n = 30（0～32 MiB）、20（64～256 MiB）；进程级每档 n = 3"
+
+
+def d24_4():
+    from draw_criu_20 import tier_chart
+    style = {"沙箱级 p50": ("teal", "line"), "进程级 p50": ("purple", "line")}
+    d = Chart()
+    d.header("950 同机：两套方案的增量 checkpoint 与 restore 客户端墙钟随档位变化",
+             "950（Kunpeng 950 7592C），2026-11-17 test950.sh standard 同一轮：沙箱级 16:48 起，进程级 17:03 起。"
+             "客户端墙钟，单位 ms；进程级取三轮中位数。" + CMP950_N + "。两侧的内存与文件负载、沙箱与次序、模板和脏页后端"
+             "（hdbss 与 soft-dirty）都不同（§4.6），图中的高低只描述这组实测。")
+    d.legend_row([(k, r, s) for k, (r, s) in style.items()])
+    xl = [f"{t} MiB" for t, _ in CMP920_TIERS]
+    xs = [f"内存 / 文件 {s}" for _, s in CMP920_TIERS]
+    notes = {"增量 checkpoint": "§5.1", "restore": "§5.1，改动之后回到全量基点"}
+    for k, op in enumerate(CMP950, 1):
+        d.section(k, op, note=notes[op] + "；横轴是总改动量，按档位等距排列")
+        S = [(name, style[name][0], vs, style[name][1]) for name, vs in CMP950[op].items() if name in style]
+        T = [("沙箱级 p99（未画线）", "teal", CMP950[op]["沙箱级 p99"], "none")]
+        tier_chart(d, xl, xs, S, (0, 125), table_only=T)
+    d.footer("注：沙箱级 p99 只列在数值表里，未画线；n ≤ 30 时 p99 即最大值。进程级 n = 3 没有 p99。"
+             "第一次全量两侧不是同一个量，不在图中。")
+    d.save(out("criu", "24-4-950同机对比"))
+
+
 d24_3()
+d24_4()

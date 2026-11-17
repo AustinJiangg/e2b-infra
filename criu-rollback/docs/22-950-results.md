@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：第一轮已填（2026-11-17）。** 950 上 `criu-rollback/deploy/950.sh all` 13 步全部 PASS（§0），本章各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，原始文件留在 950 上。只有 §5 的“串口关键词命中”一行还是 `待填`：取数脚本当时还不统计这一项，现在的版本会打印。这是填写 950 结果的唯一位置。
+> **状态：两轮已填（2026-11-17）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -143,7 +143,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 | 判定 | PASS | PASS | PASS | PASS |
 | 看门狗 | `DONE rc=0` | `DONE rc=0` | `DONE rc=0` | `DONE rc=0` |
 | dmesg 新命中 | 0 | 0 | 0 | 0 |
-| 串口关键词命中 | `待填`（`console.txt` 56798 字节） | `待填`（55262 字节） | `待填`（140638 字节） | `待填`（205470 字节） |
+| 串口关键词命中 | 0（`console.txt` 56798 字节） | 0（55262 字节） | 0（140638 字节） | 0（205470 字节） |
 | checkpoint / restore / delete 成功次数 | 77 / 153 / 15 | 75 / 155 / 13 | 92 / 100 / 9 | 92 / 100 / 9 |
 | gsd 侧错误 | `create:resource_exhausted` 55 | `create:resource_exhausted` 57 | 无 | 无 |
 | worker 操作总数 | 1794503 | 0 | — | 713015 |
@@ -269,9 +269,72 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 ---
 
+## 9. 第二轮：test950 standard
+
+同一天 17:01 起，`test950.sh standard` 在沙箱级各步之后切到进程级，又跑了一遍验收（`criu-acceptance`）和探针加四组压测（`criu-stress`），再切回沙箱级冒烟。结果目录 `test950/results/20261117-161710-standard/`，取数用与 `950.sh report handbook` 相同的脚本。这一轮前后机器由我们独占（§8 第 11 条满足），并有沙箱级的分档在 15 分钟前跑完，用来做 [24](24-vs-sandbox-level.md) §5 的同机对比。
+
+### 9.1 条件与判定
+
+| 项 | 值 |
+|---|---|
+| 仓库提交 | e2b-infra `c27b6f8` |
+| 被测文件 | gsd `421597e5…`、orchestrator `063e580e…`、guest 内核 `b81306e7…`，与第一轮相同，acceptance 与 stress 两个目录一致 |
+| guest 自检 | `gsd -commit` 为 `259f1a25c`，与第一轮相同 |
+| 验收 | 17:03:01–17:06:10，3 分 09 秒，**PASS**：guest-check、verify_gsd、verify_fixes、verify_multitree、clear_refs_race、perf-run1..3 全部 PASS；`slow_calls` 为空 |
+| 压测 | 3 分 52 秒，**PASS**：whiteout、all、noworkers、multitree、deldense 全部 PASS。开跑前 e2b netns 有 1539 个，超过 1500，`test950.sh` 先自动清理到 294（2 分 10 秒） |
+| 回切冒烟 | `sandbox/smoke-after` PASS 5 / FAIL 0 / SKIP 0 |
+
+### 9.2 与第一轮对照
+
+| 项 | 第一轮（`950.sh all`） | 第二轮（standard） |
+|---|---|---|
+| `verify_fixes.py` | PASS 26 / SKIP 2（G-19、G-36） | 相同 |
+| `verify_multitree.py --skip V12` | 12 / 12 PASS | 相同，`BAD` 行 0 |
+| 漏页测试 | 30 轮，漏页 0 | 30 轮，漏页 0；`A_dump_ms` p50 16.28 ms；恢复后状态都是 T，哈希都相等，没有卡死 |
+| `verify_gsd.py` restore `total_ms` p50（最小～最大） | 68.9（67.0～76.7） | 69.7（69.0～78.0）；`criuRestoreMs` 58.8、`killMs` 10.2；根盘 266 MB，8 次都是 +0 |
+| 七个 whiteout 探针 | 全部未崩溃 | 全部未崩溃，起点 whiteout 0，dmesg 空 |
+| all（6 worker，300 轮） | create 77 / restore 153 / delete 15，p50 65 / 60 ms，`resource_exhausted` 55 | create 77 / restore 153 / delete 15，p50 75.5 / 76.4 ms，`resource_exhausted` 55 |
+| noworkers（300 轮） | create 75 / restore 155 / delete 13，p50 33 / 33 ms，`resource_exhausted` 57 | create 75 / restore 155 / delete 13，p50 30.4 / 32.6 ms，`resource_exhausted` 57 |
+| multitree / deldense（各 200 轮） | 校验 192 / 0 失败 | 校验 192 / 0 失败；deldense 的文件操作 unlink 4544、rmtree 1093、mkdir 1132、create 6236，失败 0 |
+| 四组串口关键词命中 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| 分档恢复校验 | 18 / 18，SDK 与 journal 最大差 0.0 ms | 相同 |
+
+两轮的各组操作计数完全相同，这是压测脚本按固定种子决定操作序列的结果。all 组的 p50 第二轮高约 10～16 ms，noworkers 组没有升高；每组只有一次运行，不判断这是不是稳定差异。
+
+### 9.3 分档性能
+
+服务端 `total_ms` 三轮中位数和墙钟中位数，单位 ms：
+
+| 总改动量 MiB | 内存 / 文件 MiB | 全量基点 | 增量 checkpoint | restore | 全量基点墙钟 | 增量 checkpoint 墙钟 | restore 墙钟 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 0 | 0 / 0 | 17.6 | 7.6 | 7.7 | 21.3 | 9.4 | 9.7 |
+| 16 | 12 / 4 | 23.4 | 12.7 | 12.8 | 26.8 | 14.9 | 15.1 |
+| 32 | 24 / 8 | 29.2 | 20.7 | 21.8 | 33.2 | 23.0 | 24.1 |
+| 64 | 48 / 16 | 39.7 | 32.0 | 29.9 | 43.2 | 34.1 | 31.9 |
+| 128 | 96 / 32 | 56.2 | 49.4 | 45.4 | 59.8 | 51.7 | 47.5 |
+| 256 | 192 / 64 | 96.5 | 88.8 | 79.7 | 100.1 | 91.0 | 82.4 |
+
+三轮的服务端逐轮样本：
+
+| 总改动量 MiB | 全量基点 轮 1 | 轮 2 | 轮 3 | 增量 checkpoint 轮 1 | 轮 2 | 轮 3 | restore 轮 1 | 轮 2 | 轮 3 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 16.9 | 17.6 | 36.2 | 7.3 | 7.9 | 7.6 | 8.0 | 7.5 | 7.7 |
+| 16 | 23.4 | 22.3 | 27.8 | 11.8 | 12.7 | 13.1 | 11.5 | 12.8 | 15.6 |
+| 32 | 29.2 | 28.8 | 31.1 | 20.5 | 20.7 | 22.4 | 22.1 | 19.1 | 21.8 |
+| 64 | 39.7 | 44.2 | 37.5 | 32.0 | 41.7 | 30.5 | 29.9 | 30.4 | 26.1 |
+| 128 | 56.2 | 58.4 | 54.2 | 52.3 | 47.9 | 49.4 | 46.1 | 44.7 | 45.4 |
+| 256 | 96.5 | 99.2 | 95.5 | 88.8 | 89.4 | 86.6 | 80.6 | 79.7 | 78.8 |
+
+各档 RSS 与第一轮相同，最多差 0.1 MiB（11.6、24.8、36.8、60.8、108.8、204.8 MiB）。第一轮 128 档第 2 轮偏高的现象（§6）这一轮没有出现，三个样本在 54.2～58.4 ms（全量基点）和 44.7～46.1 ms（restore）之间。这一轮 0 档第 3 轮的全量基点 36.2 ms 比另两轮高约一倍，是每档每轮新沙箱的第一次 checkpoint，增量和 restore 不受影响，原因没有查。
+
+两轮的增量 checkpoint 与 restore 中位数相差 0.1～5.7 ms，差最大的是 128 档的 restore（51.1 对 45.4 ms）；全量基点在 128 档相差 11.2 ms（67.4 对 56.2 ms）。这两处正是第一轮那个偏高样本所在的档。
+
+---
+
 ## 本章要点
 
 - 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。
+- 同一天 `test950.sh standard` 的第二轮在独占机器上跑，验收与四组压测全部 PASS，功能计数、压测计数与第一轮相同；分档的增量 checkpoint 与 restore 中位数相差不超过 5.7 ms（§9）。
 - 分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。
 - 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。

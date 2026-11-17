@@ -497,4 +497,4 @@ $PY ../crtest/bench/compliance.py "$OUT"/raw-*.jsonl 2>&1 | tee "$OUT/compliance
 
 ## 阶段结果摘要
 
-运行目录 `results/` 整体由 Git 忽略，原始日志仅留本地，不提交、不推送或作为发布附件。2026-10-13 与 2026-10-15 五轮测试的结论见[结果摘要](../../evidence/950/README.md)，保留失败、跳过、超线与验证缺口。
+运行目录 `results/` 整体由 Git 忽略，原始日志仅留本地，不提交、不推送或作为发布附件。950 各轮测试的结论见[结果摘要](../../evidence/950/README.md)，保留失败、跳过、超线与验证缺口。2026-11-17 起 950 用仓库根的 `test950.sh` 分档测试（`test950/README.md`）。

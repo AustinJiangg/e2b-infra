@@ -50,23 +50,23 @@
 
 ## 2. 测试矩阵
 
-全书唯一一张。只记状态，数字见 [第 17 章](17-functional-verification.md)～[第 21 章](21-concurrency-and-longrun.md)。代码讲解基准见 [README](README.md)。950 各轮身份不同：2026-10-15 smoke 有能力文件、SDK 自检与 FC 路径 hash，2026-10-13 HDBSS 专项有 FC / orchestrator hash，2026-11-06 原生分档有 orchestrator hash 和完整 JSON；2026-10-13 perf、func 的当轮身份待补。这些结果不能自动等同于代码基准的完整验收。
+全书唯一一张。只记状态，数字见 [第 17 章](17-functional-verification.md)～[第 21 章](21-concurrency-and-longrun.md)。代码讲解基准见 [README](README.md)。950 的 smoke、func、perf、HDBSS 来自 2026-11-17 `test950.sh standard` 同一轮，orchestrator 与 FC 的 sha256 在该轮记录；2026-11-06 原生分档有 orchestrator hash 和完整 JSON，与 11-17 是同一份二进制。这些结果不能自动等同于代码基准的完整验收。
 
 | 要证的性质 | 脚本 / 用例 | 判据 | 920B | 950 |
 |---|---|---|---|---|
-| 快照 / 恢复后照常干活；内存、文件、删除、权限位、进程都回到那一刻 | `acceptance/checkpoint_verify.py` | 末行 `✓ 59 项校验全部通过。` | 已跑，2026-11-06 部署上 59 项通过 | 2026-10-15 smoke 中通过并归档（[第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)） |
-| 部署前提与二进制配套 | `run.sh smoke` 的预检、SDK、能力与 FC 身份采集 | 预检无 FAIL；选定 FC 接口与交付件 hash 核对 | 已通过，五项全过，预检 WARN 1 为无 HDBSS | 2026-10-15 五项全部通过并归档（[第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)）；FC 版本判定依据为部署脚本 |
+| 快照 / 恢复后照常干活；内存、文件、删除、权限位、进程都回到那一刻 | `acceptance/checkpoint_verify.py` | 末行 `✓ 59 项校验全部通过。` | 已跑，2026-11-06 部署上 59 项通过 | 2026-11-17 smoke 中通过并归档（[第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)） |
+| 部署前提与二进制配套 | `run.sh smoke` 的预检、SDK、能力与 FC 身份采集 | 预检无 FAIL；选定 FC 接口与交付件 hash 核对 | 已通过，五项全过，预检 WARN 1 为无 HDBSS | 2026-11-17 五项全部通过并归档（[第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)）；FC 版本判定依据为部署脚本 |
 | 树语义：线性 / 前滚 / 分叉跨 LCA / 删除与合并（compact / fold） / 失败 | `dev/correctness.py ext4`（开发态） | 末行 `ALL PASS` | 已跑（部署版） | 不在 950 上跑：直链与前滚由 `checkpoint_verify.py` 覆盖，分叉由 T15、深链随机回滚由 T22、删除与隐藏层合并由 T36 和滚动保留覆盖，失败路径由 T21 覆盖 |
 | checkpoint 之后原生 pause，磁盘与内存完好 | crtest T39（内存与盘上标记）；`acceptance/compat_matrix.py` 的 B2、D1（`O_DIRECT` 读回） | 内存 md5 一致；`O_DIRECT` 读回一致 | T39 已跑，含 2026-11-06 func | T39 通过并归档；开发态的 `dev/pause_verify.py` 与这两项重复，不在 950 上跑 |
-| 不弄坏原生生命周期 | `acceptance/compat_matrix.py`（`run.sh func` 里跑）；crtest T41 | 无 `BROKEN` | T41 已跑，含 2026-11-06 func；`compat_matrix.py` 待演练 | T41 通过并归档（外部出网未测）；`compat_matrix.py` 待测 |
+| 不弄坏原生生命周期 | `acceptance/compat_matrix.py`（`run.sh func` 里跑）；crtest T41 | 无 `BROKEN` | T41 已跑，含 2026-11-06 func；`compat_matrix.py` 待演练 | T41 通过并归档（外部出网未测）；`compat_matrix.py` 在 2026-11-17 func 中跑过：OK 13 / REFUSED 3（B4、B8、F1，服务端明确拒绝）/ BROKEN 0 |
 | 原生 pause / resume 分档耗时与导出体积 | `benchmark/native_snapshot_tiers.py` | 判定 PASS，内容与进程校验全过 | 2026-11-06 精确增量与对照构建各 216 个样本（[第 19 章](19-native-pause-resume.md)） | 2026-11-06 pause 模式 108 个样本（[第 19 章](19-native-pause-resume.md)）；`create_snapshot()` 路径待测 |
 | HDBSS 三级证据 | `dev/hdbss_evidence.py` 等；上机验收的入口是 `run.sh hdbss`（[第 22 章 §5.1](22-acceptance.md#51-hdbss-档hdbss-专项)） | L1 / L2 / L3 | 920B 无 HDBSS，只作负样本 | 默认 order 1 的能力、自报、启用日志、数据面与 MD5 文本证据已归档（[第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)）；未扫描其他 order |
 | 稳定性：数百次交替回滚 | `crtest/bench/serial_restore.py`（perf 档 100 次，soak 档 5000 次） | 全部成功、抽验一致 | 5000 次已跑 | 100 次已归档；5000 次待测。开发态的 `dev/loop.py` 与它重复，不在 950 上跑 |
 | 盲区、边界、故障注入 | crtest T11–T41 | 各用例三段式断言 | 默认 16 个用例 2026-11-06 通过；重启类与注入类在 `3539c45df` 上单独跑过 | 默认 16 个用例通过并归档（[第 17 章 §3](17-functional-verification.md#3-功能回归结果)）；T18 / T21 / T37 / T38 跳过，重启 / 注入 / 配额专项未测 |
-| 短时并发：跨沙箱扩展性与同沙箱争用 | `acceptance/checkpoint_concurrent.py` A/B 段 | A 逐项校验；B 结合 RPC、命令错误与操作后状态 | 已跑 | 2026-10-13 文本已归档，见 [第 21 章 §1](21-concurrency-and-longrun.md#2-950-短时并发2026-10-13-ab)；B 的命令异常单列 |
-| 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（[第 21 章 §2](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；全规模、D 段与小时级长稳仍缺结果 |
-| 恢复返回后立即请求 | crtest T40 | 线程完成、账本与活体硬判；另核对请求失败计数 | 已跑，含 2026-11-06 func | 默认非 overlap 场景通过并归档（[第 21 章 §2](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；不外推为在途命令可跨 restore |
-| SDK 异常语义 | `crtest/sdktests/test_checkpoint_errors.py` | pytest 全过 | 已跑，2026-11-06 为 67 passed | func 中 67 passed 并归档（[第 17 章 §3](17-functional-verification.md#3-功能回归结果)），不是 SKIP |
+| 短时并发：跨沙箱扩展性与同沙箱争用 | `acceptance/checkpoint_concurrent.py` A/B 段 | A 逐项校验；B 结合 RPC、命令错误与操作后状态 | 已跑 | 2026-11-17 已跑，见 [第 21 章 §2](21-concurrency-and-longrun.md#2-950-短时并发2026-11-17-ab)；A 段 N=16 有 1 次 restore 应答丢失，判 FAIL；B 的命令异常单列 |
+| 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（[第 21 章 §3](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；全规模、D 段与小时级长稳仍缺结果 |
+| 恢复返回后立即请求 | crtest T40 | 线程完成、账本与活体硬判；另核对请求失败计数 | 已跑，含 2026-11-06 func | 默认非 overlap 场景通过并归档（[第 21 章 §3](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；不外推为在途命令可跨 restore |
+| SDK 异常语义 | `crtest/sdktests/test_checkpoint_errors.py` | pytest 全过 | 已跑，2026-11-06 为 67 passed | 2026-11-17 func 中因客户端未装 pytest 判 SKIP，待下一轮（[第 17 章 §3.3](17-functional-verification.md#33-跳过项)） |
 | 分档性能、串行长尾、空闲后 restore | 见 [§6](#6-基准脚本分工)、[§7](#7-空闲后-restore-与串口的专项测法) | —— | 已跑 | 12 档与串行 100 次文本已归档（[第 18 章](18-950-performance.md)）；空闲后专项仍缺结果 |
 
 默认功能回归通过不意味着未运行的重启 / 注入项也通过；perf 与两分钟混合操作都不能替代小时级稳定性。
