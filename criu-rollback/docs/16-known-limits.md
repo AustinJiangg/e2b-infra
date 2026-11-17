@@ -50,7 +50,7 @@
 | L-11 | 标准输出接到 journald 的进程无法 dump，checkpoint 返回 `internal`，日志尾部有 `External socket is used` | 用 `systemd-run` 之类方式起、输出进 journal 的用户进程做不了 checkpoint | 通向 journald 的 socket 另一端在树外，是 CRIU 的 external socket 限制；与 L-01 同理，gsd 不加放宽选项 | 把输出重定向到文件，或经 SDK 的后台命令起进程（它的输出走通向 envd 的管道，不受影响） | 设计如此 |
 | L-12 | 同一条链上的层栈深度有上限，约 190 层；超过时 checkpoint 返回 `resource_exhausted`（`layer stack too deep`） | 沿同一条历史连续做约 190 次"有文件改动"的 checkpoint 之后不能再 checkpoint | ioctl 的选项串上限是一页（4 KiB），每层的路径都要写进去；gsd 用短层名把上限推到这个量级，并在 checkpoint 时预检，不会建出恢复不了的 checkpoint（[15](15-state-concurrency-capacity.md)） | restore 回一个较浅的 checkpoint 之后可以继续；长跑时定期删除旧 checkpoint 并从较浅的点重新开始。没有层压缩功能 | 设计如此 |
 
-另有五条量级较小、但部署和长期运行时要知道的：
+另有七条量级较小、但部署和长期运行时要知道的：
 
 | 编号 | 现象 | 影响 | 原因 | 规避办法 | 状态 |
 |---|---|---|---|---|---|
@@ -59,6 +59,8 @@
 | L-15 | 在"带 gsd"模式下建的模板与"不带 gsd"模式下建的模板之间互相派生（以一种模式建的模板为基础、在另一种模式下继续构建）没有处理 | 行为未定义 | 开关只保证两种模式的 base 层缓存不互相复用（缓存键里多一个 `"gsd"`）；跨模式派生涉及 init 和根文件系统布局的切换，没有做。本条没有对着模板派生的代码逐步核实，属未验证 | 同一台 orchestrator 上不要混用两种模式建有派生关系的模板 | 未处理、未验证 |
 | L-16 | 建模板时的自检不验证 guest 内核是否带补丁：它只看 `gsd.service` 是否 active、`/health` 是否为 `ok`、`/usr/sbin/criu` 是否 4.x | `HOST_KERNELS_DIR` 指向没打补丁的内核时模板照样建成功，要到第一次 checkpoint 才失败 | 自检脚本（`gsdCheckScript`）不做 checkpoint，也不读内核版本串；gsd 的 `/health` 不探测切层 ioctl 是否存在 | 建完模板按 [27](27-deployment.md) 的"部署后自检"到 guest 里核对内核版本串，再跑 [30](30-acceptance-runbook.md) 的第一个验收脚本；症状与处置见 [29](29-troubleshooting.md) | 未处理 |
 | L-17 | journald 默认按服务单元限流；CRIU 的详细输出把额度用完后，gsd 自己的 JSON 日志会被一起丢掉 | 连续做十来次 checkpoint 之后 gsd 日志可能残缺，排障和验收时缺行 | CRIU 的输出经 gsd 的标准错误进同一个单元的 journal，与 gsd 的日志共用限流额度。依据是验证脚本 `verify_clear_refs_race.py` 的处理（它在开头给 `gsd.service` 关掉限流，脚本注释记录默认额度下约第 10 轮起丢日志）；没有专门的结果文件 | 需要完整日志时先给 `gsd.service` 加关闭限流的 drop-in（[28](28-configuration-and-observability.md)） | 设计如此 |
+| L-18 | `7cdadccf2` 及以前：restore 之后的第一次 checkpoint 总是全量，每棵树的整个进程内存重新写出一遍，再下一次才恢复增量 | 交替做 restore 和 checkpoint 的用法里，这一次的耗时和镜像大小随进程大小增长，而不是随改动量。新 920B 2026-11-18：256 MiB 的进程一页不改，restore 之前的增量 checkpoint 写出 0.1 MiB、约 16 ms；restore 之后的第一次写出 260.8 MiB、约 115～125 ms | CRIU 4.2.1 的 PID 复用检测（`criu/mem.c` 的 `detect_pid_reuse`，dump 日志 `Pid reuse detected for pid N`）：进程的启动时间不早于父镜像 inventory 里的 dump 时刻，就不用父镜像。restore 出来的进程 PID 不变、启动时间是新的，必然命中 | `daae6968f` 修复：restore 时 `--leave-stopped`，全部树恢复完先写 `clear_refs` 再放行；为下一次 dump 建替身父目录（镜像文件的符号链接，加一份 dump 时刻改到恢复之后一个时钟节拍的 inventory），见 [12](12-restore.md) §6。修复后 restore 之后的第一次也是 0.1 MiB；`verify_restore_incremental.py` 每轮 restore 到这份增量核对整块内存 | 已修（`daae6968f`） |
+| L-19 | 范围外的进程（root 服务、envd 代为执行的操作）持续把根盘写满时，restore 也被拒绝：`resource_exhausted`，`no space left for the restore layer switch`，什么都没动 | 这期间 checkpoint 和 restore 都做不了，沙箱停在当前状态，直到有人腾出空间 | restore 杀掉用户进程之后要做一次层切换，内核要在新的 work 目录下建子目录；盘满时这一步会失败，而那时用户进程已经杀了，只能报 `data_loss`。gsd 常驻 4 MiB 预留文件给这一步用；预留文件被用掉又补不回来时（范围外进程马上把空出来的空间写满），gsd 在杀进程之前按 `f_bavail` 检查，不够就拒绝，宁可不做也不做一半。restore 本身腾不出空间：旧的可写层要等切换之后才在后台回收。只有用户进程写满根盘时，restore 仍能借预留文件完成（[23](23-gaps-and-boundaries.md) 的容量耗尽一行）| 停掉写盘的范围外进程或删掉文件，或删掉不用的 checkpoint（层随之回收），之后重试。实测：新 920B 2026-11-18 `stress-ext` 的 `append` 组（6 个 root worker 一直追加），1000 轮里 268 次 checkpoint、272 次 restore 被安全拒绝，`data_loss` 0，校验无失败；这一组改按容量耗尽判 | 设计如此 |
 
 ---
 
@@ -128,6 +130,8 @@
 | 默认路径建模板的确认、U-01 的两次慢调用 | `gsd-release-20261008` 的 `summary.txt` 三、七，`func/verify_multitree.log`，`place-20261009/` |
 | L-16 | `gsdCheckScript`（`packages/orchestrator/internal/template/build/layer/gsd.go:22`） |
 | L-17 | 验证脚本 `verify_clear_refs_race.py` 开头的处理与注释 |
+| L-18 | 2026-11-18 新 920B 的 `test950.sh compare`、诊断脚本与 `verify_restore_incremental.py`；CRIU dump 日志 `Warn (criu/mem.c:408): Pid reuse detected` |
+| L-19 | 2026-11-18 新 920B `test950.sh extended` 的 `criu-stress-ext/append`（`stress-summary.json`、`stress-ops.log`） |
 | L-11、T-07 | `gsd-fixes-20260930` 的 `SUMMARY.md` "逐项验证"与"未验证" |
 | L-13、U-03、K-02、K-03 | `gsd-fix5-20261008` 的 `summary.txt` 一、四、六 |
 | L-08 | `fc-kernels/configs/x86_64/6.1.158.config`；`0002-overlayfs-hot-switch-checkpoint.patch` 的 arm64 部分 |

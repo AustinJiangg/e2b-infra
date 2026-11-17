@@ -1730,7 +1730,7 @@ root 的服务和 envd 的文件接口可能正在读目录、写文件、重命
 <p>于是这一次的镜像只有改过的页那么大。</p>
 <p>gsd 按<strong>树</strong>做增量：下一次 checkpoint 时，如果某棵树的根进程还是同一个（PID 相同，并且进程的启动时间也相同，
 后者用来排除 PID 被复用的情况），就以上一个 checkpoint 里这棵树的镜像目录为父；新出现的树做全量。
-restore 之后也可以接着做增量：恢复出来的进程从被恢复的那个镜像开始重新计脏，下一次 checkpoint 以它为父。
+restore 之后也可以接着做增量：恢复出来的进程从被恢复的那个镜像开始重新计脏，下一次 checkpoint 以它为父。这要求 restore 之后先清一次 soft-dirty，并绕开 CRIU 对恢复出来的进程的 PID 复用误判，见 <a href="#d12">12</a> §6。
 认定规则和各种边界情况见 <code>incrementalParent</code>（<code>ckpt/service.go:396</code>）与 <a href="#d11">11</a>。</p>
 <h3 id="d03-22-parent-链接以及父目录必须活得比子久">2.2 parent 链接，以及"父目录必须活得比子久"</h3>
 <p>增量镜像自己是不完整的：它只有改过的页，其余的页要到父镜像里去取；父镜像如果也是增量，就再往上找。
@@ -6126,6 +6126,12 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 <p>C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，但 C3 这个条目本身仍然在、仍然可以 restore。
 这棵树上的父子依赖决定了删除时哪些镜像必须保留，见 <a href="#d15">15</a>。</p>
 <p>目标没有进程镜像时，restore 之后 <code>lastTrees</code> 为空；之后新启动的进程在下一次 checkpoint 时做全量。</p>
+<p>要让"只写恢复之后改过的页"真的成立，还有两道关：</p>
+<ol>
+<li><strong>恢复出来的进程要从干净的 soft-dirty 开始。</strong> CRIU 把内存写回时每一页都被置上 soft-dirty，新建的内存区域带区域级标志（<a href="#d03">03</a> §3）。所以 restore 也用 <code>--leave-stopped</code>：全部树恢复完、都停着的时候，gsd 给恢复出来的每个进程写 <code>clear_refs</code>，然后才放行。dump 前就停着的进程（用户 Ctrl-Z）在 checkpoint 时记进条目（状态文件里的 <code>stopped_pids</code>），放行时跳过，恢复出来仍是停着的。</li>
+<li><strong>CRIU 要肯用这份父镜像。</strong> CRIU 4.2.1 在增量 dump 前做 PID 复用检测（<code>criu/mem.c</code> 的 <code>detect_pid_reuse</code>）：进程的启动时间（时钟节拍）不早于父镜像 <code>inventory.img</code> 里的 dump 时刻（<code>dump_uptime</code>，微秒），就认为这个 PID 可能已经换了进程，不用父镜像、整个进程重新写出。restore 出来的进程 PID 不变、启动时间是新的，必然命中。对 gsd 刚恢复出来的进程这是误判，所以 gsd 在目标镜像目录旁边建一个<strong>替身父目录</strong>（<code>t0.rp</code> 等）：镜像文件都是指向原镜像的符号链接，只有 <code>inventory.img</code> 是一份拷贝，<code>dump_uptime</code> 改成全部树恢复完之后再加一个时钟节拍。下一次 dump 以它为父；子镜像的 <code>parent</code> 链接指向替身目录，restore 时经符号链接读到原镜像。restore 之后新起的进程、真的复用了 PID 的进程，启动时间都晚于这个时刻，CRIU 的保护对它们照样生效。读不到 uptime 或 inventory 不认识时，退回原镜像目录（下一次全量）。</li>
+</ol>
+<p>这两步是 2026-11-18 补上的（<code>daae6968f</code>，<a href="#d16">16</a> 的 L-18）。之前 restore 之后的第一次 checkpoint 一律全量：新 920B 上 256 MiB 的进程一页不改，restore 之前的增量写出 0.1 MiB、约 16 ms，restore 之后写出 260.8 MiB、约 115～125 ms；修复后两者都是 0.1 MiB。验证：<code>verify_restore_incremental.py</code>（<a href="#d30">30</a> 的验收里）每轮只改一部分内存、restore 到这份增量核对整块内存的 SHA256，并让替身目录一代接一代；漏页测试 <code>verify_clear_refs_race.py</code> 30 轮 0 漏页。</p>
 <hr />
 <h2 id="d12-7-耗时的构成">7. 耗时的构成</h2>
 <p>一次 restore 的耗时几乎全部在两项上：<code>criu_restore_ms</code> 和 <code>kill_ms</code>。下面两组数只用来建立量级感，<strong>判定值见 <a href="#d20">20</a>，不能与那里的数相减</strong>。</p>
@@ -8130,7 +8136,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 </tr>
 </tbody>
 </table></div>
-<p>另有五条量级较小、但部署和长期运行时要知道的：</p>
+<p>另有七条量级较小、但部署和长期运行时要知道的：</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -8181,6 +8187,22 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <td>连续做十来次 checkpoint 之后 gsd 日志可能残缺，排障和验收时缺行</td>
 <td>CRIU 的输出经 gsd 的标准错误进同一个单元的 journal，与 gsd 的日志共用限流额度。依据是验证脚本 <code>verify_clear_refs_race.py</code> 的处理（它在开头给 <code>gsd.service</code> 关掉限流，脚本注释记录默认额度下约第 10 轮起丢日志）；没有专门的结果文件</td>
 <td>需要完整日志时先给 <code>gsd.service</code> 加关闭限流的 drop-in（<a href="#d28">28</a>）</td>
+<td>设计如此</td>
+</tr>
+<tr>
+<td>L-18</td>
+<td><code>7cdadccf2</code> 及以前：restore 之后的第一次 checkpoint 总是全量，每棵树的整个进程内存重新写出一遍，再下一次才恢复增量</td>
+<td>交替做 restore 和 checkpoint 的用法里，这一次的耗时和镜像大小随进程大小增长，而不是随改动量。新 920B 2026-11-18：256 MiB 的进程一页不改，restore 之前的增量 checkpoint 写出 0.1 MiB、约 16 ms；restore 之后的第一次写出 260.8 MiB、约 115～125 ms</td>
+<td>CRIU 4.2.1 的 PID 复用检测（<code>criu/mem.c</code> 的 <code>detect_pid_reuse</code>，dump 日志 <code>Pid reuse detected for pid N</code>）：进程的启动时间不早于父镜像 inventory 里的 dump 时刻，就不用父镜像。restore 出来的进程 PID 不变、启动时间是新的，必然命中</td>
+<td><code>daae6968f</code> 修复：restore 时 <code>--leave-stopped</code>，全部树恢复完先写 <code>clear_refs</code> 再放行；为下一次 dump 建替身父目录（镜像文件的符号链接，加一份 dump 时刻改到恢复之后一个时钟节拍的 inventory），见 <a href="#d12">12</a> §6。修复后 restore 之后的第一次也是 0.1 MiB；<code>verify_restore_incremental.py</code> 每轮 restore 到这份增量核对整块内存</td>
+<td>已修（<code>daae6968f</code>）</td>
+</tr>
+<tr>
+<td>L-19</td>
+<td>范围外的进程（root 服务、envd 代为执行的操作）持续把根盘写满时，restore 也被拒绝：<code>resource_exhausted</code>，<code>no space left for the restore layer switch</code>，什么都没动</td>
+<td>这期间 checkpoint 和 restore 都做不了，沙箱停在当前状态，直到有人腾出空间</td>
+<td>restore 杀掉用户进程之后要做一次层切换，内核要在新的 work 目录下建子目录；盘满时这一步会失败，而那时用户进程已经杀了，只能报 <code>data_loss</code>。gsd 常驻 4 MiB 预留文件给这一步用；预留文件被用掉又补不回来时（范围外进程马上把空出来的空间写满），gsd 在杀进程之前按 <code>f_bavail</code> 检查，不够就拒绝，宁可不做也不做一半。restore 本身腾不出空间：旧的可写层要等切换之后才在后台回收。只有用户进程写满根盘时，restore 仍能借预留文件完成（<a href="#d23">23</a> 的容量耗尽一行）</td>
+<td>停掉写盘的范围外进程或删掉文件，或删掉不用的 checkpoint（层随之回收），之后重试。实测：新 920B 2026-11-18 <code>stress-ext</code> 的 <code>append</code> 组（6 个 root worker 一直追加），1000 轮里 268 次 checkpoint、272 次 restore 被安全拒绝，<code>data_loss</code> 0，校验无失败；这一组改按容量耗尽判</td>
 <td>设计如此</td>
 </tr>
 </tbody>
@@ -8384,6 +8406,14 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <tr>
 <td>L-17</td>
 <td>验证脚本 <code>verify_clear_refs_race.py</code> 开头的处理与注释</td>
+</tr>
+<tr>
+<td>L-18</td>
+<td>2026-11-18 新 920B 的 <code>test950.sh compare</code>、诊断脚本与 <code>verify_restore_incremental.py</code>；CRIU dump 日志 <code>Warn (criu/mem.c:408): Pid reuse detected</code></td>
+</tr>
+<tr>
+<td>L-19</td>
+<td>2026-11-18 新 920B <code>test950.sh extended</code> 的 <code>criu-stress-ext/append</code>（<code>stress-summary.json</code>、<code>stress-ops.log</code>）</td>
 </tr>
 <tr>
 <td>L-11、T-07</td>
@@ -12415,17 +12445,22 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tr>
 <td>沙箱 pause / resume 之后</td>
 <td>2026-11-16 起有一项实测：兼容矩阵 B8（<code>rollback/scripts/acceptance/compat_matrix.py</code>，模板 <code>base-gsd</code>）在新 920B 上建 checkpoint、pause、resume，再用原 Sandbox 对象 restore，内容一致、账本跨 pause 保留（沙箱级则不保留）。只有这一种序列、单次</td>
-<td>设计上 gsd 连同内存一起被冻结再恢复（<a href="#d15">15</a>）；更多组合与次数没有覆盖；<code>connect</code> 取回的对象受上一行的 SDK 缺陷影响（<a href="#d16">16</a> 的 T-09）</td>
+<td>设计上 gsd 连同内存一起被冻结再恢复（<a href="#d15">15</a>）；更多组合与次数没有覆盖；<code>connect</code> 取回的对象曾受下面第三行的 SDK 缺陷影响，2026-11-17 已修，兼容矩阵 B3～B7、E1 在 920B 上复验通过（<a href="#d16">16</a> 的 T-09）</td>
 </tr>
 <tr>
 <td>容量耗尽时的安全失败</td>
-<td>2026-11-17 新 920B 上 <code>950.sh stress-ext</code> 的两组 1000 轮（脚本删得少，checkpoint 不封顶）。<code>multitree-capacity</code>：snapshot store 涨到 2 GiB tmpfs 的 89%～93%，guest <code>MemAvailable</code> 降到 16～24 MiB，容量预检拒绝了一部分 create，但约第 306 轮 guest 发生 OOM，被杀的是用户进程（gsd 与 criu 的 <code>OOMScoreAdjust=-1000</code>，<a href="#d15">15</a> §7 说的正是这种情形）。<code>deldense-capacity</code>：层堆在根盘上，约第 685 轮根盘写满，此后多数 create / restore 以 <code>internal</code>（"nothing was changed"）安全失败，但另有 4 次 restore 返回 <code>data_loss</code>，即杀进程之后才失败。错误原文未留存</td>
-<td>容量预检对"估算值与 <code>MemAvailable</code> 接近"的情形没有余量，挡不住 OOM；根盘写满时 restore 不能保证所有可能失败的步骤都在提交点之前。200 轮（容量以内）三个种子都通过</td>
+<td>2026-11-17 新 920B 上 <code>950.sh stress-ext</code> 的两组 1000 轮（脚本删得少，checkpoint 不封顶）发现两个缺陷，当天修复（gsd <code>7cdadccf2</code>）并复验，结果见下一行和 <a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/deploy/README.md#14-更新记录与-920b-实测">部署说明第 14 节</a>。修复前：<code>multitree-capacity</code> 的 snapshot store 涨到 2 GiB tmpfs 的 89%～93%，<code>MemAvailable</code> 降到 16～24 MiB，约第 306 轮 guest OOM 杀了用户进程；<code>deldense-capacity</code> 约第 685 轮沙箱根盘写满，之后有 3～4 次 restore 返回 <code>data_loss</code>：杀掉用户进程之后，层切换 ioctl 要在内核里新建 <code>&lt;workdir&gt;/work</code>，ENOSPC</td>
+<td>修复：① checkpoint 预检要求 dump 之后 guest 至少留 MemTotal 的 1/8（不少于 64 MiB）；② gsd 在层目录常驻 4 MiB 预留文件，层切换前让给内核，预留文件补不回来时，杀进程之前按 <code>f_bavail</code> 检查剩余空间（<code>f_bfree</code> 含 ext4 留给元数据的约 16 MiB，盘满时也不为 0），不够就拒绝；③ 根盘写满时的安全失败报 <code>resource_exhausted</code>，不再是 <code>internal</code>；④ 根盘写满时 restore 仍能做（建 restore 目录遇到 ENOSPC 就先用预留空间），restore 正是丢掉多写数据的办法。只在 920B 上复验过，950 未跑</td>
 </tr>
 <tr>
 <td>SDK <code>Sandbox.connect</code> 拿到的对象</td>
-<td>2026-11-16 新 920B 上查实：<code>_cls_connect_sandbox</code> 建连接配置时没有加 <code>E2b-Sandbox-Id</code> 头（<code>create</code> 路径有），client-proxy 按头定址，于是这个对象上的 checkpoint 调用全部被以 <code>missing header</code> 打回。兼容矩阵的 B3、B4、B6/B7、E1 因此判 BROKEN；用 pause 之前那个对象做 restore（B8）通过，即 <a href="#d16">16</a> 的 T-09 在真机上第一次走通</td>
-<td>用户 pause / resume 之后若用 <code>Sandbox.connect</code> 取回沙箱，checkpoint 功能不可用，需要修 SDK</td>
+<td>2026-11-16 新 920B 上查实：<code>_cls_connect_sandbox</code> 建连接配置时没有加 <code>E2b-Sandbox-Id</code> 头（<code>create</code> 路径有），client-proxy 按头定址，这个对象上的 checkpoint 调用全部被以 <code>missing header</code> 打回，兼容矩阵 B3、B4、B6/B7、E1 判 BROKEN。2026-11-17 SDK 修复（<code>7cdadccf2</code>），920B 复验兼容矩阵 OK 15 / REFUSED 1 / BROKEN 0</td>
+<td>950 未复验</td>
+</tr>
+<tr>
+<td>restore 之后的第一次 checkpoint</td>
+<td>2026-11-18 新 920B 上用同一负载对比脚本（<code>benchmark/ckpt_same_workload.py</code>）发现：restore 之后的第一次 checkpoint 总是把整个进程全量写出（256 MiB 的进程一页不改，restore 之前的增量 checkpoint 写出 0.1 MiB、约 16 ms；restore 之后的第一次写出 260.8 MiB、约 115～125 ms）。原有的分档测试只在 restore 之前做增量，测不到。原因是 CRIU 的 PID 复用检测对恢复出来的进程的误判；当天修复（<code>daae6968f</code>，<a href="#d12">12</a> §6、<a href="#d16">16</a> 的 L-18），修复后 restore 之后的第一次也是 0.1 MiB，<code>verify_restore_incremental.py</code> 20～30 轮内容全部一致</td>
+<td>950 未跑</td>
 </tr>
 <tr>
 <td>三处未查清的现象</td>
@@ -13434,6 +13469,210 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <li><strong>语义不同的取舍。</strong> 耗时相近不代表可以互换，见 <a href="#d24-6-restore-之后各自会发生什么">§6</a>。</li>
 </ul>
 <hr />
+<h3 id="d24-48-同一负载下的对比2026-11-18test950sh-compare">4.8 同一负载下的对比（2026-11-18，<code>test950.sh compare</code>）</h3>
+<p>§4.3～§4.6 的两侧负载构造不同，分不开"改动量"和"进程大小"。2026-11-18 用 <code>benchmark/ckpt_same_workload.py</code> 在新 920B 上补了一组两侧完全相同的负载：一个常驻进程预分配 P MiB 并写满，每次原地改写其中 d MiB；文件负载是根盘上一个 f MiB 的文件。每个测点新建 2 个沙箱、各 10 次（另有 1 次预热不计），n = 20；每次测量是"改写 → checkpoint A → 再改写 → checkpoint B → restore 回基点 → 校验整块内存 SHA256 与文件"，A 紧跟在上一次 restore 之后，B 紧跟在 A 之后。</p>
+<blockquote>
+<p>平台：新 920B。沙箱级：RPM <code>2026.09-4</code>（<code>/usr/bin/template-manager</code> sha256 <code>b125e518…</code>），<code>kvm-wp</code>，模板 <code>base</code>。进程级：gsd <code>daae6968f</code>，orchestrator <code>063e580e…</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB、客户端墙钟 p50，单位 ms；每侧 460 次测量，校验全部一致。</p>
+</blockquote>
+<p><strong>改动量变化，进程固定 256 MiB：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">改动 d MiB</th>
+<th style="text-align: right;">沙箱级 连续 checkpoint</th>
+<th style="text-align: right;">进程级 连续 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore 后 checkpoint</th>
+<th style="text-align: right;">进程级 restore 后 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">6.6</td>
+<td style="text-align: right;">22.3</td>
+<td style="text-align: right;">12.9</td>
+<td style="text-align: right;">19.9</td>
+<td style="text-align: right;">18.9</td>
+<td style="text-align: right;">110.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">12.5</td>
+<td style="text-align: right;">27.4</td>
+<td style="text-align: right;">14.2</td>
+<td style="text-align: right;">23.6</td>
+<td style="text-align: right;">22.0</td>
+<td style="text-align: right;">116.6</td>
+</tr>
+<tr>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">13.6</td>
+<td style="text-align: right;">30.7</td>
+<td style="text-align: right;">15.4</td>
+<td style="text-align: right;">31.0</td>
+<td style="text-align: right;">25.3</td>
+<td style="text-align: right;">113.9</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">15.8</td>
+<td style="text-align: right;">42.6</td>
+<td style="text-align: right;">17.8</td>
+<td style="text-align: right;">43.9</td>
+<td style="text-align: right;">31.5</td>
+<td style="text-align: right;">116.9</td>
+</tr>
+<tr>
+<td style="text-align: right;">128</td>
+<td style="text-align: right;">21.6</td>
+<td style="text-align: right;">66.9</td>
+<td style="text-align: right;">24.0</td>
+<td style="text-align: right;">67.0</td>
+<td style="text-align: right;">43.0</td>
+<td style="text-align: right;">116.6</td>
+</tr>
+<tr>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">28.8</td>
+<td style="text-align: right;">107.4</td>
+<td style="text-align: right;">31.0</td>
+<td style="text-align: right;">108.1</td>
+<td style="text-align: right;">64.1</td>
+<td style="text-align: right;">113.1</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>进程大小变化，改动固定 16 MiB：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">进程 P MiB</th>
+<th style="text-align: right;">沙箱级 连续 checkpoint</th>
+<th style="text-align: right;">进程级 连续 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">12.2</td>
+<td style="text-align: right;">21.6</td>
+<td style="text-align: right;">20.9</td>
+<td style="text-align: right;">24.9</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">12.0</td>
+<td style="text-align: right;">22.3</td>
+<td style="text-align: right;">20.2</td>
+<td style="text-align: right;">37.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">128</td>
+<td style="text-align: right;">12.5</td>
+<td style="text-align: right;">23.2</td>
+<td style="text-align: right;">22.3</td>
+<td style="text-align: right;">63.6</td>
+</tr>
+<tr>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">12.7</td>
+<td style="text-align: right;">26.0</td>
+<td style="text-align: right;">27.5</td>
+<td style="text-align: right;">117.1</td>
+</tr>
+<tr>
+<td style="text-align: right;">384</td>
+<td style="text-align: right;">12.8</td>
+<td style="text-align: right;">31.6</td>
+<td style="text-align: right;">23.3</td>
+<td style="text-align: right;">165.6</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>只写文件（进程 16 MiB，内存不改）：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">文件 f MiB</th>
+<th style="text-align: right;">沙箱级 checkpoint</th>
+<th style="text-align: right;">进程级 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">31.8</td>
+<td style="text-align: right;">12.3</td>
+<td style="text-align: right;">25.7</td>
+<td style="text-align: right;">18.6</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">82.7</td>
+<td style="text-align: right;">10.9</td>
+<td style="text-align: right;">35.9</td>
+<td style="text-align: right;">20.4</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>N 个沙箱同时做（进程 64 MiB、改动 16 MiB），墙钟 / 服务端：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">N</th>
+<th style="text-align: right;">沙箱级 checkpoint</th>
+<th style="text-align: right;">进程级 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">12.9 / 11.3</td>
+<td style="text-align: right;">29.1 / 26.4</td>
+<td style="text-align: right;">22.0 / 20.3</td>
+<td style="text-align: right;">37.3 / 34.9</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">16.9 / 13.6</td>
+<td style="text-align: right;">30.3 / 26.6</td>
+<td style="text-align: right;">26.9 / 23.3</td>
+<td style="text-align: right;">39.3 / 35.6</td>
+</tr>
+<tr>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">22.0 / 12.8</td>
+<td style="text-align: right;">31.3 / 21.3</td>
+<td style="text-align: right;">32.1 / 23.5</td>
+<td style="text-align: right;">46.0 / 36.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">58.9 / 14.1</td>
+<td style="text-align: right;">70.5 / 20.5</td>
+<td style="text-align: right;">69.5 / 23.5</td>
+<td style="text-align: right;">89.2 / 38.7</td>
+</tr>
+</tbody>
+</table></div>
+<p>从这组数可以直接读出四件事：</p>
+<ol>
+<li><strong>内存的每 MiB 代价，沙箱级低得多。</strong> 连续 checkpoint 在 d = 16～256 MiB 之间近似线性：沙箱级约 0.07 ms/MiB，进程级约 0.33 ms/MiB。两侧写出的字节数几乎相同（256 MiB 改动时 265.8 与 257.6 MiB），差别在怎么写：沙箱级由宿主上的 Firecracker 从 guest 内存的映射直接写差分文件，在宿主 CPU 上做一次拷贝；进程级由 guest 里的 CRIU 经寄生代码和管道把页搬出来，再写进 guest 内的 tmpfs，全部在 2 个 vCPU 上完成。这是按两条路径的机制做的解释，没有逐段拆分 CRIU 内部的耗时。</li>
+<li><strong>restore 由不同的量决定。</strong> 沙箱级 restore 随回滚量增长（256 MiB 进程，d 从 16 到 256 MiB：22.0 → 64.1 ms），与进程大小基本无关；进程级 restore 要重建整个进程，随进程大小增长（d = 16 MiB，P 从 32 到 384 MiB：24.9 → 165.6 ms，约 0.40 ms/MiB），与改动量无关。进程越大、每步改得越少，沙箱级越占优。</li>
+<li><strong>文件改动，进程级占优。</strong> 进程级的文件改动靠一次层切换完成，不搬数据，64 MiB 文件的 checkpoint 仍约 12 ms；沙箱级的文件写入先进 guest 页缓存（算作内存改动），再加上磁盘写层的封存与块登记，64 MiB 文件的 checkpoint 约 83 ms。</li>
+<li><strong>并发到 16 个沙箱时，两侧的服务端耗时都基本不变，墙钟变长来自客户端。</strong> 16 个线程共用一个 Python 进程和一个连接池，墙钟与服务端 <code>total</code> 的差从 2～3 ms 涨到约 45～50 ms。</li>
+</ol>
+<p><strong>和 §4.3～§4.5、§5 的关系。</strong> 原有分档里两侧负载不同：沙箱级的内存负载在 <code>/dev/shm</code>、文件占总改动的 1/4，进程级的进程大小随档位一起变。文件那一份正好落在进程级占优的地方，而进程大小随档位变又掩盖了进程级 restore 随进程大小增长这一点。所以"哪一侧更快"要按负载的构成判断：内存改动为主、进程大、restore 频繁时沙箱级更快；文件改动为主、进程小时进程级更快。950 上 §5 的六档都是进程级更低，950 还没有跑这组同负载对比（<code>bash test950.sh compare</code>），在那之前不把本节 920B 的结论外推到 950。</p>
+<p><strong>restore 之后的第一次 checkpoint。</strong> 修复之前（<code>7cdadccf2</code>），进程级这一列与进程大小成正比：256 MiB 进程约 115～125 ms、写出 260.8 MiB（<a href="#d16">16</a> 的 L-18）。上表是修复后的 <code>daae6968f</code>：两侧"restore 后"与"连续"两列都基本相同。</p>
+<hr />
 <h2 id="d24-5-950-同机对比">5. 950 同机对比</h2>
 <p>2026-11-17 的 <code>test950.sh standard</code> 在同一台 950 上先后跑了两套的分档测试：沙箱级 16:48 起，切到进程级后 17:03 起，相隔约 15 分钟，中间只有切栈。这是第一组同机、同时段的 950 数据。</p>
 <h3 id="d24-51-两侧的数字">5.1 两侧的数字</h3>
@@ -13595,6 +13834,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <h3 id="d24-52-这组实测说明了什么">5.2 这组实测说明了什么</h3>
 <p>本节与 §4.7 一样不给净加速比，只说这组实测里谁更低、低在哪些档。</p>
 <p><strong>950 上六档全部是进程级更低，两种操作都是。</strong> restore 的差距在 32 MiB 档最小（5.6 ms），在 128 MiB 档最大（21.0 ms），256 MiB 档为 10.8 ms；checkpoint 的差距在 8.1～16.0 ms 之间。进程级两轮都在沙箱级 p50 之下。</p>
+<p>同负载下的对比（§4.8）目前只有 920B；§4.8 说明了为什么原有分档的负载构造会偏向进程级，950 上要跑 <code>bash test950.sh compare</code> 才能确认这里的差距有多少来自负载构造。</p>
 <p><strong>这与 920B 的分界不同。</strong> 920B 上 restore 从 64 MiB 起、checkpoint 从 32 MiB 起是沙箱级更低（§4.7）。两台机器的数字对照如下（单位 ms，256 MiB 档）：</p>
 <div class="tw"><table>
 <thead>
@@ -17080,6 +17320,14 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;im
 <td>否</td>
 </tr>
 <tr>
+<td>5a</td>
+<td><code>verify_restore_incremental.py</code></td>
+<td>约 1 分钟</td>
+<td><code>== 判定 PASS：不合格轮次 无 / 20；CRIU Pid reuse 0 次；替身目录回退 0 次</code></td>
+<td>每轮 restore 到"restore 之后的增量"后整块内存一致，且这份增量只比改动量多几 MiB</td>
+<td>是</td>
+</tr>
+<tr>
 <td>6</td>
 <td><code>demo_checkpoint_perf.py</code> 连跑三次</td>
 <td>每次约 20～30 秒</td>
@@ -17231,6 +17479,14 @@ grep<span class="w"> </span>-n<span class="w"> </span><span class="s1">&#39;可�
 <p><strong>期望。</strong> 30 行轮次记录，每行 <code>漏页 diff=    0</code>、<code>restored_state=T</code>、<code>sha_eq=True</code>；汇总里 <code>有漏页的轮数: 0 / 30   漏页合计 0</code>。汇总标题行的轮数应当是 30：如果少于 30 并且出现"排除 writer 卡死后的 N 轮"，说明写入进程中途停止了写入，这一轮验收无效，要查原因后重跑。</p>
 <p><strong>对数。</strong> 停住时长与增量镜像大小对照 <a href="#d19">19</a>"<code>verify_clear_refs_race.py</code>"一节。判定只看漏页。</p>
 <p><strong>不过时。</strong> 任何一轮漏页不为 0 都是严重问题：它意味着增量 checkpoint 会静默地恢复出错误的内存内容。先确认 guest 里的 gsd 是当前版本（§3），再按 <a href="#d11">11</a> 的"为什么 <code>--leave-stopped</code>"一节核对。</p>
+<h3 id="d30-44a-verify_restore_incrementalpy">4.4a <code>verify_restore_incremental.py</code></h3>
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_restore_incremental.py<span class="w"> </span>--template<span class="w"> </span>base-criu<span class="w"> </span>--rounds<span class="w"> </span><span class="m">20</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out<span class="w"> </span><span class="nv">$OUT</span>/func/restore_incremental.json<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/restore_incremental.log
+</code></pre></div>
+
+<p><strong>期望。</strong> 20 行轮次记录，每行 <code>A 镜像</code> 只比 <code>d=</code> 多一两 MiB（解释器和校验弄脏的页），<code>回到上一代一致=True</code>、<code>restore A 后一致=True</code>；末行判定 PASS，<code>Pid reuse</code> 与替身目录回退都是 0 次。</p>
+<p><strong>它测什么。</strong> restore 之后的第一次 checkpoint 要绕开 CRIU 的 PID 复用检测才是增量（<a href="#d12">12</a> §6）。绕开用的替身父目录一旦用错，restore 出来的内存会静默出错，所以每一轮都真的 restore 到这份增量并核对整块内存；偶数轮把它当下一轮的起点，替身目录一代接一代。</p>
+<p><strong>不过时。</strong> 内容不一致与漏页同样严重，先停用 restore 之后的增量（回退 gsd 到 <code>7cdadccf2</code>）再查。只是镜像变大、内容一致，说明替身目录没起作用（<code>Pid reuse</code> 不为 0 或 gsd 日志里有 <code>cannot build reparent dir</code>），不影响正确性。</p>
 <h3 id="d30-45-demo_checkpoint_perfpy">4.5 <code>demo_checkpoint_perf.py</code></h3>
 <div class="hl"><pre><span></span><code><span class="k">for</span><span class="w"> </span>i<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">3</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
 <span class="w">  </span><span class="nv">TEMPLATE</span><span class="o">=</span>base-criu<span class="w"> </span><span class="nv">THP</span><span class="o">=</span>never<span class="w"> </span><span class="nv">OUT_JSON</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$OUT</span><span class="s2">/func/perf-run</span><span class="nv">$i</span><span class="s2">.json&quot;</span><span class="w"> </span><span class="se">\</span>

@@ -126,7 +126,7 @@ CRIU 的增量 dump 解决的就是这个问题。它需要两个选项配合：
 
 gsd 按**树**做增量：下一次 checkpoint 时，如果某棵树的根进程还是同一个（PID 相同，并且进程的启动时间也相同，
 后者用来排除 PID 被复用的情况），就以上一个 checkpoint 里这棵树的镜像目录为父；新出现的树做全量。
-restore 之后也可以接着做增量：恢复出来的进程从被恢复的那个镜像开始重新计脏，下一次 checkpoint 以它为父。
+restore 之后也可以接着做增量：恢复出来的进程从被恢复的那个镜像开始重新计脏，下一次 checkpoint 以它为父。这要求 restore 之后先清一次 soft-dirty，并绕开 CRIU 对恢复出来的进程的 PID 复用误判，见 [12](12-restore.md) §6。
 认定规则和各种边界情况见 `incrementalParent`（`ckpt/service.go:396`）与 [11](11-checkpoint.md)。
 
 ### 2.2 parent 链接，以及"父目录必须活得比子久"

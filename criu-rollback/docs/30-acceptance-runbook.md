@@ -74,6 +74,7 @@ OUT=$PWD/results/$(date +%Y%m%d-%H%M)-acceptance; mkdir -p $OUT/func $OUT/stress
 | 3 | `verify_fixes.py` | 约 2 分钟 | `合计 28 项，FAIL 0: []` | PASS 26 / FAIL 0 / SKIP 2 | 是 |
 | 4 | `verify_multitree.py` | 跳过 V12 约 1 分钟；带 8 轮 V12 约 6 分钟 | `合计 13 项，FAIL 0: []`，其后一行慢调用统计 | 全部 PASS | 是 |
 | 5 | `verify_clear_refs_race.py` | 约 30 秒 | `有漏页的轮数: 0 / 30   漏页合计 0` | 漏页轮数为 0，每轮恢复后为 T、哈希相等 | 否 |
+| 5a | `verify_restore_incremental.py` | 约 1 分钟 | `== 判定 PASS：不合格轮次 无 / 20；CRIU Pid reuse 0 次；替身目录回退 0 次` | 每轮 restore 到"restore 之后的增量"后整块内存一致，且这份增量只比改动量多几 MiB | 是 |
 | 6 | `demo_checkpoint_perf.py` 连跑三次 | 每次约 20～30 秒 | `判定: PASS` | 每次 6 行 restore 全部 `OK`，完整内容与计时校验通过 | 是 |
 | 7（可选） | `probe_whiteout_bug.py` 与四组压测（§5） | 探针约半分钟；压测两两并行，每对一分半钟左右 | `RESULT` 为 `DONE rc=0 …` | §5 的判据表 | 部分 |
 
@@ -195,6 +196,19 @@ python acceptance/verify_clear_refs_race.py --template base-criu --rounds 30 --p
 **对数。** 停住时长与增量镜像大小对照 [19](19-920b-functional.md)"`verify_clear_refs_race.py`"一节。判定只看漏页。
 
 **不过时。** 任何一轮漏页不为 0 都是严重问题：它意味着增量 checkpoint 会静默地恢复出错误的内存内容。先确认 guest 里的 gsd 是当前版本（§3），再按 [11](11-checkpoint.md) 的"为什么 `--leave-stopped`"一节核对。
+
+### 4.4a `verify_restore_incremental.py`
+
+```bash
+python acceptance/verify_restore_incremental.py --template base-criu --rounds 20 \
+    --out $OUT/func/restore_incremental.json 2>&1 | tee $OUT/func/restore_incremental.log
+```
+
+**期望。** 20 行轮次记录，每行 `A 镜像` 只比 `d=` 多一两 MiB（解释器和校验弄脏的页），`回到上一代一致=True`、`restore A 后一致=True`；末行判定 PASS，`Pid reuse` 与替身目录回退都是 0 次。
+
+**它测什么。** restore 之后的第一次 checkpoint 要绕开 CRIU 的 PID 复用检测才是增量（[12](12-restore.md) §6）。绕开用的替身父目录一旦用错，restore 出来的内存会静默出错，所以每一轮都真的 restore 到这份增量并核对整块内存；偶数轮把它当下一轮的起点，替身目录一代接一代。
+
+**不过时。** 内容不一致与漏页同样严重，先停用 restore 之后的增量（回退 gsd 到 `7cdadccf2`）再查。只是镜像变大、内容一致，说明替身目录没起作用（`Pid reuse` 不为 0 或 gsd 日志里有 `cannot build reparent dir`），不影响正确性。
 
 ### 4.5 `demo_checkpoint_perf.py`
 

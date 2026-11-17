@@ -107,7 +107,7 @@ bash rollback/scripts/950/run.sh long
 
 判读时还要看：`analyze.log` 里各档 `mem_mode` 应全为 `incremental`；数字所在平台（920B 为 `kvm-wp`、950 为 `hdbss`）写进留档。
 950的结果与判定见[第 18 章](18-950-performance.md)，920B历史分档见[第 20 章 §2](20-920b-performance.md#2-分档基准与判定)。
-950 的 2026-11-17 perf 中，分档、达标判定、串行三项 PASS 与性能超线同时成立；并发项 FAIL，原因是 A 段 N=16 的 1 次 restore 应答丢失（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)）。并发 B 还记录了跨 restore 的 guest 命令异常，需读其明细，不能只据退出码写“整轮无异常”。
+950 的 2026-11-17 perf 中，分档、达标判定、串行三项 PASS 与性能超线同时成立；并发项 FAIL，原因是 A 段 N=16 的 1 次 restore 应答丢失（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)），根因在客户端 SDK 的共享连接池，已修复，950 待复验。并发 B 还记录了跨 restore 的 guest 命令异常，需读其明细，不能只据退出码写“整轮无异常”。
 
 ### 5.1 hdbss 档：HDBSS 专项
 
@@ -259,11 +259,11 @@ bash rollback/scripts/950/run.sh long
 | 原生 pause / resume 固定开销 | 待验证项：部分未归因 | 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；950 没有逐段数据；920B 上 resume 比对照慢的原因未查 |
 | 封层刷屏障与重复刷盘 | 待验证项 | V1–V3 均未验证 |
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复问题：根因或触发条件待定位 | 保留现象记录，需要针对负载复现 |
-| restore 应答丢失 | 待修复问题：丢失位置待定位 | 950 并发 N=16 出现 1 次，服务端已完成、客户端等满 300 s；计划在 920B 循环复现并打开 client-proxy 调试日志（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)） |
+| restore 应答丢失 | 已修复，950 待复验 | 950 并发 N=16 出现 1 次，服务端已完成、客户端等满 300 s。2026-11-17 在 920B 复现并查实是客户端 SDK 共享连接池在多线程下误关正在使用的连接，SDK 已修，920B 复验未再出现（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)） |
 | 950 空闲后 restore | 属于 950 专项覆盖 | 950 待测，由 `run.sh idle` 运行；`compat_matrix.py` 已在 2026-11-17 func 中跑过（OK 13 / REFUSED 3 / BROKEN 0）；不在 950 上跑的开发态工具见 §7 第 13 项 |
 | 当前 950 二进制上的 `pb2.py` | 属于 950 专项覆盖 | T39、T41 已在 `a5d03902…` 上通过（2026-11-17 func）；`pb2.py` 待跑 |
 
-待修复但不属于验证缺口的项，例如 delete 同步合并、conntrack 清扫长尾、netns 泄漏、客户端连接异常和偶发 GC 长暂停，状态见 [第 30 章 §1](30-status-and-directions.md#1-已知问题)。
+待修复但不属于验证缺口的项，例如 delete 同步合并、conntrack 清扫长尾、netns 泄漏和偶发 GC 长暂停，状态见 [第 30 章 §1](30-status-and-directions.md#1-已知问题)。
 
 ## 本章要点
 

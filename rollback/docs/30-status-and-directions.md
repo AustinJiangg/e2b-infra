@@ -13,8 +13,9 @@
 | delete 同步合并 | 待修复：性能优化暂缓 | 合并延长 delete 耗时；需要时可改后台异步合并，见 [§3](#3-候选开发方向) 及 [附录 C §3.10](C-evolution-and-cases.md#310-删除同步合并delete-变慢) |
 | conntrack 清扫长尾 | 待修复：已有方案，暂不实施 | 清扫成本受整张宿主表影响，可能进入冻结关键路径；按 ct mark 过滤的方案已设计，见 [附录 C §3.6](C-evolution-and-cases.md#36-conntrack-清理占了冻结窗口) |
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复：触发条件或根因待定位 | 保留现象记录，需要针对负载复现；一次短测不能关闭概率项，见 [第 22 章 §7](22-acceptance.md#7-已知项与缺口)、[第 21 章](21-concurrency-and-longrun.md) |
-| restore 应答丢失 | 待修复：丢失位置待定位 | 950 并发 N=16 出现 1 次：服务端约 140 ms 完成 restore 并写回应答，客户端等满 300 s 超时；数据未受影响。丢在 orchestrator 代理、client-proxy、SDK 之间，client-proxy 无逐请求日志。计划在 920B 循环复现并记录每个请求的收发时刻，见 [第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失) |
-| netns 泄漏、客户端连接异常、偶发 GC 长暂停 | 待修复：分别为上游运维处置、客户端记录、未归因 | 各项影响范围与处理不同，不能归为同一个回滚缺陷，见 [附录 B §11](B-920b-results.md#11-已知未解决)、[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏) |
+| restore 应答丢失、客户端偶发 `Bad file descriptor` | 已修复（SDK），950 待复验 | 950 并发 N=16 出现 1 次：服务端约 140 ms 完成 restore 并写回应答，客户端等满 300 s 超时；920B 长跑里每轮 0–2 次的 `Bad file descriptor` 是同一个原因。根因是同一进程内全部沙箱共用的 httpcore 连接池在连接总数超过 `max_keepalive_connections`（默认 20）时，会关掉刚分给另一个线程的连接。SDK 把该上限默认改为与最大连接数相同，920B 复验未再出现，见 [第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失) |
+| 重启 orchestrator 后旧沙箱的 Firecracker 残留 | 已修复（RPM `2026.09-4`），950 待复验 | `nomad job restart` 时 orchestrator 关网络池超过 job 的 30 s kill_timeout，被 SIGKILL；Firecracker 在自己的进程组里，不随之退出，由 init 收养，一直占着内存和网络槽位（920B 2026-11-17 复现）。deltabox 分支 2026-07 已有启动时清理遗留 Firecracker 的代码，构建 RPM 的 `0001` 补丁没有带上。`2026.09-4` 的补丁加了同样的清理（只结束父进程为 init、路径在 `/fc-versions/` 下、API socket 名为 `fc-<沙箱>-<随机>.sock` 的进程），920B 复验 T18 通过；被结束的 Firecracker 占过的 NBD 设备暂不回收 |
+| netns 泄漏、偶发 GC 长暂停 | 待修复：分别为上游运维处置、未归因 | 各项影响范围与处理不同，不能归为同一个回滚缺陷，见 [附录 B §11](B-920b-results.md#11-已知未解决)、[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏) |
 
 ## 2. 验证缺口
 
@@ -64,7 +65,7 @@
 
 ## 本章要点
 
-- delete 同步合并、conntrack 清扫长尾是成本问题；空闲后变慢、首个增量的两种形态和 950 上的 restore 应答丢失待定位。
+- delete 同步合并、conntrack 清扫长尾是成本问题；空闲后变慢、首个增量的两种形态待定位；950 上的 restore 应答丢失已查实是客户端 SDK 连接池问题并修复。
 - 950 的小时级长跑、滚动保留、资源收敛和重启 / 注入 / 配额专项尚未覆盖，920B 的结果不能替代。
 - V1–V3 没有测量结论，先量再改。
 - 候选方向按需要启动，实施前验证收益、调用契约与失败语义。
