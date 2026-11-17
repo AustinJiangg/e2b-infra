@@ -625,7 +625,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td><a href="#d22">22 950 结果</a></td>
-<td>950 上的验收与性能：首轮全部 PASS，部分读数待填</td>
+<td>950 上的验收与性能：首轮全部 PASS</td>
 </tr>
 <tr>
 <td><a href="#d23">23 缺口与结论边界</a></td>
@@ -723,7 +723,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p><strong>代码引用。</strong> 写成"<code>函数名</code>（<code>文件:行号</code>）"，代码基准是 <code>criu-rollback-dev@bc3cce913</code>。gsd 的核心包路径统一简写为 <code>ckpt/</code>，即 <code>packages/gsd/internal/services/checkpoint/</code>。内核补丁只引用"补丁文件名 + 函数名"，不引行号：<code>0002-overlayfs-hot-switch-checkpoint.patch</code> 是初始实现的补丁，<code>0003-overlayfs-hot-switch-fixes.patch</code> 是其上的全部修复。完整的代码地图在<a href="#dA">附录 A</a>。</p>
 <p><strong>交叉引用。</strong> 链接文字是章号，写成 <code>[20](20-920b-performance.md)</code>，附录写 <code>[附录 C](C-issue-resolution.md)</code>；需要指到节时写出节名，章内用 <code>§x.y</code>。</p>
 <p><strong>数字纪律。</strong> 判定性的实测数字只在第四篇。完整功能与压测以 2026-10-08 的确认验证为准，2026-10-16 的六档分档和 2026-11-06 的全流程复测单列。每个数字在 <a href="#d23">23</a> 的出处表里能找到来源文件。其他章举数时当场标明平台、日期、代码版本和口径，这些数只为说明原理或过程，不能与第四篇的数相减。不同平台、不同口径的同名指标不互相比较。容量单位用 MiB / GiB，时间用 ms。</p>
-<p><strong>平台标签。</strong> "新 920B"指 192.168.45.47 这台机器；"旧 920B"指已退役的那台，只在案例附录作为历史数据出现。950：2026-11-17 跑完首轮 <code>950.sh all</code>，全部 PASS，部分读数待填，见 <a href="#d22">22</a>、<a href="#d24">24</a>。</p>
+<p><strong>平台标签。</strong> "新 920B"指 192.168.45.47 这台机器；"旧 920B"指已退役的那台，只在案例附录作为历史数据出现。950：2026-11-17 跑完首轮 <code>950.sh all</code>，全部 PASS，见 <a href="#d22">22</a>、<a href="#d24">24</a>。</p>
 <p><strong>路径与命名。</strong> 命令和路径按运行时布局写：宿主 <code>/fc-criu/gsd</code>、<code>/fc-criu/orchestrator</code>、<code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code>，模板名 <code>base-criu</code>。2026-11-17 之前的布局是 <code>/fc-gsd/</code>、模板 <code>base-gsd</code>，第 16～24 章与附录里的实测记录保留当时的名字。结果文件里的开发期产物名只在 <a href="#d19">19</a> 的条件标签、<a href="#d23">23</a> 的出处表和<a href="#dA">附录 A</a> 的对照表里出现。</p>
 <p><strong>措辞。</strong> "初始实现"指修复之前的代码；"修改前 / 修复后"指同一份代码的两个阶段；"进程级"指本书的方案，"沙箱级"指沙箱级手册的方案；"回滚"即 restore；拍快照的操作写 checkpoint，只有引用接口名时才写 <code>CreateCheckpoint</code>、<code>create()</code>。过程性的叙述（先怀疑什么、后来推翻什么）只在<a href="#dD">附录 D</a>、<a href="#dE">附录 E</a> 和 <a href="#d08">08</a>、<a href="#d09">09</a> 各主题的"根因"小节里，其余章只写现状。</p>
 <p><strong>全书唯一的表。</strong> 目录与层布局（<a href="#d05">05</a>）、错误表（<a href="#d14">14</a>）、已知限制表（<a href="#d16">16</a>）、缺口表（<a href="#d23">23</a>）、两种方案的对比表（<a href="#d24">24</a>）、开关总表与计时键（<a href="#d28">28</a>）、问题处理总表（<a href="#dC">附录 C</a>）。别的章需要时链接过去，不复述。</p>
@@ -940,7 +940,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <tbody>
 <tr>
 <td>950</td>
-<td>2026-11-17 首次部署，<code>950.sh all</code> 13 步全部 PASS（验收、四组压测、回切沙箱级冒烟）；部分读数待填，见 <a href="#d22">22</a></td>
+<td>2026-11-17 首次部署，<code>950.sh all</code> 13 步全部 PASS（验收、四组压测、回切沙箱级冒烟）；读数见 <a href="#d22">22</a></td>
 </tr>
 <tr>
 <td>guest 架构</td>
@@ -11044,7 +11044,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>未查清的记录有一处：候选内核上两次 checkpoint 返回 <code>internal</code>（U-02），之后没有再出现。</li>
 </ul><nav class="pager" data-n="21"></nav></article><article id="v22" class="doc" hidden><h1 id="d22-950-结果">950 结果</h1>
 <blockquote>
-<p><strong>状态：第一轮已跑完，部分已填（2026-11-17）。</strong> 950 上 <code>criu-rollback/deploy/950.sh all</code> 13 步全部 PASS（§0）。本章已填入 <code>all</code> 结束时终端摘要里有的数；其余单元格仍是 <code>待填</code>，由同一轮结果目录用 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取出后填写。这是填写 950 结果的唯一位置。</p>
+<p><strong>状态：第一轮已填（2026-11-17）。</strong> 950 上 <code>criu-rollback/deploy/950.sh all</code> 13 步全部 PASS（§0），本章各表由同一轮结果目录经 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取数填写，原始文件留在 950 上。只有 §5 的“串口关键词命中”一行还是 <code>待填</code>：取数脚本当时还不统计这一项，现在的版本会打印。这是填写 950 结果的唯一位置。</p>
 </blockquote>
 <h2 id="d22-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -11143,7 +11143,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>日期与起止时间</td>
-<td>2026-11-17；验收 15:23:08～15:26:17，压测 15:26:17～15:29:04（<code>all.log</code>）</td>
+<td>2026-11-17；验收 15:23:09.68～15:26:17.79（<code>summary.json</code>），压测 15:26:17～15:29:04（<code>all.log</code>）</td>
 <td><code>summary.json</code> 的 <code>started</code>、<code>finished</code>；核对机器时钟</td>
 </tr>
 <tr>
@@ -11158,7 +11158,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>提交：<code>gsd -commit</code></td>
-<td><code>待填</code></td>
+<td><code>259f1a25c</code></td>
 <td><code>guest-check.log</code> 的 <code>commit</code></td>
 </tr>
 <tr>
@@ -11168,7 +11168,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>gsd sha256（宿主 / guest）</td>
-<td>宿主 <code>421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe</code> / guest <code>待填</code></td>
+<td>宿主 <code>421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe</code> / guest 相同</td>
 <td><code>deliverables.sha256</code>；<code>guest-check.log</code> 的 <code>gsd_sha256</code></td>
 </tr>
 <tr>
@@ -11183,37 +11183,37 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>guest 内核版本串</td>
-<td><code>待填</code></td>
+<td><code>Linux version 6.1.158+ … #4 SMP Thu Oct  8 20:06:40 CST 2026</code></td>
 <td><code>guest-check.log</code> 的 <code>kernel</code></td>
 </tr>
 <tr>
 <td>CRIU 版本</td>
-<td><code>待填</code></td>
+<td>4.2.1</td>
 <td><code>guest-check.log</code> 的 <code>criu</code></td>
 </tr>
 <tr>
 <td>THP</td>
-<td><code>待填</code></td>
+<td><code>always madvise [never]</code></td>
 <td><code>guest-check.log</code> 的 <code>thp</code></td>
 </tr>
 <tr>
 <td><code>rcu_expedited</code></td>
-<td><code>待填</code></td>
+<td>1</td>
 <td><code>guest-check.log</code> 的 <code>rcu</code></td>
 </tr>
 <tr>
 <td>guest 规格（vCPU / 内存）</td>
-<td><code>待填</code></td>
+<td>2 / <code>MemTotal: 2035188 kB</code></td>
 <td><code>guest-check.log</code> 的 <code>vcpus</code>、<code>memory</code></td>
 </tr>
 <tr>
 <td><code>/</code>、<code>/tmp</code> 的权限与 <code>/tmp</code> 所在文件系统</td>
-<td><code>待填</code></td>
+<td><code>/</code> 0755 root:root，<code>/tmp</code> 1777 root:root，overlay</td>
 <td><code>guest-check.log</code> 的 <code>root</code>、<code>tmp</code>、<code>tmp_fs</code></td>
 </tr>
 <tr>
 <td>模板别名与 ID</td>
-<td><code>待填</code></td>
+<td><code>base-criu</code> / <code>00gzphcgb2l55nmokvs8</code></td>
 <td><code>summary.json</code> 的 <code>template</code>；<code>guest-check.log</code> 首行</td>
 </tr>
 <tr>
@@ -11289,87 +11289,87 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td><code>verify_fixes.py</code> PASS / FAIL / SKIP</td>
-<td><code>待填</code></td>
+<td>26 / 0 / 2</td>
 <td><code>verify_fixes.json</code> 的 <code>status</code> 计数</td>
 </tr>
 <tr>
 <td><code>verify_fixes.py</code> SKIP 的项</td>
-<td><code>待填</code></td>
+<td>G-19、G-36</td>
 <td>同上</td>
 </tr>
 <tr>
 <td><code>verify_multitree.py</code> PASS 项数</td>
-<td><code>待填</code></td>
+<td>12 / 12；日志无 <code>BAD</code> 行</td>
 <td><code>verify_multitree.json</code> 的 <code>items</code></td>
 </tr>
 <tr>
 <td>慢调用次数</td>
-<td><code>待填</code></td>
+<td>0</td>
 <td><code>verify_multitree.json</code> 的 <code>slow_calls</code></td>
 </tr>
 <tr>
 <td>漏页：有漏页的轮数 / 总轮数，漏页合计</td>
-<td><code>待填</code></td>
+<td>0 / 30，0</td>
 <td><code>clear_refs_race.log</code> 的汇总段</td>
 </tr>
 <tr>
 <td>漏页：恢复后状态、哈希相等的轮数、写入进程卡死的轮数</td>
-<td><code>待填</code></td>
+<td>全部 T，30，0</td>
 <td><code>clear_refs_race.jsonl</code> 的 <code>restored_state</code>、<code>sha_eq</code>、<code>wedged</code></td>
 </tr>
 <tr>
 <td>漏页：checkpoint A 的 <code>stopped_ms</code> p50 / 最小 / 最大</td>
-<td><code>待填</code></td>
+<td>0.47 / 0.40 / 5.56</td>
 <td><code>clear_refs_race.log</code> 的 <code>A_stopped_ms</code></td>
 </tr>
 <tr>
 <td>漏页：checkpoint A 的 <code>criu_dump_ms</code> p50 / 最小 / 最大</td>
-<td><code>待填</code></td>
+<td>14.99 / 10.93 / 30.70</td>
 <td><code>clear_refs_race.log</code> 的 <code>A_dump_ms</code></td>
 </tr>
 <tr>
 <td>漏页：checkpoint A 的 <code>overlay_sink_ms</code> p50</td>
-<td><code>待填</code></td>
+<td>0.02</td>
 <td><code>clear_refs_race.log</code> 的 <code>A_sink_ms</code></td>
 </tr>
 <tr>
 <td>漏页：checkpoint B 的页镜像大小 p50 / 最小 / 最大</td>
-<td><code>待填</code></td>
+<td>908 / 8 / 2552 KiB</td>
 <td><code>clear_refs_race.log</code> 的 <code>cpB 增量 pages</code></td>
 </tr>
 <tr>
 <td>G-06 全量镜像 / 增量镜像</td>
-<td><code>待填</code></td>
+<td>272420864 字节 / 1097728 字节（1.05 MiB）</td>
 <td><code>verify_fixes.json</code> 的 G-06</td>
 </tr>
 <tr>
 <td>G-08 成功次数、被拒时的选项串长度</td>
-<td><code>待填</code></td>
+<td>190 次；第 191 次 4105 字节 &gt; 4096 被拒（最后一次成功时 3871）</td>
 <td><code>verify_fixes.json</code> 的 G-08</td>
 </tr>
 <tr>
 <td>G-11 <code>df /</code> 增量、journal 增量、扣除后净增</td>
-<td><code>待填</code></td>
+<td>19296 KB、19264 KB、32 KB（40 轮）</td>
 <td><code>verify_fixes.json</code> 的 G-11</td>
 </tr>
 <tr>
 <td>G-20 secure 与非 secure 的鉴权差</td>
-<td><code>待填</code></td>
+<td>带鉴权的 <code>ListCheckpoints</code> 比 <code>/health</code> 慢：secure 0.54 ms，非 secure 0.74 ms</td>
 <td><code>verify_fixes.json</code> 的 G-20</td>
 </tr>
 <tr>
 <td>G-21 被拒时的估算、快照存储剩余、<code>MemAvailable</code></td>
-<td><code>待填</code></td>
+<td>580.4 MiB、1082.5 MiB、457.6 MiB</td>
 <td><code>verify_fixes.json</code> 的 G-21</td>
 </tr>
 <tr>
 <td>PERF <code>find_pids_ms</code> 中位数：checkpoint / restore</td>
-<td><code>待填</code></td>
+<td>0.50 / 0.47</td>
 <td><code>verify_fixes.json</code> 的 PERF</td>
 </tr>
 <tr>
 <td>V5 全量 / 不改内存 / 起第三棵树后的镜像大小</td>
-<td><code>待填</code></td>
+<td>133.2 / 0.37 / 66.9 MiB</td>
 <td><code>verify_multitree.json</code> 的 V5</td>
 </tr>
 </tbody>
@@ -11390,45 +11390,45 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td><code>bug</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 <tr>
 <td><code>ctl</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 <tr>
 <td><code>nodel</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 <tr>
 <td><code>masked</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 <tr>
 <td><code>trap</code> 第 1 次</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 <tr>
 <td><code>trap</code> 第 2 次</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 <tr>
 <td><code>trap</code> 第 3 次</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>false</td>
+<td>upper=0 layers=0</td>
+<td>空</td>
 </tr>
 </tbody>
 </table></div>
@@ -11462,24 +11462,24 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>看门狗</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td><code>DONE rc=0</code></td>
+<td><code>DONE rc=0</code></td>
+<td><code>DONE rc=0</code></td>
+<td><code>DONE rc=0</code></td>
 </tr>
 <tr>
 <td>dmesg 新命中</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
 </tr>
 <tr>
 <td>串口关键词命中</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td><code>待填</code>（<code>console.txt</code> 56798 字节）</td>
+<td><code>待填</code>（55262 字节）</td>
+<td><code>待填</code>（140638 字节）</td>
+<td><code>待填</code>（205470 字节）</td>
 </tr>
 <tr>
 <td>checkpoint / restore / delete 成功次数</td>
@@ -11497,17 +11497,17 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>worker 操作总数</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>1794503</td>
+<td>0</td>
+<td>—</td>
+<td>713015</td>
 </tr>
 <tr>
 <td>worker 错误（按 errno）</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td><code>ENOENT</code> 101890，<code>ESTALE</code> 71639</td>
+<td>—</td>
+<td>—</td>
+<td><code>ENOENT</code> 322957，<code>ENOTEMPTY</code> 17，<code>ESTALE</code> 5，<code>EEXIST</code> 4；预期之外的 errno 0</td>
 </tr>
 <tr>
 <td>校验次数与失败数</td>
@@ -11518,17 +11518,17 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td><code>mnt_cache</code> 起 → 止</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>334 → 324（−10）</td>
+<td>334 → 335（+1）</td>
+<td>301 → 357（+56）</td>
+<td>301 → 340（+39）</td>
 </tr>
 <tr>
 <td>结束时 <code>/health</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>ok</td>
+<td>ok</td>
+<td>ok</td>
+<td>ok</td>
 </tr>
 </tbody>
 </table></div>
@@ -11543,27 +11543,27 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>多棵树结束时的 <code>state.json</code>（版本、checkpoint 条目数、层数）</td>
-<td><code>待填</code></td>
+<td>2、88、7</td>
 <td><code>multitree-summary.json</code> 的 <code>state</code></td>
 </tr>
 <tr>
 <td>多棵树 checkpoint 的 p50：<code>total_ms</code> / <code>criu_dump_ms</code> / <code>stopped_ms</code></td>
-<td><code>待填</code></td>
+<td>38.36 / 35.76 / 26.52</td>
 <td><code>multitree.log</code> 的"性能 p50"行</td>
 </tr>
 <tr>
 <td>多棵树 restore 的 p50：<code>total_ms</code> / <code>criu_restore_ms</code> / <code>kill_ms</code></td>
-<td><code>待填</code></td>
+<td>26.72 / 22.24 / 3.40</td>
 <td>同上</td>
 </tr>
 <tr>
 <td>删文件密集的宿主侧变更：删文件 / 整目录删除 / 重建目录 / 建文件</td>
-<td><code>待填</code></td>
+<td>4544 / 1093 / 1132 / 6236</td>
 <td><code>deldense-summary.json</code> 的 <code>stats.mutate</code></td>
 </tr>
 <tr>
 <td>删文件密集结束时的 whiteout / opaque 目录</td>
-<td><code>待填</code></td>
+<td>3181 / 2832</td>
 <td><code>deldense-summary.json</code> 的 <code>marks_end</code></td>
 </tr>
 <tr>
@@ -11593,65 +11593,66 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tr>
 <td>0</td>
 <td>0 / 0</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">18.7</td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: right;">8.5</td>
+<td style="text-align: right;">22.2</td>
+<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">11.1</td>
 </tr>
 <tr>
 <td>16</td>
 <td>12 / 4</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">23.9</td>
+<td style="text-align: right;">14.6</td>
+<td style="text-align: right;">14.7</td>
+<td style="text-align: right;">27.6</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">16.8</td>
 </tr>
 <tr>
 <td>32</td>
 <td>24 / 8</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">28.1</td>
+<td style="text-align: right;">20.8</td>
+<td style="text-align: right;">21.0</td>
+<td style="text-align: right;">31.5</td>
+<td style="text-align: right;">22.7</td>
+<td style="text-align: right;">22.8</td>
 </tr>
 <tr>
 <td>64</td>
 <td>48 / 16</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">38.6</td>
+<td style="text-align: right;">30.9</td>
+<td style="text-align: right;">26.2</td>
+<td style="text-align: right;">43.3</td>
+<td style="text-align: right;">33.2</td>
+<td style="text-align: right;">28.4</td>
 </tr>
 <tr>
 <td>128</td>
 <td>96 / 32</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">67.4</td>
+<td style="text-align: right;">52.0</td>
+<td style="text-align: right;">51.1</td>
+<td style="text-align: right;">71.8</td>
+<td style="text-align: right;">54.4</td>
+<td style="text-align: right;">53.2</td>
 </tr>
 <tr>
 <td>256</td>
 <td>192 / 64</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">96.1</td>
+<td style="text-align: right;">88.7</td>
+<td style="text-align: right;">83.6</td>
+<td style="text-align: right;">99.9</td>
+<td style="text-align: right;">90.8</td>
+<td style="text-align: right;">86.3</td>
 </tr>
 </tbody>
 </table></div>
+<p>128 档第 2 轮的全量基点和 restore（78.8、68.8 ms）比另两轮高出 10～25 ms，同一轮的增量 checkpoint 不高，原因没有查。这一轮没有记录机器上是否有别的负载（§8 第 11 条）。</p>
 <p>三轮的服务端逐轮样本：</p>
 <div class="tw"><table>
 <thead>
@@ -11671,75 +11672,75 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>0</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">18.7</td>
+<td style="text-align: right;">17.4</td>
+<td style="text-align: right;">19.7</td>
+<td style="text-align: right;">7.3</td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: right;">8.4</td>
+<td style="text-align: right;">8.5</td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: right;">8.7</td>
 </tr>
 <tr>
 <td>16</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">22.8</td>
+<td style="text-align: right;">31.4</td>
+<td style="text-align: right;">23.9</td>
+<td style="text-align: right;">14.6</td>
+<td style="text-align: right;">14.1</td>
+<td style="text-align: right;">17.9</td>
+<td style="text-align: right;">12.7</td>
+<td style="text-align: right;">18.4</td>
+<td style="text-align: right;">14.7</td>
 </tr>
 <tr>
 <td>32</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">28.1</td>
+<td style="text-align: right;">27.6</td>
+<td style="text-align: right;">33.9</td>
+<td style="text-align: right;">20.8</td>
+<td style="text-align: right;">20.7</td>
+<td style="text-align: right;">24.9</td>
+<td style="text-align: right;">21.0</td>
+<td style="text-align: right;">19.1</td>
+<td style="text-align: right;">21.6</td>
 </tr>
 <tr>
 <td>64</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">38.5</td>
+<td style="text-align: right;">45.6</td>
+<td style="text-align: right;">38.6</td>
+<td style="text-align: right;">30.8</td>
+<td style="text-align: right;">33.9</td>
+<td style="text-align: right;">30.9</td>
+<td style="text-align: right;">25.7</td>
+<td style="text-align: right;">27.9</td>
+<td style="text-align: right;">26.2</td>
 </tr>
 <tr>
 <td>128</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">57.4</td>
+<td style="text-align: right;">78.8</td>
+<td style="text-align: right;">67.4</td>
+<td style="text-align: right;">46.6</td>
+<td style="text-align: right;">52.0</td>
+<td style="text-align: right;">62.2</td>
+<td style="text-align: right;">43.7</td>
+<td style="text-align: right;">68.8</td>
+<td style="text-align: right;">51.1</td>
 </tr>
 <tr>
 <td>256</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">85.7</td>
+<td style="text-align: right;">97.3</td>
+<td style="text-align: right;">96.1</td>
+<td style="text-align: right;">84.4</td>
+<td style="text-align: right;">88.7</td>
+<td style="text-align: right;">92.0</td>
+<td style="text-align: right;">79.1</td>
+<td style="text-align: right;">84.4</td>
+<td style="text-align: right;">83.6</td>
 </tr>
 </tbody>
 </table></div>
@@ -11756,39 +11757,39 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>0</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">11.6</td>
+<td style="text-align: right;">11.6</td>
+<td style="text-align: right;">11.6</td>
 </tr>
 <tr>
 <td>16</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">24.8</td>
+<td style="text-align: right;">24.8</td>
+<td style="text-align: right;">24.8</td>
 </tr>
 <tr>
 <td>32</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">36.7</td>
+<td style="text-align: right;">36.8</td>
+<td style="text-align: right;">36.8</td>
 </tr>
 <tr>
 <td>64</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">60.8</td>
+<td style="text-align: right;">60.8</td>
+<td style="text-align: right;">60.8</td>
 </tr>
 <tr>
 <td>128</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">108.8</td>
+<td style="text-align: right;">108.8</td>
+<td style="text-align: right;">108.8</td>
 </tr>
 <tr>
 <td>256</td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">204.8</td>
+<td style="text-align: right;">204.8</td>
+<td style="text-align: right;">204.8</td>
 </tr>
 </tbody>
 </table></div>
@@ -11803,12 +11804,12 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>恢复校验通过次数</td>
-<td><code>待填</code></td>
+<td>18 / 18</td>
 <td>汇总 <code>summary.json</code> 的 <code>restore_checks_passed</code></td>
 </tr>
 <tr>
 <td>SDK 与 journal 分段最大差</td>
-<td><code>待填</code></td>
+<td>0.0 ms</td>
 <td>汇总 <code>summary.json</code> 的 <code>max_sdk_journal_diff_ms</code></td>
 </tr>
 </tbody>
@@ -11826,39 +11827,39 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td><code>total_ms</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">68.9</td>
+<td style="text-align: right;">67.0</td>
+<td style="text-align: right;">76.7</td>
 </tr>
 <tr>
 <td><code>criu_restore_ms</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">58.1</td>
+<td style="text-align: right;">55.6</td>
+<td style="text-align: right;">65.8</td>
 </tr>
 <tr>
 <td><code>kill_ms</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">10.3</td>
+<td style="text-align: right;">9.2</td>
+<td style="text-align: right;">10.7</td>
 </tr>
 <tr>
 <td><code>find_pids_ms</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">0.6</td>
+<td style="text-align: right;">0.5</td>
+<td style="text-align: right;">0.6</td>
 </tr>
 <tr>
 <td><code>overlay_restore_ms</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">0.4</td>
+<td style="text-align: right;">0.3</td>
+<td style="text-align: right;">0.4</td>
 </tr>
 <tr>
 <td><code>precheck_ms</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
-<td style="text-align: right;"><code>待填</code></td>
+<td style="text-align: right;">0.1</td>
+<td style="text-align: right;">0.1</td>
+<td style="text-align: right;">0.1</td>
 </tr>
 </tbody>
 </table></div>
@@ -11872,7 +11873,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>根盘已用量起点与每次增量</td>
-<td><code>待填</code></td>
+<td>266 MB，8 次都是 +0</td>
 </tr>
 </tbody>
 </table></div>
@@ -11941,7 +11942,8 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <hr />
 <h2 id="d22-本章要点">本章要点</h2>
 <ul>
-<li>950 上第一轮 <code>950.sh all</code> 已跑完（2026-11-17），13 步全部 PASS；本章部分单元格已填，其余由 <code>950.sh report handbook</code> 取数后填写。</li>
+<li>950 上第一轮 <code>950.sh all</code> 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。</li>
+<li>分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。</li>
 <li>结果由 <code>criu-rollback/deploy/950.sh all</code> 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。</li>
 <li>表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。</li>
 <li>950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。</li>
@@ -11961,7 +11963,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p><strong>950 的进程级只跑了首轮。</strong> 2026-11-17 在 950 上首次部署，<code>950.sh all</code> 13 步全部 PASS：部署、必跑验收（guest 自检、<code>verify_gsd.py</code>、<code>verify_fixes.py</code>、<code>verify_multitree.py --skip V12</code>、漏页测试、性能三轮）、探针与四组压测、切回沙箱级后的冒烟（<a href="#d22">22</a>）。用的是与新 920B 相同的三个运行文件和同一个镜像。</p>
 <ul>
 <li>这一轮说明部件在 950 上能部署、功能验收和 200～300 轮压测能通过，脏页跟踪不依赖 950 独有的硬件特性这一判断得到了一次实测支持。</li>
-<li><a href="#d22">22</a> 里分档性能、漏页、G 项读数等单元格还没有填，书里引用的耗时仍都来自新 920B。</li>
+<li>950 的首轮读数都在 <a href="#d22">22</a>，只有一轮、每档三个样本；其余各章引用的耗时仍来自新 920B，两者不相减。</li>
 <li>八组压测、多种子、兼容矩阵、长跑、调试内核在 950 上都没有跑。</li>
 <li>宿主硬件和宿主内核不同，920B 的耗时不能当作 950 的预期值，也不能作为通过阈值。</li>
 </ul>
@@ -12049,7 +12051,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>950</td>
-<td>只跑了首轮验收和四组压测（§1），读数部分待填</td>
+<td>只跑了首轮验收和四组压测（§1）</td>
 <td>性能与长时间稳定性结论的平台范围只到新 920B；表在 <a href="#d22">22</a></td>
 </tr>
 <tr>
@@ -12425,7 +12427,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <hr />
 <h2 id="d23-本章要点">本章要点</h2>
 <ul>
-<li>最大的缺口是 950：只跑了首轮验收和四组压测（全部 PASS），<a href="#d22">22</a> 的读数部分待填，扩展档、长跑和调试内核没有跑。</li>
+<li>最大的缺口是 950：只跑了首轮验收和四组压测（全部 PASS），读数在 <a href="#d22">22</a>，扩展档、长跑和调试内核没有跑。</li>
 <li>全书的进程级结论都按"新 920B、2 vCPU / 2048 MB、THP never、<code>259f1a25c</code> 的 gsd 与同一个内核二进制"理解。</li>
 <li>分档结果每档三个样本，进程大小与改动量同时变化；多棵树只到三棵；压测最长 300 轮；这些都是结论的边界。</li>
 <li>只有单测的失败分支、注入开关的关闭态、pause / resume 之后的行为、更大的规格、小时级运行、同机并发都没有实测证据。</li>
@@ -13160,7 +13162,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 </ul>
 <hr />
 <h2 id="d24-5-950-同平台对比进程级列待填">5. 950 同平台对比（进程级列待填）</h2>
-<p>950 上的进程级已于 2026-11-17 跑完首轮 <code>950.sh all</code>（<a href="#d22">22</a>），分档性能的读数取回之后填进本节的进程级列；现在只有沙箱级的数字。这是填写 950 对比的唯一位置。</p>
+<p>950 上的进程级已于 2026-11-17 跑完首轮 <code>950.sh all</code>（<a href="#d22">22</a>），读数列在 §5.3。它与 §5.1 的沙箱级数据是不是同一台机器还没有核实（§5.2 第 1 条），所以 §5.1 的进程级列仍空着。这是填写 950 对比的唯一位置。</p>
 <h3 id="d24-51-现有数字">5.1 现有数字</h3>
 <blockquote>
 <p>平台：950（主机名 <code>slot6</code>）。沙箱级数据日期 2026-10-13，脏页后端 <code>hdbss</code>（FC 自报），<code>bench_tiers.py --tier-set short --passes 2</code>。
@@ -13260,6 +13262,59 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <li><strong>时间差。</strong> 写明两侧的日期和代码版本。沙箱级若已重跑，换用新数据时一并更新本节条件。</li>
 <li><strong>§4.6 的负载差别在 950 上同样成立。</strong> 填完之后结论的写法与 §4.7 相同：说谁更低、低在哪些档，不给净加速比。950 与 920B 的数字不相减、不并列。</li>
 </ol>
+<h3 id="d24-53-950-进程级首轮读数">5.3 950 进程级首轮读数</h3>
+<blockquote>
+<p>平台：950（141.61.11.24，主机名 <code>localhost.localdomain</code>），宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code>。2026-11-17，e2b-infra <code>57b333e</code> 的 <code>criu-rollback/deploy/</code>（gsd <code>259f1a25c</code>）。<code>demo_checkpoint_perf.py</code> 三轮，每档每轮一个样本（n = 3），客户端墙钟 <code>e2e_ms</code> 的三轮中位数，单位 ms。来源：<a href="#d22">22</a> §6。
+与 §5.1 的 <code>slot6</code> 是否同一台机器未核实；两边的日期、代码版本和样本量也不同。之后 <code>test950.sh standard</code> 会在同一台机器上先后跑两套的分档测试，得到同机数据后再填 §5.1 的进程级列。</p>
+</blockquote>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">总改动 MiB</th>
+<th>内存 / 文件 MiB</th>
+<th style="text-align: right;">进程级 checkpoint（增量）墙钟中位数</th>
+<th style="text-align: right;">进程级 restore 墙钟中位数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td>0 / 0</td>
+<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">11.1</td>
+</tr>
+<tr>
+<td style="text-align: right;">16</td>
+<td>12 / 4</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">16.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">32</td>
+<td>24 / 8</td>
+<td style="text-align: right;">22.7</td>
+<td style="text-align: right;">22.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td>48 / 16</td>
+<td style="text-align: right;">33.2</td>
+<td style="text-align: right;">28.4</td>
+</tr>
+<tr>
+<td style="text-align: right;">128</td>
+<td>96 / 32</td>
+<td style="text-align: right;">54.4</td>
+<td style="text-align: right;">53.2</td>
+</tr>
+<tr>
+<td style="text-align: right;">256</td>
+<td>192 / 64</td>
+<td style="text-align: right;">90.8</td>
+<td style="text-align: right;">86.3</td>
+</tr>
+</tbody>
+</table></div>
 <hr />
 <h2 id="d24-6-restore-之后各自会发生什么">6. restore 之后：各自会发生什么</h2>
 <p>对写业务代码的人来说，比耗时更要紧的是语义上的差别。下表列出 restore 返回之后，沙箱里各样东西的状态。"回到 checkpoint"指内容恢复成 checkpoint 时刻的样子。</p>
@@ -13470,7 +13525,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li><strong>"restore 失败之后沙箱就废了。"</strong> 这是沙箱级"撕裂"的结局。进程级在杀进程之后失败时，虚拟机、envd 和 gsd 都还在，
     用户进程没有了；再成功 restore 一次就回到一个完整的状态（<a href="#d14">14</a>）。</li>
 <li><strong>"两套 SDK 接口同名，所以可以混着用。"</strong> 接口同名，但是两份不同的 SDK，同一字段编号在响应里类型不同（§2.1）；一台宿主上实际由谁应答取决于运行的是哪一套 orchestrator（§8）。</li>
-<li><strong>"进程级在 950 上会更快。"</strong> 没有数据。它的代码路径不使用 950 的硬件脏页跟踪，950 上的分档读数还没有填进 §5（§9）。</li>
+<li><strong>"进程级在 950 上会更快。"</strong> 没有可比的数据。它的代码路径不使用 950 的硬件脏页跟踪；950 上两套的分档读数还没有在同一台机器、同一时段测过（§5、§9）。</li>
 </ul>
 <hr />
 <h2 id="d24-沙箱级手册的对应章节">沙箱级手册的对应章节</h2>
@@ -13590,7 +13645,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li>两套的服务路径和请求相同，响应字段互不兼容，同一字段编号类型不同，所以 SDK 不能混用。</li>
 <li>新 920B 上按客户端墙钟并列：restore 在 0、16、32 MiB 档进程级更低，在 64、128、256 MiB 档沙箱级更低；checkpoint 在 0 MiB 档进程级更低，16 MiB 档两边接近，32 MiB 起沙箱级更低。</li>
 <li>这组数不给净加速比：内存与文件负载的构造、档位含义、模板、样本量（60～100 对 3）和测试时间都不同，进程级的进程大小又随档位变化。结论只适用于单沙箱、单棵树、<code>kvm-wp</code> 的 920B 条件。</li>
-<li>950 的同平台对比位置在 §5，沙箱级数字已列，进程级待填（首轮已跑完，读数未取回）；跨平台的数字不并列。</li>
+<li>950 的同平台对比位置在 §5：沙箱级数字已列，进程级首轮读数在 §5.3，两者是否同机未核实，暂不并列；跨平台的数字不并列。</li>
 <li>语义上，沙箱级让沙箱内的一切回到同一时刻（连接作废、单调时钟倒退）；进程级保住范围外的一切（envd、日志、时钟），代价是范围外的进程可能拿着被丢弃时间线里的旧对象。</li>
 <li>失败的结局不同：沙箱级在提交点之后失败是"撕裂"，沙箱要销毁重建；进程级在杀进程之后失败，再 restore 一次即可恢复。</li>
 <li>两套目前<strong>不能在同一个沙箱上一起用</strong>：入口是同一个端口，一台宿主上只能运行其中一套的 orchestrator；合并的方案未实施。</li>

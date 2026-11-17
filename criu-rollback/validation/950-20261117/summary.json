@@ -1,0 +1,245 @@
+{
+  "platform": "950",
+  "host": "141.61.11.24 (localhost.localdomain)",
+  "host_kernel": "6.6.0-159.4.3.154.oe2403sp4.aarch64",
+  "date": "2026-11-17",
+  "run": "criu-rollback/deploy/results/20261117-142121-all（留在 950 上）",
+  "repo_commit": "57b333e",
+  "gsd_commit": "259f1a25c",
+  "sha256": {
+    "gsd": "421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe",
+    "orchestrator": "063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870",
+    "vmlinux": "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+  },
+  "source": "950.sh report handbook 的终端输出（e2b-infra 4513486），由三份 perf-run JSON 算出；数值保留一位小数，原始 JSON 未取回，所以没有来源哈希",
+  "schema_version": 2,
+  "measurement_mode": "per-tier-size",
+  "restore_path": "modified-child-to-full-baseline",
+  "restore_checks_passed": 18,
+  "max_sdk_journal_diff_ms": 0.0,
+  "verdict": "PASS",
+  "tiers": [
+    {
+      "total_mib": 0,
+      "mem_mib": 0,
+      "file_mib": 0,
+      "server_total_ms": {
+        "full_baseline": [
+          18.7,
+          17.4,
+          19.7
+        ],
+        "incremental": [
+          7.3,
+          8.2,
+          8.4
+        ],
+        "restore": [
+          8.5,
+          8.2,
+          8.7
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 18.7,
+        "incremental": 8.2,
+        "restore": 8.5
+      },
+      "wall_p50_ms": {
+        "full_baseline": 22.2,
+        "incremental": 10.0,
+        "restore": 11.1
+      },
+      "rss_mib": [
+        11.6,
+        11.6,
+        11.6
+      ]
+    },
+    {
+      "total_mib": 16,
+      "mem_mib": 12,
+      "file_mib": 4,
+      "server_total_ms": {
+        "full_baseline": [
+          22.8,
+          31.4,
+          23.9
+        ],
+        "incremental": [
+          14.6,
+          14.1,
+          17.9
+        ],
+        "restore": [
+          12.7,
+          18.4,
+          14.7
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 23.9,
+        "incremental": 14.6,
+        "restore": 14.7
+      },
+      "wall_p50_ms": {
+        "full_baseline": 27.6,
+        "incremental": 16.6,
+        "restore": 16.8
+      },
+      "rss_mib": [
+        24.8,
+        24.8,
+        24.8
+      ]
+    },
+    {
+      "total_mib": 32,
+      "mem_mib": 24,
+      "file_mib": 8,
+      "server_total_ms": {
+        "full_baseline": [
+          28.1,
+          27.6,
+          33.9
+        ],
+        "incremental": [
+          20.8,
+          20.7,
+          24.9
+        ],
+        "restore": [
+          21.0,
+          19.1,
+          21.6
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 28.1,
+        "incremental": 20.8,
+        "restore": 21.0
+      },
+      "wall_p50_ms": {
+        "full_baseline": 31.5,
+        "incremental": 22.7,
+        "restore": 22.8
+      },
+      "rss_mib": [
+        36.7,
+        36.8,
+        36.8
+      ]
+    },
+    {
+      "total_mib": 64,
+      "mem_mib": 48,
+      "file_mib": 16,
+      "server_total_ms": {
+        "full_baseline": [
+          38.5,
+          45.6,
+          38.6
+        ],
+        "incremental": [
+          30.8,
+          33.9,
+          30.9
+        ],
+        "restore": [
+          25.7,
+          27.9,
+          26.2
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 38.6,
+        "incremental": 30.9,
+        "restore": 26.2
+      },
+      "wall_p50_ms": {
+        "full_baseline": 43.3,
+        "incremental": 33.2,
+        "restore": 28.4
+      },
+      "rss_mib": [
+        60.8,
+        60.8,
+        60.8
+      ]
+    },
+    {
+      "total_mib": 128,
+      "mem_mib": 96,
+      "file_mib": 32,
+      "server_total_ms": {
+        "full_baseline": [
+          57.4,
+          78.8,
+          67.4
+        ],
+        "incremental": [
+          46.6,
+          52.0,
+          62.2
+        ],
+        "restore": [
+          43.7,
+          68.8,
+          51.1
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 67.4,
+        "incremental": 52.0,
+        "restore": 51.1
+      },
+      "wall_p50_ms": {
+        "full_baseline": 71.8,
+        "incremental": 54.4,
+        "restore": 53.2
+      },
+      "rss_mib": [
+        108.8,
+        108.8,
+        108.8
+      ]
+    },
+    {
+      "total_mib": 256,
+      "mem_mib": 192,
+      "file_mib": 64,
+      "server_total_ms": {
+        "full_baseline": [
+          85.7,
+          97.3,
+          96.1
+        ],
+        "incremental": [
+          84.4,
+          88.7,
+          92.0
+        ],
+        "restore": [
+          79.1,
+          84.4,
+          83.6
+        ]
+      },
+      "server_total_p50_ms": {
+        "full_baseline": 96.1,
+        "incremental": 88.7,
+        "restore": 83.6
+      },
+      "wall_p50_ms": {
+        "full_baseline": 99.9,
+        "incremental": 90.8,
+        "restore": 86.3
+      },
+      "rss_mib": [
+        204.8,
+        204.8,
+        204.8
+      ]
+    }
+  ]
+}

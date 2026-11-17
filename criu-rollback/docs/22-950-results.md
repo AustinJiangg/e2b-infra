@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：第一轮已跑完，部分已填（2026-11-17）。** 950 上 `criu-rollback/deploy/950.sh all` 13 步全部 PASS（§0）。本章已填入 `all` 结束时终端摘要里有的数；其余单元格仍是 `待填`，由同一轮结果目录用 `bash criu-rollback/deploy/950.sh report handbook` 取出后填写。这是填写 950 结果的唯一位置。
+> **状态：第一轮已填（2026-11-17）。** 950 上 `criu-rollback/deploy/950.sh all` 13 步全部 PASS（§0），本章各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，原始文件留在 950 上。只有 §5 的“串口关键词命中”一行还是 `待填`：取数脚本当时还不统计这一项，现在的版本会打印。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -57,21 +57,21 @@
 | 项 | 值 | 来源 |
 |---|---|---|
 | 平台 | 950（141.61.11.24） | 运行时记录 |
-| 日期与起止时间 | 2026-11-17；验收 15:23:08～15:26:17，压测 15:26:17～15:29:04（`all.log`） | `summary.json` 的 `started`、`finished`；核对机器时钟 |
+| 日期与起止时间 | 2026-11-17；验收 15:23:09.68～15:26:17.79（`summary.json`），压测 15:26:17～15:29:04（`all.log`） | `summary.json` 的 `started`、`finished`；核对机器时钟 |
 | 宿主内核 | `6.6.0-159.4.3.154.oe2403sp4.aarch64` | 宿主上 `uname -r` |
 | 部署版本 | e2b-infra `57b333e` 的 `criu-rollback/deploy/`（gsd 与内核为 `259f1a25c`，orchestrator 为 `259f1a25c-e2bv`） | 运行时记录 |
-| 提交：`gsd -commit` | `待填` | `guest-check.log` 的 `commit` |
+| 提交：`gsd -commit` | `259f1a25c` | `guest-check.log` 的 `commit` |
 | 提交：SDK | `2.19.0+gsd.dcca61266` | wheel 版本号 |
-| gsd sha256（宿主 / guest） | 宿主 `421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe` / guest `待填` | `deliverables.sha256`；`guest-check.log` 的 `gsd_sha256` |
+| gsd sha256（宿主 / guest） | 宿主 `421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe` / guest 相同 | `deliverables.sha256`；`guest-check.log` 的 `gsd_sha256` |
 | orchestrator sha256 | `063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870` | `deliverables.sha256` |
 | guest 内核 sha256 | `b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c` | `deliverables.sha256` |
-| guest 内核版本串 | `待填` | `guest-check.log` 的 `kernel` |
-| CRIU 版本 | `待填` | `guest-check.log` 的 `criu` |
-| THP | `待填` | `guest-check.log` 的 `thp` |
-| `rcu_expedited` | `待填` | `guest-check.log` 的 `rcu` |
-| guest 规格（vCPU / 内存） | `待填` | `guest-check.log` 的 `vcpus`、`memory` |
-| `/`、`/tmp` 的权限与 `/tmp` 所在文件系统 | `待填` | `guest-check.log` 的 `root`、`tmp`、`tmp_fs` |
-| 模板别名与 ID | `待填` | `summary.json` 的 `template`；`guest-check.log` 首行 |
+| guest 内核版本串 | `Linux version 6.1.158+ … #4 SMP Thu Oct  8 20:06:40 CST 2026` | `guest-check.log` 的 `kernel` |
+| CRIU 版本 | 4.2.1 | `guest-check.log` 的 `criu` |
+| THP | `always madvise [never]` | `guest-check.log` 的 `thp` |
+| `rcu_expedited` | 1 | `guest-check.log` 的 `rcu` |
+| guest 规格（vCPU / 内存） | 2 / `MemTotal: 2035188 kB` | `guest-check.log` 的 `vcpus`、`memory` |
+| `/`、`/tmp` 的权限与 `/tmp` 所在文件系统 | `/` 0755 root:root，`/tmp` 1777 root:root，overlay | `guest-check.log` 的 `root`、`tmp`、`tmp_fs` |
+| 模板别名与 ID | `base-criu` / `00gzphcgb2l55nmokvs8` | `summary.json` 的 `template`；`guest-check.log` 首行 |
 | 建模板耗时 | 8.1 s（首个沙箱 94 ms） | `build_template.py` 末行 |
 | Python 与 SDK 路径 | Python 3.14.10；`/root/miniconda3/envs/jll-e2b-criu/lib/python3.14/site-packages/e2b/__init__.py` | `summary.json` 的 `python`、`sdk` |
 
@@ -95,23 +95,23 @@
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| `verify_fixes.py` PASS / FAIL / SKIP | `待填` | `verify_fixes.json` 的 `status` 计数 |
-| `verify_fixes.py` SKIP 的项 | `待填` | 同上 |
-| `verify_multitree.py` PASS 项数 | `待填` | `verify_multitree.json` 的 `items` |
-| 慢调用次数 | `待填` | `verify_multitree.json` 的 `slow_calls` |
-| 漏页：有漏页的轮数 / 总轮数，漏页合计 | `待填` | `clear_refs_race.log` 的汇总段 |
-| 漏页：恢复后状态、哈希相等的轮数、写入进程卡死的轮数 | `待填` | `clear_refs_race.jsonl` 的 `restored_state`、`sha_eq`、`wedged` |
-| 漏页：checkpoint A 的 `stopped_ms` p50 / 最小 / 最大 | `待填` | `clear_refs_race.log` 的 `A_stopped_ms` |
-| 漏页：checkpoint A 的 `criu_dump_ms` p50 / 最小 / 最大 | `待填` | `clear_refs_race.log` 的 `A_dump_ms` |
-| 漏页：checkpoint A 的 `overlay_sink_ms` p50 | `待填` | `clear_refs_race.log` 的 `A_sink_ms` |
-| 漏页：checkpoint B 的页镜像大小 p50 / 最小 / 最大 | `待填` | `clear_refs_race.log` 的 `cpB 增量 pages` |
-| G-06 全量镜像 / 增量镜像 | `待填` | `verify_fixes.json` 的 G-06 |
-| G-08 成功次数、被拒时的选项串长度 | `待填` | `verify_fixes.json` 的 G-08 |
-| G-11 `df /` 增量、journal 增量、扣除后净增 | `待填` | `verify_fixes.json` 的 G-11 |
-| G-20 secure 与非 secure 的鉴权差 | `待填` | `verify_fixes.json` 的 G-20 |
-| G-21 被拒时的估算、快照存储剩余、`MemAvailable` | `待填` | `verify_fixes.json` 的 G-21 |
-| PERF `find_pids_ms` 中位数：checkpoint / restore | `待填` | `verify_fixes.json` 的 PERF |
-| V5 全量 / 不改内存 / 起第三棵树后的镜像大小 | `待填` | `verify_multitree.json` 的 V5 |
+| `verify_fixes.py` PASS / FAIL / SKIP | 26 / 0 / 2 | `verify_fixes.json` 的 `status` 计数 |
+| `verify_fixes.py` SKIP 的项 | G-19、G-36 | 同上 |
+| `verify_multitree.py` PASS 项数 | 12 / 12；日志无 `BAD` 行 | `verify_multitree.json` 的 `items` |
+| 慢调用次数 | 0 | `verify_multitree.json` 的 `slow_calls` |
+| 漏页：有漏页的轮数 / 总轮数，漏页合计 | 0 / 30，0 | `clear_refs_race.log` 的汇总段 |
+| 漏页：恢复后状态、哈希相等的轮数、写入进程卡死的轮数 | 全部 T，30，0 | `clear_refs_race.jsonl` 的 `restored_state`、`sha_eq`、`wedged` |
+| 漏页：checkpoint A 的 `stopped_ms` p50 / 最小 / 最大 | 0.47 / 0.40 / 5.56 | `clear_refs_race.log` 的 `A_stopped_ms` |
+| 漏页：checkpoint A 的 `criu_dump_ms` p50 / 最小 / 最大 | 14.99 / 10.93 / 30.70 | `clear_refs_race.log` 的 `A_dump_ms` |
+| 漏页：checkpoint A 的 `overlay_sink_ms` p50 | 0.02 | `clear_refs_race.log` 的 `A_sink_ms` |
+| 漏页：checkpoint B 的页镜像大小 p50 / 最小 / 最大 | 908 / 8 / 2552 KiB | `clear_refs_race.log` 的 `cpB 增量 pages` |
+| G-06 全量镜像 / 增量镜像 | 272420864 字节 / 1097728 字节（1.05 MiB） | `verify_fixes.json` 的 G-06 |
+| G-08 成功次数、被拒时的选项串长度 | 190 次；第 191 次 4105 字节 > 4096 被拒（最后一次成功时 3871） | `verify_fixes.json` 的 G-08 |
+| G-11 `df /` 增量、journal 增量、扣除后净增 | 19296 KB、19264 KB、32 KB（40 轮） | `verify_fixes.json` 的 G-11 |
+| G-20 secure 与非 secure 的鉴权差 | 带鉴权的 `ListCheckpoints` 比 `/health` 慢：secure 0.54 ms，非 secure 0.74 ms | `verify_fixes.json` 的 G-20 |
+| G-21 被拒时的估算、快照存储剩余、`MemAvailable` | 580.4 MiB、1082.5 MiB、457.6 MiB | `verify_fixes.json` 的 G-21 |
+| PERF `find_pids_ms` 中位数：checkpoint / restore | 0.50 / 0.47 | `verify_fixes.json` 的 PERF |
+| V5 全量 / 不改内存 / 起第三棵树后的镜像大小 | 133.2 / 0.37 / 66.9 MiB | `verify_multitree.json` 的 V5 |
 
 `verify_multitree.py --skip V12` 不产生 V12 的两部分结果。V12 需要一份仅版本不同的进程级模板作对照，首次部署没有这样的模板，所以第 20 章 §3 的逐轮交错和一、二、三棵树分段在本章没有对应的表。
 
@@ -123,13 +123,13 @@
 
 | 用例 | `crashed` | 开机时的 whiteout 数 | dmesg |
 |---|---|---|---|
-| `bug` | `待填` | `待填` | `待填` |
-| `ctl` | `待填` | `待填` | `待填` |
-| `nodel` | `待填` | `待填` | `待填` |
-| `masked` | `待填` | `待填` | `待填` |
-| `trap` 第 1 次 | `待填` | `待填` | `待填` |
-| `trap` 第 2 次 | `待填` | `待填` | `待填` |
-| `trap` 第 3 次 | `待填` | `待填` | `待填` |
+| `bug` | false | upper=0 layers=0 | 空 |
+| `ctl` | false | upper=0 layers=0 | 空 |
+| `nodel` | false | upper=0 layers=0 | 空 |
+| `masked` | false | upper=0 layers=0 | 空 |
+| `trap` 第 1 次 | false | upper=0 layers=0 | 空 |
+| `trap` 第 2 次 | false | upper=0 layers=0 | 空 |
+| `trap` 第 3 次 | false | upper=0 layers=0 | 空 |
 
 ---
 
@@ -141,24 +141,24 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 |---|---|---|---|---|
 | 轮数 | 300 | 300 | 200 | 200 |
 | 判定 | PASS | PASS | PASS | PASS |
-| 看门狗 | `待填` | `待填` | `待填` | `待填` |
-| dmesg 新命中 | `待填` | `待填` | `待填` | `待填` |
-| 串口关键词命中 | `待填` | `待填` | `待填` | `待填` |
+| 看门狗 | `DONE rc=0` | `DONE rc=0` | `DONE rc=0` | `DONE rc=0` |
+| dmesg 新命中 | 0 | 0 | 0 | 0 |
+| 串口关键词命中 | `待填`（`console.txt` 56798 字节） | `待填`（55262 字节） | `待填`（140638 字节） | `待填`（205470 字节） |
 | checkpoint / restore / delete 成功次数 | 77 / 153 / 15 | 75 / 155 / 13 | 92 / 100 / 9 | 92 / 100 / 9 |
 | gsd 侧错误 | `create:resource_exhausted` 55 | `create:resource_exhausted` 57 | 无 | 无 |
-| worker 操作总数 | `待填` | `待填` | `待填` | `待填` |
-| worker 错误（按 errno） | `待填` | `待填` | `待填` | `待填` |
+| worker 操作总数 | 1794503 | 0 | — | 713015 |
+| worker 错误（按 errno） | `ENOENT` 101890，`ESTALE` 71639 | — | — | `ENOENT` 322957，`ENOTEMPTY` 17，`ESTALE` 5，`EEXIST` 4；预期之外的 errno 0 |
 | 校验次数与失败数 | 不校验 | 不校验 | 192 / 0 | 192 / 0 |
-| `mnt_cache` 起 → 止 | `待填` | `待填` | `待填` | `待填` |
-| 结束时 `/health` | `待填` | `待填` | `待填` | `待填` |
+| `mnt_cache` 起 → 止 | 334 → 324（−10） | 334 → 335（+1） | 301 → 357（+56） | 301 → 340（+39） |
+| 结束时 `/health` | ok | ok | ok | ok |
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| 多棵树结束时的 `state.json`（版本、checkpoint 条目数、层数） | `待填` | `multitree-summary.json` 的 `state` |
-| 多棵树 checkpoint 的 p50：`total_ms` / `criu_dump_ms` / `stopped_ms` | `待填` | `multitree.log` 的"性能 p50"行 |
-| 多棵树 restore 的 p50：`total_ms` / `criu_restore_ms` / `kill_ms` | `待填` | 同上 |
-| 删文件密集的宿主侧变更：删文件 / 整目录删除 / 重建目录 / 建文件 | `待填` | `deldense-summary.json` 的 `stats.mutate` |
-| 删文件密集结束时的 whiteout / opaque 目录 | `待填` | `deldense-summary.json` 的 `marks_end` |
+| 多棵树结束时的 `state.json`（版本、checkpoint 条目数、层数） | 2、88、7 | `multitree-summary.json` 的 `state` |
+| 多棵树 checkpoint 的 p50：`total_ms` / `criu_dump_ms` / `stopped_ms` | 38.36 / 35.76 / 26.52 | `multitree.log` 的"性能 p50"行 |
+| 多棵树 restore 的 p50：`total_ms` / `criu_restore_ms` / `kill_ms` | 26.72 / 22.24 / 3.40 | 同上 |
+| 删文件密集的宿主侧变更：删文件 / 整目录删除 / 重建目录 / 建文件 | 4544 / 1093 / 1132 / 6236 | `deldense-summary.json` 的 `stats.mutate` |
+| 删文件密集结束时的 whiteout / opaque 目录 | 3181 / 2832 | `deldense-summary.json` 的 `marks_end` |
 | `stress` 总判定 | PASS（含探针，用时 167 秒） | `summary.json` 的 `verdict` |
 
 ---
@@ -169,54 +169,56 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 | 总改动量 MiB | 内存 / 文件 MiB | 全量基点 | 增量 checkpoint | restore | 全量基点墙钟 | 增量 checkpoint 墙钟 | restore 墙钟 |
 |---|---|---:|---:|---:|---:|---:|---:|
-| 0 | 0 / 0 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 16 | 12 / 4 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 32 | 24 / 8 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 64 | 48 / 16 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 128 | 96 / 32 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 256 | 192 / 64 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
+| 0 | 0 / 0 | 18.7 | 8.2 | 8.5 | 22.2 | 10.0 | 11.1 |
+| 16 | 12 / 4 | 23.9 | 14.6 | 14.7 | 27.6 | 16.6 | 16.8 |
+| 32 | 24 / 8 | 28.1 | 20.8 | 21.0 | 31.5 | 22.7 | 22.8 |
+| 64 | 48 / 16 | 38.6 | 30.9 | 26.2 | 43.3 | 33.2 | 28.4 |
+| 128 | 96 / 32 | 67.4 | 52.0 | 51.1 | 71.8 | 54.4 | 53.2 |
+| 256 | 192 / 64 | 96.1 | 88.7 | 83.6 | 99.9 | 90.8 | 86.3 |
+
+128 档第 2 轮的全量基点和 restore（78.8、68.8 ms）比另两轮高出 10～25 ms，同一轮的增量 checkpoint 不高，原因没有查。这一轮没有记录机器上是否有别的负载（§8 第 11 条）。
 
 三轮的服务端逐轮样本：
 
 | 总改动量 MiB | 全量基点 轮 1 | 轮 2 | 轮 3 | 增量 checkpoint 轮 1 | 轮 2 | 轮 3 | restore 轮 1 | 轮 2 | 轮 3 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 16 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 32 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 64 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 128 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
-| 256 | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` | `待填` |
+| 0 | 18.7 | 17.4 | 19.7 | 7.3 | 8.2 | 8.4 | 8.5 | 8.2 | 8.7 |
+| 16 | 22.8 | 31.4 | 23.9 | 14.6 | 14.1 | 17.9 | 12.7 | 18.4 | 14.7 |
+| 32 | 28.1 | 27.6 | 33.9 | 20.8 | 20.7 | 24.9 | 21.0 | 19.1 | 21.6 |
+| 64 | 38.5 | 45.6 | 38.6 | 30.8 | 33.9 | 30.9 | 25.7 | 27.9 | 26.2 |
+| 128 | 57.4 | 78.8 | 67.4 | 46.6 | 52.0 | 62.2 | 43.7 | 68.8 | 51.1 |
+| 256 | 85.7 | 97.3 | 96.1 | 84.4 | 88.7 | 92.0 | 79.1 | 84.4 | 83.6 |
 
 各档实测 RSS：
 
 | 总改动量 MiB | 轮 1 MiB | 轮 2 MiB | 轮 3 MiB |
 |---|---:|---:|---:|
-| 0 | `待填` | `待填` | `待填` |
-| 16 | `待填` | `待填` | `待填` |
-| 32 | `待填` | `待填` | `待填` |
-| 64 | `待填` | `待填` | `待填` |
-| 128 | `待填` | `待填` | `待填` |
-| 256 | `待填` | `待填` | `待填` |
+| 0 | 11.6 | 11.6 | 11.6 |
+| 16 | 24.8 | 24.8 | 24.8 |
+| 32 | 36.7 | 36.8 | 36.8 |
+| 64 | 60.8 | 60.8 | 60.8 |
+| 128 | 108.8 | 108.8 | 108.8 |
+| 256 | 204.8 | 204.8 | 204.8 |
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| 恢复校验通过次数 | `待填` | 汇总 `summary.json` 的 `restore_checks_passed` |
-| SDK 与 journal 分段最大差 | `待填` | 汇总 `summary.json` 的 `max_sdk_journal_diff_ms` |
+| 恢复校验通过次数 | 18 / 18 | 汇总 `summary.json` 的 `restore_checks_passed` |
+| SDK 与 journal 分段最大差 | 0.0 ms | 汇总 `summary.json` 的 `max_sdk_journal_diff_ms` |
 
 `verify_gsd.py` 单棵 192 MiB、全脏、连续 restore 8 次的分段，结构与 [20](20-920b-performance.md) §2 相同，来源是 `verify_gsd.log`：
 
 | 分段 | p50 | 最小 | 最大 |
 |---|---:|---:|---:|
-| `total_ms` | `待填` | `待填` | `待填` |
-| `criu_restore_ms` | `待填` | `待填` | `待填` |
-| `kill_ms` | `待填` | `待填` | `待填` |
-| `find_pids_ms` | `待填` | `待填` | `待填` |
-| `overlay_restore_ms` | `待填` | `待填` | `待填` |
-| `precheck_ms` | `待填` | `待填` | `待填` |
+| `total_ms` | 68.9 | 67.0 | 76.7 |
+| `criu_restore_ms` | 58.1 | 55.6 | 65.8 |
+| `kill_ms` | 10.3 | 9.2 | 10.7 |
+| `find_pids_ms` | 0.6 | 0.5 | 0.6 |
+| `overlay_restore_ms` | 0.4 | 0.3 | 0.4 |
+| `precheck_ms` | 0.1 | 0.1 | 0.1 |
 
 | 项 | 值 |
 |---|---|
-| 根盘已用量起点与每次增量 | `待填` |
+| 根盘已用量起点与每次增量 | 266 MB，8 次都是 +0 |
 
 ---
 
@@ -269,7 +271,8 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 ## 本章要点
 
-- 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；本章部分单元格已填，其余由 `950.sh report handbook` 取数后填写。
+- 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。
+- 分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。
 - 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。
 - 950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。

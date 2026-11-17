@@ -12,6 +12,17 @@ import sys
 import paths
 
 CUT = 400
+# 串口关键词：与 scripts/stress/analyze_stress.py 的 BAD 相同
+BAD = re.compile(r"KASAN|BUG:|Oops|WARNING:|list_add corruption|list_del corruption|list corruption|possible circular locking|"
+                 r"possible recursive locking|sleeping function called from invalid context|ODEBUG|hung task|hung_task|"
+                 r"blocked for more than|soft lockup|rcu.*stall|detected stalls", re.I)
+
+
+def console_hits(path):
+    try:
+        return sum(bool(BAD.search(x)) for x in Path(path).read_text(errors="replace").splitlines())
+    except OSError:
+        return "缺"
 
 
 def clip(text, n=CUT):
@@ -130,8 +141,8 @@ def stress(run):
         d = load(st / g / "stress-summary.json")
         res = (lines_of(st / g / "RESULT") or ["缺"])[0]
         con = st / g / "console.txt"
-        print("  [%s] RESULT=%s console=%s字节 fail文件=%d" % (g, res, con.stat().st_size if con.exists() else "缺",
-              len(list((st / g).glob("*-create-fail-*")))))
+        print("  [%s] RESULT=%s console=%s字节 串口关键词命中=%s fail文件=%d" % (
+            g, res, con.stat().st_size if con.exists() else "缺", console_hits(con), len(list((st / g).glob("*-create-fail-*")))))
         if d:
             keep = ("rounds", "workers", "gsd_ops", "lat_ms_p50", "worker_ops_total", "worker_errs_by_errno",
                     "worker_heartbeat_age_s", "slab_start", "slab_end", "dmesg_new_hits", "health", "ckpts_left")
@@ -140,7 +151,8 @@ def stress(run):
         d = load(st / g / ("%s-summary.json" % g))
         res = (lines_of(st / g / "RESULT") or ["缺"])[0]
         con = st / g / "console.txt"
-        print("  [%s] RESULT=%s console=%s字节" % (g, res, con.stat().st_size if con.exists() else "缺"))
+        print("  [%s] RESULT=%s console=%s字节 串口关键词命中=%s" % (
+            g, res, con.stat().st_size if con.exists() else "缺", console_hits(con)))
         if d:
             keep = ("verdict", "rounds", "workers", "stats", "unexpected_errors", "worker_ops_total", "worker_errs",
                     "worker_unexpected_errno", "worker_heartbeat_age_s", "dmesg_hits", "slab_boot", "slab_end",
