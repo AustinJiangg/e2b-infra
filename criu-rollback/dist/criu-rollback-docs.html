@@ -625,7 +625,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td><a href="#d22">22 950 结果</a></td>
-<td>950 上的验收与性能，待填</td>
+<td>950 上的验收与性能：首轮全部 PASS，部分读数待填</td>
 </tr>
 <tr>
 <td><a href="#d23">23 缺口与结论边界</a></td>
@@ -723,7 +723,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p><strong>代码引用。</strong> 写成"<code>函数名</code>（<code>文件:行号</code>）"，代码基准是 <code>criu-rollback-dev@bc3cce913</code>。gsd 的核心包路径统一简写为 <code>ckpt/</code>，即 <code>packages/gsd/internal/services/checkpoint/</code>。内核补丁只引用"补丁文件名 + 函数名"，不引行号：<code>0002-overlayfs-hot-switch-checkpoint.patch</code> 是初始实现的补丁，<code>0003-overlayfs-hot-switch-fixes.patch</code> 是其上的全部修复。完整的代码地图在<a href="#dA">附录 A</a>。</p>
 <p><strong>交叉引用。</strong> 链接文字是章号，写成 <code>[20](20-920b-performance.md)</code>，附录写 <code>[附录 C](C-issue-resolution.md)</code>；需要指到节时写出节名，章内用 <code>§x.y</code>。</p>
 <p><strong>数字纪律。</strong> 判定性的实测数字只在第四篇。完整功能与压测以 2026-10-08 的确认验证为准，2026-10-16 的六档分档和 2026-11-06 的全流程复测单列。每个数字在 <a href="#d23">23</a> 的出处表里能找到来源文件。其他章举数时当场标明平台、日期、代码版本和口径，这些数只为说明原理或过程，不能与第四篇的数相减。不同平台、不同口径的同名指标不互相比较。容量单位用 MiB / GiB，时间用 ms。</p>
-<p><strong>平台标签。</strong> "新 920B"指 192.168.45.47 这台机器；"旧 920B"指已退役的那台，只在案例附录作为历史数据出现。950：未运行，数据待填，见 <a href="#d22">22</a>、<a href="#d24">24</a>。</p>
+<p><strong>平台标签。</strong> "新 920B"指 192.168.45.47 这台机器；"旧 920B"指已退役的那台，只在案例附录作为历史数据出现。950：2026-11-17 跑完首轮 <code>950.sh all</code>，全部 PASS，部分读数待填，见 <a href="#d22">22</a>、<a href="#d24">24</a>。</p>
 <p><strong>路径与命名。</strong> 命令和路径按运行时布局写：宿主 <code>/fc-criu/gsd</code>、<code>/fc-criu/orchestrator</code>、<code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code>，模板名 <code>base-criu</code>。2026-11-17 之前的布局是 <code>/fc-gsd/</code>、模板 <code>base-gsd</code>，第 16～24 章与附录里的实测记录保留当时的名字。结果文件里的开发期产物名只在 <a href="#d19">19</a> 的条件标签、<a href="#d23">23</a> 的出处表和<a href="#dA">附录 A</a> 的对照表里出现。</p>
 <p><strong>措辞。</strong> "初始实现"指修复之前的代码；"修改前 / 修复后"指同一份代码的两个阶段；"进程级"指本书的方案，"沙箱级"指沙箱级手册的方案；"回滚"即 restore；拍快照的操作写 checkpoint，只有引用接口名时才写 <code>CreateCheckpoint</code>、<code>create()</code>。过程性的叙述（先怀疑什么、后来推翻什么）只在<a href="#dD">附录 D</a>、<a href="#dE">附录 E</a> 和 <a href="#d08">08</a>、<a href="#d09">09</a> 各主题的"根因"小节里，其余章只写现状。</p>
 <p><strong>全书唯一的表。</strong> 目录与层布局（<a href="#d05">05</a>）、错误表（<a href="#d14">14</a>）、已知限制表（<a href="#d16">16</a>）、缺口表（<a href="#d23">23</a>）、两种方案的对比表（<a href="#d24">24</a>）、开关总表与计时键（<a href="#d28">28</a>）、问题处理总表（<a href="#dC">附录 C</a>）。别的章需要时链接过去，不复述。</p>
@@ -767,7 +767,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     多棵树时随树数近似线性增长（§2.3，代价模型见 <a href="#d17">17</a>）。</li>
 <li><strong>边界是清楚的。</strong> 只回滚用户进程和 overlay 根文件系统，范围外的进程可能看到旧时间线或得到 <code>ESTALE</code>，
     已知限制集中在 <a href="#d16">16</a>，使用语义在 <a href="#d26">26</a>。</li>
-<li><strong>还有缺口。</strong> 950 未部署、未测，只支持 arm64 的 guest，更大规格、三棵以上的树和小时级连续运行都没有数据（§2.4）。</li>
+<li><strong>还有缺口。</strong> 950 只跑了首轮验收和四组压测（全部 PASS，<a href="#d22">22</a>），只支持 arm64 的 guest，更大规格、三棵以上的树和小时级连续运行都没有数据（§2.4）。</li>
 </ol>
 <hr />
 <h2 id="d01-2-成果总览">2. 成果总览</h2>
@@ -940,7 +940,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <tbody>
 <tr>
 <td>950</td>
-<td>进程级未部署、未测，<a href="#d22">22</a> 待填</td>
+<td>2026-11-17 首次部署，<code>950.sh all</code> 13 步全部 PASS（验收、四组压测、回切沙箱级冒烟）；部分读数待填，见 <a href="#d22">22</a></td>
 </tr>
 <tr>
 <td>guest 架构</td>
@@ -1174,7 +1174,7 @@ gsd 守护进程的核心包路径较长，统一简写为 <code>ckpt/</code>，
 <li>checkpoint 的耗时随改动量增长，restore 的耗时随进程大小增长、随树数近似线性增长；分档结果里 256 MiB 档的 restore 约 94 ms。</li>
 <li>回滚范围小是它全部特点的来源：checkpoint 拍得少、文件那一半几乎不花时间；restore 必须杀掉并重建进程。</li>
 <li>一次 checkpoint 与一次 restore 的每一步都能在 §4 的两张表里找到对应章节，<a href="#d13">13</a> 把它们完整走一遍。</li>
-<li>代码以 <code>criu-rollback-dev@bc3cce913</code> 为准；950 未部署、未测；只支持 arm64 的 guest；缺口表在 <a href="#d23">23</a>。</li>
+<li>代码以 <code>criu-rollback-dev@bc3cce913</code> 为准；950 只跑了首轮验收和四组压测；只支持 arm64 的 guest；缺口表在 <a href="#d23">23</a>。</li>
 </ol><nav class="pager" data-n="01"></nav></article><article id="v02" class="doc" hidden><h1 id="d02-进程级回滚问题与定位">进程级回滚：问题与定位</h1>
 <h2 id="d02-本章目标">本章目标</h2>
 <p>读完本章，你应当能够：</p>
@@ -8015,7 +8015,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
     三项都不损坏数据，都没有稳定的复现办法。</li>
 <li><strong>没有在真机上走到的分支 9 项</strong>（§3）：集中在多棵树的异常路径和注入开关的关闭态。除 T-09 只有代码注释的论证外，其余都<strong>只有单测、没有在新 920B 上走过</strong>。</li>
 <li><strong>内核里记录在案的 4 项</strong>（§4）：<code>/proc/mounts</code> 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留，以及一条已在最后一轮处理、为对照旧结果而保留的记录。</li>
-<li>950：未部署、未测。本章的实测都在新 920B 上完成。</li>
+<li>950：只跑了首轮验收和四组压测（全部 PASS，<a href="#d22">22</a>）。本章的实测都在新 920B 上完成。</li>
 </ul>
 <p>表里"状态"一列的取值：<strong>设计如此</strong>（是取舍的结果，不计划改）、<strong>未查</strong>（见过现象，原因不明）、<strong>未测</strong>（有代码、有单测，没有新 920B 上的结果）、<strong>未处理</strong>（知道问题在哪，没有改）。</p>
 <hr />
@@ -8459,7 +8459,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li><strong>范围外的进程在 restore 后可能遇到 <code>ESTALE</code></strong>，这是为了不把被回滚的内容写回去；重新 <code>chdir</code>、重新打开即可。</li>
 <li>三个没查清的现象（首个请求约 5 秒、同一沙箱上 2 次 checkpoint 返回 <code>internal</code>、单发 <code>ENOTEMPTY</code>）都不损坏数据，都没有稳定复现。</li>
 <li>没有新 920B 上的结果的分支集中在<strong>多棵树的异常路径</strong>和<strong>注入开关的关闭态</strong>；它们只有单测、没有在新 920B 上走过，评审时应当把它们算作未验证。默认路径建模板已于 2026-10-09 在新 920B 上确认；建模板的自检不验证内核是否带补丁（L-16）。</li>
-<li>950 未部署、未测；本章的全部实测依据来自新 920B。</li>
+<li>950 只跑了首轮验收和四组压测；本章的全部实测依据来自新 920B。</li>
 </ol><nav class="pager" data-n="16"></nav></article><article id="v17" class="doc" hidden><h1 id="d17-性能原理代价模型">性能原理：代价模型</h1>
 <h2 id="d17-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -9363,7 +9363,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
     <code>verify_fixes.py</code> 的 G-11 与 <code>probe_leak.py</code> 都在计算时把 <code>/var/log</code> 的增长单独扣掉。写新的长时间测试时两点都要考虑。</li>
 <li><strong>机器是共用的。</strong> 压测一组要起沙箱跑几百轮，并行跑几组时会明显抬高机器负载；压测脚本记录的客户端墙钟耗时因此只反映当时的并发程度，不作判据，也不能当作 gsd 的耗时引用。</li>
 </ul>
-<p>本章所有脚本目前都只在新 920B 上跑过，950 上尚未运行；在 950 上跑出的结果填入 <a href="#d22">22</a>。</p>
+<p>本章的脚本都在新 920B 上跑过。950 上 2026-11-17 跑了 <code>950.sh all</code> 包含的部分（guest 自检、<code>verify_gsd.py</code>、<code>verify_fixes.py</code>、<code>verify_multitree.py --skip V12</code>、漏页测试、性能三轮、探针与四组压测），全部 PASS，结果在 <a href="#d22">22</a>；八组压测、多种子、调试内核在 950 上还没有跑。</p>
 <hr />
 <h2 id="d18-代码位置">代码位置</h2>
 <div class="tw"><table>
@@ -9480,7 +9480,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tbody>
 </table></div>
 <p>三轮里 <code>verify_gsd.py</code> 都判定根盘恒定。</p>
-<p><strong>这些结果的边界。</strong> 它们是一台机器、一种 guest 规格（2 vCPU / 2048 MB）、几种人造负载下的结果。恒为 SKIP 的两项是 G-19、G-36（<a href="#d18">18</a> §3.2）。950 的进程级尚未运行（<a href="#d22">22</a>）。
+<p><strong>这些结果的边界。</strong> 它们是一台机器、一种 guest 规格（2 vCPU / 2048 MB）、几种人造负载下的结果。恒为 SKIP 的两项是 G-19、G-36（<a href="#d18">18</a> §3.2）。950 上首轮功能验收已通过（<a href="#d22">22</a>）。
 2026-10-08 验证时用的是开发期的文件路径，默认路径由 2026-10-09 的落位复核确认（§1.3）。</p>
 <hr />
 <h2 id="d19-1-条件标签">1. 条件标签</h2>
@@ -10561,7 +10561,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>当前内核上的压测全部通过，dmesg 与串口关键词零命中，gsd 侧只有预期的 <code>resource_exhausted</code>，worker 的错误只有切换语义允许的 errno。</li>
 <li>2026-10-08 确认验证（<code>259f1a25c</code>）跑了四组；2026-11-06 全流程复测（gsd 与内核不变，orchestrator 重编）重跑了同样四组和探针七例。</li>
 <li>其余四组加 enospc、10 个种子的对照、调试内核和其余探针只在前一个提交号 <code>c0630349c</code> 上跑过。Go 代码相同、内核是同一个二进制，它们是补充证据。</li>
-<li>最长的单组是 300 轮，没有小时级的连续运行（<a href="#d23">23</a>）。950 尚未运行压测（<a href="#d22">22</a>）。</li>
+<li>最长的单组是 300 轮，没有小时级的连续运行（<a href="#d23">23</a>）。950 上首轮四组压测（各 200～300 轮）已通过，见 <a href="#d22">22</a>。</li>
 </ul>
 <hr />
 <h2 id="d21-1-2026-10-08-确认验证的四组">1. 2026-10-08 确认验证的四组</h2>
@@ -11044,7 +11044,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>未查清的记录有一处：候选内核上两次 checkpoint 返回 <code>internal</code>（U-02），之后没有再出现。</li>
 </ul><nav class="pager" data-n="21"></nav></article><article id="v22" class="doc" hidden><h1 id="d22-950-结果">950 结果</h1>
 <blockquote>
-<p><strong>状态：待填。</strong> 950 的进程级尚未运行。本章的表由 <code>criu-rollback/deploy/950.sh all</code> 跑完之后填写，现在所有单元格都是 <code>待填</code>，没有任何数字。这是填写 950 结果的唯一位置。</p>
+<p><strong>状态：第一轮已跑完，部分已填（2026-11-17）。</strong> 950 上 <code>criu-rollback/deploy/950.sh all</code> 13 步全部 PASS（§0）。本章已填入 <code>all</code> 结束时终端摘要里有的数；其余单元格仍是 <code>待填</code>，由同一轮结果目录用 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取出后填写。这是填写 950 结果的唯一位置。</p>
 </blockquote>
 <h2 id="d22-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -11055,8 +11055,46 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </ol>
 <p>本章不给通过阈值。950 的第一轮结果是它自己的基线，920B 的耗时不能作为 950 的通过标准。四组压测和功能验收的判据在 <a href="#d18">18</a>，表的结构与 <a href="#d19">19</a>、<a href="#d20">20</a> §1、<a href="#d21">21</a> §2 相同，以便并排阅读。同一流程在新 920B 上跑出的结果就是那几节。</p>
 <hr />
+<h2 id="d22-0-第一轮概况">0. 第一轮概况</h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>平台</td>
+<td>950（141.61.11.24），宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code></td>
+</tr>
+<tr>
+<td>结果目录</td>
+<td><code>criu-rollback/deploy/results/20261117-142121-all/</code>（14:21:21 开始，导入镜像一步停过三次，15:21:53 续跑到完成）</td>
+</tr>
+<tr>
+<td>仓库提交</td>
+<td>e2b-infra <code>57b333e</code></td>
+</tr>
+<tr>
+<td><code>all</code> 逐步用时</td>
+<td>校验、展开、conda 与 SDK、凭据、导入镜像、预检与基线、落位合计 7 秒；切到进程级 59 秒；建模板 10 秒；必跑验收 189 秒；探针与四组压测 167 秒；切回沙箱级 59 秒；沙箱级冒烟 54 秒</td>
+</tr>
+<tr>
+<td>判定</td>
+<td>13 步全部 PASS；切换前后宿主上非 e2b 的网卡、路由、策略路由、iptables 规则无变化</td>
+</tr>
+</tbody>
+</table></div>
+<p>导入镜像一步停下的三次都与 950 的 docker 配置有关，处理后不影响本轮结果：</p>
+<ol>
+<li>950 的 docker 使用 containerd 镜像存储，导入时读归档里的 <code>index.json</code> 及其指向的 OCI 清单。当时仓库里的归档缺这份清单，导入出 0B 的空镜像。补上后归档同时满足两种存储（<code>criu-rollback/deploy/README.md</code> 第 14 节）。</li>
+<li>docker daemon 配了代理，<code>harbor</code> 不在 <code>NO_PROXY</code> 里，推送 <code>harbor:443</code> 返回 504。现在推送走 Harbor 的 http 端口 <code>SERVER_IP:2900</code>，模板仍引用 <code>harbor:443/...</code>（<a href="#d27">27</a> §7）。</li>
+<li>重启 docker 后 Harbor 的 2900 端口没有恢复，重新执行沙箱级部署（<code>build.sh -d/-i/-s</code>）后正常。</li>
+</ol>
+<hr />
 <h2 id="d22-1-结果从哪里来">1. 结果从哪里来</h2>
-<p>入口是仓库里的 <code>criu-rollback/deploy/950.sh</code>，在仓库根目录执行 <code>bash criu-rollback/deploy/950.sh all</code>，结束时把逐步结论和各项摘要打印到终端，细节用 <code>950.sh report acceptance|stress|smoke</code> 打印（不打包）。结果目录 <code>criu-rollback/deploy/results/&lt;时间&gt;-all/</code> 里与验证相关的三部分：</p>
+<p>入口是仓库里的 <code>criu-rollback/deploy/950.sh</code>，在仓库根目录执行 <code>bash criu-rollback/deploy/950.sh all</code>，结束时把逐步结论和各项摘要打印到终端，细节用 <code>950.sh report acceptance|stress|smoke</code> 打印（不打包）；本章各表要的数用 <code>950.sh report handbook</code> 一次打印，每段标明来源文件。结果目录 <code>criu-rollback/deploy/results/&lt;时间&gt;-all/</code> 里与验证相关的三部分：</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -11100,22 +11138,22 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>平台</td>
-<td><code>待填</code></td>
+<td>950（141.61.11.24）</td>
 <td>运行时记录</td>
 </tr>
 <tr>
 <td>日期与起止时间</td>
-<td><code>待填</code></td>
+<td>2026-11-17；验收 15:23:08～15:26:17，压测 15:26:17～15:29:04（<code>all.log</code>）</td>
 <td><code>summary.json</code> 的 <code>started</code>、<code>finished</code>；核对机器时钟</td>
 </tr>
 <tr>
 <td>宿主内核</td>
-<td><code>待填</code></td>
+<td><code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code></td>
 <td>宿主上 <code>uname -r</code></td>
 </tr>
 <tr>
 <td>部署版本</td>
-<td><code>待填</code></td>
+<td>e2b-infra <code>57b333e</code> 的 <code>criu-rollback/deploy/</code>（gsd 与内核为 <code>259f1a25c</code>，orchestrator 为 <code>259f1a25c-e2bv</code>）</td>
 <td>运行时记录</td>
 </tr>
 <tr>
@@ -11125,22 +11163,22 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>提交：SDK</td>
-<td><code>待填</code></td>
+<td><code>2.19.0+gsd.dcca61266</code></td>
 <td>wheel 版本号</td>
 </tr>
 <tr>
 <td>gsd sha256（宿主 / guest）</td>
-<td><code>待填</code></td>
+<td>宿主 <code>421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe</code> / guest <code>待填</code></td>
 <td><code>deliverables.sha256</code>；<code>guest-check.log</code> 的 <code>gsd_sha256</code></td>
 </tr>
 <tr>
 <td>orchestrator sha256</td>
-<td><code>待填</code></td>
+<td><code>063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870</code></td>
 <td><code>deliverables.sha256</code></td>
 </tr>
 <tr>
 <td>guest 内核 sha256</td>
-<td><code>待填</code></td>
+<td><code>b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c</code></td>
 <td><code>deliverables.sha256</code></td>
 </tr>
 <tr>
@@ -11180,12 +11218,12 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>建模板耗时</td>
-<td><code>待填</code></td>
+<td>8.1 s（首个沙箱 94 ms）</td>
 <td><code>build_template.py</code> 末行</td>
 </tr>
 <tr>
 <td>Python 与 SDK 路径</td>
-<td><code>待填</code></td>
+<td>Python 3.14.10；<code>/root/miniconda3/envs/jll-e2b-criu/lib/python3.14/site-packages/e2b/__init__.py</code></td>
 <td><code>summary.json</code> 的 <code>python</code>、<code>sdk</code></td>
 </tr>
 </tbody>
@@ -11204,37 +11242,37 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>guest 自检</td>
-<td><code>待填</code></td>
+<td>PASS</td>
 <td><code>guest-check.log</code></td>
 </tr>
 <tr>
 <td><code>verify_gsd.py</code>（8 次 restore）</td>
-<td><code>待填</code></td>
+<td>PASS</td>
 <td><code>verify_gsd.log</code></td>
 </tr>
 <tr>
 <td><code>verify_fixes.py</code></td>
-<td><code>待填</code></td>
+<td>PASS</td>
 <td><code>verify_fixes.log</code>、<code>verify_fixes.json</code></td>
 </tr>
 <tr>
 <td><code>verify_multitree.py --skip V12</code></td>
-<td><code>待填</code></td>
+<td>PASS</td>
 <td><code>verify_multitree.log</code>、<code>verify_multitree.json</code></td>
 </tr>
 <tr>
 <td><code>verify_clear_refs_race.py</code></td>
-<td><code>待填</code></td>
+<td>PASS</td>
 <td><code>clear_refs_race.log</code>、<code>clear_refs_race.jsonl</code></td>
 </tr>
 <tr>
 <td>性能三轮</td>
-<td><code>待填</code></td>
+<td>PASS（三轮各自判定）</td>
 <td><code>perf-run1.json</code>、<code>perf-run2.json</code>、<code>perf-run3.json</code></td>
 </tr>
 <tr>
 <td><code>acceptance</code> 总判定</td>
-<td><code>待填</code></td>
+<td>PASS（用时 189 秒）</td>
 <td><code>summary.json</code> 的 <code>verdict</code></td>
 </tr>
 </tbody>
@@ -11410,17 +11448,17 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>轮数</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>300</td>
+<td>300</td>
+<td>200</td>
+<td>200</td>
 </tr>
 <tr>
 <td>判定</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>PASS</td>
+<td>PASS</td>
+<td>PASS</td>
+<td>PASS</td>
 </tr>
 <tr>
 <td>看门狗</td>
@@ -11445,17 +11483,17 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>checkpoint / restore / delete 成功次数</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>77 / 153 / 15</td>
+<td>75 / 155 / 13</td>
+<td>92 / 100 / 9</td>
+<td>92 / 100 / 9</td>
 </tr>
 <tr>
 <td>gsd 侧错误</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td><code>create:resource_exhausted</code> 55</td>
+<td><code>create:resource_exhausted</code> 57</td>
+<td>无</td>
+<td>无</td>
 </tr>
 <tr>
 <td>worker 操作总数</td>
@@ -11473,10 +11511,10 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>校验次数与失败数</td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
-<td><code>待填</code></td>
+<td>不校验</td>
+<td>不校验</td>
+<td>192 / 0</td>
+<td>192 / 0</td>
 </tr>
 <tr>
 <td><code>mnt_cache</code> 起 → 止</td>
@@ -11530,7 +11568,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td><code>stress</code> 总判定</td>
-<td><code>待填</code></td>
+<td>PASS（含探针，用时 167 秒）</td>
 <td><code>summary.json</code> 的 <code>verdict</code></td>
 </tr>
 </tbody>
@@ -11851,18 +11889,18 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td><code>sandbox</code> 切换</td>
-<td><code>待填</code></td>
+<td>成功，59 秒；切回后用原模板 <code>base</code> 建沙箱 90 ms</td>
 <td>入口输出</td>
 </tr>
 <tr>
 <td><code>status</code> 显示的二进制与 <code>/health</code></td>
-<td><code>待填</code></td>
+<td><code>/usr/bin/template-manager</code>（<code>a5d03902…</code>），<code>/health</code> 200</td>
 <td>入口输出</td>
 </tr>
 <tr>
-<td><code>sandbox_smoke.py</code> PASS / FAIL / SKIP</td>
-<td><code>待填</code></td>
-<td>包内 <code>sandbox-smoke/</code> 下的 <code>SUMMARY.md</code></td>
+<td>沙箱级冒烟 PASS / FAIL / SKIP</td>
+<td>5 / 0 / 0（宿主预检 19 项 PASS、SDK 覆盖层自检、能力文件、Firecracker sha256、59 项正确性）</td>
+<td><code>sandbox-smoke/</code> 下的 <code>SUMMARY.md</code></td>
 </tr>
 </tbody>
 </table></div>
@@ -11903,7 +11941,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <hr />
 <h2 id="d22-本章要点">本章要点</h2>
 <ul>
-<li>950 的进程级尚未运行，本章所有单元格都是 <code>待填</code>。</li>
+<li>950 上第一轮 <code>950.sh all</code> 已跑完（2026-11-17），13 步全部 PASS；本章部分单元格已填，其余由 <code>950.sh report handbook</code> 取数后填写。</li>
 <li>结果由 <code>criu-rollback/deploy/950.sh all</code> 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。</li>
 <li>表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。</li>
 <li>950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。</li>
@@ -11912,7 +11950,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <h2 id="d23-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
 <ol>
-<li>说出最大的缺口是什么：950 上的进程级尚未运行；</li>
+<li>说出最大的缺口是什么：950 上的进程级只跑了首轮验收和四组压测；</li>
 <li>对书里的每一类结论，说出它适用的平台、规格和负载范围，以及不能推到哪里；</li>
 <li>查到哪些路径、规格和时长没有证据，这些缺口各有什么影响；</li>
 <li>对 <a href="#d19">19</a>、<a href="#d20">20</a>、<a href="#d21">21</a> 的任何一个数字，在出处表里找到它来自哪个结果文件。</li>
@@ -11920,14 +11958,14 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p>评审和接手的人应当把本章与前面几章的结果放在一起读。限制本身（代码现在不做什么）在 <a href="#d16">16</a>，本章讲的是证据的范围。</p>
 <hr />
 <h2 id="d23-1-最大的缺口950">1. 最大的缺口：950</h2>
-<p><strong>950 的进程级尚未运行。</strong> 全书所有进程级结果都来自 920B，主要是新 920B。离线部署和验证入口在新 920B 上完整走过一遍（2026-11-06），但这只说明流程本身可用，不能说明它在 950 上的结果。</p>
+<p><strong>950 的进程级只跑了首轮。</strong> 2026-11-17 在 950 上首次部署，<code>950.sh all</code> 13 步全部 PASS：部署、必跑验收（guest 自检、<code>verify_gsd.py</code>、<code>verify_fixes.py</code>、<code>verify_multitree.py --skip V12</code>、漏页测试、性能三轮）、探针与四组压测、切回沙箱级后的冒烟（<a href="#d22">22</a>）。用的是与新 920B 相同的三个运行文件和同一个镜像。</p>
 <ul>
-<li>没有 950 的部署条件、功能验收、压测和性能数字。<a href="#d22">22</a> 预建了全部的表，单元格都是 <code>待填</code>。</li>
-<li>进程级快照回滚不依赖 950 独有的硬件特性（<a href="#d24">24</a>）：脏页来自 guest 内核的 soft-dirty。这只是设计上的判断，没有实测。</li>
-<li>宿主硬件、宿主内核和部署都可能不同，所以 920B 的耗时不能当作 950 的预期值，也不能作为通过阈值。</li>
-<li>跑完之后，要回到本章更新 §2、§3 里关于 950 的说法。</li>
+<li>这一轮说明部件在 950 上能部署、功能验收和 200～300 轮压测能通过，脏页跟踪不依赖 950 独有的硬件特性这一判断得到了一次实测支持。</li>
+<li><a href="#d22">22</a> 里分档性能、漏页、G 项读数等单元格还没有填，书里引用的耗时仍都来自新 920B。</li>
+<li>八组压测、多种子、兼容矩阵、长跑、调试内核在 950 上都没有跑。</li>
+<li>宿主硬件和宿主内核不同，920B 的耗时不能当作 950 的预期值，也不能作为通过阈值。</li>
 </ul>
-<p>在这之前，读者看到书里任何性能或稳定性结论，都应当按"新 920B 上成立"理解。</p>
+<p>读者看到书里的性能和长时间稳定性结论，仍应当按"新 920B 上成立"理解。</p>
 <hr />
 <h2 id="d23-2-各结论的适用范围">2. 各结论的适用范围</h2>
 <div class="tw"><table>
@@ -12011,8 +12049,8 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tbody>
 <tr>
 <td>950</td>
-<td>进程级尚未运行（§1）</td>
-<td>全部结论的平台范围都只到新 920B；待填的表在 <a href="#d22">22</a></td>
+<td>只跑了首轮验收和四组压测（§1），读数部分待填</td>
+<td>性能与长时间稳定性结论的平台范围只到新 920B；表在 <a href="#d22">22</a></td>
 </tr>
 <tr>
 <td><code>HOST_GSD_PATH=off</code> 的关闭态</td>
@@ -12387,7 +12425,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <hr />
 <h2 id="d23-本章要点">本章要点</h2>
 <ul>
-<li>最大的缺口是 950：进程级尚未运行，<a href="#d22">22</a> 的表都是待填，进程级快照回滚不依赖 950 独有硬件只是设计判断。</li>
+<li>最大的缺口是 950：只跑了首轮验收和四组压测（全部 PASS），<a href="#d22">22</a> 的读数部分待填，扩展档、长跑和调试内核没有跑。</li>
 <li>全书的进程级结论都按"新 920B、2 vCPU / 2048 MB、THP never、<code>259f1a25c</code> 的 gsd 与同一个内核二进制"理解。</li>
 <li>分档结果每档三个样本，进程大小与改动量同时变化；多棵树只到三棵；压测最长 300 轮；这些都是结论的边界。</li>
 <li>只有单测的失败分支、注入开关的关闭态、pause / resume 之后的行为、更大的规格、小时级运行、同机并发都没有实测证据。</li>
@@ -13121,8 +13159,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <li><strong>语义不同的取舍。</strong> 耗时相近不代表可以互换，见 <a href="#d24-6-restore-之后各自会发生什么">§6</a>。</li>
 </ul>
 <hr />
-<h2 id="d24-5-950-同平台对比待填">5. 950 同平台对比（待填）</h2>
-<p>950 上的进程级未部署、未测，本节只放沙箱级已有的数字，进程级列留空。这是之后填写 950 对比的唯一位置。</p>
+<h2 id="d24-5-950-同平台对比进程级列待填">5. 950 同平台对比（进程级列待填）</h2>
+<p>950 上的进程级已于 2026-11-17 跑完首轮 <code>950.sh all</code>（<a href="#d22">22</a>），分档性能的读数取回之后填进本节的进程级列；现在只有沙箱级的数字。这是填写 950 对比的唯一位置。</p>
 <h3 id="d24-51-现有数字">5.1 现有数字</h3>
 <blockquote>
 <p>平台：950（主机名 <code>slot6</code>）。沙箱级数据日期 2026-10-13，脏页后端 <code>hdbss</code>（FC 自报），<code>bench_tiers.py --tier-set short --passes 2</code>。
@@ -13417,7 +13455,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li>沙箱级手册没有讨论进程级，本书也没有这方面的测试；</li>
 <li>层次不同只说明两者不是同一机制，不能证明叠加之后行为正确，也不能说明叠加的代价。</li>
 </ul>
-<p>"不依赖"也不等于"已验证"。本书的代码在 950 上<strong>未部署、未测</strong>（<a href="#d27">27</a>、<a href="#d23">23</a>），新 920B 上的数字不能当作 950 的数字。
+<p>"不依赖"也不等于"已验证"。本书的代码在 950 上只跑过首轮验收和四组压测（<a href="#d22">22</a>、<a href="#d23">23</a>），新 920B 上的数字不能当作 950 的数字。
 早期有过一份来自 950 的两套对照数据，它出自初始实现，本书不引用它作任何结论。</p>
 <hr />
 <h2 id="d24-10-几个常见误解">10. 几个常见误解</h2>
@@ -13432,7 +13470,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li><strong>"restore 失败之后沙箱就废了。"</strong> 这是沙箱级"撕裂"的结局。进程级在杀进程之后失败时，虚拟机、envd 和 gsd 都还在，
     用户进程没有了；再成功 restore 一次就回到一个完整的状态（<a href="#d14">14</a>）。</li>
 <li><strong>"两套 SDK 接口同名，所以可以混着用。"</strong> 接口同名，但是两份不同的 SDK，同一字段编号在响应里类型不同（§2.1）；一台宿主上实际由谁应答取决于运行的是哪一套 orchestrator（§8）。</li>
-<li><strong>"进程级在 950 上会更快。"</strong> 没有数据。它的代码路径不使用 950 的硬件脏页跟踪，而且 950 上未部署、未测（§9）。</li>
+<li><strong>"进程级在 950 上会更快。"</strong> 没有数据。它的代码路径不使用 950 的硬件脏页跟踪，950 上的分档读数还没有填进 §5（§9）。</li>
 </ul>
 <hr />
 <h2 id="d24-沙箱级手册的对应章节">沙箱级手册的对应章节</h2>
@@ -13552,11 +13590,11 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li>两套的服务路径和请求相同，响应字段互不兼容，同一字段编号类型不同，所以 SDK 不能混用。</li>
 <li>新 920B 上按客户端墙钟并列：restore 在 0、16、32 MiB 档进程级更低，在 64、128、256 MiB 档沙箱级更低；checkpoint 在 0 MiB 档进程级更低，16 MiB 档两边接近，32 MiB 起沙箱级更低。</li>
 <li>这组数不给净加速比：内存与文件负载的构造、档位含义、模板、样本量（60～100 对 3）和测试时间都不同，进程级的进程大小又随档位变化。结论只适用于单沙箱、单棵树、<code>kvm-wp</code> 的 920B 条件。</li>
-<li>950 的同平台对比位置在 §5，沙箱级数字已列，进程级待填；跨平台的数字不并列。</li>
+<li>950 的同平台对比位置在 §5，沙箱级数字已列，进程级待填（首轮已跑完，读数未取回）；跨平台的数字不并列。</li>
 <li>语义上，沙箱级让沙箱内的一切回到同一时刻（连接作废、单调时钟倒退）；进程级保住范围外的一切（envd、日志、时钟），代价是范围外的进程可能拿着被丢弃时间线里的旧对象。</li>
 <li>失败的结局不同：沙箱级在提交点之后失败是"撕裂"，沙箱要销毁重建；进程级在杀进程之后失败，再 restore 一次即可恢复。</li>
 <li>两套目前<strong>不能在同一个沙箱上一起用</strong>：入口是同一个端口，一台宿主上只能运行其中一套的 orchestrator；合并的方案未实施。</li>
-<li>进程级的增量不依赖 HDBSS，代码路径里不使用它；HDBSS 能否与进程级同时启用没有测试，本书不下结论。950 上未部署、未测。</li>
+<li>进程级的增量不依赖 HDBSS，代码路径里不使用它；HDBSS 能否与进程级同时启用没有测试，本书不下结论。950 上首轮进程级运行时，沙箱级的能力文件显示 HDBSS 已启用（KVM capability 502），两套栈不同时运行，这一轮不回答这个问题。</li>
 </ol><nav class="pager" data-n="24"></nav></article><article id="v25" class="doc" hidden><h1 id="d25-快速上手">快速上手</h1>
 <h2 id="d25-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -14337,7 +14375,7 @@ gsd 检查不出来的一种情况是树之间共享的匿名共享内存（只�
 </ol>
 <p>前两章（<a href="#d25">25</a>、<a href="#d26">26</a>）面向调用方，从本章起面向部署与运维。本章讲"从代码到一个能用的模板"的全过程；
 装好之后有哪些开关、怎么看日志在下一章（<a href="#d28">28</a>），出了问题按症状查 <a href="#d29">29</a>，成套的上机验收在 <a href="#d30">30</a>。</p>
-<p>本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码基准是 <code>criu-rollback-dev@bc3cce913</code>。950：尚未运行，流程见 §7，结果填在 <a href="#d22">22</a>。</p>
+<p>本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码基准是 <code>criu-rollback-dev@bc3cce913</code>。950：2026-11-17 按 §7 首次部署，全部 PASS，结果在 <a href="#d22">22</a>。</p>
 <hr />
 <h2 id="d27-1-部件清单">1. 部件清单</h2>
 <p>进程级这套栈不改 Firecracker，也不改宿主内核。要部署的是下面六样，其中前三样是宿主上的文件，第四样是镜像仓库里的镜像，第五样随 orchestrator 一起带进去，第六样在客户端。</p>
@@ -14728,8 +14766,8 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <p>这段自检只确认"部件就位"，不确认"功能正确"。接下来按 <a href="#d30">30</a> 跑验收脚本，第一个脚本 <code>verify_gsd</code> 会重复其中几项并实际做若干次 checkpoint / restore。</p>
 <hr />
 <h2 id="d27-7-950">7. 950</h2>
-<p>950 上<strong>尚未运行</strong>，本书没有 950 的进程级结果，跑完之后填进 <a href="#d22">22</a>。进程级快照回滚的设计不依赖 950 独有的硬件特性（它的脏页跟踪在 guest 内核里用软件完成），按理同样的部件可以直接部署，但这只是推断，兼容性要在 950 上确认。</p>
-<p>950 上不走 §2 的构建，用仓库里 <code>criu-rollback/deploy/</code> 下预先构建好的产物部署：<code>git pull</code> 之后在仓库根目录执行即可，不需要另外拷贝文件。这套入口最早以独立离线包的形式于 2026-11-06 在新 920B 上完整走过一遍（结果见 <a href="#d19">19</a> 的"2026-11-06 全流程复测"一节），2026-11-16 并入仓库后又在新 920B 上从头演练过（见 <code>criu-rollback/deploy/README.md</code> 第 14 节），在 950 上还没有执行。与本章前面各节的差别是：</p>
+<p>950 上 2026-11-17 按本节首次部署，<code>950.sh all</code> 13 步全部 PASS，结果在 <a href="#d22">22</a>。进程级快照回滚的脏页跟踪在 guest 内核里用软件完成，不依赖 950 独有的硬件特性；这次部署用的是与新 920B 相同的三个运行文件和同一个镜像，没有为 950 改动。</p>
+<p>950 上不走 §2 的构建，用仓库里 <code>criu-rollback/deploy/</code> 下预先构建好的产物部署：<code>git pull</code> 之后在仓库根目录执行即可，不需要另外拷贝文件。这套入口最早以独立离线包的形式于 2026-11-06 在新 920B 上完整走过一遍（结果见 <a href="#d19">19</a> 的"2026-11-06 全流程复测"一节），2026-11-16 并入仓库后又在新 920B 上从头演练过（见 <code>criu-rollback/deploy/README.md</code> 第 14 节），2026-11-17 在 950 上首次执行。与本章前面各节的差别是：</p>
 <ul>
 <li>
 <p>三个运行文件以 xz 压缩入库，orchestrator 和 gsd 用 <code>strip -g</code> 去掉了 DWARF 调试段，代码段与验收版逐字节相同。镜像的前两层取仓库根目录已有的 <code>ubuntu-22.04-custom.tar.gz</code>，只有 CRIU 那一层单独入库。第一步把它们展开到 <code>criu-rollback/deploy/.work/</code>，按 <code>manifest.json</code> 核对 SHA256 和镜像 ID。</p>
@@ -14750,6 +14788,8 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <li>只支持 orchestrator 与 template-manager 合并部署（<code>ORCHESTRATOR_SERVICES=orchestrator,template-manager</code>），其他形态由预检拒绝。</li>
 <li>orchestrator 是动态链接的，需要 glibc 2.38 的符号；不满足时停在切栈之前，不替换系统 glibc。gsd 是静态链接的。</li>
 <li>基础镜像在现场拼出后导入 950 使用的镜像仓库，不重新构建；SDK 用入库的 wheel 离线安装进一个克隆出来的 conda 环境，不用 <code>PYTHONPATH</code>。</li>
+<li>镜像归档同时带 docker 旧格式的 <code>manifest.json</code> 和 OCI 的 <code>index.json</code> 及其清单，两种 docker 镜像存储都能导入：950 的 docker 用 containerd 镜像存储（<code>docker info</code> 显示 <code>io.containerd.snapshotter.v1</code>），导入后显示的 image ID 是 OCI 清单摘要 <code>b7a2fdd2…</code>；新 920B 用传统存储，显示的是配置摘要 <code>7caae4a6…</code>。导入脚本按标签取镜像，两种 ID 都认。</li>
+<li>推送走 Harbor 的 http 端口 <code>SERVER_IP:2900</code>（<code>SERVER_IP</code> 取自 <code>/opt/e2b-infra/dep/.env</code>），模板仍引用 <code>harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421</code>，两个地址是同一个仓库。950 的 docker daemon 配了代理，<code>harbor</code> 这个名字只在本机 <code>/etc/hosts</code> 里，不在 <code>NO_PROXY</code> 中时推 <code>harbor:443</code> 会被转给代理，返回 504。建模板时由 orchestrator 拉镜像，不经过 docker daemon 的代理。</li>
 </ul>
 <p>首次部署只需要一条命令，在 e2b-infra 仓库根目录以 root 运行：</p>
 <div class="hl"><pre><span></span><code>bash<span class="w"> </span>criu-rollback/deploy/950.sh<span class="w"> </span>all
@@ -14759,8 +14799,8 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <ul>
 <li><strong>失败或中断</strong>：处理完原因后再执行同一条命令，会从停下的那一步继续，做完的验收、压测不会重做。验收或压测失败时，先删掉 e2b 沙箱，再自动切回沙箱级。</li>
 <li><strong>网络比对</strong>：切换前后各抓一次宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则做比对，用来确认同机的 AgentENV 没有受影响。</li>
-<li><strong>结果</strong>：结束时把逐步结论、身份、网络比对、验收与压测摘要直接打印到终端；细节用 <code>950.sh report acceptance|stress|smoke|netcheck|log</code> 按部分打印，不打包。</li>
-<li><strong>演练</strong>：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑；2026-11-17 按 <code>/fc-criu/</code> 布局从头演练过。</li>
+<li><strong>结果</strong>：结束时把逐步结论、身份、网络比对、验收与压测摘要直接打印到终端；细节用 <code>950.sh report acceptance|stress|smoke|netcheck|log</code> 按部分打印，<code>950.sh report handbook</code> 打印 <a href="#d22">22</a> 各表要填的数，不打包。</li>
+<li><strong>演练</strong>：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑；2026-11-17 按 <code>/fc-criu/</code> 布局从头演练过；同日在 950 上首次执行，13 步全部 PASS，用时见 <a href="#d22">22</a> §0。</li>
 <li><strong>网络命名空间</strong>：每次重启 orchestrator 会留下约 300 个，<code>all</code> 重启两次。积累多了执行 <code>bash criu-rollback/deploy/950.sh recycle-netns</code>：删 e2b 沙箱、停 job、<code>build.sh --recycle-netns</code> 清理、按当前栈重新拉起。</li>
 </ul>
 <p>以后日常切换用 <code>bash criu-rollback/deploy/950.sh criu</code> 和 <code>bash criu-rollback/deploy/950.sh sandbox</code>。切到进程级时，<code>base-criu</code> 不在或建不出沙箱，会自动重建。</p>
@@ -14889,7 +14929,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <li>切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；<code>950.sh</code> 切换前先删掉全部 e2b 沙箱（不碰 AgentENV 的），开发用的 <code>switch-gsd-new920b.sh</code> 则在还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。</li>
 <li>模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。</li>
 <li>部署后到 guest 里核对：<code>gsd -commit</code>、内核版本串、透明大页为 <code>[never]</code>、<code>rcu_expedited</code> 为 1、<code>/health</code> 为 ok、CRIU 4.2.1、<code>/</code> 为 755、<code>/tmp</code> 在 overlay 上；然后转 <a href="#d30">30</a> 做验收。</li>
-<li>950 尚未运行。部署用仓库里的 <code>criu-rollback/deploy/</code>，<code>git pull</code> 后一条命令 <code>bash criu-rollback/deploy/950.sh all</code> 做完全流程，日常切换用 <code>950.sh criu</code> / <code>sandbox</code>，流程见 §7，结果填在 <a href="#d22">22</a>。</li>
+<li>950 上 2026-11-17 首次部署，<code>950.sh all</code> 全部 PASS。部署用仓库里的 <code>criu-rollback/deploy/</code>，<code>git pull</code> 后一条命令 <code>bash criu-rollback/deploy/950.sh all</code> 做完全流程，日常切换用 <code>950.sh criu</code> / <code>sandbox</code>，流程见 §7，结果填在 <a href="#d22">22</a>。</li>
 </ul><nav class="pager" data-n="27"></nav></article><article id="v28" class="doc" hidden><h1 id="d28-配置与可观测性">配置与可观测性</h1>
 <h2 id="d28-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -16407,6 +16447,16 @@ bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </
 <td>把 gsd 放到位（<a href="#d27">27</a>）；或把环境变量改成小写 <code>off</code> 后重启 orchestrator</td>
 </tr>
 <tr>
+<td>导入镜像后 <code>docker images</code> 里 <code>ubuntu:22.04-custom-criu421</code> 是 0B、架构为空，<code>docker run</code> 报 <code>content digest sha256:b7a2fdd2…: not found</code></td>
+<td>docker 用 containerd 镜像存储，读归档里的 <code>index.json</code> 和它指向的 OCI 清单；e2b-infra <code>f5c01d5</code> 之前的归档缺这份清单</td>
+<td><code>git pull</code> 后重跑 <code>950.sh all</code>：归档会重新拼出，导入脚本先去掉旧的空镜像标签</td>
+</tr>
+<tr>
+<td>推送镜像报 <code>504 Gateway Time-out</code>；或 <code>502 Bad Gateway</code>、<code>connect: connection refused</code></td>
+<td>504：docker daemon 配了代理，推送的主机名不在 <code>NO_PROXY</code> 里，请求被转给代理。502 和 connection refused：Harbor 的 2900 端口没有在服务，常见于重启 docker 之后</td>
+<td>504：推送走 <code>SERVER_IP:2900</code>（<code>57b333e</code> 起默认如此），或把 <code>harbor</code> 加进 docker 的 <code>NO_PROXY</code>。502 和 connection refused：<code>curl --noproxy '*' http://127.0.0.1:2900/v2/</code> 应返回 401；不是 401 时重启 Harbor 或重新执行沙箱级部署</td>
+</tr>
+<tr>
 <td><code>gsd is not healthy after injection (…): gsd check failed: gsd not healthy after 10s: systemctl is-active=&lt;…&gt;, /health=&lt;…&gt;</code></td>
 <td>注入并重启 gsd 之后，约 10 秒内它没有同时满足"服务 active"和"<code>/health</code> 回 ok"。报错后面附着 <code>systemctl status gsd</code> 的最后 20 行</td>
 <td>看附带的 <code>is-active</code> 与 <code>/health</code>：服务没起来多半是二进制不对（架构不是 arm64、文件损坏）；<code>/health</code> 是 <code>degraded</code> 时原因就在其中（按 §6 的表判断）</td>
@@ -16981,7 +17031,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <p><strong>回传什么。</strong> <code>summary.txt</code>、<code>deliverables.sha256</code>、<code>guest-check.txt</code> 一定带；功能验证带 <code>func/</code> 下的 JSON 与日志（都不大）；压测通过的组带 <code>RESULT</code> 与 <code>*-summary.json</code> 即可，没通过的组带整个目录。结果目录里有沙箱 ID 与本机路径，不入库。</p>
 <hr />
 <h2 id="d30-8-950">8. 950</h2>
-<p>950 上尚未运行，本章的步骤没有在 950 上走过，结果填进 <a href="#d22">22</a>。可以预先确定的有：gsd 只支持 arm64 的 guest（<a href="#d04">04</a>），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"在那之前无从谈起。</p>
+<p>950 上 2026-11-17 用 <code>criu-rollback/deploy/950.sh all</code> 跑了本章的必跑验收和四组压测，全部 PASS，结果在 <a href="#d22">22</a>。已经确定的有：gsd 只支持 arm64 的 guest（<a href="#d04">04</a>），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"以这一轮为准。</p>
 <p>部署步骤见 <a href="#d27">27</a> §7。验收由 <code>criu-rollback/deploy/950.sh</code> 执行（<code>all</code> 会依次跑下面两步），顺序和判据与本章相同，由入口自动判读，不需要手工 grep：</p>
 <div class="tw"><table>
 <thead>
@@ -17043,7 +17093,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <li><code>verify_fixes.py</code> 通过的样子是 PASS 26 / FAIL 0 / SKIP 2；它和 <code>verify_multitree.py</code> 都把 dmesg 的可疑行只记作证据，要另外搜一遍。</li>
 <li>压测在首次部署、换内核、改补丁时跑，一律带看门狗；判据是 <code>RESULT</code> 为 <code>DONE rc=0</code>、dmesg 与串口关键词零命中、worker 只有允许的 errno、没有心跳过期、gsd 侧只有 <code>resource_exhausted</code>。改过内核补丁还要在调试内核上再跑一遍并确认 <code>debug_locks</code> 为 1。</li>
 <li>验收的判定是功能性的，性能数字没有达标线。条件与口径都与 20 章相同时，各分段中位数相差 3 ms 以内视为一致；条件不同就只留档、不比较。</li>
-<li>结果按 <code>summary.txt</code>、环境核对文件、<code>func/</code>、<code>stress/</code> 的结构留档，<code>summary.txt</code> 写清条件与"这份结果不能拿来做什么"。950 上尚未运行，第一轮结果填进 <a href="#d22">22</a>。</li>
+<li>结果按 <code>summary.txt</code>、环境核对文件、<code>func/</code>、<code>stress/</code> 的结构留档，<code>summary.txt</code> 写清条件与"这份结果不能拿来做什么"。950 的第一轮结果在 <a href="#d22">22</a>。</li>
 </ul><nav class="pager" data-n="30"></nav></article><article id="vA" class="doc" hidden><h1 id="dA-术语代码地图与文件格式">术语、代码地图与文件格式</h1>
 <h2 id="dA-本章目标">本章目标</h2>
 <p>本附录是全书的查询入口，不用从头读。需要时能在这里查到：</p>
@@ -18817,7 +18867,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 <code>Checkpoint
 <li><strong><code>/proc/mounts</code> 的显示</strong>：让挂载选项反映当前层栈能减少排障时的误导，但 CRIU 要读 mountinfo，改之前要确认对 dump 和 restore 没有影响。</li>
 <li><strong>cgroup 的 <code>favordynmods</code></strong>：作为 <code>rcu_expedited</code> 的替代，没有实测过（<a href="#dD">附录 D</a>）。</li>
 <li><strong>x86_64 guest</strong>：需要内核配置打开 <code>CHECKPOINT_RESTORE</code>，并确认 soft-dirty 在 x86_64 上可用（上游有实现）；overlayfs 的补丁与架构无关。当前列为非目标。</li>
-<li><strong>950 上的部署与验证</strong>：尚未运行。进程级快照回滚不依赖 950 独有的硬件特性，部署流程见 <a href="#d27">27</a> §7，所有数字都要重新测，结果填进 <a href="#d22">22</a>。</li>
+<li><strong>950 上的部署与验证</strong>：2026-11-17 首次部署，<code>950.sh all</code> 全部 PASS（<a href="#d22">22</a>）。扩展档（八组压测、多种子、兼容矩阵）和长跑由 <code>test950.sh</code> 调度，还没有跑。</li>
 </ul>
 <h3 id="dB-53-两套栈合进一个部署包">5.3 两套栈合进一个部署包</h3>
 <p>目前进程级靠切换宿主上的 orchestrator 与沙箱级轮流使用（<a href="#d27">27</a>）。要让一个部署包同时带两套，还有这些事没有做：</p>

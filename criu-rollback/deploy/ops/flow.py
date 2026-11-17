@@ -7,7 +7,7 @@
     criu          切到进程级，等到能建沙箱；base-criu 不在或不可用时自动重建
     sandbox       切回沙箱级，等到原模板能建沙箱
     recycle-netns 清理重启 orchestrator 留下的 e2b 网络命名空间，按当前栈重新拉起
-    report        把 all 的结果打印到终端（可加 acceptance / stress / smoke / netcheck / log，或 --file）
+    report        把 all 的结果打印到终端（可加 acceptance / stress / smoke / netcheck / log / handbook，或 --file）
     install-sdk   没有进程级环境时先克隆，再离线安装 SDK
     quick / acceptance / stress / stress-ext / soak   进程级测试（自动使用进程级环境）
     smoke         只跑沙箱级冒烟（自动使用沙箱级环境）
@@ -471,12 +471,17 @@ def print_overview(run):
     print("==== 结束 ====")
     print("细节（各自打印到终端）：")
     for part, what in (("acceptance", "性能三轮分档表与各项日志末尾"), ("stress", "四组压测摘要，失败组的错误样本"),
-                       ("smoke", "冒烟各项日志末尾"), ("netcheck", "网络比对全文"), ("log", "全流程日志末尾")):
+                       ("smoke", "冒烟各项日志末尾"), ("netcheck", "网络比对全文"), ("log", "全流程日志末尾"),
+                       ("handbook", "手册第 22 章要填的数")):
         print("  bash criu-rollback/deploy/950.sh report %-10s # %s" % (part, what))
 
 
 def print_report(part, file, lines):
     run = latest_run()
+    if part == "handbook":
+        import handbook_extract
+        handbook_extract.main(run)
+        return
     if file:
         report.show_file(run / file, lines, root=run)
         return
@@ -543,7 +548,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("action", choices=("all", "criu", "sandbox", "recycle-netns", "report", "install-sdk", "quick",
                                            "acceptance", "stress", "stress-ext", "soak", "smoke"))
-    parser.add_argument("part", nargs="?", choices=("acceptance", "stress", "smoke", "netcheck", "log", "files"),
+    parser.add_argument("part", nargs="?", choices=("acceptance", "stress", "smoke", "netcheck", "log", "handbook", "files"),
                         help="report：只打印这一部分")
     parser.add_argument("--file", help="report：打印结果目录里的这个文件（相对路径，用 report files 列出）")
     parser.add_argument("--lines", type=int, default=40, help="report：每个文件打印的行数，0 为全部")

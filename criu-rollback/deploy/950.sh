@@ -59,7 +59,7 @@ case "${1:-help}" in
   sandbox        切回沙箱级（等到原模板能建沙箱）
   status         看当前是哪一套、e2b 沙箱数、e2b netns 数
   recycle-netns  清理重启留下的 e2b 网络命名空间与 iptables 规则，按当前栈重新拉起（约 1～2 分钟）
-  report [acceptance|stress|smoke|netcheck|log|files] [--file 相对路径] [--lines N]
+  report [acceptance|stress|smoke|netcheck|log|handbook|files] [--file 相对路径] [--lines N]
                  把最近一次 all 的结果打印到终端，便于复制
 切栈和清理之前会先删掉全部 e2b 沙箱；同机 AgentENV 的沙箱不碰。
 以下是 all 里的单步，一般不需要单独用：

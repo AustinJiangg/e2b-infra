@@ -185,7 +185,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 `CheckpointInfo`
 - **`/proc/mounts` 的显示**：让挂载选项反映当前层栈能减少排障时的误导，但 CRIU 要读 mountinfo，改之前要确认对 dump 和 restore 没有影响。
 - **cgroup 的 `favordynmods`**：作为 `rcu_expedited` 的替代，没有实测过（[附录 D](D-restore-slowness-case.md)）。
 - **x86_64 guest**：需要内核配置打开 `CHECKPOINT_RESTORE`，并确认 soft-dirty 在 x86_64 上可用（上游有实现）；overlayfs 的补丁与架构无关。当前列为非目标。
-- **950 上的部署与验证**：尚未运行。进程级快照回滚不依赖 950 独有的硬件特性，部署流程见 [27](27-deployment.md) §7，所有数字都要重新测，结果填进 [22](22-950-results.md)。
+- **950 上的部署与验证**：2026-11-17 首次部署，`950.sh all` 全部 PASS（[22](22-950-results.md)）。扩展档（八组压测、多种子、兼容矩阵）和长跑由 `test950.sh` 调度，还没有跑。
 
 ### 5.3 两套栈合进一个部署包
 

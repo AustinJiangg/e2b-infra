@@ -342,6 +342,7 @@ bash criu-rollback/deploy/950.sh report
 | `bash criu-rollback/deploy/950.sh report smoke` | 冒烟各项日志末尾 |
 | `bash criu-rollback/deploy/950.sh report netcheck` | 宿主网络比对全文 |
 | `bash criu-rollback/deploy/950.sh report log` | 全流程日志末尾 |
+| `bash criu-rollback/deploy/950.sh report handbook` | 进程级手册第 22 章各表要填的数（guest 自检、G 项读数、漏页、探针、四组压测、分档性能逐轮与中位数、回切冒烟），每段标明来源文件 |
 | `bash criu-rollback/deploy/950.sh report files` | 结果目录里的全部文件 |
 
 需要某个文件时，用 `report files` 找到它的相对路径，再用 `--file` 打印，`--lines N` 指定行数（0 为全部），例如：

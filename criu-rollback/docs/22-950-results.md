@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：待填。** 950 的进程级尚未运行。本章的表由 `criu-rollback/deploy/950.sh all` 跑完之后填写，现在所有单元格都是 `待填`，没有任何数字。这是填写 950 结果的唯一位置。
+> **状态：第一轮已跑完，部分已填（2026-11-17）。** 950 上 `criu-rollback/deploy/950.sh all` 13 步全部 PASS（§0）。本章已填入 `all` 结束时终端摘要里有的数；其余单元格仍是 `待填`，由同一轮结果目录用 `bash criu-rollback/deploy/950.sh report handbook` 取出后填写。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -14,9 +14,27 @@
 
 ---
 
+## 0. 第一轮概况
+
+| 项 | 值 |
+|---|---|
+| 平台 | 950（141.61.11.24），宿主内核 `6.6.0-159.4.3.154.oe2403sp4.aarch64` |
+| 结果目录 | `criu-rollback/deploy/results/20261117-142121-all/`（14:21:21 开始，导入镜像一步停过三次，15:21:53 续跑到完成） |
+| 仓库提交 | e2b-infra `57b333e` |
+| `all` 逐步用时 | 校验、展开、conda 与 SDK、凭据、导入镜像、预检与基线、落位合计 7 秒；切到进程级 59 秒；建模板 10 秒；必跑验收 189 秒；探针与四组压测 167 秒；切回沙箱级 59 秒；沙箱级冒烟 54 秒 |
+| 判定 | 13 步全部 PASS；切换前后宿主上非 e2b 的网卡、路由、策略路由、iptables 规则无变化 |
+
+导入镜像一步停下的三次都与 950 的 docker 配置有关，处理后不影响本轮结果：
+
+1. 950 的 docker 使用 containerd 镜像存储，导入时读归档里的 `index.json` 及其指向的 OCI 清单。当时仓库里的归档缺这份清单，导入出 0B 的空镜像。补上后归档同时满足两种存储（`criu-rollback/deploy/README.md` 第 14 节）。
+2. docker daemon 配了代理，`harbor` 不在 `NO_PROXY` 里，推送 `harbor:443` 返回 504。现在推送走 Harbor 的 http 端口 `SERVER_IP:2900`，模板仍引用 `harbor:443/...`（[27](27-deployment.md) §7）。
+3. 重启 docker 后 Harbor 的 2900 端口没有恢复，重新执行沙箱级部署（`build.sh -d/-i/-s`）后正常。
+
+---
+
 ## 1. 结果从哪里来
 
-入口是仓库里的 `criu-rollback/deploy/950.sh`，在仓库根目录执行 `bash criu-rollback/deploy/950.sh all`，结束时把逐步结论和各项摘要打印到终端，细节用 `950.sh report acceptance|stress|smoke` 打印（不打包）。结果目录 `criu-rollback/deploy/results/<时间>-all/` 里与验证相关的三部分：
+入口是仓库里的 `criu-rollback/deploy/950.sh`，在仓库根目录执行 `bash criu-rollback/deploy/950.sh all`，结束时把逐步结论和各项摘要打印到终端，细节用 `950.sh report acceptance|stress|smoke` 打印（不打包）；本章各表要的数用 `950.sh report handbook` 一次打印，每段标明来源文件。结果目录 `criu-rollback/deploy/results/<时间>-all/` 里与验证相关的三部分：
 
 | `all` 里的步骤 | 内容 | 结果目录下 |
 |---|---|---|
@@ -38,15 +56,15 @@
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| 平台 | `待填` | 运行时记录 |
-| 日期与起止时间 | `待填` | `summary.json` 的 `started`、`finished`；核对机器时钟 |
-| 宿主内核 | `待填` | 宿主上 `uname -r` |
-| 部署版本 | `待填` | 运行时记录 |
+| 平台 | 950（141.61.11.24） | 运行时记录 |
+| 日期与起止时间 | 2026-11-17；验收 15:23:08～15:26:17，压测 15:26:17～15:29:04（`all.log`） | `summary.json` 的 `started`、`finished`；核对机器时钟 |
+| 宿主内核 | `6.6.0-159.4.3.154.oe2403sp4.aarch64` | 宿主上 `uname -r` |
+| 部署版本 | e2b-infra `57b333e` 的 `criu-rollback/deploy/`（gsd 与内核为 `259f1a25c`，orchestrator 为 `259f1a25c-e2bv`） | 运行时记录 |
 | 提交：`gsd -commit` | `待填` | `guest-check.log` 的 `commit` |
-| 提交：SDK | `待填` | wheel 版本号 |
-| gsd sha256（宿主 / guest） | `待填` | `deliverables.sha256`；`guest-check.log` 的 `gsd_sha256` |
-| orchestrator sha256 | `待填` | `deliverables.sha256` |
-| guest 内核 sha256 | `待填` | `deliverables.sha256` |
+| 提交：SDK | `2.19.0+gsd.dcca61266` | wheel 版本号 |
+| gsd sha256（宿主 / guest） | 宿主 `421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe` / guest `待填` | `deliverables.sha256`；`guest-check.log` 的 `gsd_sha256` |
+| orchestrator sha256 | `063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870` | `deliverables.sha256` |
+| guest 内核 sha256 | `b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c` | `deliverables.sha256` |
 | guest 内核版本串 | `待填` | `guest-check.log` 的 `kernel` |
 | CRIU 版本 | `待填` | `guest-check.log` 的 `criu` |
 | THP | `待填` | `guest-check.log` 的 `thp` |
@@ -54,8 +72,8 @@
 | guest 规格（vCPU / 内存） | `待填` | `guest-check.log` 的 `vcpus`、`memory` |
 | `/`、`/tmp` 的权限与 `/tmp` 所在文件系统 | `待填` | `guest-check.log` 的 `root`、`tmp`、`tmp_fs` |
 | 模板别名与 ID | `待填` | `summary.json` 的 `template`；`guest-check.log` 首行 |
-| 建模板耗时 | `待填` | `build_template.py` 末行 |
-| Python 与 SDK 路径 | `待填` | `summary.json` 的 `python`、`sdk` |
+| 建模板耗时 | 8.1 s（首个沙箱 94 ms） | `build_template.py` 末行 |
+| Python 与 SDK 路径 | Python 3.14.10；`/root/miniconda3/envs/jll-e2b-criu/lib/python3.14/site-packages/e2b/__init__.py` | `summary.json` 的 `python`、`sdk` |
 
 ---
 
@@ -65,13 +83,13 @@
 
 | 步骤 | 判定 | 来源 |
 |---|---|---|
-| guest 自检 | `待填` | `guest-check.log` |
-| `verify_gsd.py`（8 次 restore） | `待填` | `verify_gsd.log` |
-| `verify_fixes.py` | `待填` | `verify_fixes.log`、`verify_fixes.json` |
-| `verify_multitree.py --skip V12` | `待填` | `verify_multitree.log`、`verify_multitree.json` |
-| `verify_clear_refs_race.py` | `待填` | `clear_refs_race.log`、`clear_refs_race.jsonl` |
-| 性能三轮 | `待填` | `perf-run1.json`、`perf-run2.json`、`perf-run3.json` |
-| `acceptance` 总判定 | `待填` | `summary.json` 的 `verdict` |
+| guest 自检 | PASS | `guest-check.log` |
+| `verify_gsd.py`（8 次 restore） | PASS | `verify_gsd.log` |
+| `verify_fixes.py` | PASS | `verify_fixes.log`、`verify_fixes.json` |
+| `verify_multitree.py --skip V12` | PASS | `verify_multitree.log`、`verify_multitree.json` |
+| `verify_clear_refs_race.py` | PASS | `clear_refs_race.log`、`clear_refs_race.jsonl` |
+| 性能三轮 | PASS（三轮各自判定） | `perf-run1.json`、`perf-run2.json`、`perf-run3.json` |
+| `acceptance` 总判定 | PASS（用时 189 秒） | `summary.json` 的 `verdict` |
 
 ### 3.2 计数与读数
 
@@ -121,16 +139,16 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 | 项 | all（6 个 worker） | noworkers | 多棵树 | 删文件密集 |
 |---|---|---|---|---|
-| 轮数 | `待填` | `待填` | `待填` | `待填` |
-| 判定 | `待填` | `待填` | `待填` | `待填` |
+| 轮数 | 300 | 300 | 200 | 200 |
+| 判定 | PASS | PASS | PASS | PASS |
 | 看门狗 | `待填` | `待填` | `待填` | `待填` |
 | dmesg 新命中 | `待填` | `待填` | `待填` | `待填` |
 | 串口关键词命中 | `待填` | `待填` | `待填` | `待填` |
-| checkpoint / restore / delete 成功次数 | `待填` | `待填` | `待填` | `待填` |
-| gsd 侧错误 | `待填` | `待填` | `待填` | `待填` |
+| checkpoint / restore / delete 成功次数 | 77 / 153 / 15 | 75 / 155 / 13 | 92 / 100 / 9 | 92 / 100 / 9 |
+| gsd 侧错误 | `create:resource_exhausted` 55 | `create:resource_exhausted` 57 | 无 | 无 |
 | worker 操作总数 | `待填` | `待填` | `待填` | `待填` |
 | worker 错误（按 errno） | `待填` | `待填` | `待填` | `待填` |
-| 校验次数与失败数 | `待填` | `待填` | `待填` | `待填` |
+| 校验次数与失败数 | 不校验 | 不校验 | 192 / 0 | 192 / 0 |
 | `mnt_cache` 起 → 止 | `待填` | `待填` | `待填` | `待填` |
 | 结束时 `/health` | `待填` | `待填` | `待填` | `待填` |
 
@@ -141,7 +159,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 | 多棵树 restore 的 p50：`total_ms` / `criu_restore_ms` / `kill_ms` | `待填` | 同上 |
 | 删文件密集的宿主侧变更：删文件 / 整目录删除 / 重建目录 / 建文件 | `待填` | `deldense-summary.json` 的 `stats.mutate` |
 | 删文件密集结束时的 whiteout / opaque 目录 | `待填` | `deldense-summary.json` 的 `marks_end` |
-| `stress` 总判定 | `待填` | `summary.json` 的 `verdict` |
+| `stress` 总判定 | PASS（含探针，用时 167 秒） | `summary.json` 的 `verdict` |
 
 ---
 
@@ -206,9 +224,9 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 | 项 | 值 | 来源 |
 |---|---|---|
-| `sandbox` 切换 | `待填` | 入口输出 |
-| `status` 显示的二进制与 `/health` | `待填` | 入口输出 |
-| `sandbox_smoke.py` PASS / FAIL / SKIP | `待填` | 包内 `sandbox-smoke/` 下的 `SUMMARY.md` |
+| `sandbox` 切换 | 成功，59 秒；切回后用原模板 `base` 建沙箱 90 ms | 入口输出 |
+| `status` 显示的二进制与 `/health` | `/usr/bin/template-manager`（`a5d03902…`），`/health` 200 | 入口输出 |
+| 沙箱级冒烟 PASS / FAIL / SKIP | 5 / 0 / 0（宿主预检 19 项 PASS、SDK 覆盖层自检、能力文件、Firecracker sha256、59 项正确性） | `sandbox-smoke/` 下的 `SUMMARY.md` |
 
 ---
 
@@ -251,7 +269,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 ## 本章要点
 
-- 950 的进程级尚未运行，本章所有单元格都是 `待填`。
+- 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；本章部分单元格已填，其余由 `950.sh report handbook` 取数后填写。
 - 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。
 - 950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。

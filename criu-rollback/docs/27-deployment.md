@@ -14,7 +14,7 @@
 前两章（[25](25-quickstart.md)、[26](26-semantics-and-limits.md)）面向调用方，从本章起面向部署与运维。本章讲"从代码到一个能用的模板"的全过程；
 装好之后有哪些开关、怎么看日志在下一章（[28](28-configuration-and-observability.md)），出了问题按症状查 [29](29-troubleshooting.md)，成套的上机验收在 [30](30-acceptance-runbook.md)。
 
-本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码基准是 `criu-rollback-dev@bc3cce913`。950：尚未运行，流程见 §7，结果填在 [22](22-950-results.md)。
+本章的命令以新 920B（192.168.45.47）上实际做过的为准，代码基准是 `criu-rollback-dev@bc3cce913`。950：2026-11-17 按 §7 首次部署，全部 PASS，结果在 [22](22-950-results.md)。
 
 ---
 
@@ -371,9 +371,9 @@ finally:
 
 ## 7. 950
 
-950 上**尚未运行**，本书没有 950 的进程级结果，跑完之后填进 [22](22-950-results.md)。进程级快照回滚的设计不依赖 950 独有的硬件特性（它的脏页跟踪在 guest 内核里用软件完成），按理同样的部件可以直接部署，但这只是推断，兼容性要在 950 上确认。
+950 上 2026-11-17 按本节首次部署，`950.sh all` 13 步全部 PASS，结果在 [22](22-950-results.md)。进程级快照回滚的脏页跟踪在 guest 内核里用软件完成，不依赖 950 独有的硬件特性；这次部署用的是与新 920B 相同的三个运行文件和同一个镜像，没有为 950 改动。
 
-950 上不走 §2 的构建，用仓库里 `criu-rollback/deploy/` 下预先构建好的产物部署：`git pull` 之后在仓库根目录执行即可，不需要另外拷贝文件。这套入口最早以独立离线包的形式于 2026-11-06 在新 920B 上完整走过一遍（结果见 [19](19-920b-functional.md) 的"2026-11-06 全流程复测"一节），2026-11-16 并入仓库后又在新 920B 上从头演练过（见 `criu-rollback/deploy/README.md` 第 14 节），在 950 上还没有执行。与本章前面各节的差别是：
+950 上不走 §2 的构建，用仓库里 `criu-rollback/deploy/` 下预先构建好的产物部署：`git pull` 之后在仓库根目录执行即可，不需要另外拷贝文件。这套入口最早以独立离线包的形式于 2026-11-06 在新 920B 上完整走过一遍（结果见 [19](19-920b-functional.md) 的"2026-11-06 全流程复测"一节），2026-11-16 并入仓库后又在新 920B 上从头演练过（见 `criu-rollback/deploy/README.md` 第 14 节），2026-11-17 在 950 上首次执行。与本章前面各节的差别是：
 
 - 三个运行文件以 xz 压缩入库，orchestrator 和 gsd 用 `strip -g` 去掉了 DWARF 调试段，代码段与验收版逐字节相同。镜像的前两层取仓库根目录已有的 `ubuntu-22.04-custom.tar.gz`，只有 CRIU 那一层单独入库。第一步把它们展开到 `criu-rollback/deploy/.work/`，按 `manifest.json` 核对 SHA256 和镜像 ID。
 
@@ -389,6 +389,8 @@ finally:
 - 只支持 orchestrator 与 template-manager 合并部署（`ORCHESTRATOR_SERVICES=orchestrator,template-manager`），其他形态由预检拒绝。
 - orchestrator 是动态链接的，需要 glibc 2.38 的符号；不满足时停在切栈之前，不替换系统 glibc。gsd 是静态链接的。
 - 基础镜像在现场拼出后导入 950 使用的镜像仓库，不重新构建；SDK 用入库的 wheel 离线安装进一个克隆出来的 conda 环境，不用 `PYTHONPATH`。
+- 镜像归档同时带 docker 旧格式的 `manifest.json` 和 OCI 的 `index.json` 及其清单，两种 docker 镜像存储都能导入：950 的 docker 用 containerd 镜像存储（`docker info` 显示 `io.containerd.snapshotter.v1`），导入后显示的 image ID 是 OCI 清单摘要 `b7a2fdd2…`；新 920B 用传统存储，显示的是配置摘要 `7caae4a6…`。导入脚本按标签取镜像，两种 ID 都认。
+- 推送走 Harbor 的 http 端口 `SERVER_IP:2900`（`SERVER_IP` 取自 `/opt/e2b-infra/dep/.env`），模板仍引用 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`，两个地址是同一个仓库。950 的 docker daemon 配了代理，`harbor` 这个名字只在本机 `/etc/hosts` 里，不在 `NO_PROXY` 中时推 `harbor:443` 会被转给代理，返回 504。建模板时由 orchestrator 拉镜像，不经过 docker daemon 的代理。
 
 首次部署只需要一条命令，在 e2b-infra 仓库根目录以 root 运行：
 
@@ -400,8 +402,8 @@ bash criu-rollback/deploy/950.sh all
 
 - **失败或中断**：处理完原因后再执行同一条命令，会从停下的那一步继续，做完的验收、压测不会重做。验收或压测失败时，先删掉 e2b 沙箱，再自动切回沙箱级。
 - **网络比对**：切换前后各抓一次宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则做比对，用来确认同机的 AgentENV 没有受影响。
-- **结果**：结束时把逐步结论、身份、网络比对、验收与压测摘要直接打印到终端；细节用 `950.sh report acceptance|stress|smoke|netcheck|log` 按部分打印，不打包。
-- **演练**：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑；2026-11-17 按 `/fc-criu/` 布局从头演练过。
+- **结果**：结束时把逐步结论、身份、网络比对、验收与压测摘要直接打印到终端；细节用 `950.sh report acceptance|stress|smoke|netcheck|log` 按部分打印，`950.sh report handbook` 打印 [22](22-950-results.md) 各表要填的数，不打包。
+- **演练**：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑；2026-11-17 按 `/fc-criu/` 布局从头演练过；同日在 950 上首次执行，13 步全部 PASS，用时见 [22](22-950-results.md) §0。
 - **网络命名空间**：每次重启 orchestrator 会留下约 300 个，`all` 重启两次。积累多了执行 `bash criu-rollback/deploy/950.sh recycle-netns`：删 e2b 沙箱、停 job、`build.sh --recycle-netns` 清理、按当前栈重新拉起。
 
 以后日常切换用 `bash criu-rollback/deploy/950.sh criu` 和 `bash criu-rollback/deploy/950.sh sandbox`。切到进程级时，`base-criu` 不在或建不出沙箱，会自动重建。
@@ -451,4 +453,4 @@ bash criu-rollback/deploy/950.sh all
 - 切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；`950.sh` 切换前先删掉全部 e2b 沙箱（不碰 AgentENV 的），开发用的 `switch-gsd-new920b.sh` 则在还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。
 - 模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。
 - 部署后到 guest 里核对：`gsd -commit`、内核版本串、透明大页为 `[never]`、`rcu_expedited` 为 1、`/health` 为 ok、CRIU 4.2.1、`/` 为 755、`/tmp` 在 overlay 上；然后转 [30](30-acceptance-runbook.md) 做验收。
-- 950 尚未运行。部署用仓库里的 `criu-rollback/deploy/`，`git pull` 后一条命令 `bash criu-rollback/deploy/950.sh all` 做完全流程，日常切换用 `950.sh criu` / `sandbox`，流程见 §7，结果填在 [22](22-950-results.md)。
+- 950 上 2026-11-17 首次部署，`950.sh all` 全部 PASS。部署用仓库里的 `criu-rollback/deploy/`，`git pull` 后一条命令 `bash criu-rollback/deploy/950.sh all` 做完全流程，日常切换用 `950.sh criu` / `sandbox`，流程见 §7，结果填在 [22](22-950-results.md)。

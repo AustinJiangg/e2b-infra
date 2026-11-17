@@ -342,7 +342,7 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 
 ## 8. 950
 
-950 上尚未运行，本章的步骤没有在 950 上走过，结果填进 [22](22-950-results.md)。可以预先确定的有：gsd 只支持 arm64 的 guest（[04](04-goals-and-tradeoffs.md)），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"在那之前无从谈起。
+950 上 2026-11-17 用 `criu-rollback/deploy/950.sh all` 跑了本章的必跑验收和四组压测，全部 PASS，结果在 [22](22-950-results.md)。已经确定的有：gsd 只支持 arm64 的 guest（[04](04-goals-and-tradeoffs.md)），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"以这一轮为准。
 
 部署步骤见 [27](27-deployment.md) §7。验收由 `criu-rollback/deploy/950.sh` 执行（`all` 会依次跑下面两步），顺序和判据与本章相同，由入口自动判读，不需要手工 grep：
 
@@ -374,4 +374,4 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 - `verify_fixes.py` 通过的样子是 PASS 26 / FAIL 0 / SKIP 2；它和 `verify_multitree.py` 都把 dmesg 的可疑行只记作证据，要另外搜一遍。
 - 压测在首次部署、换内核、改补丁时跑，一律带看门狗；判据是 `RESULT` 为 `DONE rc=0`、dmesg 与串口关键词零命中、worker 只有允许的 errno、没有心跳过期、gsd 侧只有 `resource_exhausted`。改过内核补丁还要在调试内核上再跑一遍并确认 `debug_locks` 为 1。
 - 验收的判定是功能性的，性能数字没有达标线。条件与口径都与 20 章相同时，各分段中位数相差 3 ms 以内视为一致；条件不同就只留档、不比较。
-- 结果按 `summary.txt`、环境核对文件、`func/`、`stress/` 的结构留档，`summary.txt` 写清条件与"这份结果不能拿来做什么"。950 上尚未运行，第一轮结果填进 [22](22-950-results.md)。
+- 结果按 `summary.txt`、环境核对文件、`func/`、`stress/` 的结构留档，`summary.txt` 写清条件与"这份结果不能拿来做什么"。950 的第一轮结果在 [22](22-950-results.md)。
