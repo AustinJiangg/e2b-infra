@@ -6,7 +6,7 @@
   guest ：第一次 gsd RPC 在 guest 里 curl 127.0.0.1:49984（不经宿主代理），之后再走一次 SDK
 记录每次的墙钟、gsd 自报 total_ms、gsd 日志里 "rpc completed" 的条数。
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python probe_first_rpc.py base-gsd 20 > out.json
+    python probe_first_rpc.py base-criu 20 > out.json
 """
 import json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

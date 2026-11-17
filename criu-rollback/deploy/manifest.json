@@ -86,8 +86,8 @@
   "python": {
     "strategy": "conda-clone-on-950",
     "source_env": "jll-e2b",
-    "target_env": "jll-e2b-gsd",
-    "clone_command": "conda create --offline --copy --name jll-e2b-gsd --clone jll-e2b --yes",
+    "target_env": "jll-e2b-criu",
+    "clone_command": "conda create --offline --copy --yes -n jll-e2b-criu --clone jll-e2b（950.sh 自动执行）",
     "version": "继承950原jll-e2b的Python版本，不随包携带解释器",
     "sdk_wheel": "sdk/e2b-2.19.0+gsd.dcca61266-py3-none-any.whl",
     "sdk_version": "2.19.0+gsd.dcca61266",

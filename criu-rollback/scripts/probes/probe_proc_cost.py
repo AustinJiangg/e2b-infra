@@ -7,7 +7,7 @@ from e2b_env import load_e2b_env
 os.environ.update(load_e2b_env())
 from e2b import Sandbox
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 PROBE = r'''
 import os, time
 pids=[int(p) for p in os.listdir("/proc") if p.isdigit()]

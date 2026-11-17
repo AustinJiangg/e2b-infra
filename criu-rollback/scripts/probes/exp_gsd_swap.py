@@ -6,12 +6,12 @@
 cp1），记录响应里的 timings（旧 gsd 没有 timings，从 journal 取）。变体按轮交错，减小漂移。
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python exp_gsd_swap.py --template base-gsd --rounds 2 --n 8 \
+    python exp_gsd_swap.py --template base-criu --rounds 2 --n 8 \
         --variant base=/path/gsd-a --variant old=/path/gsd-b \
         --variant 'exp-a=/path/gsd-exp:GSD_EXP_RECLAIM=after' --out x.json
 变体格式：名字=二进制[:K=V[,K=V...]]
 特殊键 GUEST_BG=<命令>（命令里不能有逗号和单引号）：不写进 gsd 的环境，而是在 guest 里 systemd-run 起一个 root 后台命令，
-例如 'x@base-gsd=-:GUEST_BG=while :; do echo t > /dev/kmsg; sleep 0.01; done'（二进制写 "-" 表示不换 gsd）。
+例如 'x@base-criu=-:GUEST_BG=while :; do echo t > /dev/kmsg; sleep 0.01; done'（二进制写 "-" 表示不换 gsd）。
 """
 import argparse
 import base64
@@ -29,7 +29,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--rounds", type=int, default=2)
 ap.add_argument("--n", type=int, default=8)
 ap.add_argument("--variant", action="append", required=True)
@@ -57,7 +57,7 @@ RPC0 = "curl -s -m 20 -u root: -H 'Content-Type: application/json' -d '%s' http:
 
 
 def parse_variant(s):
-    # 名字里可以带 @模板，例如 old@base-gsd=/path/gsd：这个变体用指定模板起沙箱。
+    # 名字里可以带 @模板，例如 old@base-criu=/path/gsd：这个变体用指定模板起沙箱。
     name, rest = s.split("=", 1)
     env = {}
     if ":" in rest:

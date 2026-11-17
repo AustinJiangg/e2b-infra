@@ -6,12 +6,12 @@ gsd 栈下建模板不需要任何 gsd 专有参数——往 guest 里注入 gsd
 
 用法（在 scripts/ 目录下；解释器要能 import 到带 checkpoint 接口的 SDK，即 PYTHONPATH=<代码仓>/py-sdk）：
     python build_template.py --image <镜像仓库>/e2b-orchestration/ubuntu:22.04-custom-criu421
-    python build_template.py --alias base-gsd --memory 2048 --image <镜像>      # 等价的完整写法
+    python build_template.py --alias base-criu --memory 2048 --image <镜像>      # 等价的完整写法
     python build_template.py --alias <调试模板名> --memory 4096 --image <镜像>   # 调试内核用的模板
 
 默认值：
-    --alias   base-gsd（手册统一使用的模板名）
-    --image   环境变量 GSD_TEMPLATE_IMAGE；没设时是 harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421
+    --alias   base-criu（手册统一使用的模板名）
+    --image   环境变量 CRIU_TEMPLATE_IMAGE；没设时是 harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421
     --cpu 2、--memory 2048（手册全部实测所用的规格）
     不带 --use-cache 时不使用构建缓存（skip_cache=True）
 
@@ -30,10 +30,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build an e2b template from a registry image")
     parser.add_argument(
         "--image",
-        default=os.environ.get("GSD_TEMPLATE_IMAGE", "harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421"),
+        default=os.environ.get("CRIU_TEMPLATE_IMAGE", "harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421"),
         help="OCI image reference the template is built from",
     )
-    parser.add_argument("--alias", default="base-gsd", help="template alias (default: base-gsd)")
+    parser.add_argument("--alias", default="base-criu", help="template alias (default: base-criu)")
     parser.add_argument("--api-url", default=None, help="E2B API URL (default: $E2B_API_URL or http://localhost:3000)")
     parser.add_argument("--cpu", type=int, default=2, help="vCPU count (default: 2)")
     parser.add_argument("--memory", type=int, default=2048, help="memory in MB (default: 2048)")

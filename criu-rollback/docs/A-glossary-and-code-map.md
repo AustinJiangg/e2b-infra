@@ -173,11 +173,13 @@ gsd 的启动参数取值在 `template/build/core/rootfs/templates.go:57-61`。
 
 ### 3.1 运行时布局
 
+2026-11-17 之前的布局是 `/fc-gsd/`。
+
 | 位置 | 路径 | 内容 |
 |---|---|---|
-| 宿主 | `/fc-gsd/gsd` | gsd 二进制（`HOST_GSD_PATH` 的默认值） |
-| 宿主 | `/fc-gsd/orchestrator` | 带注入逻辑的 orchestrator |
-| 宿主 | `/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin` | 打过三个补丁的 guest 内核（与沙箱级共用的机器用 `HOST_KERNELS_DIR=/fc-gsd/kernels` 指过来） |
+| 宿主 | `/fc-criu/gsd` | gsd 二进制（部署时用 `HOST_GSD_PATH` 指过来；内置默认 `/fc-gsd/gsd` 是旧布局） |
+| 宿主 | `/fc-criu/orchestrator` | 带注入逻辑的 orchestrator |
+| 宿主 | `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 打过三个补丁的 guest 内核（与沙箱级共用的机器用 `HOST_KERNELS_DIR=/fc-criu/kernels` 指过来） |
 | guest | `/usr/bin/gsd`、`/usr/bin/overlay-init`、`/usr/sbin/criu` | 注入的 gsd 与 init；基础镜像自带的 CRIU |
 | guest | `/mnt/lower` | 基础层（ext4 根的 bind） |
 | guest | `/overlay/workspace/{upper,work}` | 开机时的初始 upper 与 work |
@@ -312,7 +314,7 @@ gsd 监听 guest 的 `0.0.0.0:49984`，Connect 协议，服务名 `checkpoint.Ch
 
 ### 5.4 模板代号
 
-本书统一把模板叫 `base-gsd`。验证时每换一次内核或 gsd 都要重建模板（模板固化），所以结果文件里有一串带序号的名字：
+本书统一把模板叫 `base-criu`（2026-11-17 之前叫 `base-gsd`，下表与第 19～21 章的结果文件保留当时的名字）。验证时每换一次内核或 gsd 都要重建模板（模板固化），所以结果文件里有一串带序号的名字：
 
 | 代号 | 内核 | gsd | 规格 | 模板 ID | 出现在 |
 |---|---|---|---|---|---|

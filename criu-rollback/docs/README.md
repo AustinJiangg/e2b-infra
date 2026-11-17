@@ -116,7 +116,7 @@
 
 **平台标签。** "新 920B"指 192.168.45.47 这台机器；"旧 920B"指已退役的那台，只在案例附录作为历史数据出现。950：未运行，数据待填，见 [22](22-950-results.md)、[24](24-vs-sandbox-level.md)。
 
-**路径与命名。** 命令和路径按运行时布局写：宿主 `/fc-gsd/gsd`、`/fc-gsd/orchestrator`、`/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin`，模板名 `base-gsd`。结果文件里的开发期产物名只在 [19](19-920b-functional.md) 的条件标签、[23](23-gaps-and-boundaries.md) 的出处表和[附录 A](A-glossary-and-code-map.md) 的对照表里出现。
+**路径与命名。** 命令和路径按运行时布局写：宿主 `/fc-criu/gsd`、`/fc-criu/orchestrator`、`/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin`，模板名 `base-criu`。2026-11-17 之前的布局是 `/fc-gsd/`、模板 `base-gsd`，第 16～24 章与附录里的实测记录保留当时的名字。结果文件里的开发期产物名只在 [19](19-920b-functional.md) 的条件标签、[23](23-gaps-and-boundaries.md) 的出处表和[附录 A](A-glossary-and-code-map.md) 的对照表里出现。
 
 **措辞。** "初始实现"指修复之前的代码；"修改前 / 修复后"指同一份代码的两个阶段；"进程级"指本书的方案，"沙箱级"指沙箱级手册的方案；"回滚"即 restore；拍快照的操作写 checkpoint，只有引用接口名时才写 `CreateCheckpoint`、`create()`。过程性的叙述（先怀疑什么、后来推翻什么）只在[附录 D](D-restore-slowness-case.md)、[附录 E](E-regression-case.md) 和 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) 各主题的"根因"小节里，其余章只写现状。
 

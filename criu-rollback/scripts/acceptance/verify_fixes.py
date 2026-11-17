@@ -5,7 +5,7 @@
 每项独立起沙箱（用完即 kill），输出 PASS / FAIL / SKIP / INFO 和证据，最后汇总成表（stdout + --out-json + --out-md）。
 
 在宿主机上跑（gsd 栈在运行；解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python verify_fixes.py [--template base-gsd]
+    python verify_fixes.py [--template base-criu]
         [--only G-01,G-02] [--skip G-08] [--out-json x.json] [--out-md x.md]
 
 判据：汇总表 28 行，全部通过的样子是 PASS 26 / FAIL 0 / SKIP 2，末行"合计 28 项，FAIL 0: []"。
@@ -34,7 +34,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--only", default="", help="逗号分隔的项目 ID，只跑这些")
 ap.add_argument("--skip", default="", help="逗号分隔的项目 ID，跳过这些")
 ap.add_argument("--g08-max", type=int, default=260, help="G-08 连续 create 的上限次数")

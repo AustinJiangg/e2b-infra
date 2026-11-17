@@ -20,7 +20,7 @@ from e2b_env import load_e2b_env  # noqa: E402
 os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 60
 
 LOOP = r'''

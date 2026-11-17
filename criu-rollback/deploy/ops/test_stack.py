@@ -37,19 +37,28 @@ class StackTests(unittest.TestCase):
         d = fixture(); d["Job"]["TaskGroups"][1]["Tasks"][0]["Config"]["args"][1] += "0"
         with self.assertRaises(RuntimeError): stack.select_task(d)
 
-    def test_gsd_change_preserves_original_and_other_settings(self):
+    def test_criu_change_preserves_original_and_other_settings(self):
         d = fixture(); original = copy.deepcopy(d)
-        with patch.object(stack, "sha", return_value="gsdhash"):
-            new = stack.make_gsd(d)
+        with patch.dict(stack.os.environ, {"CRIU_FC": "/fc-criu"}), \
+                patch.object(stack, "sha", return_value="orchhash"):
+            new = stack.make_criu(d)
         self.assertEqual(d, original)
         t = stack.select_task(new)[1]
-        self.assertEqual(stack.binary(t), "/fc-gsd/orchestrator")
-        self.assertEqual(t["Env"]["HOST_KERNELS_DIR"], "/fc-gsd/kernels")
-        self.assertEqual(t["Env"]["GSD_ORCH_SHA256"], "gsdhash")
-        self.assertNotIn("HOST_GSD_PATH", t["Env"])
+        self.assertEqual(stack.binary(t), "/fc-criu/orchestrator")
+        self.assertEqual(t["Env"]["HOST_KERNELS_DIR"], "/fc-criu/kernels")
+        self.assertEqual(t["Env"]["HOST_GSD_PATH"], "/fc-criu/gsd")
+        self.assertEqual(t["Env"]["CRIU_ORCH_SHA256"], "orchhash")
         self.assertEqual(t["Env"]["STORAGE_PROVIDER"], "Local")
         self.assertEqual(new["Job"]["TaskGroups"][0], original["Job"]["TaskGroups"][0])
 
+    def test_default_paths(self):
+        import paths
+        with patch.dict(paths.os.environ, {}, clear=False):
+            for k in ("CRIU_FC", "CRIU_STATE_DIR", "CRIU_CONDA_ENV"):
+                paths.os.environ.pop(k, None)
+            self.assertEqual(paths.host_fc(), paths.Path("/fc-criu"))
+            self.assertEqual(paths.state_dir(), paths.Path("/var/lib/criu-rollback"))
+            self.assertEqual(paths.conda_env(), "jll-e2b-criu")
 
 if __name__ == "__main__":
     unittest.main()

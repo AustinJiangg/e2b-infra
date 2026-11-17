@@ -12,7 +12,7 @@ from e2b_env import load_e2b_env
 os.environ.update(load_e2b_env())
 from e2b import Sandbox
 
-sb = Sandbox.create(template=os.environ.get("TEMPLATE", "base-gsd"), timeout=300)
+sb = Sandbox.create(template=os.environ.get("TEMPLATE", "base-criu"), timeout=300)
 try:
     print("sandbox", sb.sandbox_id, "template", sb.get_info().template_id)
     code = r'''

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """"checkpoint 时把以写方式打开着的 upper 文件留在 upper、沉下去的是一份拷贝"这一做法的代价与覆盖面。
 
-    python3 probe_move_cost.py [模板名，默认 base-gsd]
+    python3 probe_move_cost.py [模板名，默认 base-criu]
 
 1) 沙箱里本来就以写方式打开着的 overlay 文件（journald 等）：checkpoint 前后在沉下去的层和新 upper 里各是哪个 inode；
 2) 一个 root 进程以 O_RDWR 打开 N MiB 的文件（N = 0/1/16/64/128，0 表示不开文件），各做一次 checkpoint，
@@ -19,7 +19,7 @@ from e2b_env import load_e2b_env  # noqa: E402
 os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 HOLD = r'''
 import os, sys, time
 fd = os.open(sys.argv[1], os.O_RDWR)

@@ -1,4 +1,4 @@
-"""只在激活的 jll-e2b-gsd 中离线替换 SDK，不更改原 jll-e2b。"""
+"""只在 jll-e2b-criu 中离线替换 SDK，不更改原 jll-e2b。"""
 import importlib.metadata as metadata
 import os
 from pathlib import Path
@@ -14,8 +14,8 @@ VERSION = "2.19.0+gsd.dcca61266"
 def guard():
     prefix = Path(sys.prefix).resolve()
     active = os.environ.get("CONDA_PREFIX")
-    if not active or Path(active).resolve() != prefix or prefix.name != "jll-e2b-gsd" or not (prefix / "conda-meta").is_dir():
-        raise RuntimeError("请先 conda activate jll-e2b-gsd；拒绝在 jll-e2b、base 或系统 Python 中安装")
+    if not active or Path(active).resolve() != prefix or prefix.name != "jll-e2b-criu" or not (prefix / "conda-meta").is_dir():
+        raise RuntimeError("只能装进 jll-e2b-criu（950.sh install-sdk 会自动选用）；拒绝在 jll-e2b、base 或系统 Python 中安装")
     if os.environ.get("PYTHONPATH") or os.environ.get("PYTHONHOME"):
         raise RuntimeError("请先 unset PYTHONPATH PYTHONHOME，避免导入包外 SDK")
     return prefix
@@ -51,7 +51,7 @@ def main():
                     "--no-cache-dir", "--disable-pip-version-check", "--force-reinstall", str(wheels[0])], check=True)
     subprocess.run([sys.executable, str(ROOT / "ops/check_python.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "ops/check_sdk_headers.py")], check=True)
-    print("GSD SDK 离线安装完成。后续 conda activate jll-e2b-gsd 后直接运行 python。")
+    print("进程级 SDK 离线安装完成。")
 
 
 if __name__ == "__main__":

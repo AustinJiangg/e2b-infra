@@ -2,7 +2,7 @@
 
     python ops/probe.py templates        列出模板（别名、build ID、状态），同时确认 API 和 key 可用
     python ops/probe.py create <模板>    建一个沙箱后立即删除，确认服务就绪且模板可用
-    python ops/probe.py cleanup <模板>   删除由这个模板起的全部沙箱（只用于本包的测试模板）
+    python ops/probe.py cleanup-all      删除 API 上列出的全部 e2b 沙箱（950 上的 e2b 只有我们在用）
 """
 import json
 import os
@@ -20,17 +20,18 @@ def emit(**data):
     print(json.dumps(data, ensure_ascii=False), flush=True)
 
 
-def cleanup(alias, templates):
+def cleanup_all():
     from e2b import Sandbox
-    ids = {t.get("templateID") for t in templates if alias in (t.get("aliases") or [])}
-    killed = []
+    killed, failed = [], []
     paginator = Sandbox.list()
     while paginator.has_next:
         for info in paginator.next_items():
-            if info.template_id in ids or info.name == alias:
+            try:
                 Sandbox.kill(info.sandbox_id)
                 killed.append(info.sandbox_id)
-    emit(ok=True, killed=killed)
+            except Exception as exc:
+                failed.append("%s %s" % (info.sandbox_id, exc))
+    emit(ok=True, killed=killed, failed=failed)
     return 0
 
 
@@ -40,7 +41,13 @@ def main():
     except SystemExit as exc:
         emit(ok=False, error="客户端凭据: %s" % exc)
         return 1
-    if sys.argv[1] in ("templates", "cleanup"):
+    if sys.argv[1] == "cleanup-all":
+        try:
+            return cleanup_all()
+        except Exception as exc:
+            emit(ok=False, error="%s: %s" % (type(exc).__name__, exc))
+            return 1
+    if sys.argv[1] == "templates":
         url = os.environ["E2B_API_URL"].rstrip("/") + "/templates"
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:
@@ -49,8 +56,6 @@ def main():
         except Exception as exc:
             emit(ok=False, error="%s: %s" % (type(exc).__name__, exc))
             return 1
-        if sys.argv[1] == "cleanup":
-            return cleanup(sys.argv[2], data)
         emit(ok=True, templates=[{"aliases": t.get("aliases") or [], "templateID": t.get("templateID"),
                                   "buildID": t.get("buildID"), "buildStatus": t.get("buildStatus")} for t in data])
         return 0

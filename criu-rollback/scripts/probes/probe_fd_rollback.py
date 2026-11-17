@@ -19,7 +19,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "fd"
-TPL = sys.argv[2] if len(sys.argv) > 2 else "base-gsd"
+TPL = sys.argv[2] if len(sys.argv) > 2 else "base-criu"
 
 HOLDER = r'''
 import os, sys, time

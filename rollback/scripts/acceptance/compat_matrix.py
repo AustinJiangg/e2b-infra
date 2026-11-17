@@ -13,7 +13,7 @@ pause / kill 四个（connect 对已 pause 的沙箱等同 resume）。两组操
 判定"数据对不对"一律用 O_DIRECT 读回 8 MiB 随机数据比 sha256：走 guest page cache 会把磁盘层的
 问题完全盖住。
 
-只调用 SDK 的公开接口，所以同一份脚本在沙箱级（模板 base）和进程级（模板 base-gsd）上都能跑。
+只调用 SDK 的公开接口，所以同一份脚本在沙箱级（模板 base）和进程级（模板 base-criu）上都能跑。
 进程级的 B 组就是手册里 T-09 那一条"checkpoint → pause → resume → restore"。B8 用 pause 之前
 那个 Sandbox 对象做 restore，B3～B7 用 connect 拿到的新对象：两者分开，是因为进程级 SDK 的
 connect 曾经漏带 E2b-Sandbox-Id 头，新对象上的 checkpoint 调用会被代理以 "missing header" 打回。
@@ -27,7 +27,7 @@ connect 曾经漏带 E2b-Sandbox-Id 头，新对象上的 checkpoint 调用会�
 
 用法：
     python3 compat_matrix.py --template base --out /tmp/compat.json
-    python3 compat_matrix.py --template base-gsd --out /tmp/compat.json
+    python3 compat_matrix.py --template base-criu --out /tmp/compat.json
 """
 import argparse
 import json

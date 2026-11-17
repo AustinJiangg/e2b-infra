@@ -13,7 +13,7 @@
 
 > 进程级快照回滚（criu-rollback）不需要另外部署：按本文把沙箱级部署好之后，在仓库根目录以 root 执行
 > `bash criu-rollback/deploy/950.sh all`，一条命令切到进程级、建模板、验收并切回沙箱级；以后日常切换用
-> `bash criu-rollback/deploy/950.sh gsd` / `sandbox`。说明见 [`criu-rollback/deploy/README.md`](criu-rollback/deploy/README.md)。
+> `bash criu-rollback/deploy/950.sh criu` / `sandbox`。说明见 [`criu-rollback/deploy/README.md`](criu-rollback/deploy/README.md)。
 
 ---
 

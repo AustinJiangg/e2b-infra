@@ -16,15 +16,15 @@
 
 ## 1. 结果从哪里来
 
-入口是仓库里的 `criu-rollback/deploy/950.sh`，在仓库根目录执行 `bash criu-rollback/deploy/950.sh all`，全部结果打成一个包 `criu-rollback/deploy/results/<时间>-all.tar.gz`。包里与验证相关的三部分：
+入口是仓库里的 `criu-rollback/deploy/950.sh`，在仓库根目录执行 `bash criu-rollback/deploy/950.sh all`，结束时把逐步结论和各项摘要打印到终端，细节用 `950.sh report acceptance|stress|smoke` 打印（不打包）。结果目录 `criu-rollback/deploy/results/<时间>-all/` 里与验证相关的三部分：
 
-| `all` 里的步骤 | 内容 | 包内目录 |
+| `all` 里的步骤 | 内容 | 结果目录下 |
 |---|---|---|
 | 验收（也可单独 `950.sh acceptance`） | guest 自检、`verify_gsd.py`、`verify_fixes.py`、`verify_multitree.py --skip V12`、`verify_clear_refs_race.py`、`demo_checkpoint_perf.py` 三轮 | `acceptance/` |
 | 压测（也可单独 `950.sh stress`） | `probe_whiteout_bug.py` 七个用例，然后 all、noworkers、multitree、deldense 四组 | `stress/` |
 | 切回沙箱级并冒烟（也可单独 `950.sh sandbox`、`950.sh smoke`） | 切回后用原模板试建沙箱，再跑沙箱级冒烟 | `sandbox-smoke/` |
 
-`all` 之后的分档测试由仓库根的 `test950.sh` 调度（`test950/README.md`），结果包是 `test950/results/<时间>-<档>.tar.gz`，进程级各步的目录名为 `criu-<命令>`，内部结构与下面相同。extended 档另有 `criu-stress-ext/`（八组压测、多种子与兼容矩阵），long 档另有 `criu-soak/`（按时长的长跑与宿主资源前后对比）。
+`all` 之后的分档测试由仓库根的 `test950.sh` 调度（`test950/README.md`），结果用 `bash test950.sh report` 打印，结果目录是 `test950/results/<时间>-<档>/`，进程级各步的目录名为 `criu-<命令>`，内部结构与下面相同。extended 档另有 `criu-stress-ext/`（八组压测、多种子与兼容矩阵），long 档另有 `criu-soak/`（按时长的长跑与宿主资源前后对比）。
 
 包里另有 `all.log`（每步进度与结论）、`summary.json`（每步状态与用时）和 `netcheck.txt`（切换前后宿主上非 e2b 网络配置的比对）。验收和压测两个目录里都有 `summary.json`（每一步的命令和状态、判定 `verdict`、机器名、起止时间、Python 与 SDK 路径）和 `deliverables.sha256`（三个运行文件的 sha256）。`acceptance` 的 `summary.json` 还有 `slow_calls` 和 `skipped`。下面各表的"来源"列写的都是相对这两个目录的文件名。
 
@@ -219,7 +219,7 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 **产物与模板。**
 
 1. `deliverables.sha256` 里 gsd、orchestrator、guest 内核三个 sha256 与 `criu-rollback/deploy/manifest.json` 里的 `sha256` 一致（是去掉调试段后的版本），acceptance 和 stress 两个目录也互相一致。
-2. `base-gsd` 是在 950 的进程级栈下新建的，不是沙箱级模板，也不是从别的机器带来的；建模板时没有加 `--use-cache`。
+2. `base-criu` 是在 950 的进程级栈下新建的，不是沙箱级模板，也不是从别的机器带来的；建模板时没有加 `--use-cache`。
 3. guest 自检通过：`gsd -commit` 为 `259f1a25c`，内核构建标识为 `#4 SMP Thu Oct  8 20:06:40 CST 2026`，CRIU 为 4.2.1，THP 为 `[never]`，`rcu_expedited` 为 1，vCPU 为 2。
 4. 客户端用的是带 checkpoint 接口的进程级 SDK，`summary.json` 的 `sdk` 落在进程级 conda 环境里。
 

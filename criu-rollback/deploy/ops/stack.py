@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""950 上保存本机基线、检查、落位、切换及恢复。只使用 Python 标准库。"""
+"""950 上保存本机基线、检查、落位、切换及恢复，以及清理泄漏的网络命名空间。只使用 Python 标准库。
+
+栈的名字：sandbox（沙箱级，原 job）、criu（进程级，由基线生成的 job）。
+"""
 import copy
 import hashlib
 import json
@@ -18,12 +21,22 @@ import unpack
 import paths
 ROOT = paths.ROOT
 FC = paths.FC
-STATE = Path(os.environ.get("GSD_STATE_DIR", "/var/lib/gsd-950-offline"))
-JOB = os.environ.get("GSD_JOB", "template-manager-system")
-PORT = int(os.environ.get("GSD_PORT", "5008"))
+JOB = os.environ.get("CRIU_JOB", "template-manager-system")
+PORT = int(os.environ.get("CRIU_PORT", "5008"))
 FILES = ("gsd", "orchestrator", "kernels/vmlinux-6.1.158/vmlinux.bin")
+BUILD_SH = os.environ.get("E2B_INFRA_BUILD", "/opt/e2b-infra/build.sh")
+# e2b 的 Firecracker 都从 /fc-versions/ 启动；同机 AgentENV 的在 /var/lib/aenv/ 下，不算、不碰。
+E2B_FC_PREFIX = "/fc-versions/"
+
+
+def state():
+    return paths.state_dir()
+
+
+def hfc():
+    return paths.host_fc()
 META = ("Version", "SubmitTime", "CreateIndex", "ModifyIndex", "JobModifyIndex", "Status", "StatusDescription")
-ENV_KEYS = ("HOST_GSD_PATH", "HOST_KERNELS_DIR", "GSD_ORCH_SHA256")
+ENV_KEYS = ("HOST_GSD_PATH", "HOST_KERNELS_DIR", "CRIU_ORCH_SHA256")
 
 
 def require(ok, reason):
@@ -102,9 +115,35 @@ def health():
         return False
 
 
+def e2b_firecrackers():
+    """e2b 自己的 Firecracker 进程（exe 在 /fc-versions/ 下）的 pid。按 exe 认，不用 pgrep -f。"""
+    pids = []
+    for proc in Path("/proc").glob("[0-9]*"):
+        try:
+            exe = os.readlink(proc / "exe")
+        except OSError:
+            continue
+        if exe.startswith(E2B_FC_PREFIX) and Path(exe.replace(" (deleted)", "")).name.startswith("firecracker"):
+            pids.append(int(proc.name))
+    return pids
+
+
+def e2b_netns():
+    """e2b 的网络命名空间个数（/run/netns/ns-<n>；AgentENV 的在 /run/aenv/netns/，不算）。"""
+    d = Path("/run/netns")
+    return sum(1 for p in d.iterdir() if re.fullmatch(r"ns-\d+", p.name)) if d.is_dir() else 0
+
+
+def nat_rules():
+    try:
+        return len(run("iptables", "-t", "nat", "-S").splitlines())
+    except (OSError, subprocess.CalledProcessError):
+        return -1
+
+
 def no_sandboxes():
-    p = subprocess.run(["pgrep", "-x", "firecracker"], capture_output=True, text=True)
-    require(p.returncode == 1, "还有 firecracker 沙箱运行，或无法确认进程状态；先结束沙箱和模板构建")
+    left = e2b_firecrackers()
+    require(not left, "还有 %d 个 e2b 沙箱（firecracker）在运行；950.sh 的命令会先删掉它们，单独执行这一步时先删沙箱" % len(left))
 
 
 def load_job():
@@ -125,9 +164,12 @@ def verify():
 
 
 def status():
-    print("job:", JOB, "port:", PORT, "baseline:", STATE / "baseline.json")
+    cur = current()
+    print("当前栈:", {"criu": "进程级 criu", "sandbox": "沙箱级 sandbox"}.get(cur, "认不出（5008 上的进程数不是 1）"))
+    print("job:", JOB, "port:", PORT, "baseline:", state() / "baseline.json")
     print(json.dumps(processes(), ensure_ascii=False, indent=2))
     print("health:", 200 if health() else "不可用")
+    print("e2b 沙箱（firecracker）:", len(e2b_firecrackers()), " e2b netns:", e2b_netns(), " nat 规则:", nat_rules())
 
 
 def preflight():
@@ -157,28 +199,30 @@ def preflight():
     require(all(pools.values()), "job 缺沙箱地址池环境变量，现场部署早于 e2b-infra 870d087，先升级部署或补齐 job 环境")
     require(len(processes()) == 1 and health(), "当前 orchestrator 数量或健康状态异常")
     no_sandboxes()
-    envs.run(envs.GSD_ENV, [ROOT / "ops/check_python.py"], check=True)
+    envs.run(envs.CRIU_ENV, [ROOT / "ops/check_python.py"], check=True)
     print("宿主预检 PASS。Harbor 导入、客户端凭据和 guest 自检按 README 继续。")
 
 
 def save_baseline():
     no_sandboxes()
-    require(not (STATE / "baseline.json").exists(), "基线已存在，拒绝覆盖；重复切换直接用 gsd/sandbox")
+    STATE = state()
+    require(not (STATE / "baseline.json").exists(), "基线已存在，拒绝覆盖；重复切换直接用 criu/sandbox")
     doc = load_job()
     _, task = select_task(doc)
     path = binary(task)
     active = processes()
     require(len(active) == 1 and health(), "必须在原沙箱级服务健康运行时保存")
-    require(not path.startswith("/fc-gsd/") and not active[0]["exe"].startswith("/fc-gsd/"), "当前是 gsd，不能保存成沙箱级基线")
+    require(not is_criu(path) and not is_criu(active[0]["exe"]), "当前是进程级栈，不能保存成沙箱级基线")
     require(active[0]["sha256"] == sha(path) and active[0]["exe"] == path, "job 路径与运行中二进制不一致")
     write_json(STATE / "baseline.identity.json", active[0])
     write_json(STATE / "baseline.json", doc)
     (STATE / "baseline.sha256").write_text(sha(STATE / "baseline.json") + "\n")
     os.chmod(STATE / "baseline.sha256", 0o600)
-    print("已保存 950 本机沙箱级基线（含密钥，不输出、不回传）:", STATE)
+    print("已保存本机沙箱级基线（含密钥，只留在本机，不打印）:", STATE)
 
 
 def baseline():
+    STATE = state()
     p = STATE / "baseline.json"
     require(p.exists(), "缺本机基线，请先在沙箱级环境运行 save-baseline")
     require(sha(p) == (STATE / "baseline.sha256").read_text().strip(), "本机基线校验失败")
@@ -188,15 +232,23 @@ def baseline():
     return doc, ident
 
 
-def make_gsd(doc):
+def is_criu(exe):
+    return exe.startswith(str(hfc()) + "/")
+
+
+def criu_env():
+    """进程级 job 里要设的三个环境变量（与 ENV_KEYS 对应）。HOST_GSD_PATH 是 orchestrator 读的名字，
+    它的内置默认是 /fc-gsd/gsd，这里显式指向 /fc-criu/gsd。"""
+    return {"HOST_GSD_PATH": str(hfc() / "gsd"), "HOST_KERNELS_DIR": str(hfc() / "kernels"),
+            "CRIU_ORCH_SHA256": sha(hfc() / "orchestrator")}
+
+
+def make_criu(doc):
     doc = copy.deepcopy(doc)
     _, task = select_task(doc)
     old = binary(task)
-    task["Config"]["args"][1] = task["Config"]["args"][1].replace(old, "/fc-gsd/orchestrator")
-    env = task.setdefault("Env", {})
-    env.pop("HOST_GSD_PATH", None)  # 沿用已验证的默认 /fc-gsd/gsd
-    env["HOST_KERNELS_DIR"] = "/fc-gsd/kernels"
-    env["GSD_ORCH_SHA256"] = sha("/fc-gsd/orchestrator")
+    task["Config"]["args"][1] = task["Config"]["args"][1].replace(old, str(hfc() / "orchestrator"))
+    task.setdefault("Env", {}).update(criu_env())
     return doc
 
 
@@ -208,25 +260,25 @@ def install():
 def place_files():
     baseline()
     unpack.unpack()
-    # 已存在且内容不同就停，不覆盖现场另一轮 gsd 产物。
+    # 已存在且内容不同就停，不覆盖现场另一轮进程级产物。
     for name in FILES:
-        dst = Path("/fc-gsd") / name
+        dst = hfc() / name
         require(not dst.exists() or sha(dst) == sha(FC / name), "现场文件与交付版本不同，拒绝覆盖: " + str(dst))
     for name in FILES:
         # 内容相同就不重写：重写会换掉正在运行的 orchestrator 的文件，进程路径变成 "(deleted)"。
-        if (Path("/fc-gsd") / name).exists():
+        if (hfc() / name).exists():
             continue
         subprocess.run(["install", "-D", "-m", "644" if name.endswith(".bin") else "755",
-                        str(FC / name), str(Path("/fc-gsd") / name)], check=True)
-    print("三个运行文件落位完成")
+                        str(FC / name), str(hfc() / name)], check=True)
+    print("三个运行文件落位完成:", hfc())
 
 
 def current():
-    """当前 5008 上是哪一套：gsd、sandbox，进程数不是 1 时为 None。"""
+    """当前 5008 上是哪一套：criu、sandbox，进程数不是 1 时为 None。"""
     ps = processes()
     if len(ps) != 1:
         return None
-    return "gsd" if ps[0]["exe"].startswith("/fc-gsd/") else "sandbox"
+    return "criu" if is_criu(ps[0]["exe"]) else "sandbox"
 
 
 def matches(ps, expected):
@@ -234,45 +286,76 @@ def matches(ps, expected):
             and ps[0]["env"] == expected["env"])
 
 
-def switch(target):
+def target_job(target):
+    """目标栈的 job 定义与切换后应看到的进程（路径、sha256、三个环境变量）。"""
     doc, ident = baseline()
-    if target == "gsd":
-        verify()
-        unpack.unpack()
-        for name in FILES:
-            require(sha(Path("/fc-gsd") / name) == sha(FC / name), "运行文件与交付包不同")
-        doc = make_gsd(doc)
-        expected = {"exe": "/fc-gsd/orchestrator", "sha256": sha("/fc-gsd/orchestrator"),
-                    "env": {"HOST_GSD_PATH": None, "HOST_KERNELS_DIR": "/fc-gsd/kernels",
-                            "GSD_ORCH_SHA256": sha("/fc-gsd/orchestrator")}}
-    else:
-        expected = ident
+    if target == "sandbox":
+        return doc, ident
+    verify()
+    unpack.unpack()
+    for name in FILES:
+        require(sha(hfc() / name) == sha(FC / name), "运行文件与仓库里的交付版本不同: %s" % (hfc() / name))
+    exe = str(hfc() / "orchestrator")
+    return make_criu(doc), {"exe": exe, "sha256": sha(exe), "env": criu_env()}
+
+
+def stop_job():
+    """停 job 并等进程退出。失败不强杀、不 purge。"""
+    run("nomad", "job", "stop", "-detach", JOB)
+    for _ in range(60):
+        if not processes() and not health():
+            return
+        time.sleep(2)
+    raise RuntimeError("旧服务 120 秒未退出，停止操作；请核对 Nomad alloc 后重跑")
+
+
+def start_job(target, doc, expected):
+    path = state() / ("job-" + target + ".json")
+    write_json(path, doc)
+    run("nomad", "job", "run", "-detach", "-json", str(path))
+    for _ in range(72):
+        if matches(processes(), expected) and health():
+            time.sleep(20)
+            require(matches(processes(), expected) and health(), "启动后的等待期内进程或 health 变化，不能判定成功")
+            print("已启动%s栈（已核对实际进程 SHA256、环境和 health）" % ("进程级" if target == "criu" else "沙箱级"), flush=True)
+            return
+        time.sleep(5)
+    raise RuntimeError("360 秒内未确认服务启动；查 Nomad 日志，必要时执行 bash criu-rollback/deploy/950.sh sandbox 恢复原基线")
+
+
+def switch(target):
+    doc, expected = target_job(target)
     if matches(processes(), expected) and health():
         print("已经是", target, "栈，不重启服务", flush=True)
         return
     no_sandboxes()
-    path = STATE / ("job-" + target + ".json")
-    write_json(path, doc)
-    # 先停旧 job，避免两个 alloc 争用固定端口。失败不强杀，不自动 purge。
+    # 先停旧 job，避免两个 alloc 争用固定端口。
     print("准备切换到", target, flush=True)
-    run("nomad", "job", "stop", "-detach", JOB)
-    for _ in range(60):
-        if not processes() and not health():
-            break
-        time.sleep(2)
-    else:
-        raise RuntimeError("旧服务 120 秒未退出，停止操作；请核对 Nomad alloc 后重跑")
-    run("nomad", "job", "run", "-detach", "-json", str(path))
-    for _ in range(72):
-        ps = processes()
-        if matches(ps, expected) and health():
-            time.sleep(20)
-            require(matches(processes(), expected) and health(), "切换后的等待期内进程或 health 变化，不能判定成功")
-            print("切换完成（已核对实际进程 SHA256、环境和 health）")
-            status()
-            return
-        time.sleep(5)
-    raise RuntimeError("360 秒内未确认切换成功；查 Nomad 日志，必要时执行 sandbox 恢复原基线")
+    stop_job()
+    start_job(target, doc, expected)
+    status()
+
+
+def recycle_netns():
+    """清理重启 orchestrator 留下的 e2b 网络命名空间与 iptables 规则，然后按原栈重新拉起。
+
+    停 job → build.sh --recycle-netns（此时 /usr/bin/template-manager 不在运行，它只清理、不拉起；
+    只认 e2bv- 网卡、ns-<n> 和本机地址池，不碰 AgentENV）→ 按当前栈 nomad job run。"""
+    target = current()
+    require(target in ("criu", "sandbox") and health(), "当前服务状态认不出，先执行 950.sh status 核对")
+    require(Path(BUILD_SH).is_file(), "找不到 %s；在 ops/site.env 写 E2B_INFRA_BUILD=build.sh 路径" % BUILD_SH)
+    doc, expected = target_job(target)
+    no_sandboxes()
+    before = (e2b_netns(), nat_rules())
+    print("清理前：e2b netns %d 个，nat 规则 %d 条；当前栈 %s" % (before + (target,)), flush=True)
+    stop_job()
+    r = subprocess.run(["bash", BUILD_SH, "--recycle-netns"], capture_output=True, text=True)
+    tail = "\n".join((r.stdout + r.stderr).strip().splitlines()[-6:])
+    try:
+        require(r.returncode == 0, "build.sh --recycle-netns 失败：\n" + tail)
+    finally:
+        start_job(target, doc, expected)
+    print("清理后：e2b netns %d 个，nat 规则 %d 条（新进程会再建一池暖池）" % (e2b_netns(), nat_rules()), flush=True)
 
 
 def main():
@@ -280,7 +363,7 @@ def main():
     funcs = {"status": status, "preflight": preflight, "save-baseline": save_baseline, "install": install}
     if action in funcs:
         funcs[action]()
-    elif action in ("gsd", "sandbox"):
+    elif action in ("criu", "sandbox"):
         switch(action)
     else:
         raise RuntimeError("未知操作")

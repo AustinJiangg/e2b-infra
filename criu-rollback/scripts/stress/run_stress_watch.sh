@@ -2,8 +2,8 @@
 # 跑 stress_overlay_ckpt.py，带看门狗：操作日志（<outdir>/<mode>-ops.log 与 <mode>.log）超过 STALL 秒没有新行就认为 guest 卡死，
 # 从 orchestrator 日志取出 guest 控制台（fc_console.sh），杀掉脚本和沙箱。
 #   run_stress_watch.sh <outdir> <stress_overlay_ckpt.py 的其余参数...>
-# 例：run_stress_watch.sh <outdir> --template base-gsd --mode stress --rounds 300 --workers 6 --seed 3
-# 换脚本：SCRIPT=stress_multitree.py run_stress_watch.sh <outdir> --template base-gsd --mode multitree --rounds 200
+# 例：run_stress_watch.sh <outdir> --template base-criu --mode stress --rounds 300 --workers 6 --seed 3
+# 换脚本：SCRIPT=stress_multitree.py run_stress_watch.sh <outdir> --template base-criu --mode multitree --rounds 200
 #
 # 环境变量：
 #   PY          解释器，默认 PATH 里的 python3（先激活装好 SDK 依赖的环境，或直接给解释器的完整路径）

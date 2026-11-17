@@ -1,6 +1,6 @@
 """把入库的压缩产物展开到 .work/，并逐项核对 manifest.json。只用标准库，现场不需要 xz 命令。
 
-- 三个运行文件：xz 解压到 .work/fc-gsd/，按 manifest 核对 SHA256；
+- 三个运行文件：xz 解压到 .work/fc/，按 manifest 核对 SHA256；
 - 镜像：前两层从仓库根目录的 ubuntu-22.04-custom.tar.gz 取，第三层（CRIU）从
   artifacts/image/criu421-layer.tar.xz 解压，加上原样保存的配置与清单，拼成 docker load 能读的归档。
   每层按 diff_id 核对，配置文件的 SHA256 就是镜像 ID，所以拼出的镜像与验收过的同一个。

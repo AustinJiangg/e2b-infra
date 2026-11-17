@@ -1,7 +1,7 @@
 """定位 conda 和两个客户端环境，用环境自己的解释器运行脚本，不需要手动 conda activate。只用标准库。
 
-环境用名字或绝对路径指定，默认进程级 jll-e2b-gsd、沙箱级 jll-e2b，可在 ops/site.env 里用
-GSD_CONDA_ENV / SANDBOX_CONDA_ENV 改。用路径时，进程级环境目录名也必须是 jll-e2b-gsd。
+环境用名字或绝对路径指定，默认进程级 jll-e2b-criu、沙箱级 jll-e2b，可在 ops/site.env 里用
+CRIU_CONDA_ENV / SANDBOX_CONDA_ENV 改。用路径时，进程级环境目录名也必须是 jll-e2b-criu。
 """
 import json
 import os
@@ -9,7 +9,9 @@ from pathlib import Path
 import shutil
 import subprocess
 
-GSD_ENV = os.environ.get("GSD_CONDA_ENV", "jll-e2b-gsd")
+import paths
+
+CRIU_ENV = paths.conda_env()
 SANDBOX_ENV = os.environ.get("SANDBOX_CONDA_ENV", "jll-e2b")
 CONDA_HOMES = ("/root/miniforge3", "/root/miniconda3", "/root/anaconda3",
                "/opt/miniforge3", "/opt/miniconda3", "/opt/conda")

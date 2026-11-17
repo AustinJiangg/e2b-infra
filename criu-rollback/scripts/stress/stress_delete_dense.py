@@ -16,7 +16,7 @@
 和 opaque 目录（trusted.overlay.opaque=y）个数，确认确实产生过。
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    SCRIPT=stress_delete_dense.py bash run_stress_watch.sh <outdir> --template base-gsd --mode deldense --rounds 200
+    SCRIPT=stress_delete_dense.py bash run_stress_watch.sh <outdir> --template base-criu --mode deldense --rounds 200
 判据：<outdir>/deldense-summary.json 的 verdict 为 PASS。
 """
 import argparse
@@ -35,7 +35,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--mode", default="deldense", help="只用于文件名前缀（与 run_stress_watch.sh 配合）")
 ap.add_argument("--rounds", type=int, default=200)
 ap.add_argument("--workers", type=int, default=4)

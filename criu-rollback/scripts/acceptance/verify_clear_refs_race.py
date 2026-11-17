@@ -5,7 +5,7 @@
 这段窗口里进程写的页被抹掉 soft-dirty，下一次增量 dump 漏掉它们，restore 后这些页是旧内容。
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python verify_clear_refs_race.py [--template base-gsd] [--rounds 20] [--pages 4096] [--rate 100000]
+    python verify_clear_refs_race.py [--template base-criu] [--rounds 20] [--pages 4096] [--rate 100000]
                                      [--gsd-binary /path/to/gsd] [--jsonl out.jsonl]
 
 测试设计
@@ -41,7 +41,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--rounds", type=int, default=20)
 ap.add_argument("--pages", type=int, default=4096, help="缓冲区页数 N（4 KiB/页）")
 ap.add_argument("--rate", type=float, default=100000, help="写入速率，页/秒")

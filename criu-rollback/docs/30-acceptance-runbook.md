@@ -25,14 +25,14 @@
 **进程级栈在运行，三个文件是要验的那一套。** 宿主上带 gsd 注入的 orchestrator 已经在服务，gsd 二进制与补丁内核在运行时布局的位置上：
 
 ```bash
-/fc-gsd/gsd -commit                                   # 应输出要验收的提交号
-sha256sum /fc-gsd/gsd /fc-gsd/orchestrator /fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
+/fc-criu/gsd -commit                                  # 应输出要验收的提交号
+sha256sum /fc-criu/gsd /fc-criu/orchestrator /fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 ```
 
 三个 sha256 与交付清单逐一相同；验收的若是 [19](19-920b-functional.md) 所述的那个版本，值在该章"条件标签"一节。再确认正在运行的 orchestrator 就是这一个二进制、环境变量符合 [27](27-deployment.md) 的两种机器形态之一；
 新 920B 上用随手册附带的 `scripts/ops/switch-gsd-new920b.sh status` 看（它只读，不改任何东西），其他机器按本机的部署方式核对。
 
-**模板。** 在进程级栈下建好别名为 `base-gsd` 的模板：2 vCPU / 2048 MB，不使用缓存（[27](27-deployment.md)）。所有脚本的默认模板名都是它。
+**模板。** 在进程级栈下建好别名为 `base-criu` 的模板：2 vCPU / 2048 MB，不使用缓存（[27](27-deployment.md)）。所有脚本的默认模板名都是它。
 模板固化了建模板时的内核、gsd 与 overlay-init——**换过三者中的任何一样而没有重建模板，接下来测的就是旧的那一套**，这是最常见的白跑原因，§3 的部署自检专门查这一点。
 规格与 19 章的条件标签不同（更多 vCPU、更大内存）时功能判定仍然有效，但性能数字不能与 20 章对照。
 
@@ -94,7 +94,7 @@ sys.path[:0] = ["."]
 from e2b_env import load_e2b_env
 os.environ.update(load_e2b_env())
 from e2b import Sandbox
-sb = Sandbox.create(template="base-gsd", timeout=300)
+sb = Sandbox.create(template="base-criu", timeout=300)
 try:
     print("template_id", sb.get_info().template_id)
     print(sb.commands.run(
@@ -113,8 +113,8 @@ EOF
 
 | 项 | 期望 | 不符合说明什么 |
 |---|---|---|
-| guest 内 `gsd -commit` | 等于宿主上 `/fc-gsd/gsd -commit` 的输出 | 模板是换 gsd 之前建的，要重建模板 |
-| guest 内 `/usr/bin/gsd` 的 sha256 | 等于宿主上 `/fc-gsd/gsd` 的 sha256 | 同上 |
+| guest 内 `gsd -commit` | 等于宿主上 `/fc-criu/gsd -commit` 的输出 | 模板是换 gsd 之前建的，要重建模板 |
+| guest 内 `/usr/bin/gsd` 的 sha256 | 等于宿主上 `/fc-criu/gsd` 的 sha256 | 同上 |
 | `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[27](27-deployment.md)） |
 | THP | `always madvise [never]` | overlay-init 不是当前版本；增量会退化成接近全量（[03](03-criu-and-incremental-memory.md)） |
 | `rcu_expedited` | `1` | gsd 不是当前版本或没有正常启动（[12](12-restore.md)） |
@@ -133,7 +133,7 @@ EOF
 ### 4.1 `verify_gsd.py`
 
 ```bash
-python acceptance/verify_gsd.py base-gsd 8 2>&1 | tee $OUT/func/verify_gsd.log
+python acceptance/verify_gsd.py base-criu 8 2>&1 | tee $OUT/func/verify_gsd.log
 ```
 
 **期望。** 开头四行环境信息与 §3 一致（提交号、内核、`rcu_expedited` 为 1、THP 为 never）；8 行 restore 每行 `ok=True`、根盘已用量相对起点都是 `(+0)`；末行 `判定: 根盘恒定 ✓`。
@@ -145,7 +145,7 @@ python acceptance/verify_gsd.py base-gsd 8 2>&1 | tee $OUT/func/verify_gsd.log
 ### 4.2 `verify_fixes.py`
 
 ```bash
-python acceptance/verify_fixes.py --template base-gsd --out-json $OUT/func/verify_fixes.json 2>&1 | tee $OUT/func/verify_fixes.log
+python acceptance/verify_fixes.py --template base-criu --out-json $OUT/func/verify_fixes.json 2>&1 | tee $OUT/func/verify_fixes.log
 ```
 
 **期望。** 汇总表 28 行，其中 G-19 与 G-36 为 SKIP，其余 26 行为 PASS；末行 `合计 28 项，FAIL 0: []`。再做两个检查：
@@ -166,7 +166,7 @@ grep -n '可疑行' $OUT/func/verify_fixes.log       # 应无输出
 没有对照模板时跳过 V12：
 
 ```bash
-python acceptance/verify_multitree.py --template base-gsd --skip V12 --out-json $OUT/func/verify_multitree.json 2>&1 | tee $OUT/func/verify_multitree.log
+python acceptance/verify_multitree.py --template base-criu --skip V12 --out-json $OUT/func/verify_multitree.json 2>&1 | tee $OUT/func/verify_multitree.log
 ```
 
 **期望。** 汇总表 12 行全部 PASS，`合计 12 项，FAIL 0: []`；汇总表里没有重印出来的 `BAD` 行。带上 V12 时是 13 行、`合计 13 项`。同样搜一下 `可疑行`。
@@ -184,7 +184,7 @@ python acceptance/verify_multitree.py --template base-gsd --skip V12 --out-json 
 ### 4.4 `verify_clear_refs_race.py`
 
 ```bash
-python acceptance/verify_clear_refs_race.py --template base-gsd --rounds 30 --pages 4096 --rate 100000 \
+python acceptance/verify_clear_refs_race.py --template base-criu --rounds 30 --pages 4096 --rate 100000 \
     --jsonl $OUT/func/clear_refs_race.jsonl 2>&1 | tee $OUT/func/clear_refs_race.log
 ```
 
@@ -200,7 +200,7 @@ python acceptance/verify_clear_refs_race.py --template base-gsd --rounds 30 --pa
 
 ```bash
 for i in 1 2 3; do
-  TEMPLATE=base-gsd THP=never OUT_JSON="$OUT/func/perf-run$i.json" \
+  TEMPLATE=base-criu THP=never OUT_JSON="$OUT/func/perf-run$i.json" \
     python acceptance/demo_checkpoint_perf.py > "$OUT/func/perf-run$i.log" 2>&1 || exit 1
   sleep 8
 done
@@ -225,7 +225,7 @@ python acceptance/summarize_checkpoint_perf.py \
 ### 5.1 `probe_whiteout_bug.py`
 
 ```bash
-python probes/probe_whiteout_bug.py base-gsd --cases bug,ctl,nodel,masked,trap,trap,trap \
+python probes/probe_whiteout_bug.py base-criu --cases bug,ctl,nodel,masked,trap,trap,trap \
     > $OUT/func/probe-whiteout.json 2> $OUT/func/probe-whiteout.log
 cat $OUT/func/probe-whiteout.log
 ```
@@ -240,13 +240,13 @@ cat $OUT/func/probe-whiteout.log
 
 ```bash
 export STALL=150
-A="--template base-gsd --mode stress --rounds 300"
+A="--template base-criu --mode stress --rounds 300"
 bash stress/run_stress_watch.sh $OUT/stress/all       $A --workers 6 &
 bash stress/run_stress_watch.sh $OUT/stress/noworkers $A --workers 0 &
 wait; cat $OUT/stress/all/RESULT $OUT/stress/noworkers/RESULT
 
-SCRIPT=stress_multitree.py    bash stress/run_stress_watch.sh $OUT/stress/multitree --template base-gsd --mode multitree --rounds 200 &
-SCRIPT=stress_delete_dense.py bash stress/run_stress_watch.sh $OUT/stress/deldense  --template base-gsd --mode deldense  --rounds 200 &
+SCRIPT=stress_multitree.py    bash stress/run_stress_watch.sh $OUT/stress/multitree --template base-criu --mode multitree --rounds 200 &
+SCRIPT=stress_delete_dense.py bash stress/run_stress_watch.sh $OUT/stress/deldense  --template base-criu --mode deldense  --rounds 200 &
 wait; cat $OUT/stress/multitree/RESULT $OUT/stress/deldense/RESULT
 ```
 
@@ -348,14 +348,14 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 
 | 入口 | 内容 | 判据 |
 |---|---|---|
-| `bash criu-rollback/deploy/950.sh acceptance` | §3 的部署自检（`ops/guest_check.py`）→ `verify_gsd.py base-gsd 8` → `verify_fixes.py` → `verify_multitree.py --skip V12` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 | 同 §2 的表。遇到非零返回码或内容判据失败就停止，写 `summary.json`。首次部署没有对照模板，跳过 V12 |
+| `bash criu-rollback/deploy/950.sh acceptance` | §3 的部署自检（`ops/guest_check.py`）→ `verify_gsd.py base-criu 8` → `verify_fixes.py` → `verify_multitree.py --skip V12` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 | 同 §2 的表。遇到非零返回码或内容判据失败就停止，写 `summary.json`。首次部署没有对照模板，跳过 V12 |
 | `bash criu-rollback/deploy/950.sh stress` | `probe_whiteout_bug.py` 七个用例，再顺序跑 all、noworkers、multitree、deldense 四组，`STALL` 为 150 秒 | 同 §5.2 的判据表。任何一组失败就停止后续组；取不到串口输出不算通过 |
 
-`all` 之外还有三个测试命令，都要先在进程级栈上（先执行 `950.sh gsd`）。平时由仓库根的 `test950.sh` 按档调度，见 `test950/README.md`：
+`all` 之外还有三个测试命令，都要先在进程级栈上（先执行 `950.sh criu`）。平时由仓库根的 `test950.sh` 按档调度，见 `test950/README.md`：
 
 | 入口 | 内容 | 判据 |
 |---|---|---|
-| `bash criu-rollback/deploy/950.sh quick` | 部署自检 + `verify_gsd.py base-gsd 8`，约 2 分钟，每次切栈或换二进制后用 | 同 §3、§4.1 |
+| `bash criu-rollback/deploy/950.sh quick` | 部署自检 + `verify_gsd.py base-criu 8`，约 2 分钟，每次切栈或换二进制后用 | 同 §3、§4.1 |
 | `bash criu-rollback/deploy/950.sh stress-ext` | [18](18-testing-and-debug-kernel.md) §5.1 的八组（含 enospc）各 1000 轮；多棵树、删文件密集各 3 个种子 200 轮（容量以内），再各 1000 轮（`*-capacity`，把 guest 内存或根盘用满，看容量耗尽时是否仍安全失败）；all、noworkers 各 5 个种子 300 轮；最后跑兼容矩阵 `rollback/scripts/acceptance/compat_matrix.py`（含 checkpoint → pause → resume → restore，即 [16](16-known-limits.md) 的 T-09） | 压测同 §5.2；enospc 另判删掉填充后 checkpoint 与 restore 恢复、内容正确；兼容矩阵无 `BROKEN` |
 | `bash criu-rollback/deploy/950.sh soak --hours 4` | 一个沙箱、六个 worker、十种文件操作，按时长连续 checkpoint / restore / delete；前后记录宿主内存、netns、orchestrator fd 与根盘用量 | 同 §5.2；资源只记录不判 |
 
@@ -367,7 +367,7 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 
 ## 本章要点
 
-- 在运行进程级栈的宿主机上、用装好 SDK 依赖的 conda 环境加代码仓的 `py-sdk`、对模板 `base-gsd` 跑；开始前确认三个文件的 sha256、确认机器上没有别人的沙箱。
+- 在运行进程级栈的宿主机上、用装好 SDK 依赖的 conda 环境加代码仓的 `py-sdk`、对模板 `base-criu` 跑；开始前确认三个文件的 sha256、确认机器上没有别人的沙箱。
 - 顺序固定：部署自检 → `verify_gsd.py` → `verify_fixes.py` → `verify_multitree.py` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 → 可选的探针与压测。前一步不过就停下来查。
 - 部署自检查的是"模板里装的是不是要验的那一套"：guest 内 gsd 的提交号与 sha256、内核版本串、THP、`rcu_expedited`、`/health`、criu 版本、`/` 与 `/tmp`。换过内核、gsd、overlay-init 而没有重建模板，是最常见的白跑原因。
 - `verify_gsd.py`、`verify_clear_refs_race.py` 与 `stress_overlay_ckpt.py` 的退出码不是判定，分别看末行的根盘判定、漏页轮数、以及按判据表核对汇总 JSON。

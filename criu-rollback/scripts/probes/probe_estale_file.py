@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """目录跨 restore 语义修复的非目录分支：restore 后按路径访问一个"被别人只读打开着、checkpoint 之后又改过"的文件。
 
-    python3 probe_estale_file.py [模板名，默认 base-gsd]
+    python3 probe_estale_file.py [模板名，默认 base-criu]
 
 f 在 c1 之前建好（c1 时在 upper，沉进 L1）；root 进程（systemd-run，不在 criu 树里）只读打开 f 并一直拿着；
 c1 之后按路径追加一行（copy-up），建 c2（这份 upper 沉进 L2，inode 的 lower 被改到 L2），再 restore c1。
@@ -20,7 +20,7 @@ from e2b_env import load_e2b_env  # noqa: E402
 os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 HOLD = r'''
 import os, sys, time
 fd = os.open(sys.argv[1], os.O_RDONLY)

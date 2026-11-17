@@ -22,6 +22,7 @@ import sys
 import time
 
 import paths
+import stack
 ROOT = paths.ROOT
 SCRIPTS = paths.SCRIPTS
 from check_python import check
@@ -34,7 +35,7 @@ parser.add_argument("--hours", type=float, default=4.0, help="soak 的时长（�
 args = parser.parse_args()
 OUT = (args.out or ROOT / "results" / (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + args.mode)).resolve()
 OUT.mkdir(parents=True, exist_ok=False)
-os.environ.setdefault("TEMPLATE", "base-gsd")
+os.environ.setdefault("TEMPLATE", os.environ.get("CRIU_TEMPLATE", "base-criu"))
 TEMPLATE = os.environ["TEMPLATE"]
 summary = {"machine": os.uname().nodename, "started": datetime.now().isoformat(),
            "mode": args.mode, "template": TEMPLATE, "python": sys.version,
@@ -171,7 +172,7 @@ OPS_GROUPS = {
 def stress_group(name, script, mode, rounds, extra, stall="150"):
     directory = OUT / name
     env = dict(os.environ, SCRIPT=script, PY=sys.executable, STALL=stall)
-    env.setdefault("NOMAD_JOB", os.environ.get("GSD_JOB", "template-manager-system"))
+    env.setdefault("NOMAD_JOB", os.environ.get("CRIU_JOB", "template-manager-system"))
     check = (lambda text: check_enospc(directory) or check_console(directory)) if mode == "enospc" \
         else (lambda text: check_stress(directory))
     step(name, ["bash", "stress/run_stress_watch.sh", str(directory), "--template", TEMPLATE,
@@ -203,8 +204,8 @@ def host_resources():
               "case ${e##*/} in orchestrator*|template-manager*) echo ${p#/proc/}; break;; esac; done")
     res = {"time": datetime.now().isoformat(),
            "MemAvailable_kB": int(mem["MemAvailable"].split()[0]),
-           "netns": len(os.listdir("/run/netns")) if os.path.isdir("/run/netns") else 0,
-           "firecracker": len(sh("pidof firecracker").split()),
+           "netns": stack.e2b_netns(),
+           "firecracker": len(stack.e2b_firecrackers()),
            "orchestrator_pid": orch}
     if orch:
         res["orchestrator_rss_kB"] = int(sh("awk '/VmRSS/{print $2}' /proc/%s/status" % orch) or 0)
@@ -215,8 +216,9 @@ def host_resources():
 
 try:
     save()
-    hashes = subprocess.check_output(["sha256sum", "/fc-gsd/gsd", "/fc-gsd/orchestrator",
-                                     "/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin"], text=True)
+    fc = paths.host_fc()
+    hashes = subprocess.check_output(["sha256sum", str(fc / "gsd"), str(fc / "orchestrator"),
+                                     str(fc / "kernels/vmlinux-6.1.158/vmlinux.bin")], text=True)
     (OUT / "deliverables.sha256").write_text(hashes)
     if args.mode == "quick":
         step("guest-check", [sys.executable, str(ROOT / "ops/guest_check.py")])
@@ -292,7 +294,7 @@ try:
         ):
             directory = OUT / name
             env = dict(os.environ, SCRIPT=script, PY=sys.executable, STALL="150")
-            env.setdefault("NOMAD_JOB", os.environ.get("GSD_JOB", "template-manager-system"))
+            env.setdefault("NOMAD_JOB", os.environ.get("CRIU_JOB", "template-manager-system"))
             step(name, ["bash", "stress/run_stress_watch.sh", str(directory), "--template", TEMPLATE,
                         "--mode", mode, "--rounds", rounds] + extra,
                  lambda text: check_stress(directory), env)

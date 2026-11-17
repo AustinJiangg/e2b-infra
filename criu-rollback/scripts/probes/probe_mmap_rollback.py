@@ -3,7 +3,7 @@
 
 （该语义：checkpoint 之前打开的 fd，checkpoint 之后经它写入的内容落到新 upper，随 restore 回滚。）
 
-    python3 probe_mmap_rollback.py [模板名，默认 base-gsd]
+    python3 probe_mmap_rollback.py [模板名，默认 base-criu]
 
 root 进程（systemd-run，gsd 不碰它）在 checkpoint 前打开文件、写第 1 行，checkpoint c1 之后再写第 2 行：
   M0  只有 fd，经 fd 写（对照，按上述语义应回滚）
@@ -29,7 +29,7 @@ from e2b_env import load_e2b_env  # noqa: E402
 os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 
 HOLDER = r'''
 import mmap, os, sys, time

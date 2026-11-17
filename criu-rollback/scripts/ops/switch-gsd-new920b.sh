@@ -9,9 +9,9 @@
 # 重新生成，gsd 加的 env 不会残留。
 #
 # 这个脚本对基线 job 做的改动：
-#   - 二进制换成 /fc-gsd/orchestrator
-#   - 注入 guest 的 gsd 在 /fc-gsd/gsd，正是 HOST_GSD_PATH 的默认值，不用设 env
-#   - task env 追加 HOST_KERNELS_DIR=/fc-gsd/kernels（gsd 补丁内核的根目录）。这台机器
+#   - 二进制换成 $F/orchestrator（$F 默认 /fc-criu，与 950.sh 落位的位置相同）
+#   - task env 设 HOST_GSD_PATH=$F/gsd（orchestrator 内置默认是旧位置 /fc-gsd/gsd，要显式设）
+#   - task env 追加 HOST_KERNELS_DIR=$F/kernels（gsd 补丁内核的根目录）。这台机器
 #     两套栈共用，/fc-kernels/vmlinux-6.1.158 是整机级那套的，所以补丁内核另放；
 #     只跑 gsd 的机器把补丁内核直接放 /fc-kernels 即可，这个 env 也不用设
 # 两点保护与后果：
@@ -27,12 +27,13 @@
 set -uo pipefail
 
 S_DIR=${GSD_STACK_DIR:-$HOME/gsd-stack/stack}       # 只放基线 job 与生成的 job 定义
-F=/fc-gsd                                           # gsd 栈运行时用的全部文件
-GSD_DEFAULT=$F/gsd                                  # = orchestrator 里 HOST_GSD_PATH 的默认值
+F=${CRIU_FC:-/fc-criu}                              # 进程级栈运行时用的全部文件（与 950.sh 落位的位置相同）
+GSD_DEFAULT=/fc-gsd/gsd                             # = orchestrator 里 HOST_GSD_PATH 的内置默认值
+
 # 调试时可用环境变量临时换一套（例如带 KASAN 的内核）：
 #   GSD_ORCH_BIN=... GSD_BIN=... GSD_KDIR=... switch-gsd-new920b.sh gsd
 BIN_GSD=${GSD_ORCH_BIN:-$F/orchestrator}
-GSD=${GSD_BIN:-$GSD_DEFAULT}
+GSD=${GSD_BIN:-$F/gsd}
 KDIR=${GSD_KDIR:-$F/kernels}                        # 其下 vmlinux-6.1.158/vmlinux.bin 是补丁内核
 KERNEL=$KDIR/vmlinux-6.1.158/vmlinux.bin
 JOB=template-manager-system

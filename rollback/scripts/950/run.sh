@@ -86,6 +86,19 @@ RUN_ARGS="$*"
 
 die() { echo "错误：$*" >&2; exit 2; }
 
+# live_fc：活着的 e2b firecracker 进程数。e2b 的 firecracker 从 /fc-versions/ 启动，
+# 同机 AgentENV 的在 /var/lib/aenv/ 下，不算。按 exe 认，不用 pidof / pgrep -f。
+live_fc() {
+	local p e n=0
+	for p in /proc/[0-9]*; do
+		e=$(readlink "$p/exe" 2>/dev/null) || continue
+		case $e in /fc-versions/*/firecracker*) n=$((n + 1)) ;; esac
+	done
+	echo "$n"
+}
+# e2b_netns：e2b 的网络命名空间个数（/run/netns/ns-<n>；AgentENV 的在 /run/aenv/netns/）
+e2b_netns() { ls /run/netns 2>/dev/null | grep -cE '^ns-[0-9]+$' || true; }
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 	smoke | func | perf | hdbss | special | idle | soak | long) TIER=$1; shift ;;
@@ -125,9 +138,9 @@ if [ -n "$ORDERS" ] || [ "$TIER" = special ]; then
 		[ "$ALLOW_RESTART" = 1 ] ||
 			die "special 档要逐条改 env 并重启 orchestrator 8 次，这台机器上所有沙箱都会没；确认要做就加 --allow-restart"
 	fi
-	# 第二道闸：机器上还有沙箱在跑就不扫（--allow-restart 只表示「知道要重启」，不表示
-	# 「知道现在有人在用」）。在建结果目录、碰 job 之前就判，用 pidof 数，不用 pgrep -f。
-	N_LIVE_FC=$(pidof firecracker | wc -w)
+	# 第二道闸：机器上还有 e2b 沙箱在跑就不扫（--allow-restart 只表示「知道要重启」，不表示
+	# 「知道现在有人在用」）。在建结果目录、碰 job 之前就判；只数 e2b 的 firecracker（见 live_fc）。
+	N_LIVE_FC=$(live_fc)
 	if [ "$N_LIVE_FC" -gt 0 ] && [ "$KILL_SANDBOXES_OK" != 1 ]; then
 		ORCH_EXE="（没找到 orchestrator / template-manager 进程）"
 		for p in /proc/[0-9]*; do
@@ -366,7 +379,6 @@ orch_port() { # orchestrator 的 gRPC / health 端口：取自它的命令行 --
 	echo "${port:-5008}"
 }
 orch_health() { curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:$1/health" 2>/dev/null; }
-live_fc() { pidof firecracker | wc -w; } # 活着的 firecracker 进程数
 
 # job_view <inspect.json>：把 job 定义里会影响进程的部分（启动命令 + Env）排好序打成文本，
 # 供扫描前后 diff。名字像密钥的变量只打值的 sha256 前 12 位 —— 这份文本会进 SUMMARY。
@@ -509,7 +521,7 @@ hdbss_restore_job() {
 		echo "| job 版本 | 扫描前 $(job_version "$OUT/job-before.json") → 现在 $(job_version "$after")（每提交一次加 1） |"
 		echo "| 现在的 orchestrator | pid ${p:-无} · \`$([ -n "$p" ] && readlink "/proc/$p/exe")\` · health $([ -n "$p" ] && orch_health "$port") |"
 		echo "| 现在进程环境里的 FC_HDBSS_ORDER | ${cur_order:-未设（Firecracker 取默认 1）} |"
-		echo "| 活着的 firecracker / netns 数 | $(live_fc) / $(ls /run/netns 2>/dev/null | wc -l) |"
+		echo "| 活着的 e2b firecracker / e2b netns 数 | $(live_fc) / $(e2b_netns) |"
 		echo ""
 		if [ -n "$diff_out" ]; then
 			echo "扫描前（<）与现在（>）的差异："
@@ -882,7 +894,7 @@ soak)
 		{
 			echo "time=$(date -Is)"
 			echo "MemAvailable_kB=$(awk '/MemAvailable/{print $2}' /proc/meminfo)"
-			echo "netns=$(ls /run/netns 2>/dev/null | wc -l)"
+			echo "netns=$(e2b_netns)"
 			echo "firecracker=$(live_fc)"
 			echo "nat_rules=$(iptables -t nat -S 2>/dev/null | wc -l)"
 			echo "conntrack=$(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null || echo -)"
@@ -1149,8 +1161,9 @@ TOTAL=$((N_PASS + N_FAIL + N_SKIP))
 	fi
 	echo "## 怎么把结果交回"
 	echo ""
-	echo "把这份 \`SUMMARY.md\` 和需要细看的 \`.json\` 一起拷出来即可；\`.log\` 体积大，"
-	echo "只在有 FAIL 时才需要连日志一起带。整个 \`results/\` 不入库。"
+	echo "用 test950.sh 跑时，\`bash test950.sh report\` 把逐项结果打印到终端，"
+	echo "\`bash test950.sh report 步骤名\` 再打印该步各项日志的末尾，复制终端内容即可，不用拷文件。"
+	echo "单独跑本脚本时，\`cat\` 这份 \`SUMMARY.md\`，需要细看哪个 \`.log\` 再 \`tail\` 它。整个 \`results/\` 不入库。"
 } >"$SUMMARY"
 
 say ""

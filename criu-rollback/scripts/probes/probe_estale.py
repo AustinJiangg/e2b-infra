@@ -4,7 +4,7 @@
 压测里 worker 的 cwd 固定在 /srv/st/d1/.../d8，restore 之后它的 cwd 就是陈旧目录；
 在目录跨 restore 的语义修好之前的内核上，worker 按绝对路径 listdir/scandir 的 ESTALE 比例很高，这里拆开看：
 
-    python3 probe_estale.py [模板名，默认 base-gsd]
+    python3 probe_estale.py [模板名，默认 base-criu]
 
 场景（每个场景都是 create c2 → restore c1 之后，用全新的进程按绝对路径做一组操作）：
   A  没有任何进程停在这些目录里（对照）
@@ -30,7 +30,7 @@ from e2b_env import load_e2b_env  # noqa: E402
 os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 
 OPS = [
     ("ls /srv/p", "ls /srv/p"),

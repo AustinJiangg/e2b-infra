@@ -724,7 +724,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p><strong>交叉引用。</strong> 链接文字是章号，写成 <code>[20](20-920b-performance.md)</code>，附录写 <code>[附录 C](C-issue-resolution.md)</code>；需要指到节时写出节名，章内用 <code>§x.y</code>。</p>
 <p><strong>数字纪律。</strong> 判定性的实测数字只在第四篇。完整功能与压测以 2026-10-08 的确认验证为准，2026-10-16 的六档分档和 2026-11-06 的全流程复测单列。每个数字在 <a href="#d23">23</a> 的出处表里能找到来源文件。其他章举数时当场标明平台、日期、代码版本和口径，这些数只为说明原理或过程，不能与第四篇的数相减。不同平台、不同口径的同名指标不互相比较。容量单位用 MiB / GiB，时间用 ms。</p>
 <p><strong>平台标签。</strong> "新 920B"指 192.168.45.47 这台机器；"旧 920B"指已退役的那台，只在案例附录作为历史数据出现。950：未运行，数据待填，见 <a href="#d22">22</a>、<a href="#d24">24</a>。</p>
-<p><strong>路径与命名。</strong> 命令和路径按运行时布局写：宿主 <code>/fc-gsd/gsd</code>、<code>/fc-gsd/orchestrator</code>、<code>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin</code>，模板名 <code>base-gsd</code>。结果文件里的开发期产物名只在 <a href="#d19">19</a> 的条件标签、<a href="#d23">23</a> 的出处表和<a href="#dA">附录 A</a> 的对照表里出现。</p>
+<p><strong>路径与命名。</strong> 命令和路径按运行时布局写：宿主 <code>/fc-criu/gsd</code>、<code>/fc-criu/orchestrator</code>、<code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code>，模板名 <code>base-criu</code>。2026-11-17 之前的布局是 <code>/fc-gsd/</code>、模板 <code>base-gsd</code>，第 16～24 章与附录里的实测记录保留当时的名字。结果文件里的开发期产物名只在 <a href="#d19">19</a> 的条件标签、<a href="#d23">23</a> 的出处表和<a href="#dA">附录 A</a> 的对照表里出现。</p>
 <p><strong>措辞。</strong> "初始实现"指修复之前的代码；"修改前 / 修复后"指同一份代码的两个阶段；"进程级"指本书的方案，"沙箱级"指沙箱级手册的方案；"回滚"即 restore；拍快照的操作写 checkpoint，只有引用接口名时才写 <code>CreateCheckpoint</code>、<code>create()</code>。过程性的叙述（先怀疑什么、后来推翻什么）只在<a href="#dD">附录 D</a>、<a href="#dE">附录 E</a> 和 <a href="#d08">08</a>、<a href="#d09">09</a> 各主题的"根因"小节里，其余章只写现状。</p>
 <p><strong>全书唯一的表。</strong> 目录与层布局（<a href="#d05">05</a>）、错误表（<a href="#d14">14</a>）、已知限制表（<a href="#d16">16</a>）、缺口表（<a href="#d23">23</a>）、两种方案的对比表（<a href="#d24">24</a>）、开关总表与计时键（<a href="#d28">28</a>）、问题处理总表（<a href="#dC">附录 C</a>）。别的章需要时链接过去，不复述。</p>
 <hr />
@@ -2798,6 +2798,7 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 <h2 id="d05-6-目录布局总表">6. 目录布局总表</h2>
 <p>全书提到的路径都以这张表为准。</p>
 <h3 id="d05-61-宿主">6.1 宿主</h3>
+<p>2026-11-17 起运行文件放在 <code>/fc-criu/</code>（<code>criu-rollback/deploy/README.md</code> 第 1 节）；之前的布局是 <code>/fc-gsd/</code>，第 19～21 章的记录保留当时的路径。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -2808,19 +2809,19 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 </thead>
 <tbody>
 <tr>
-<td><code>/fc-gsd/gsd</code></td>
+<td><code>/fc-criu/gsd</code></td>
 <td>gsd 二进制（arm64，静态编译）</td>
-<td>orchestrator 建模板时读，路径来自 <code>HOST_GSD_PATH</code>，这就是它的默认值</td>
+<td>orchestrator 建模板时读，路径来自 <code>HOST_GSD_PATH</code>（内置默认 <code>/fc-gsd/gsd</code> 是旧布局，部署时显式设成这个路径）</td>
 </tr>
 <tr>
-<td><code>/fc-gsd/orchestrator</code></td>
+<td><code>/fc-criu/orchestrator</code></td>
 <td>带 gsd 注入逻辑的 orchestrator</td>
 <td>宿主的服务管理</td>
 </tr>
 <tr>
-<td><code>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
+<td><code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
 <td>打了热切层与 soft-dirty 补丁的 guest 内核</td>
-<td>orchestrator，经 <code>HOST_KERNELS_DIR=/fc-gsd/kernels</code> 指过去；只跑进程级的机器也可以直接放在默认的 <code>/fc-kernels</code> 下</td>
+<td>orchestrator，经 <code>HOST_KERNELS_DIR=/fc-criu/kernels</code> 指过去；只跑进程级的机器也可以直接放在默认的 <code>/fc-kernels</code> 下</td>
 </tr>
 </tbody>
 </table></div>
@@ -3300,7 +3301,7 @@ restore 时把层栈换回去（<a href="#d07">07</a>）。</p>
 <h2 id="d06-4-orchestrator-的注入">4. orchestrator 的注入</h2>
 <h3 id="d06-41-一个开关管五处">4.1 一个开关管五处</h3>
 <p>是否构建带 gsd 的模板由 <code>BuilderConfig.GSDEnabled</code>（<code>cfg/model.go:39</code>）决定，它只看一件事：<code>HostGSDPath</code> 是否非空。这个字段来自环境变量
-<code>HOST_GSD_PATH</code>，默认值 <code>/fc-gsd/gsd</code>（<code>cfg/model.go:22</code>）。所以<strong>默认是开的</strong>。</p>
+<code>HOST_GSD_PATH</code>，默认值 <code>/fc-gsd/gsd</code>（<code>cfg/model.go:22</code>）。所以<strong>默认是开的</strong>。部署入口把 gsd 放在 <code>/fc-criu/gsd</code>，并在 job 里显式设 <code>HOST_GSD_PATH</code> 指向它（<a href="#d27">27</a> §3.1）。</p>
 <p><code>GSDEnabled</code> 为真时，建模板路径上有五处与上游不同；为假时这五处都走与上游相同的分支：</p>
 <div class="tw"><table>
 <thead>
@@ -3385,7 +3386,7 @@ restore 时把层栈换回去（<a href="#d07">07</a>）。</p>
 </table></div>
 <p>要点是<strong>只有小写的 <code>off</code> 才是关</strong>。写成 <code>OFF</code> 或 <code>Off</code> 会被当成一个相对路径，gsd 仍然是开的，之后建模板时因为读不到这个文件而失败（<a href="#d16">16</a>）。</p>
 <p>这张表来自配置解析的测试。表里第一行"不设该变量、按默认路径注入"已于 2026-10-09 在新 920B 上真实建模板确认：orchestrator 的进程环境里没有 <code>HOST_GSD_PATH</code> 这个键，
-建出的模板里 guest 的 <code>/usr/bin/gsd</code> 与宿主 <code>/fc-gsd/gsd</code> 的 sha256 相同（<a href="#d19">19</a> 的"落位后的复核"一节、<a href="#d27">27</a>）。
+建出的模板里 guest 的 <code>/usr/bin/gsd</code> 与宿主上 <code>HOST_GSD_PATH</code> 指的 gsd 的 sha256 相同（<a href="#d19">19</a> 的"落位后的复核"一节、<a href="#d27">27</a>）。
 "关掉开关（<code>off</code>）后真实建出的模板与上游一致"这一条仍然只有单测与代码依据，没有上机结果，列在 <a href="#d23">23</a> 的缺口表里。</p>
 <h3 id="d06-43-每建一层后的注入与自检">4.3 每建一层后的注入与自检</h3>
 <p>模板是一层一层建的。每一层的构建沙箱起来之后、执行该层的构建动作之前，<code>injectGsdInSandbox</code>（<code>template/build/layer/gsd.go:50</code>）做三件事：</p>
@@ -3411,7 +3412,7 @@ restore 时把层栈换回去（<a href="#d07">07</a>）。</p>
 <p>沙箱不是"开机"出来的。模板构建的最后一步是给运行中的构建沙箱拍一个内存快照；之后每个沙箱都是从这个快照恢复出来的。由此得到三个推论：</p>
 <ul>
 <li><strong>内核</strong>：快照里是建模板那一刻正在运行的 guest 内核。把宿主上的内核文件换掉、或者把 <code>HOST_KERNELS_DIR</code> 指到另一个目录，<strong>不改变任何已有模板</strong>里的内核。</li>
-<li><strong>gsd</strong>：快照里是一个已经在运行的 gsd 进程，连同它的堆。宿主上换 <code>/fc-gsd/gsd</code> 同样不影响已有模板。</li>
+<li><strong>gsd</strong>：快照里是一个已经在运行的 gsd 进程，连同它的堆。宿主上换 gsd 文件（<code>HOST_GSD_PATH</code> 指的那个）同样不影响已有模板。</li>
 <li><strong><code>overlay-init</code></strong>：它只在建模板时的开机过程中运行过，沙箱恢复时不再运行。改它的效果只体现在此后新建的模板上。</li>
 </ul>
 <p>所以换这三者中的任何一样，都要重建模板。反过来看这也是一个保障：已有模板不会因为宿主上换了文件而悄悄变样。</p>
@@ -11055,13 +11056,13 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p>本章不给通过阈值。950 的第一轮结果是它自己的基线，920B 的耗时不能作为 950 的通过标准。四组压测和功能验收的判据在 <a href="#d18">18</a>，表的结构与 <a href="#d19">19</a>、<a href="#d20">20</a> §1、<a href="#d21">21</a> §2 相同，以便并排阅读。同一流程在新 920B 上跑出的结果就是那几节。</p>
 <hr />
 <h2 id="d22-1-结果从哪里来">1. 结果从哪里来</h2>
-<p>入口是仓库里的 <code>criu-rollback/deploy/950.sh</code>，在仓库根目录执行 <code>bash criu-rollback/deploy/950.sh all</code>，全部结果打成一个包 <code>criu-rollback/deploy/results/&lt;时间&gt;-all.tar.gz</code>。包里与验证相关的三部分：</p>
+<p>入口是仓库里的 <code>criu-rollback/deploy/950.sh</code>，在仓库根目录执行 <code>bash criu-rollback/deploy/950.sh all</code>，结束时把逐步结论和各项摘要打印到终端，细节用 <code>950.sh report acceptance|stress|smoke</code> 打印（不打包）。结果目录 <code>criu-rollback/deploy/results/&lt;时间&gt;-all/</code> 里与验证相关的三部分：</p>
 <div class="tw"><table>
 <thead>
 <tr>
 <th><code>all</code> 里的步骤</th>
 <th>内容</th>
-<th>包内目录</th>
+<th>结果目录下</th>
 </tr>
 </thead>
 <tbody>
@@ -11082,7 +11083,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 </tbody>
 </table></div>
-<p><code>all</code> 之后的分档测试由仓库根的 <code>test950.sh</code> 调度（<code>test950/README.md</code>），结果包是 <code>test950/results/&lt;时间&gt;-&lt;档&gt;.tar.gz</code>，进程级各步的目录名为 <code>criu-&lt;命令&gt;</code>，内部结构与下面相同。extended 档另有 <code>criu-stress-ext/</code>（八组压测、多种子与兼容矩阵），long 档另有 <code>criu-soak/</code>（按时长的长跑与宿主资源前后对比）。</p>
+<p><code>all</code> 之后的分档测试由仓库根的 <code>test950.sh</code> 调度（<code>test950/README.md</code>），结果用 <code>bash test950.sh report</code> 打印，结果目录是 <code>test950/results/&lt;时间&gt;-&lt;档&gt;/</code>，进程级各步的目录名为 <code>criu-&lt;命令&gt;</code>，内部结构与下面相同。extended 档另有 <code>criu-stress-ext/</code>（八组压测、多种子与兼容矩阵），long 档另有 <code>criu-soak/</code>（按时长的长跑与宿主资源前后对比）。</p>
 <p>包里另有 <code>all.log</code>（每步进度与结论）、<code>summary.json</code>（每步状态与用时）和 <code>netcheck.txt</code>（切换前后宿主上非 e2b 网络配置的比对）。验收和压测两个目录里都有 <code>summary.json</code>（每一步的命令和状态、判定 <code>verdict</code>、机器名、起止时间、Python 与 SDK 路径）和 <code>deliverables.sha256</code>（三个运行文件的 sha256）。<code>acceptance</code> 的 <code>summary.json</code> 还有 <code>slow_calls</code> 和 <code>skipped</code>。下面各表的"来源"列写的都是相对这两个目录的文件名。</p>
 <p>分档性能的三轮结果用 <code>criu-rollback/scripts/acceptance/summarize_checkpoint_perf.py</code> 校验并汇总，命令见 <a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/validation/README.md">验证摘要</a>。950 的摘要另建带平台与日期的目录，放在 <code>criu-rollback/validation/</code> 下，不覆盖 920B 的目录。</p>
 <p>结果里有几项不进入这些文件，要在运行时另外记下：机器名、起止时间、宿主内核版本、未跑的项目和回切冒烟结果。回传时不带 <code>criu-rollback/scripts/.env</code>、状态目录、Nomad job JSON 和登录配置。</p>
@@ -11871,7 +11872,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p><strong>产物与模板。</strong></p>
 <ol>
 <li><code>deliverables.sha256</code> 里 gsd、orchestrator、guest 内核三个 sha256 与 <code>criu-rollback/deploy/manifest.json</code> 里的 <code>sha256</code> 一致（是去掉调试段后的版本），acceptance 和 stress 两个目录也互相一致。</li>
-<li><code>base-gsd</code> 是在 950 的进程级栈下新建的，不是沙箱级模板，也不是从别的机器带来的；建模板时没有加 <code>--use-cache</code>。</li>
+<li><code>base-criu</code> 是在 950 的进程级栈下新建的，不是沙箱级模板，也不是从别的机器带来的；建模板时没有加 <code>--use-cache</code>。</li>
 <li>guest 自检通过：<code>gsd -commit</code> 为 <code>259f1a25c</code>，内核构建标识为 <code>#4 SMP Thu Oct  8 20:06:40 CST 2026</code>，CRIU 为 4.2.1，THP 为 <code>[never]</code>，<code>rcu_expedited</code> 为 1，vCPU 为 2。</li>
 <li>客户端用的是带 checkpoint 接口的进程级 SDK，<code>summary.json</code> 的 <code>sdk</code> 落在进程级 conda 环境里。</li>
 </ol>
@@ -13572,7 +13573,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <hr />
 <h2 id="d25-1-前提">1. 前提</h2>
 <h3 id="d25-11-服务端">1.1 服务端</h3>
-<p>宿主已经切到进程级这套栈，并且在这套栈下建过模板 <code>base-gsd</code>（做法见 <a href="#d27">27</a>）。本章示例都用这个模板。</p>
+<p>宿主已经切到进程级这套栈，并且在这套栈下建过模板 <code>base-criu</code>（做法见 <a href="#d27">27</a>）。本章示例都用这个模板。</p>
 <p>checkpoint 接口由沙箱<strong>里面</strong>的守护进程 gsd 提供，监听 guest 的 49984 端口；宿主上的代理只负责把请求按端口转进去，不参与 checkpoint 本身（请求路径见 <a href="#d05">05</a>）。
 所以"这个沙箱能不能做 checkpoint"取决于它的模板：只有在进程级栈下建出来的模板，里面才有 gsd、补丁内核和 overlay 根文件系统。拿一个普通模板起的沙箱调用本章的接口，<code>is_running()</code> 会返回 <code>False</code>。</p>
 <h3 id="d25-12-sdk仓库里的-py-sdk">1.2 SDK：仓库里的 <code>py-sdk</code></h3>
@@ -13636,7 +13637,7 @@ pip<span class="w"> </span>install<span class="w"> </span>&lt;代码仓&gt;/py-s
 <div class="hl"><pre><span></span><code><span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">e2b</span> <span class="kn">import</span> <span class="n">Sandbox</span>
 
-<span class="n">TEMPLATE</span> <span class="o">=</span> <span class="s2">&quot;base-gsd&quot;</span>
+<span class="n">TEMPLATE</span> <span class="o">=</span> <span class="s2">&quot;base-criu&quot;</span>
 
 
 <span class="k">def</span> <span class="nf">sh</span><span class="p">(</span><span class="n">sbx</span><span class="p">,</span> <span class="n">cmd</span><span class="p">):</span>
@@ -13743,7 +13744,7 @@ pip<span class="w"> </span>install<span class="w"> </span>&lt;代码仓&gt;/py-s
 
 
 <span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
-    <span class="n">sbx</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncSandbox</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="s2">&quot;base-gsd&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>
+    <span class="n">sbx</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncSandbox</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="s2">&quot;base-criu&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="n">sbx</span><span class="o">.</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">is_running</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;这个模板里没有 gsd&quot;</span><span class="p">)</span>
@@ -14000,7 +14001,7 @@ from one command so they form a single tree
 <hr />
 <h2 id="d25-本章要点">本章要点</h2>
 <ul>
-<li>checkpoint 接口由沙箱里的 gsd 提供，能不能用取决于模板：只有进程级栈下建的模板（本书用 <code>base-gsd</code>）才有；客户端要用代码仓里的 <code>py-sdk</code>，它和沙箱级回滚用的 SDK 不是同一份，不能混装。</li>
+<li>checkpoint 接口由沙箱里的 gsd 提供，能不能用取决于模板：只有进程级栈下建的模板（本书用 <code>base-criu</code>）才有；客户端要用代码仓里的 <code>py-sdk</code>，它和沙箱级回滚用的 SDK 不是同一份，不能混装。</li>
 <li>五个方法都在 <code>sandbox.checkpoint</code> 下，同步与异步的签名相同；<code>restore()</code> 与 <code>delete()</code> 成功时返回 <code>True</code>，失败一律抛异常。</li>
 <li>被回滚的是 uid 1000 的全部用户进程树和根文件系统（包括 <code>/tmp</code>）。每个后台命令是一棵树；restore 先杀掉当前全部用户进程，再恢复目标 checkpoint 里的树。</li>
 <li><code>CheckpointInfo.timings</code> 只有 <code>create()</code> 才填；<code>restore()</code> 的分段耗时在 <code>sandbox.checkpoint.last_timings</code>。这些数字是 gsd 自己计的，不含网络与排队。</li>
@@ -14331,7 +14332,7 @@ gsd 检查不出来的一种情况是树之间共享的匿名共享内存（只�
 <li>在不联网的机器上把 gsd 与 orchestrator 编出来，把 guest 内核按固定基线打上补丁编出来，并核对补丁能从基线重放出同一棵源码树；</li>
 <li>按运行时布局摆放文件，分清"与沙箱级回滚共用的机器"和"只跑进程级的机器"两种摆法；</li>
 <li>用切栈脚本把宿主切到进程级栈，知道它改了什么、在什么情况下拒绝执行；</li>
-<li>在进程级栈下建出模板 <code>base-gsd</code>，并说清为什么换内核、换 gsd 之后必须重建模板；</li>
+<li>在进程级栈下建出模板 <code>base-criu</code>，并说清为什么换内核、换 gsd 之后必须重建模板；</li>
 <li>部署后用一段脚本逐项确认 guest 里的内核、gsd、CRIU 与文件系统布局都是预期的。</li>
 </ol>
 <p>前两章（<a href="#d25">25</a>、<a href="#d26">26</a>）面向调用方，从本章起面向部署与运维。本章讲"从代码到一个能用的模板"的全过程；
@@ -14353,19 +14354,19 @@ gsd 检查不出来的一种情况是树之间共享的匿名共享内存（只�
 <tr>
 <td>gsd</td>
 <td><code>packages/gsd/</code></td>
-<td>宿主 <code>/fc-gsd/gsd</code>；建模板时被拷进 guest 的 <code>/usr/bin/gsd</code></td>
+<td>宿主 <code>/fc-criu/gsd</code>；建模板时被拷进 guest 的 <code>/usr/bin/gsd</code></td>
 <td>纯 Go、静态链接（<code>CGO_ENABLED=0</code>）的 arm64 二进制。宿主上的这个文件只在建模板时被读取，宿主自己不运行它</td>
 </tr>
 <tr>
 <td>进程级版 orchestrator</td>
 <td><code>packages/orchestrator/</code></td>
-<td>宿主 <code>/fc-gsd/orchestrator</code></td>
+<td>宿主 <code>/fc-criu/orchestrator</code></td>
 <td>与上游相比多了"建模板时注入 gsd"的逻辑（<a href="#d06">06</a>）。需要 CGO（<code>CGO_ENABLED=1</code>）</td>
 </tr>
 <tr>
 <td>guest 内核</td>
 <td><code>fc-kernels/</code>（构建脚本、config、补丁）</td>
-<td>宿主 <code>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
+<td>宿主 <code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
 <td>上游 6.1.158 的固定基线加三个补丁。arm64 的 <code>Image</code>，文件名按 orchestrator 的约定叫 <code>vmlinux.bin</code></td>
 </tr>
 <tr>
@@ -14430,8 +14431,8 @@ sha256sum<span class="w"> </span><span class="nv">$OUT</span>/gsd<span class="w"
 <p>新 920B 上的具体路径可以作为参照：Go 工具链取自 RPM 构建树里解出来的那一份（<code>&lt;e2b-repo&gt;/tmp/rpmbuild/BUILD/go-toolchain/go/bin/go</code>），<code>GOMODCACHE</code> 与 <code>GOCACHE</code> 放在构建工作区下的 <code>gomodcache/</code> 与 <code>gocache/</code>。
 别的机器按自己的路径替换即可，没有任何一处依赖这些路径本身。2026-10-08 那次构建产物的 sha256 记在 <a href="#d19">19</a> 的条件标签里。</p>
 <p>编好之后放到运行时位置（布局见 §3）：</p>
-<div class="hl"><pre><span></span><code>install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span><span class="nv">$OUT</span>/gsd<span class="w">          </span>/fc-gsd/gsd
-install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span><span class="nv">$OUT</span>/orchestrator<span class="w"> </span>/fc-gsd/orchestrator
+<div class="hl"><pre><span></span><code>install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span><span class="nv">$OUT</span>/gsd<span class="w">          </span>/fc-criu/gsd
+install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span><span class="nv">$OUT</span>/orchestrator<span class="w"> </span>/fc-criu/orchestrator
 </code></pre></div>
 
 <h3 id="d27-22-guest-内核">2.2 guest 内核</h3>
@@ -14460,10 +14461,10 @@ make<span class="w"> </span><span class="nv">ARCH</span><span class="o">=</span>
 </code></pre></div>
 
 <p>无论哪种做法，最后都要把产物放到 orchestrator 找内核的位置。orchestrator 读的是 <code>&lt;内核根目录&gt;/vmlinux-6.1.158/vmlinux.bin</code>，<strong>中间没有架构子目录</strong>，所以 <code>build.sh</code> 的产物不能整个目录原样拷过去：</p>
-<div class="hl"><pre><span></span><code>install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">644</span><span class="w"> </span>arch/arm64/boot/Image<span class="w"> </span>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
+<div class="hl"><pre><span></span><code>install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">644</span><span class="w"> </span>arch/arm64/boot/Image<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 <span class="c1"># 或者，用 build.sh 编的：</span>
-install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">644</span><span class="w"> </span><span class="nv">$W</span>/fc-kernels/builds/vmlinux-6.1.158/arm64/vmlinux.bin<span class="w"> </span>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
-sha256sum<span class="w"> </span>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
+install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </span><span class="m">644</span><span class="w"> </span><span class="nv">$W</span>/fc-kernels/builds/vmlinux-6.1.158/arm64/vmlinux.bin<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
+sha256sum<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 </code></pre></div>
 
 <p>同时把这次用的 <code>.config</code> 留一份在旁边备查。这样编出的内核版本串是 <code>6.1.158+</code>。</p>
@@ -14496,8 +14497,8 @@ docker<span class="w"> </span>push<span class="w"> </span>&lt;镜像仓库&gt;/e
 <hr />
 <h2 id="d27-3-运行时布局">3. 运行时布局</h2>
 <h3 id="d27-31-三个文件">3.1 三个文件</h3>
-<p>进程级栈在宿主上只需要三个文件，约定放在 <code>/fc-gsd/</code> 下：</p>
-<div class="hl"><pre><span></span><code>/fc-gsd/
+<p>进程级栈在宿主上只需要三个文件，约定放在 <code>/fc-criu/</code> 下（2026-11-17 之前是 <code>/fc-gsd/</code>）：</p>
+<div class="hl"><pre><span></span><code>/fc-criu/
 ├── gsd                                   # 建模板时注入 guest 的 gsd
 ├── orchestrator                          # 进程级版 orchestrator
 └── kernels/
@@ -14507,7 +14508,7 @@ docker<span class="w"> </span>push<span class="w"> </span>&lt;镜像仓库&gt;/e
 
 <p>orchestrator 用两个环境变量找另外两样东西：</p>
 <ul>
-<li><code>HOST_GSD_PATH</code>：要注入的 gsd 二进制，<strong>默认值就是 <code>/fc-gsd/gsd</code></strong>。所以按上面的布局摆好之后不需要设它，建模板时默认就会注入 gsd。不想注入（让这个 orchestrator 建出与上游相同的模板）时设成小写的 <code>off</code>。</li>
+<li><code>HOST_GSD_PATH</code>：要注入的 gsd 二进制。orchestrator 的内置默认值是 <code>/fc-gsd/gsd</code>（2026-11-17 之前的布局），现在的布局<strong>要显式设成 <code>/fc-criu/gsd</code></strong>，<code>950.sh</code> 生成 job 时会设。不想注入（让这个 orchestrator 建出与上游相同的模板）时设成小写的 <code>off</code>。</li>
 <li><code>HOST_KERNELS_DIR</code>：guest 内核的根目录，默认值是 <code>/fc-kernels</code>，orchestrator 在它下面按 <code>vmlinux-&lt;版本&gt;/vmlinux.bin</code> 找内核。</li>
 </ul>
 <p>两个变量的完整取值规则（包括 <code>OFF</code> 大写不算关这类细节）在 <a href="#d28">28</a> 的开关总表里。</p>
@@ -14524,8 +14525,8 @@ docker<span class="w"> </span>push<span class="w"> </span>&lt;镜像仓库&gt;/e
 <tbody>
 <tr>
 <td><strong>与沙箱级回滚共用</strong>（新 920B 是这种）：<code>/fc-kernels/vmlinux-6.1.158/</code> 已经被另一套栈的内核占着，两套栈的 guest 内核版本号相同、内容不同</td>
-<td><code>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
-<td>切到进程级栈时设为 <code>/fc-gsd/kernels</code>；切回另一套栈时去掉</td>
+<td><code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
+<td>切到进程级栈时设为 <code>/fc-criu/kernels</code>；切回另一套栈时去掉</td>
 </tr>
 <tr>
 <td><strong>只跑进程级</strong></td>
@@ -14554,7 +14555,7 @@ docker<span class="w"> </span>push<span class="w"> </span>&lt;镜像仓库&gt;/e
 <p>第一次使用时自己保存基线；</p>
 </li>
 <li>切换后等到能真正建出沙箱才返回；</li>
-<li>切到进程级时，检查 <code>base-gsd</code> 是否还能用，不能用就重建。</li>
+<li>切到进程级时，检查 <code>base-criu</code> 是否还能用，不能用就重建。</li>
 </ul>
 <p>本节介绍的 <code>scripts/ops/switch-gsd-new920b.sh</code> 是开发阶段写的，切换的核心做法与 <code>950.sh</code> 相同。现在保留它，是因为 <a href="#d18">18</a> 临时换调试内核时要用它的 <code>GSD_KDIR</code>。它读的基线 job 是事先手工存的，<strong>每次重新部署之后都要重存一份</strong>，否则会把旧部署的配置提交回去。用法如下：</p>
 <div class="hl"><pre><span></span><code>bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </span>status<span class="w">   </span><span class="c1"># 只看现状，不改任何东西</span>
@@ -14564,9 +14565,9 @@ bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </
 <p><code>status</code> 打印当前占着端口的 orchestrator 是哪个二进制（及其 sha256 前缀）、它进程环境里的 <code>HOST_GSD_PATH</code> 与 <code>HOST_KERNELS_DIR</code>、据此判断出的"是不是进程级栈"、实际生效的 gsd 文件与它的提交号、补丁内核文件、<code>/health</code> 的状态码，以及当前活着的 firecracker 进程数。它读的是<strong>运行中进程</strong>的环境，而不是脚本自己的默认值，所以可以用来核对切换是否真的生效。</p>
 <p><code>gsd</code> 依次做这些事：</p>
 <ol>
-<li><strong>检查前提</strong>，任何一项不满足就退出、什么都不改：<code>/fc-gsd/orchestrator</code> 与 <code>/fc-gsd/gsd</code> 存在且可执行；补丁内核文件存在；基线 job 定义存在；<strong>没有任何 firecracker 进程在跑</strong>。</li>
+<li><strong>检查前提</strong>，任何一项不满足就退出、什么都不改：<code>/fc-criu/orchestrator</code> 与 <code>/fc-criu/gsd</code> 存在且可执行；补丁内核文件存在；基线 job 定义存在；<strong>没有任何 firecracker 进程在跑</strong>。</li>
 <li>如果当前已经是进程级栈（二进制、两个环境变量都对得上，<code>/health</code> 为 200），打印现状后直接结束。</li>
-<li><strong>生成 job 定义</strong>：读事先用 <code>nomad job inspect</code> 存下的基线 job，只改三处——启动命令里的二进制路径换成 <code>/fc-gsd/orchestrator</code>；去掉 <code>HOST_GSD_PATH</code>（用默认值）；加上 <code>HOST_KERNELS_DIR=/fc-gsd/kernels</code>——再去掉版本号、提交时间等由 nomad 维护的字段。生成的文件含有 job 里的密钥，以 600 权限保存。</li>
+<li><strong>生成 job 定义</strong>：读事先用 <code>nomad job inspect</code> 存下的基线 job，只改三处——启动命令里的二进制路径换成 <code>/fc-criu/orchestrator</code>；设 <code>HOST_GSD_PATH=/fc-criu/gsd</code>；加上 <code>HOST_KERNELS_DIR=/fc-criu/kernels</code>——再去掉版本号、提交时间等由 nomad 维护的字段。生成的文件含有 job 里的密钥，以 600 权限保存。</li>
 <li><strong>提交 job</strong>。旧的 orchestrator 还占着端口时 nomad 会报端口冲突，脚本每 15 秒重试一次，最多 6 次。</li>
 <li><strong>等切换真正完成</strong>，最长 360 秒：占着端口的进程必须是新的二进制、<code>/health</code> 为 200、<strong>并且这个进程的环境里 <code>HOST_GSD_PATH</code> 与 <code>HOST_KERNELS_DIR</code> 就是期望的值</strong>。确认之后再等 20 秒让 API 一侧重新连上，打印切换后的现状。</li>
 </ol>
@@ -14574,24 +14575,24 @@ bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </
 <p>第 1 步里"还有 firecracker 在跑就拒绝"是一道保护：切换会重启 orchestrator，正在运行的沙箱会受影响，而共用机器上那些沙箱可能是别人的。脚本不提供强制选项，要切就先让沙箱都结束。</p>
 <p>第 5 步里要核对进程环境，是因为只换内核目录或只换 gsd 路径时，orchestrator 的二进制没变，旧进程的 <code>/health</code> 同样回 200；只看二进制和健康检查会把"还没切过去"误判成"切完了"。</p>
 <p>每次都<strong>从基线 job 重新生成</strong>而不是在当前 job 上改，是为了让切换可以反复做而不积累残留：切回另一套栈的脚本同样从这份基线生成，gsd 加的环境变量不会留在里面。</p>
-<p>调试时可以用三个环境变量临时换一套文件而不动 <code>/fc-gsd/</code> 下的正式文件，例如换上带检查的调试内核：</p>
+<p>调试时可以用三个环境变量临时换一套文件而不动 <code>/fc-criu/</code> 下的正式文件，例如换上带检查的调试内核：</p>
 <div class="hl"><pre><span></span><code><span class="nv">GSD_KDIR</span><span class="o">=</span>&lt;调试内核的根目录&gt;<span class="w"> </span>bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </span>gsd
 <span class="c1"># 同理还有 GSD_ORCH_BIN=&lt;orchestrator 文件&gt;、GSD_BIN=&lt;gsd 文件&gt;</span>
 </code></pre></div>
 
-<p>用了 <code>GSD_BIN</code> 时脚本会在 job 里显式设 <code>HOST_GSD_PATH</code>；用正式位置时不设。</p>
+<p>脚本总是在 job 里显式设 <code>HOST_GSD_PATH</code>（正式位置 <code>/fc-criu/gsd</code> 不等于内置默认值）。</p>
 <h3 id="d27-42-不是-rpm-加-nomad-的机器">4.2 不是 RPM 加 nomad 的机器</h3>
 <p>脚本里与本机相关的东西有：基线 job 的存放位置、生成的 job 定义的存放位置、端口号、取 nomad 令牌的方式。换一台机器要改这几处。
-部署方式完全不同的机器（不用 nomad）没有现成脚本，但要做的事是一样的：让 <code>/fc-gsd/orchestrator</code> 取代原来的 orchestrator 运行，并在它的进程环境里按 §3 设置 <code>HOST_KERNELS_DIR</code>（需要时）和 <code>HOST_GSD_PATH</code>（一般不设）。切完之后用 §6 的办法核对，而不是相信配置文件。</p>
+部署方式完全不同的机器（不用 nomad）没有现成脚本，但要做的事是一样的：让 <code>/fc-criu/orchestrator</code> 取代原来的 orchestrator 运行，并在它的进程环境里按 §3 设置 <code>HOST_KERNELS_DIR</code>（需要时）和 <code>HOST_GSD_PATH</code>。切完之后用 §6 的办法核对，而不是相信配置文件。</p>
 <hr />
 <h2 id="d27-5-建模板">5. 建模板</h2>
-<p>宿主切到进程级栈之后，在这套栈下建一个模板，本书统一叫它 <code>base-gsd</code>。建模板就是普通的 e2b 模板构建，不需要任何 gsd 专有的参数——注入是 orchestrator 自动做的：</p>
+<p>宿主切到进程级栈之后，在这套栈下建一个模板，本书统一叫它 <code>base-criu</code>。建模板就是普通的 e2b 模板构建，不需要任何 gsd 专有的参数——注入是 orchestrator 自动做的：</p>
 <div class="hl"><pre><span></span><code><span class="kn">from</span> <span class="nn">e2b</span> <span class="kn">import</span> <span class="n">Template</span><span class="p">,</span> <span class="n">default_build_logger</span>
 
 <span class="n">IMAGE</span> <span class="o">=</span> <span class="s2">&quot;&lt;镜像仓库&gt;/e2b-orchestration/ubuntu:22.04-custom-criu421&quot;</span>
 <span class="n">Template</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
     <span class="n">Template</span><span class="p">()</span><span class="o">.</span><span class="n">from_dockerfile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;FROM </span><span class="si">{</span><span class="n">IMAGE</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">),</span>
-    <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;base-gsd&quot;</span><span class="p">,</span>
+    <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;base-criu&quot;</span><span class="p">,</span>
     <span class="n">cpu_count</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
     <span class="n">memory_mb</span><span class="o">=</span><span class="mi">2048</span><span class="p">,</span>
     <span class="n">on_build_logs</span><span class="o">=</span><span class="n">default_build_logger</span><span class="p">(),</span>
@@ -14600,18 +14601,19 @@ bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </
 </code></pre></div>
 
 <p>随测试脚本附带的 <code>build_template.py</code> 是对这段调用的封装，等价的命令行是：</p>
-<div class="hl"><pre><span></span><code>python<span class="w"> </span>build_template.py<span class="w"> </span>--alias<span class="w"> </span>base-gsd<span class="w"> </span>--memory<span class="w"> </span><span class="m">2048</span><span class="w"> </span>--image<span class="w"> </span>&lt;镜像仓库&gt;/e2b-orchestration/ubuntu:22.04-custom-criu421
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>build_template.py<span class="w"> </span>--alias<span class="w"> </span>base-criu<span class="w"> </span>--memory<span class="w"> </span><span class="m">2048</span><span class="w"> </span>--image<span class="w"> </span>&lt;镜像仓库&gt;/e2b-orchestration/ubuntu:22.04-custom-criu421
 </code></pre></div>
 
 <p>它不带 <code>--use-cache</code> 时就是 <code>skip_cache=True</code>。2 vCPU、2048 MB 是本书全部实测所用的规格（<a href="#d19">19</a>）；进程镜像占 guest 内存，内存给多少要按 <a href="#d26">26</a> 的容量一节来定。</p>
 <p>构建过程中 orchestrator 多做了这些事（细节见 <a href="#d06">06</a>）：往根文件系统里加 gsd、<code>gsd.service</code> 和 <code>overlay-init</code>；让 guest 以 <code>overlay-init</code> 而不是 systemd 作为启动程序；模板的每一层建好后把宿主的 gsd 拷进沙箱、重启 gsd，然后<strong>自检</strong>——<code>gsd.service</code> 是 active、<code>/health</code> 回 <code>ok</code>、<code>/usr/sbin/criu</code> 是 4.x，轮询最多约 10 秒。
 自检不过，构建就失败，不会留下一个"建成功了但做不了 checkpoint"的模板。新 920B 上 2026-10-08 建这个模板用了 17.2 秒（仅作量级参考）。</p>
-<p>不设 <code>HOST_GSD_PATH</code>、gsd 放在默认位置 <code>/fc-gsd/gsd</code> 这条路径，已于 2026-10-09 在新 920B 上实际建模板确认：orchestrator 的进程环境里没有 <code>HOST_GSD_PATH</code> 这个键，<code>/fc-gsd/gsd</code> 被注入，
-guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit</code> 输出 <code>259f1a25c</code>、<code>gsd.service</code> 为 active、THP 为 never；<code>base-gsd</code>（2 vCPU / 2048 MB）不用缓存，15.2 秒建成，随后的功能验证全部通过（结果见 <a href="#d19">19</a> 的"落位后的复核"一节）。
+<p>不设 <code>HOST_GSD_PATH</code>、gsd 放在内置默认位置 <code>/fc-gsd/gsd</code> 这条路径，已于 2026-10-09 在新 920B 上实际建模板确认：orchestrator 的进程环境里没有 <code>HOST_GSD_PATH</code> 这个键，<code>/fc-gsd/gsd</code> 被注入，
+guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit</code> 输出 <code>259f1a25c</code>、<code>gsd.service</code> 为 active、THP 为 never；当时的模板名 <code>base-gsd</code>（2 vCPU / 2048 MB）不用缓存，15.2 秒建成，随后的功能验证全部通过（结果见 <a href="#d19">19</a> 的"落位后的复核"一节）。
+2026-11-17 起文件改放 <code>/fc-criu/</code>、job 里显式设 <code>HOST_GSD_PATH</code>，模板改名 <code>base-criu</code>，同样在新 920B 上从头部署并验收通过（<code>criu-rollback/deploy/README.md</code> 第 14 节）。
 <code>HOST_GSD_PATH=off</code> 的关闭态仍然没有真实建过模板（<a href="#d16">16</a> 的 T-08）。</p>
 <p>要提醒的是，这一步自检<strong>不验证内核是否带补丁</strong>（<a href="#d16">16</a> 的 L-16）：<code>HOST_KERNELS_DIR</code> 指错、用没打补丁的内核建模板，自检照样通过，要到第一次 checkpoint 才失败。内核对不对靠 §6 到 guest 里核对版本串。</p>
 <p>关于模板，有三条规则必须记住：</p>
-<p><strong>模板固化了建模板时的内核、gsd 和启动脚本。</strong> 沙箱不是"开机"出来的，而是从模板的快照恢复出来的：内核已经在内存里跑着，gsd 进程也已经在跑。所以宿主上后来换掉 <code>/fc-gsd/gsd</code> 或内核文件，<strong>对已有的模板和从它起的沙箱没有任何影响</strong>；
+<p><strong>模板固化了建模板时的内核、gsd 和启动脚本。</strong> 沙箱不是"开机"出来的，而是从模板的快照恢复出来的：内核已经在内存里跑着，gsd 进程也已经在跑。所以宿主上后来换掉 <code>/fc-criu/gsd</code> 或内核文件，<strong>对已有的模板和从它起的沙箱没有任何影响</strong>；
 同理，换了三者中的任何一样，都必须重建模板才会生效。这一点曾经让一次内核性能对照失效（<a href="#dE">附录 E</a>），部署时最容易犯的错也是"换了文件、没重建模板、以为已经升级"。
 升级的完整顺序是：换文件 →（换的是 orchestrator 时）重新切栈 → 重建模板 → 用 §6 核对 guest 里的版本。</p>
 <p><strong>重建模板不要用构建缓存。</strong> 带 gsd 与不带 gsd 的基础层在缓存里是分开的，不会互相复用；但缓存的键里不含 gsd 二进制或内核的版本，换了 gsd 之后用缓存重建，可能拿到旧的那一层。上面的命令默认不用缓存。</p>
@@ -14636,7 +14638,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <span class="s2">dmesg | grep &#39;overlay-init&#39;</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
-<span class="n">sbx</span> <span class="o">=</span> <span class="n">Sandbox</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="s2">&quot;base-gsd&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+<span class="n">sbx</span> <span class="o">=</span> <span class="n">Sandbox</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="s2">&quot;base-criu&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
 <span class="k">try</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;sandbox&quot;</span><span class="p">,</span> <span class="n">sbx</span><span class="o">.</span><span class="n">sandbox_id</span><span class="p">)</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">sbx</span><span class="o">.</span><span class="n">commands</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">CHECK</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="s2">&quot;root&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
@@ -14662,7 +14664,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 </tr>
 <tr>
 <td><code>gsd sha256</code></td>
-<td>与宿主 <code>sha256sum /fc-gsd/gsd</code> 相同</td>
+<td>与宿主 <code>sha256sum /fc-criu/gsd</code> 相同</td>
 <td>同上；提交号相同而 sha 不同说明是另一次构建</td>
 </tr>
 <tr>
@@ -14733,13 +14735,14 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <p>三个运行文件以 xz 压缩入库，orchestrator 和 gsd 用 <code>strip -g</code> 去掉了 DWARF 调试段，代码段与验收版逐字节相同。镜像的前两层取仓库根目录已有的 <code>ubuntu-22.04-custom.tar.gz</code>，只有 CRIU 那一层单独入库。第一步把它们展开到 <code>criu-rollback/deploy/.work/</code>，按 <code>manifest.json</code> 核对 SHA256 和镜像 ID。</p>
 </li>
 <li>
-<p>三个运行文件的位置与 §3 相同，但 <code>install</code> 发现这些位置上已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 <code>/usr/bin</code>、<code>/fc-kernels</code> 和 <code>/fc-versions</code>。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。</p>
+<p>三个运行文件在 <code>/fc-criu/</code>（§3），切栈基线在 <code>/var/lib/criu-rollback/</code>，进程级客户端 conda 环境是 <code>jll-e2b-criu</code>（克隆原 <code>jll-e2b</code> 得来）。<code>install</code> 发现 <code>/fc-criu/</code> 下已有内容不同的文件时停下，不覆盖；不重装 RPM，不动 <code>/usr/bin</code>、<code>/fc-kernels</code> 和 <code>/fc-versions</code>。Firecracker、宿主内核和已有模板沿用 950 上已有的内容。</p>
 </li>
 <li>切栈不用 §4 的 <code>switch-gsd-new920b.sh</code>，由 <code>criu-rollback/deploy/950.sh</code> 完成：<ul>
 <li>先把本机原有的 job 保存成基线。文件含密钥，只留在本机。</li>
 <li>切到进程级栈时从这份基线生成 job，先停旧 job、等它退出再提交新 job，然后同样核对实际进程的路径、SHA256、环境变量和 <code>/health</code>。</li>
 <li>切回时恢复这份基线。</li>
 <li>已经是目标栈时不重启服务。</li>
+<li>切换前删掉全部 e2b 沙箱：950 上的 e2b 只有我们在用。只认 <code>/fc-versions/</code> 下启动的 Firecracker，同机 AgentENV 的沙箱不碰。</li>
 <li>切换后反复试建沙箱，直到成功才返回，不靠估计等待时间。</li>
 </ul>
 </li>
@@ -14754,13 +14757,13 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 
 <p>它按下表的顺序做完全部步骤，不需要激活 conda 环境，也不需要估等待时间。</p>
 <ul>
-<li><strong>失败或中断</strong>：处理完原因后再执行同一条命令，会从停下的那一步继续，做完的验收、压测不会重做。验收或压测失败时，先删掉由 <code>base-gsd</code> 起的测试沙箱，再自动切回沙箱级。</li>
+<li><strong>失败或中断</strong>：处理完原因后再执行同一条命令，会从停下的那一步继续，做完的验收、压测不会重做。验收或压测失败时，先删掉 e2b 沙箱，再自动切回沙箱级。</li>
 <li><strong>网络比对</strong>：切换前后各抓一次宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则做比对，用来确认同机的 AgentENV 没有受影响。</li>
-<li><strong>结果</strong>：最后把全部结果打成一个压缩包。</li>
-<li><strong>演练</strong>：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑。</li>
-<li><strong>网络命名空间</strong>：每次重启 orchestrator 会留下约 300 个，<code>all</code> 重启两次。积累多了按 <code>single-node-offline-deploy.md</code> 用 <code>build.sh --recycle-netns</code> 清理。</li>
+<li><strong>结果</strong>：结束时把逐步结论、身份、网络比对、验收与压测摘要直接打印到终端；细节用 <code>950.sh report acceptance|stress|smoke|netcheck|log</code> 按部分打印，不打包。</li>
+<li><strong>演练</strong>：2026-11-16 在新 920B 上演练过，包括验收中途中断再续跑；2026-11-17 按 <code>/fc-criu/</code> 布局从头演练过。</li>
+<li><strong>网络命名空间</strong>：每次重启 orchestrator 会留下约 300 个，<code>all</code> 重启两次。积累多了执行 <code>bash criu-rollback/deploy/950.sh recycle-netns</code>：删 e2b 沙箱、停 job、<code>build.sh --recycle-netns</code> 清理、按当前栈重新拉起。</li>
 </ul>
-<p>以后日常切换用 <code>bash criu-rollback/deploy/950.sh gsd</code> 和 <code>bash criu-rollback/deploy/950.sh sandbox</code>。切到进程级时，<code>base-gsd</code> 不在或建不出沙箱，会自动重建。</p>
+<p>以后日常切换用 <code>bash criu-rollback/deploy/950.sh criu</code> 和 <code>bash criu-rollback/deploy/950.sh sandbox</code>。切到进程级时，<code>base-criu</code> 不在或建不出沙箱，会自动重建。</p>
 <p>下表是 <code>all</code> 依次做的事，也可以逐条单独执行。命令列写的是 <code>bash criu-rollback/deploy/950.sh</code> 后面的参数，<code>ops/</code> 指 <code>criu-rollback/deploy/ops/</code>：</p>
 <div class="tw"><table>
 <thead>
@@ -14784,7 +14787,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <tr>
 <td>3</td>
 <td><code>preflight</code></td>
-<td>只读预检：架构、KVM、命令、动态库、gsd 提交号、job 结构、沙箱地址池环境变量、运行中的进程与 <code>/health</code>、活沙箱、SDK 与依赖</td>
+<td>只读预检：架构、KVM、命令、动态库、gsd 提交号、job 结构、沙箱地址池环境变量、运行中的进程与 <code>/health</code>、e2b 沙箱、SDK 与依赖</td>
 </tr>
 <tr>
 <td>4</td>
@@ -14799,17 +14802,17 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <tr>
 <td>6</td>
 <td><code>install</code></td>
-<td>把三个文件放到 <code>/fc-gsd/</code></td>
+<td>把三个文件放到 <code>/fc-criu/</code></td>
 </tr>
 <tr>
 <td>7</td>
-<td><code>gsd</code>，再 <code>status</code></td>
-<td>切到进程级栈并确认；等到能建沙箱才返回，<code>base-gsd</code> 不可用时自动重建</td>
+<td><code>criu</code>，再 <code>status</code></td>
+<td>切到进程级栈并确认；等到能建沙箱才返回</td>
 </tr>
 <tr>
 <td>8</td>
-<td><code>python criu-rollback/scripts/build_template.py --alias base-gsd --cpu 2 --memory 2048 --image "$GSD_TEMPLATE_IMAGE"</code></td>
-<td>在进程级栈下建模板，不用缓存</td>
+<td>（<code>criu</code> 里自动完成）</td>
+<td>在进程级栈下建模板 <code>base-criu</code>，2 vCPU / 2048 MiB，不用缓存；已有且可用时不重建</td>
 </tr>
 <tr>
 <td>9</td>
@@ -14823,7 +14826,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 </tr>
 </tbody>
 </table></div>
-<p>第 8 步的 <code>GSD_TEMPLATE_IMAGE</code> 与第 4 步用的镜像引用相同，默认是 <code>harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421</code>。§6 的自检在第 9 步由 <code>ops/guest_check.py</code> 完成。逐条执行时，第 2、9、10 步会自动使用对应的 conda 环境。</p>
+<p>第 8 步用的镜像引用与第 4 步相同，默认是 <code>harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421</code>，不同时在 <code>ops/site.env</code> 写 <code>CRIU_TEMPLATE_IMAGE=</code>。§6 的自检在第 9 步由 <code>ops/guest_check.py</code> 完成。逐条执行时，第 2、9、10 步会自动使用对应的 conda 环境。</p>
 <hr />
 <h2 id="d27-代码位置">代码位置</h2>
 <div class="tw"><table>
@@ -14882,11 +14885,11 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <li>要部署的是 gsd、进程级版 orchestrator、打了三个补丁的 guest 内核、带 CRIU 4.2.1 的基础镜像和 Python SDK，必须来自同一个提交；Firecracker 和宿主内核不动；只支持 arm64 的 guest。</li>
 <li>离线构建靠 <code>GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly</code> 加预先备好的模块缓存；提交号用 <code>-ldflags</code> 嵌进二进制，先 vet 和单测再编。</li>
 <li>内核从 <code>kernel_base_tags.txt</code> 固定的 tag 出发按顺序打三个补丁；用"从基线重放、比较 <code>git write-tree</code>"核对源码树，而不是比对补丁文本。</li>
-<li>运行时只有三个文件：<code>/fc-gsd/gsd</code>、<code>/fc-gsd/orchestrator</code>、<code>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin</code>。默认就注入 gsd，不用设 <code>HOST_GSD_PATH</code>；与别的栈共用的机器用 <code>HOST_KERNELS_DIR=/fc-gsd/kernels</code> 指向补丁内核，只跑进程级的机器把内核直接放 <code>/fc-kernels</code>。</li>
-<li>切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。</li>
+<li>运行时只有三个文件：<code>/fc-criu/gsd</code>、<code>/fc-criu/orchestrator</code>、<code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code>。job 里显式设 <code>HOST_GSD_PATH</code> 指向这个 gsd（内置默认 <code>/fc-gsd/gsd</code> 是旧布局）；与别的栈共用的机器用 <code>HOST_KERNELS_DIR</code> 指向补丁内核，只跑进程级的机器把内核直接放 <code>/fc-kernels</code>。</li>
+<li>切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；<code>950.sh</code> 切换前先删掉全部 e2b 沙箱（不碰 AgentENV 的），开发用的 <code>switch-gsd-new920b.sh</code> 则在还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。</li>
 <li>模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。</li>
 <li>部署后到 guest 里核对：<code>gsd -commit</code>、内核版本串、透明大页为 <code>[never]</code>、<code>rcu_expedited</code> 为 1、<code>/health</code> 为 ok、CRIU 4.2.1、<code>/</code> 为 755、<code>/tmp</code> 在 overlay 上；然后转 <a href="#d30">30</a> 做验收。</li>
-<li>950 尚未运行。部署用仓库里的 <code>criu-rollback/deploy/</code>，<code>git pull</code> 后一条命令 <code>bash criu-rollback/deploy/950.sh all</code> 做完全流程，日常切换用 <code>950.sh gsd</code> / <code>sandbox</code>，流程见 §7，结果填在 <a href="#d22">22</a>。</li>
+<li>950 尚未运行。部署用仓库里的 <code>criu-rollback/deploy/</code>，<code>git pull</code> 后一条命令 <code>bash criu-rollback/deploy/950.sh all</code> 做完全流程，日常切换用 <code>950.sh criu</code> / <code>sandbox</code>，流程见 §7，结果填在 <a href="#d22">22</a>。</li>
 </ul><nav class="pager" data-n="27"></nav></article><article id="v28" class="doc" hidden><h1 id="d28-配置与可观测性">配置与可观测性</h1>
 <h2 id="d28-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -16256,7 +16259,7 @@ curl<span class="w"> </span>-s<span class="w"> </span>-m<span class="w"> </span>
 <tr>
 <td><code>/usr/bin/gsd</code> 不存在，或没有 <code>gsd.service</code></td>
 <td>这个模板不是在进程级栈下建的（或建模板时 <code>HOST_GSD_PATH=off</code>）</td>
-<td>换用 <code>base-gsd</code> 这类在进程级栈下建的模板（<a href="#d27">27</a>）</td>
+<td>换用 <code>base-criu</code> 这类在进程级栈下建的模板（<a href="#d27">27</a>）</td>
 </tr>
 <tr>
 <td>服务不是 <code>active</code>，或在反复重启</td>
@@ -16369,7 +16372,7 @@ dmesg<span class="w"> </span><span class="p">|</span><span class="w"> </span>gre
 <p>原理：<a href="#d09">09</a>、<a href="#d16">16</a> 的 L-06。</p>
 <hr />
 <h2 id="d29-11-模板里不是新内核或新-gsd">11. 模板里不是新内核或新 gsd</h2>
-<p><strong>症状</strong>：宿主上明明换了 <code>/fc-gsd/gsd</code> 或内核文件，沙箱的行为却没有变；或者出现了本书说已经修掉的现象（连续 restore 之后根盘被写满、<code>dmesg</code> 里成批的 <code>ovl_ioctl_checkpoint:</code> 调试输出、SDK 拿不到 <code>timings</code>、<code>/</code> 的权限是 777、<code>/tmp</code> 是单独的内存盘）。</p>
+<p><strong>症状</strong>：宿主上明明换了 gsd（<code>/fc-criu/gsd</code>）或内核文件，沙箱的行为却没有变；或者出现了本书说已经修掉的现象（连续 restore 之后根盘被写满、<code>dmesg</code> 里成批的 <code>ovl_ioctl_checkpoint:</code> 调试输出、SDK 拿不到 <code>timings</code>、<code>/</code> 的权限是 777、<code>/tmp</code> 是单独的内存盘）。</p>
 <p>看哪里（guest 里与宿主上各一半）：</p>
 <div class="hl"><pre><span></span><code><span class="c1"># guest 里</span>
 /usr/bin/gsd<span class="w"> </span>-commit<span class="p">;</span><span class="w"> </span>sha256sum<span class="w"> </span>/usr/bin/gsd
@@ -16378,7 +16381,7 @@ stat<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;%a %
 dmesg<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-c<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;ovl_ioctl_checkpoint|ovl_lookup:&#39;</span>
 
 <span class="c1"># 宿主上</span>
-/fc-gsd/gsd<span class="w"> </span>-commit<span class="p">;</span><span class="w"> </span>sha256sum<span class="w"> </span>/fc-gsd/gsd<span class="w"> </span>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
+/fc-criu/gsd<span class="w"> </span>-commit<span class="p">;</span><span class="w"> </span>sha256sum<span class="w"> </span>/fc-criu/gsd<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </span>status
 </code></pre></div>
 
@@ -16400,7 +16403,7 @@ bash<span class="w"> </span>scripts/ops/switch-gsd-new920b.sh<span class="w"> </
 <tbody>
 <tr>
 <td><code>error reading gsd file (HOST_GSD_PATH): open … no such file or directory</code></td>
-<td>orchestrator 要注入 gsd，但读不到二进制。路径是默认的 <code>/fc-gsd/gsd</code> 时：文件没放。路径以 orchestrator 的工作目录开头、末尾是 <code>OFF</code> 或 <code>Off</code> 时：有人想关掉注入但写了大写——只有小写 <code>off</code> 才是关，其他值被当成相对路径</td>
+<td>orchestrator 要注入 gsd，但读不到二进制。路径是内置默认的 <code>/fc-gsd/gsd</code> 时：job 里没设 <code>HOST_GSD_PATH</code>，回落到了旧布局（现在文件在 <code>/fc-criu/gsd</code>，用 <code>950.sh criu</code> 切栈会设好）。路径是 <code>/fc-criu/gsd</code> 时：文件没放，执行 <code>950.sh install</code>。路径以 orchestrator 的工作目录开头、末尾是 <code>OFF</code> 或 <code>Off</code> 时：有人想关掉注入但写了大写——只有小写 <code>off</code> 才是关，其他值被当成相对路径</td>
 <td>把 gsd 放到位（<a href="#d27">27</a>）；或把环境变量改成小写 <code>off</code> 后重启 orchestrator</td>
 </tr>
 <tr>
@@ -16580,13 +16583,13 @@ grep<span class="w"> </span>-n<span class="w"> </span>-E<span class="w"> </span>
 <p><strong>在哪跑。</strong> 在运行进程级栈的那台宿主机上跑。脚本通过 SDK 起沙箱，其中几个还要在 guest 里直连 gsd、读 guest 的 dmesg 与 journal；压测的看门狗要读宿主上 orchestrator 的日志取串口输出。</p>
 <p><strong>这台机器是不是只有你在用。</strong> 验收要建模板、起几十个沙箱，压测还会明显抬高机器负载。开始之前确认机器上没有别人的沙箱在跑；进程级栈运行期间建的<strong>所有</strong>模板都会被注入 gsd（<a href="#d27">27</a>），所以验收期间别人也不要在这台机器上建模板。</p>
 <p><strong>进程级栈在运行，三个文件是要验的那一套。</strong> 宿主上带 gsd 注入的 orchestrator 已经在服务，gsd 二进制与补丁内核在运行时布局的位置上：</p>
-<div class="hl"><pre><span></span><code>/fc-gsd/gsd<span class="w"> </span>-commit<span class="w">                                   </span><span class="c1"># 应输出要验收的提交号</span>
-sha256sum<span class="w"> </span>/fc-gsd/gsd<span class="w"> </span>/fc-gsd/orchestrator<span class="w"> </span>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
+<div class="hl"><pre><span></span><code>/fc-criu/gsd<span class="w"> </span>-commit<span class="w">                                  </span><span class="c1"># 应输出要验收的提交号</span>
+sha256sum<span class="w"> </span>/fc-criu/gsd<span class="w"> </span>/fc-criu/orchestrator<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 </code></pre></div>
 
 <p>三个 sha256 与交付清单逐一相同；验收的若是 <a href="#d19">19</a> 所述的那个版本，值在该章"条件标签"一节。再确认正在运行的 orchestrator 就是这一个二进制、环境变量符合 <a href="#d27">27</a> 的两种机器形态之一；
 新 920B 上用随手册附带的 <code>scripts/ops/switch-gsd-new920b.sh status</code> 看（它只读，不改任何东西），其他机器按本机的部署方式核对。</p>
-<p><strong>模板。</strong> 在进程级栈下建好别名为 <code>base-gsd</code> 的模板：2 vCPU / 2048 MB，不使用缓存（<a href="#d27">27</a>）。所有脚本的默认模板名都是它。
+<p><strong>模板。</strong> 在进程级栈下建好别名为 <code>base-criu</code> 的模板：2 vCPU / 2048 MB，不使用缓存（<a href="#d27">27</a>）。所有脚本的默认模板名都是它。
 模板固化了建模板时的内核、gsd 与 overlay-init——<strong>换过三者中的任何一样而没有重建模板，接下来测的就是旧的那一套</strong>，这是最常见的白跑原因，§3 的部署自检专门查这一点。
 规格与 19 章的条件标签不同（更多 vCPU、更大内存）时功能判定仍然有效，但性能数字不能与 20 章对照。</p>
 <p><strong>Python 环境与 SDK。</strong> 用装好 SDK 依赖的 conda 环境，并让 <code>PYTHONPATH</code> 指向代码仓的 <code>py-sdk</code> 目录：</p>
@@ -16690,7 +16693,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;im
 <span class="s">from e2b_env import load_e2b_env</span>
 <span class="s">os.environ.update(load_e2b_env())</span>
 <span class="s">from e2b import Sandbox</span>
-<span class="s">sb = Sandbox.create(template=&quot;base-gsd&quot;, timeout=300)</span>
+<span class="s">sb = Sandbox.create(template=&quot;base-criu&quot;, timeout=300)</span>
 <span class="s">try:</span>
 <span class="s">    print(&quot;template_id&quot;, sb.get_info().template_id)</span>
 <span class="s">    print(sb.commands.run(</span>
@@ -16718,12 +16721,12 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;im
 <tbody>
 <tr>
 <td>guest 内 <code>gsd -commit</code></td>
-<td>等于宿主上 <code>/fc-gsd/gsd -commit</code> 的输出</td>
+<td>等于宿主上 <code>/fc-criu/gsd -commit</code> 的输出</td>
 <td>模板是换 gsd 之前建的，要重建模板</td>
 </tr>
 <tr>
 <td>guest 内 <code>/usr/bin/gsd</code> 的 sha256</td>
-<td>等于宿主上 <code>/fc-gsd/gsd</code> 的 sha256</td>
+<td>等于宿主上 <code>/fc-criu/gsd</code> 的 sha256</td>
 <td>同上</td>
 </tr>
 <tr>
@@ -16772,14 +16775,14 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;im
 <hr />
 <h2 id="d30-4-第-26-步功能验证与性能">4. 第 2～6 步：功能验证与性能</h2>
 <h3 id="d30-41-verify_gsdpy">4.1 <code>verify_gsd.py</code></h3>
-<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_gsd.py<span class="w"> </span>base-gsd<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/verify_gsd.log
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_gsd.py<span class="w"> </span>base-criu<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/verify_gsd.log
 </code></pre></div>
 
 <p><strong>期望。</strong> 开头四行环境信息与 §3 一致（提交号、内核、<code>rcu_expedited</code> 为 1、THP 为 never）；8 行 restore 每行 <code>ok=True</code>、根盘已用量相对起点都是 <code>(+0)</code>；末行 <code>判定: 根盘恒定 ✓</code>。</p>
 <p><strong>对数。</strong> <code>total_ms</code> 与各分段的 p50 对照 <a href="#d20">20</a> 里 <code>verify_gsd.py</code> 单棵 192 MiB 的表。同一台机器、同一规格、同一版本下，重复跑的读数应当落在那张表的最小值与最大值之间或其附近；怎么算"附近"见 §6。</p>
 <p><strong>不过时。</strong> 末行是 <code>根盘仍在增长 ✗</code>：内核不是当前版本或模板没有重建（<a href="#dD">附录 D</a> 讲了这个现象的来历）。某次 <code>ok=False</code>：看 <a href="#d29">29</a> 里 restore 失败的各条。</p>
 <h3 id="d30-42-verify_fixespy">4.2 <code>verify_fixes.py</code></h3>
-<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_fixes.py<span class="w"> </span>--template<span class="w"> </span>base-gsd<span class="w"> </span>--out-json<span class="w"> </span><span class="nv">$OUT</span>/func/verify_fixes.json<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/verify_fixes.log
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_fixes.py<span class="w"> </span>--template<span class="w"> </span>base-criu<span class="w"> </span>--out-json<span class="w"> </span><span class="nv">$OUT</span>/func/verify_fixes.json<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/verify_fixes.log
 </code></pre></div>
 
 <p><strong>期望。</strong> 汇总表 28 行，其中 G-19 与 G-36 为 SKIP，其余 26 行为 PASS；末行 <code>合计 28 项，FAIL 0: []</code>。再做两个检查：</p>
@@ -16792,7 +16795,7 @@ grep<span class="w"> </span>-n<span class="w"> </span><span class="s1">&#39;可�
 <p><strong>不过时。</strong> 用 <code>--only &lt;项&gt;</code> 单独重跑失败的那一项，日志里该项的 <code>BAD</code> 行写明了期望与实测。G-08 出现 INFO、SKIP 多于两项，同样要看原因。G-22 那一项要一分钟左右，期间沙箱对 SDK 暂时不可达是预期的。</p>
 <h3 id="d30-43-verify_multitreepy">4.3 <code>verify_multitree.py</code></h3>
 <p>没有对照模板时跳过 V12：</p>
-<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_multitree.py<span class="w"> </span>--template<span class="w"> </span>base-gsd<span class="w"> </span>--skip<span class="w"> </span>V12<span class="w"> </span>--out-json<span class="w"> </span><span class="nv">$OUT</span>/func/verify_multitree.json<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/verify_multitree.log
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_multitree.py<span class="w"> </span>--template<span class="w"> </span>base-criu<span class="w"> </span>--skip<span class="w"> </span>V12<span class="w"> </span>--out-json<span class="w"> </span><span class="nv">$OUT</span>/func/verify_multitree.json<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/verify_multitree.log
 </code></pre></div>
 
 <p><strong>期望。</strong> 汇总表 12 行全部 PASS，<code>合计 12 项，FAIL 0: []</code>；汇总表里没有重印出来的 <code>BAD</code> 行。带上 V12 时是 13 行、<code>合计 13 项</code>。同样搜一下 <code>可疑行</code>。</p>
@@ -16805,7 +16808,7 @@ grep<span class="w"> </span>-n<span class="w"> </span><span class="s1">&#39;可�
 </ul>
 <p>首次部署的机器上没有旧模板，第二种用法无从谈起，跳过即可。</p>
 <h3 id="d30-44-verify_clear_refs_racepy">4.4 <code>verify_clear_refs_race.py</code></h3>
-<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_clear_refs_race.py<span class="w"> </span>--template<span class="w"> </span>base-gsd<span class="w"> </span>--rounds<span class="w"> </span><span class="m">30</span><span class="w"> </span>--pages<span class="w"> </span><span class="m">4096</span><span class="w"> </span>--rate<span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="se">\</span>
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>acceptance/verify_clear_refs_race.py<span class="w"> </span>--template<span class="w"> </span>base-criu<span class="w"> </span>--rounds<span class="w"> </span><span class="m">30</span><span class="w"> </span>--pages<span class="w"> </span><span class="m">4096</span><span class="w"> </span>--rate<span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--jsonl<span class="w"> </span><span class="nv">$OUT</span>/func/clear_refs_race.jsonl<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tee<span class="w"> </span><span class="nv">$OUT</span>/func/clear_refs_race.log
 </code></pre></div>
 
@@ -16815,7 +16818,7 @@ grep<span class="w"> </span>-n<span class="w"> </span><span class="s1">&#39;可�
 <p><strong>不过时。</strong> 任何一轮漏页不为 0 都是严重问题：它意味着增量 checkpoint 会静默地恢复出错误的内存内容。先确认 guest 里的 gsd 是当前版本（§3），再按 <a href="#d11">11</a> 的"为什么 <code>--leave-stopped</code>"一节核对。</p>
 <h3 id="d30-45-demo_checkpoint_perfpy">4.5 <code>demo_checkpoint_perf.py</code></h3>
 <div class="hl"><pre><span></span><code><span class="k">for</span><span class="w"> </span>i<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">3</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<span class="w">  </span><span class="nv">TEMPLATE</span><span class="o">=</span>base-gsd<span class="w"> </span><span class="nv">THP</span><span class="o">=</span>never<span class="w"> </span><span class="nv">OUT_JSON</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$OUT</span><span class="s2">/func/perf-run</span><span class="nv">$i</span><span class="s2">.json&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="nv">TEMPLATE</span><span class="o">=</span>base-criu<span class="w"> </span><span class="nv">THP</span><span class="o">=</span>never<span class="w"> </span><span class="nv">OUT_JSON</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$OUT</span><span class="s2">/func/perf-run</span><span class="nv">$i</span><span class="s2">.json&quot;</span><span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>python<span class="w"> </span>acceptance/demo_checkpoint_perf.py<span class="w"> </span>&gt;<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$OUT</span><span class="s2">/func/perf-run</span><span class="nv">$i</span><span class="s2">.log&quot;</span><span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
 <span class="w">  </span>sleep<span class="w"> </span><span class="m">8</span>
 <span class="k">done</span>
@@ -16832,7 +16835,7 @@ python<span class="w"> </span>acceptance/summarize_checkpoint_perf.py<span class
 <p>功能验证全部通过之后，下面这些回答的是另一个问题：内核侧在并发文件操作下是否稳定。以下情况应当跑：第一次在一台机器上部署、换了 guest 内核、改了内核补丁。只换了 gsd 二进制而内核没动时可以不跑。
 压测脚本各自做什么见 <a href="#d18">18</a>。</p>
 <h3 id="d30-51-probe_whiteout_bugpy">5.1 <code>probe_whiteout_bug.py</code></h3>
-<div class="hl"><pre><span></span><code>python<span class="w"> </span>probes/probe_whiteout_bug.py<span class="w"> </span>base-gsd<span class="w"> </span>--cases<span class="w"> </span>bug,ctl,nodel,masked,trap,trap,trap<span class="w"> </span><span class="se">\</span>
+<div class="hl"><pre><span></span><code>python<span class="w"> </span>probes/probe_whiteout_bug.py<span class="w"> </span>base-criu<span class="w"> </span>--cases<span class="w"> </span>bug,ctl,nodel,masked,trap,trap,trap<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>&gt;<span class="w"> </span><span class="nv">$OUT</span>/func/probe-whiteout.json<span class="w"> </span><span class="m">2</span>&gt;<span class="w"> </span><span class="nv">$OUT</span>/func/probe-whiteout.log
 cat<span class="w"> </span><span class="nv">$OUT</span>/func/probe-whiteout.log
 </code></pre></div>
@@ -16842,13 +16845,13 @@ cat<span class="w"> </span><span class="nv">$OUT</span>/func/probe-whiteout.log
 <h3 id="d30-52-四组压测">5.2 四组压测</h3>
 <p>四组都带看门狗跑，各有自己的输出目录。并行跑的组数多了单次操作会变慢，所以把看门狗的停滞阈值放宽：</p>
 <div class="hl"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">STALL</span><span class="o">=</span><span class="m">150</span>
-<span class="nv">A</span><span class="o">=</span><span class="s2">&quot;--template base-gsd --mode stress --rounds 300&quot;</span>
+<span class="nv">A</span><span class="o">=</span><span class="s2">&quot;--template base-criu --mode stress --rounds 300&quot;</span>
 bash<span class="w"> </span>stress/run_stress_watch.sh<span class="w"> </span><span class="nv">$OUT</span>/stress/all<span class="w">       </span><span class="nv">$A</span><span class="w"> </span>--workers<span class="w"> </span><span class="m">6</span><span class="w"> </span><span class="p">&amp;</span>
 bash<span class="w"> </span>stress/run_stress_watch.sh<span class="w"> </span><span class="nv">$OUT</span>/stress/noworkers<span class="w"> </span><span class="nv">$A</span><span class="w"> </span>--workers<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="p">&amp;</span>
 wait<span class="p">;</span><span class="w"> </span>cat<span class="w"> </span><span class="nv">$OUT</span>/stress/all/RESULT<span class="w"> </span><span class="nv">$OUT</span>/stress/noworkers/RESULT
 
-<span class="nv">SCRIPT</span><span class="o">=</span>stress_multitree.py<span class="w">    </span>bash<span class="w"> </span>stress/run_stress_watch.sh<span class="w"> </span><span class="nv">$OUT</span>/stress/multitree<span class="w"> </span>--template<span class="w"> </span>base-gsd<span class="w"> </span>--mode<span class="w"> </span>multitree<span class="w"> </span>--rounds<span class="w"> </span><span class="m">200</span><span class="w"> </span><span class="p">&amp;</span>
-<span class="nv">SCRIPT</span><span class="o">=</span>stress_delete_dense.py<span class="w"> </span>bash<span class="w"> </span>stress/run_stress_watch.sh<span class="w"> </span><span class="nv">$OUT</span>/stress/deldense<span class="w">  </span>--template<span class="w"> </span>base-gsd<span class="w"> </span>--mode<span class="w"> </span>deldense<span class="w">  </span>--rounds<span class="w"> </span><span class="m">200</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="nv">SCRIPT</span><span class="o">=</span>stress_multitree.py<span class="w">    </span>bash<span class="w"> </span>stress/run_stress_watch.sh<span class="w"> </span><span class="nv">$OUT</span>/stress/multitree<span class="w"> </span>--template<span class="w"> </span>base-criu<span class="w"> </span>--mode<span class="w"> </span>multitree<span class="w"> </span>--rounds<span class="w"> </span><span class="m">200</span><span class="w"> </span><span class="p">&amp;</span>
+<span class="nv">SCRIPT</span><span class="o">=</span>stress_delete_dense.py<span class="w"> </span>bash<span class="w"> </span>stress/run_stress_watch.sh<span class="w"> </span><span class="nv">$OUT</span>/stress/deldense<span class="w">  </span>--template<span class="w"> </span>base-criu<span class="w"> </span>--mode<span class="w"> </span>deldense<span class="w">  </span>--rounds<span class="w"> </span><span class="m">200</span><span class="w"> </span><span class="p">&amp;</span>
 wait<span class="p">;</span><span class="w"> </span>cat<span class="w"> </span><span class="nv">$OUT</span>/stress/multitree/RESULT<span class="w"> </span><span class="nv">$OUT</span>/stress/deldense/RESULT
 </code></pre></div>
 
@@ -16991,7 +16994,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <tbody>
 <tr>
 <td><code>bash criu-rollback/deploy/950.sh acceptance</code></td>
-<td>§3 的部署自检（<code>ops/guest_check.py</code>）→ <code>verify_gsd.py base-gsd 8</code> → <code>verify_fixes.py</code> → <code>verify_multitree.py --skip V12</code> → <code>verify_clear_refs_race.py</code> → <code>demo_checkpoint_perf.py</code> 三次</td>
+<td>§3 的部署自检（<code>ops/guest_check.py</code>）→ <code>verify_gsd.py base-criu 8</code> → <code>verify_fixes.py</code> → <code>verify_multitree.py --skip V12</code> → <code>verify_clear_refs_race.py</code> → <code>demo_checkpoint_perf.py</code> 三次</td>
 <td>同 §2 的表。遇到非零返回码或内容判据失败就停止，写 <code>summary.json</code>。首次部署没有对照模板，跳过 V12</td>
 </tr>
 <tr>
@@ -17001,7 +17004,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 </tr>
 </tbody>
 </table></div>
-<p><code>all</code> 之外还有三个测试命令，都要先在进程级栈上（先执行 <code>950.sh gsd</code>）。平时由仓库根的 <code>test950.sh</code> 按档调度，见 <code>test950/README.md</code>：</p>
+<p><code>all</code> 之外还有三个测试命令，都要先在进程级栈上（先执行 <code>950.sh criu</code>）。平时由仓库根的 <code>test950.sh</code> 按档调度，见 <code>test950/README.md</code>：</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -17013,7 +17016,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <tbody>
 <tr>
 <td><code>bash criu-rollback/deploy/950.sh quick</code></td>
-<td>部署自检 + <code>verify_gsd.py base-gsd 8</code>，约 2 分钟，每次切栈或换二进制后用</td>
+<td>部署自检 + <code>verify_gsd.py base-criu 8</code>，约 2 分钟，每次切栈或换二进制后用</td>
 <td>同 §3、§4.1</td>
 </tr>
 <tr>
@@ -17033,7 +17036,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <hr />
 <h2 id="d30-本章要点">本章要点</h2>
 <ul>
-<li>在运行进程级栈的宿主机上、用装好 SDK 依赖的 conda 环境加代码仓的 <code>py-sdk</code>、对模板 <code>base-gsd</code> 跑；开始前确认三个文件的 sha256、确认机器上没有别人的沙箱。</li>
+<li>在运行进程级栈的宿主机上、用装好 SDK 依赖的 conda 环境加代码仓的 <code>py-sdk</code>、对模板 <code>base-criu</code> 跑；开始前确认三个文件的 sha256、确认机器上没有别人的沙箱。</li>
 <li>顺序固定：部署自检 → <code>verify_gsd.py</code> → <code>verify_fixes.py</code> → <code>verify_multitree.py</code> → <code>verify_clear_refs_race.py</code> → <code>demo_checkpoint_perf.py</code> 三次 → 可选的探针与压测。前一步不过就停下来查。</li>
 <li>部署自检查的是"模板里装的是不是要验的那一套"：guest 内 gsd 的提交号与 sha256、内核版本串、THP、<code>rcu_expedited</code>、<code>/health</code>、criu 版本、<code>/</code> 与 <code>/tmp</code>。换过内核、gsd、overlay-init 而没有重建模板，是最常见的白跑原因。</li>
 <li><code>verify_gsd.py</code>、<code>verify_clear_refs_race.py</code> 与 <code>stress_overlay_ckpt.py</code> 的退出码不是判定，分别看末行的根盘判定、漏页轮数、以及按判据表核对汇总 JSON。</li>
@@ -17641,6 +17644,7 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 <hr />
 <h2 id="dA-3-文件与目录格式">3. 文件与目录格式</h2>
 <h3 id="dA-31-运行时布局">3.1 运行时布局</h3>
+<p>2026-11-17 之前的布局是 <code>/fc-gsd/</code>。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -17652,18 +17656,18 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 <tbody>
 <tr>
 <td>宿主</td>
-<td><code>/fc-gsd/gsd</code></td>
-<td>gsd 二进制（<code>HOST_GSD_PATH</code> 的默认值）</td>
+<td><code>/fc-criu/gsd</code></td>
+<td>gsd 二进制（部署时用 <code>HOST_GSD_PATH</code> 指过来；内置默认 <code>/fc-gsd/gsd</code> 是旧布局）</td>
 </tr>
 <tr>
 <td>宿主</td>
-<td><code>/fc-gsd/orchestrator</code></td>
+<td><code>/fc-criu/orchestrator</code></td>
 <td>带注入逻辑的 orchestrator</td>
 </tr>
 <tr>
 <td>宿主</td>
-<td><code>/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
-<td>打过三个补丁的 guest 内核（与沙箱级共用的机器用 <code>HOST_KERNELS_DIR=/fc-gsd/kernels</code> 指过来）</td>
+<td><code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
+<td>打过三个补丁的 guest 内核（与沙箱级共用的机器用 <code>HOST_KERNELS_DIR=/fc-criu/kernels</code> 指过来）</td>
 </tr>
 <tr>
 <td>guest</td>
@@ -18105,7 +18109,7 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 </table></div>
 <p>对应关系标"约"的两行是按各提交的内容推断的，结果文件里没有逐一对照的记录。</p>
 <h3 id="dA-54-模板代号">5.4 模板代号</h3>
-<p>本书统一把模板叫 <code>base-gsd</code>。验证时每换一次内核或 gsd 都要重建模板（模板固化），所以结果文件里有一串带序号的名字：</p>
+<p>本书统一把模板叫 <code>base-criu</code>（2026-11-17 之前叫 <code>base-gsd</code>，下表与第 19～21 章的结果文件保留当时的名字）。验证时每换一次内核或 gsd 都要重建模板（模板固化），所以结果文件里有一串带序号的名字：</p>
 <div class="tw"><table>
 <thead>
 <tr>

@@ -4,7 +4,7 @@
 最初用来核对"多个根就拒绝"会不会误伤常见用法；gsd 现在对每棵树各 dump / restore 一次，不再拒绝，它留作观察工具。
 
 在宿主机上跑（gsd 栈在运行；解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python3 probe_user_roots.py [模板名，默认 base-gsd]
+    python3 probe_user_roots.py [模板名，默认 base-criu]
 
 脚本里"根"的判定是 gsd 规则的第一步（候选根）：uid 1000、父进程不是 uid 1000，且不是 PID 1/envd/gsd。
 gsd 还会去掉祖先链上已有候选根的那些（用户进程 → sudo → 用户进程 的嵌套，见手册 08 章），这里没有做这一步。
@@ -17,7 +17,7 @@ from e2b_env import load_e2b_env
 os.environ.update(load_e2b_env())
 from e2b import Sandbox
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 
 # 在 guest 里算根：只用 /proc，不依赖 ps 的输出格式
 ROOTS_SH = r'''

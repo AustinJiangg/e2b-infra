@@ -4,7 +4,9 @@
 不重写任何测试，只编排现有脚本：
   沙箱级  rollback/scripts/950/run.sh 的各档
   进程级  criu-rollback/deploy/950.sh 的 quick / acceptance / stress / stress-ext / soak
-切栈用 950.sh gsd / sandbox，跑完停在沙箱级。只用标准库。
+切栈用 950.sh criu / sandbox，跑完停在沙箱级。只用标准库。
+结果都留在 test950/results/<时间>-<档>/，用 bash test950.sh report 打印到终端（不打包、不需要拷文件）。
+e2b 的网络命名空间超过 TEST950_NETNS_LIMIT（默认 1500）时，在下一步之前自动 950.sh recycle-netns。
 """
 import argparse
 from datetime import datetime
@@ -15,7 +17,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tarfile
 import time
 
 HERE = Path(__file__).resolve().parent
@@ -25,8 +26,17 @@ RUN_SH = REPO / "rollback" / "scripts" / "950" / "run.sh"
 STACK_SH = DEPLOY / "950.sh"
 sys.path.insert(0, str(DEPLOY / "ops"))
 import envs  # noqa: E402
+import paths  # noqa: E402
+import report  # noqa: E402
+import stack  # noqa: E402
 
-STATE = Path(os.environ.get("TEST950_STATE", "/var/lib/test950"))
+
+def state_dir():
+    """进度与后台日志。"""
+    return Path(os.environ.get("TEST950_STATE") or "/var/lib/test950")
+
+
+NETNS_LIMIT = int(os.environ.get("TEST950_NETNS_LIMIT", "1500"))
 RESULTS = HERE / "results"
 LEVELS = ("quick", "standard", "extended", "long")
 STACKS = ("sandbox", "criu")
@@ -141,7 +151,7 @@ def identity(stack):
                               "sha256": sha(exe) if exe and "(deleted)" not in exe else None},
              "firecracker": {str(p): sha(p) for p in sorted(Path("/fc-versions").glob("*/firecracker"))}}
     if stack == "criu":
-        ident["fc_gsd"] = {str(p): sha(p) for p in sorted(Path("/fc-gsd").rglob("*")) if p.is_file()}
+        ident["criu_fc"] = {str(p): sha(p) for p in sorted(paths.host_fc().rglob("*")) if p.is_file()}
     return ident
 
 
@@ -152,8 +162,8 @@ def resources():
         k, v = line.split(":", 1)
         mem[k] = v.strip()
     res = {"time": datetime.now().isoformat(), "MemAvailable": mem.get("MemAvailable"),
-           "netns": len(os.listdir("/run/netns")) if os.path.isdir("/run/netns") else 0,
-           "firecracker": len(sh("pidof firecracker").split()),
+           "netns": stack.e2b_netns(),
+           "firecracker": len(stack.e2b_firecrackers()),
            "root_used_kB": sh("df -k --output=used / | tail -1")}
     if pid:
         res["orchestrator_fds"] = len(os.listdir("/proc/%s/fd" % pid))
@@ -164,16 +174,16 @@ def current_stack():
     _, exe = orchestrator()
     if not exe:
         return None
-    return "criu" if exe.startswith("/fc-gsd/") else "sandbox"
+    return "criu" if stack.is_criu(exe) else "sandbox"
 
 
-def ensure_stack(stack, run_dir):
+def ensure_stack(want, run_dir):
     """切到要测的栈。已经在目标栈上就不调用 950.sh（只装了沙箱级、没跑过 950.sh all 的机器也能测沙箱级）。"""
-    if current_stack() == stack:
-        log("当前已是%s栈" % ("沙箱级" if stack == "sandbox" else "进程级"))
+    if current_stack() == want:
+        log("当前已是%s栈" % ("沙箱级" if want == "sandbox" else "进程级"))
         return
-    target = "sandbox" if stack == "sandbox" else "gsd"
-    log("确保当前是%s栈（950.sh %s）" % ("沙箱级" if stack == "sandbox" else "进程级", target))
+    target = want
+    log("确保当前是%s栈（950.sh %s）" % ("沙箱级" if want == "sandbox" else "进程级", target))
     with (run_dir / ("switch-%s.log" % target)).open("a") as f:
         r = subprocess.run(["bash", str(STACK_SH), target], cwd=REPO, stdout=f, stderr=subprocess.STDOUT)
     if r.returncode != 0:
@@ -231,21 +241,21 @@ def outcome(step, rc, out):
     return ("PASS" if rc == 0 else "FAIL"), "退出码 %d" % rc
 
 
-def secret(name):
-    """含密钥、不进回传包的文件：nomad job 定义（带全部 env）、dotenv、ACL 令牌。"""
-    return ((name.startswith(("job-", ".job-")) and name.endswith(".json"))
-            or name.endswith(".env") or name == "acl.token")
-
-
-def pack(run_dir):
-    """打回传包，去掉含密钥的文件。"""
-    tar_path = run_dir.with_suffix(".tar.gz")
-
-    def keep(info):
-        return None if secret(Path(info.name).name) else info
-    with tarfile.open(tar_path, "w:gz") as tar:
-        tar.add(run_dir, arcname=run_dir.name, filter=keep)
-    return tar_path
+def maybe_recycle(data, run_dir):
+    """e2b netns 超过上限就清一次（每次重启 orchestrator 会留下约 300 个，extended 一轮能涨到六七千）。
+    清理失败只记录，不影响测试步骤。"""
+    n = stack.e2b_netns()
+    if n <= NETNS_LIMIT:
+        return
+    logf = run_dir / ("recycle-netns-%s.log" % datetime.now().strftime("%H%M%S"))
+    log("e2b netns %d 个，超过 %d，先清理（950.sh recycle-netns，日志 %s）" % (n, NETNS_LIMIT, logf.name))
+    t0 = time.time()
+    with logf.open("w") as f:
+        r = subprocess.run(["bash", str(STACK_SH), "recycle-netns"], cwd=REPO, stdout=f, stderr=subprocess.STDOUT)
+    rec = {"time": datetime.now().isoformat(), "before": n, "after": stack.e2b_netns(),
+           "seconds": int(time.time() - t0), "ok": r.returncode == 0}
+    data.setdefault("recycles", []).append(rec)
+    log("清理%s：e2b netns %d → %d（%s）" % ("完成" if rec["ok"] else "失败（继续测试）", n, rec["after"], dur(rec["seconds"])))
 
 
 def write_summary(data, run_dir):
@@ -259,6 +269,11 @@ def write_summary(data, run_dir):
         lines.append("| %s | %s | %s | %s |" % (s["id"], s["status"],
                                                 dur(s["seconds"]) if "seconds" in s else "-",
                                                 s.get("detail", "")))
+    if data.get("recycles"):
+        lines += ["", "## 自动清理 netns", "", "| 时刻 | 清理前 | 清理后 | 用时 | 结果 |", "|---|---|---|---|---|"]
+        for r in data["recycles"]:
+            lines.append("| %s | %s | %s | %s | %s |" % (r["time"][11:19], r["before"], r["after"], dur(r["seconds"]),
+                                                        "OK" if r["ok"] else "失败"))
     lines += ["", "## 身份", ""]
     for key, ident in data.get("identity", {}).items():
         orch = ident["orchestrator"]
@@ -272,14 +287,15 @@ def write_summary(data, run_dir):
             lines.append("| %s | %s | %s | %s | %s | %s |" % (when, r["MemAvailable"], r["netns"], r["firecracker"],
                                                          r["root_used_kB"], r.get("orchestrator_fds", "-")))
     (run_dir / "SUMMARY.md").write_text("\n".join(lines) + "\n")
+    (run_dir / "run.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))
 
 
 def progress_file():
-    return STATE / "progress.json"
+    return state_dir() / "progress.json"
 
 
 def save(data):
-    STATE.mkdir(parents=True, exist_ok=True)
+    state_dir().mkdir(parents=True, exist_ok=True)
     progress_file().write_text(json.dumps(data, ensure_ascii=False, indent=1))
     write_summary(data, Path(data["run_dir"]))
 
@@ -312,6 +328,7 @@ def execute(args):
     for step in data["steps"]:
         if step["status"] == "PASS":
             continue
+        maybe_recycle(data, run_dir)
         if step["stack"] != current:
             ensure_stack(step["stack"], run_dir)
             current = step["stack"]
@@ -328,12 +345,12 @@ def execute(args):
         step["status"], step["detail"] = outcome(step, rc, out)
         log("%s %s（%s）%s" % (step["id"], step["status"], dur(step["seconds"]), step["detail"]))
         save(data)
+    maybe_recycle(data, run_dir)
     data["resources"]["结束"] = resources()
     data["finished"] = datetime.now().isoformat()
     save(data)
-    tar_path = pack(run_dir)
     n_fail = sum(1 for s in data["steps"] if s["status"] != "PASS")
-    log("全部结束：%d 步，FAIL %d。回传包：%s" % (len(data["steps"]), n_fail, tar_path))
+    log("全部结束：%d 步，FAIL %d。把结果打印到终端：bash test950.sh report" % (len(data["steps"]), n_fail))
     return 0 if n_fail == 0 else 1
 
 
@@ -358,15 +375,108 @@ def status():
             extra = "%s  %s" % (dur(s["seconds"]), s.get("detail", ""))
         print("  %-6s %-26s %s" % (s["status"], s["id"], extra))
     print("结果目录：%s" % data["run_dir"])
-    log_file = STATE / "test950-bg.log"
+    print("打印结果：bash test950.sh report")
+    log_file = state_dir() / "test950-bg.log"
     if log_file.is_file():
         print("日志：tail -f %s" % log_file)
     return 0
 
 
+def pick_run(name=None):
+    if name:
+        run = RESULTS / name
+        if not run.is_dir():
+            sys.exit("没有结果目录 %s" % run)
+        return run
+    if progress_file().is_file():
+        run = Path(json.loads(progress_file().read_text())["run_dir"])
+        if run.is_dir():
+            return run
+    runs = sorted(p for p in RESULTS.glob("*-*") if p.is_dir())
+    if not runs:
+        sys.exit("还没有结果（%s 下是空的）" % RESULTS)
+    return runs[-1]
+
+
+def print_overview(run):
+    data = json.loads((run / "run.json").read_text()) if (run / "run.json").is_file() else None
+    if data is None:
+        report.show_file(run / "SUMMARY.md", 0, root=run)
+        return
+    print("==== test950 %s 档：%s（从这一行复制到“结束”那一行）====" % (data["level"], run.name))
+    print("主机 %s · 栈 %s · 开始 %s · %s" % (os.uname().nodename, "、".join(data["stacks"]), data["started"][:19],
+                                         ("结束 " + data["finished"][:19]) if data.get("finished") else "未结束"))
+    for s in data["steps"]:
+        print(report.clip("  %-6s %-22s %-9s %s" % (s["status"], s["id"], dur(s["seconds"]) if "seconds" in s else "-",
+                                                   s.get("detail", ""))))
+    print("-- 身份（每段开头记录，相同的只列一次）")
+    seen = set()
+    for key, ident in data.get("identity", {}).items():
+        orch = ident["orchestrator"]
+        sig = (ident["stack"], orch["exe"], orch["sha256"], ident["repo_commit"])
+        if sig in seen:
+            continue
+        seen.add(sig)
+        print("  %s：orchestrator %s sha256 %s；宿主内核 %s；仓库 %s%s" % (
+            key, orch["exe"], orch["sha256"], ident["host_kernel"], ident["repo_commit"][:12],
+            "（有未提交改动）" if ident["repo_dirty"] else ""))
+        for path, digest in sorted((ident.get("firecracker") or {}).items()):
+            print("    firecracker %s %s" % (path, digest))
+        for path, digest in sorted((ident.get("criu_fc") or {}).items()):
+            print("    %s %s" % (path, digest))
+    if data.get("resources"):
+        print("-- 宿主资源（e2b 的 netns / firecracker）")
+        for when, r in data["resources"].items():
+            print("  %s：MemAvailable %s，netns %s，firecracker %s，根盘已用 %s kB，orchestrator fd %s" % (
+                when, r["MemAvailable"], r["netns"], r["firecracker"], r["root_used_kB"], r.get("orchestrator_fds", "-")))
+    for r in data.get("recycles", []):
+        print("  自动清理 netns %s：%s → %s（%s）%s" % (r["time"][11:19], r["before"], r["after"], dur(r["seconds"]),
+                                                  "" if r["ok"] else " 失败"))
+    for s in data["steps"]:
+        out = run / s["id"].replace("/", "-")
+        if not out.is_dir():
+            continue
+        print("-- %s" % s["id"])
+        if s["kind"] == "run":
+            report.print_run_sh(out)
+        else:
+            report.print_criu(out)
+    print("==== 结束 ====")
+    print("某一步的细节（各项日志末尾、性能表）：bash test950.sh report 步骤名，例如")
+    for s in data["steps"][:3]:
+        print("  bash test950.sh report %s" % s["id"])
+
+
+def print_report(args):
+    run = pick_run(args.run)
+    if args.file:
+        report.show_file(run / args.file, args.lines, root=run)
+        return 0
+    if not args.target:
+        print_overview(run)
+        return 0
+    if args.target == "files":
+        report.list_files(run)
+        return 0
+    out = run / args.target.replace("/", "-")
+    if not out.is_dir():
+        sys.exit("没有步骤 %s 的结果目录（用 bash test950.sh report files 看有哪些）" % args.target)
+    print("==== test950 · %s · %s ====" % (run.name, args.target))
+    if args.target.startswith("sandbox/"):
+        report.print_run_sh_detail(out, args.lines)
+    else:
+        report.print_criu_detail(out, args.lines)
+    print("==== 结束 ====")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("level", choices=LEVELS + ("status",))
+    ap.add_argument("level", choices=LEVELS + ("status", "report"))
+    ap.add_argument("target", nargs="?", help="report：步骤名（如 criu/stress-ext），或 files 列出全部文件")
+    ap.add_argument("--run", help="report：结果目录名，默认最近一轮")
+    ap.add_argument("--file", help="report：打印结果目录里的这个文件（相对路径）")
+    ap.add_argument("--lines", type=int, default=40, help="report：每个文件打印的行数，0 为全部")
     ap.add_argument("--stack", choices=("both",) + STACKS, default="both", help="测哪套，默认两套都测")
     ap.add_argument("--hours", type=float, default=4.0, help="long 档每套的长跑时长（小时），默认 4；两套都测约 9 小时")
     ap.add_argument("--new", action="store_true", help="不续跑上一轮，重新开始")
@@ -374,6 +484,8 @@ def main():
     args = ap.parse_args()
     if args.level == "status":
         return status()
+    if args.level == "report":
+        return print_report(args)
     if os.geteuid() != 0:
         sys.exit("请用 root 执行")
     if progress_file().is_file():
@@ -386,8 +498,8 @@ def main():
             pass
     if not args.fg:
         RESULTS.mkdir(parents=True, exist_ok=True)
-        bg_log = STATE / "test950-bg.log"
-        STATE.mkdir(parents=True, exist_ok=True)
+        bg_log = state_dir() / "test950-bg.log"
+        state_dir().mkdir(parents=True, exist_ok=True)
         cmd = [sys.executable, str(Path(__file__).resolve())] + sys.argv[1:] + ["--fg"]
         with bg_log.open("a") as f:
             subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,

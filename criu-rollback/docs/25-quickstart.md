@@ -20,7 +20,7 @@
 
 ### 1.1 服务端
 
-宿主已经切到进程级这套栈，并且在这套栈下建过模板 `base-gsd`（做法见 [27](27-deployment.md)）。本章示例都用这个模板。
+宿主已经切到进程级这套栈，并且在这套栈下建过模板 `base-criu`（做法见 [27](27-deployment.md)）。本章示例都用这个模板。
 
 checkpoint 接口由沙箱**里面**的守护进程 gsd 提供，监听 guest 的 49984 端口；宿主上的代理只负责把请求按端口转进去，不参与 checkpoint 本身（请求路径见 [05](05-architecture.md)）。
 所以"这个沙箱能不能做 checkpoint"取决于它的模板：只有在进程级栈下建出来的模板，里面才有 gsd、补丁内核和 overlay 根文件系统。拿一个普通模板起的沙箱调用本章的接口，`is_running()` 会返回 `False`。
@@ -82,7 +82,7 @@ SDK 从环境变量读连接配置，和上游 `e2b` 完全一样：
 import time
 from e2b import Sandbox
 
-TEMPLATE = "base-gsd"
+TEMPLATE = "base-criu"
 
 
 def sh(sbx, cmd):
@@ -199,7 +199,7 @@ from e2b import AsyncSandbox, CheckpointRestoreException, NotEnoughSpaceExceptio
 
 
 async def main():
-    sbx = await AsyncSandbox.create(template="base-gsd", timeout=600)
+    sbx = await AsyncSandbox.create(template="base-criu", timeout=600)
     try:
         if not await sbx.checkpoint.is_running():
             raise RuntimeError("这个模板里没有 gsd")
@@ -374,7 +374,7 @@ restore 分两段：先做完所有检查与准备，再杀掉当前用户进程
 
 ## 本章要点
 
-- checkpoint 接口由沙箱里的 gsd 提供，能不能用取决于模板：只有进程级栈下建的模板（本书用 `base-gsd`）才有；客户端要用代码仓里的 `py-sdk`，它和沙箱级回滚用的 SDK 不是同一份，不能混装。
+- checkpoint 接口由沙箱里的 gsd 提供，能不能用取决于模板：只有进程级栈下建的模板（本书用 `base-criu`）才有；客户端要用代码仓里的 `py-sdk`，它和沙箱级回滚用的 SDK 不是同一份，不能混装。
 - 五个方法都在 `sandbox.checkpoint` 下，同步与异步的签名相同；`restore()` 与 `delete()` 成功时返回 `True`，失败一律抛异常。
 - 被回滚的是 uid 1000 的全部用户进程树和根文件系统（包括 `/tmp`）。每个后台命令是一棵树；restore 先杀掉当前全部用户进程，再恢复目标 checkpoint 里的树。
 - `CheckpointInfo.timings` 只有 `create()` 才填；`restore()` 的分段耗时在 `sandbox.checkpoint.last_timings`。这些数字是 gsd 自己计的，不含网络与排队。

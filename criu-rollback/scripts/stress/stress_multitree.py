@@ -17,7 +17,7 @@
 结束时按关键字搜 dmesg、看 lockdep、对比 slab。输出 <outdir>/multitree.log、multitree-ops.log、multitree-summary.json。
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python stress_multitree.py --template base-gsd --rounds 200 --outdir <dir>
+    python stress_multitree.py --template base-criu --rounds 200 --outdir <dir>
 也可以经 run_stress_watch.sh（SCRIPT=stress_multitree.py，带 --mode multitree）带看门狗跑。
 判据：multitree-summary.json 的 verdict 为 PASS（lockdep 的 debug_locks 变成 0 直接算失败）。
 """
@@ -37,7 +37,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--mode", default="multitree", help="只用于文件名前缀（与 run_stress_watch.sh 配合）")
 ap.add_argument("--rounds", type=int, default=200)
 ap.add_argument("--mb", type=int, default=4, help="每棵树的缓冲区大小（MiB），每拍全部写一遍")

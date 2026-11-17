@@ -57,15 +57,15 @@ grep -E 'CONFIG_VMGENID|CONFIG_KASAN=|CONFIG_PROVE_LOCKING=' $B/bld-dbg/.config 
 make ARCH=arm64 O=$B/bld-dbg Image -j"$(nproc)" > $B/build-dbg.log 2>&1
 ```
 
-产物是 `$B/bld-dbg/arch/arm64/boot/Image`，约 66 MB（发布版约 22 MB）。把它放到一个**单独的**内核根目录下，
+产物是 `$B/bld-dbg/arch/arm64/boot/Image`，约 66 MB（发布版约 22 MB）。把它放到一个**单独的**内核根目录下（`CRIU_FC` 是进程级运行文件所在目录，默认 `/fc-criu`，先 `export CRIU_FC=/fc-criu`），
 目录结构与正式位置相同，文件名固定为 `vmlinux.bin`：
 
 ```bash
-mkdir -p /fc-gsd/kernels-dbg/vmlinux-6.1.158
-cp $B/bld-dbg/arch/arm64/boot/Image /fc-gsd/kernels-dbg/vmlinux-6.1.158/vmlinux.bin
+mkdir -p $CRIU_FC/kernels-dbg/vmlinux-6.1.158
+cp $B/bld-dbg/arch/arm64/boot/Image $CRIU_FC/kernels-dbg/vmlinux-6.1.158/vmlinux.bin
 ```
 
-不要覆盖 `/fc-gsd/kernels/` 下的发布版内核。
+不要覆盖 `$CRIU_FC/kernels/` 下的发布版内核。
 
 > 实际编过的做法是上面这种——直接用完整的 `kernel-debug.config`。用 `kernel-debug.fragment` 经内核自带的
 > `scripts/kconfig/merge_config.sh` 合到发布版 config 上应当得到同样的结果，但这条路径**没有实际跑过**；
@@ -78,7 +78,7 @@ cp $B/bld-dbg/arch/arm64/boot/Image /fc-gsd/kernels-dbg/vmlinux-6.1.158/vmlinux.
 
 ```bash
 # 1. 把进程级栈切到调试内核目录（先确认机器上没有沙箱在跑）
-GSD_KDIR=/fc-gsd/kernels-dbg bash ops/switch-gsd-new920b.sh gsd
+GSD_KDIR=$CRIU_FC/kernels-dbg bash ops/switch-gsd-new920b.sh gsd
 
 # 2. 用这个内核另建一个模板。内存给 4096 MB：KASAN 的影子内存与隔离区要额外占内存
 python build_template.py --alias <调试模板名> --memory 4096 --image <镜像仓库>/e2b-orchestration/ubuntu:22.04-custom-criu421
@@ -98,7 +98,7 @@ python stress/analyze_stress.py <输出目录的上一级> <前缀>
 bash ops/switch-gsd-new920b.sh gsd
 ```
 
-用完之后调试模板可以删掉，`/fc-gsd/kernels-dbg` 也可以删。留着调试模板不影响别的模板，但**不要拿它做任何功能验收或性能测量**：
+用完之后调试模板可以删掉，`$CRIU_FC/kernels-dbg` 也可以删。留着调试模板不影响别的模板，但**不要拿它做任何功能验收或性能测量**：
 调试内核慢得多、时序也不同，前者没有额外价值，后者的数字没有意义。反过来，调试内核也不能代替发布版内核上的压测，两者要各跑一遍。
 
 第 4 步里 `STALL=300` 只是示例值，按机器负载和并行组数调整；判断标准是正常运行时不被看门狗误判为卡死。

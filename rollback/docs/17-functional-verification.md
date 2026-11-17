@@ -144,7 +144,7 @@ D 连做三次 checkpoint（多层封存）之后 pause 1 格——[附录 C §2
 E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 格。
 数据一律 `O_DIRECT` 读回 8 MiB 比 sha256。预期的三个 `REFUSED`：B4、B8 两格是同一条边界，pause / resume 之后回不到之前的 checkpoint
 （账本不跨 pause，[第 24 章 §3.1](24-api-semantics.md#31-原生-pause--resume-与-checkpoint-的代际边界)）；kill 之后不能 connect（e2b 原有行为，放进矩阵是为了让基线完整）。
-脚本 2026-11-16 移到 `acceptance/compat_matrix.py`，由 `run.sh func` 运行；同一份脚本也在进程级上跑（模板 `base-gsd`），那边的账本跨 pause 保留，B8 判 OK。
+脚本 2026-11-16 移到 `acceptance/compat_matrix.py`，由 `run.sh func` 运行；同一份脚本也在进程级上跑（模板 `base-criu`），那边的账本跨 pause 保留，B8 判 OK。
 
 ### 1.6 `hdbss_evidence.py`：能力不等于数据面
 

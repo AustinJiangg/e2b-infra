@@ -153,7 +153,7 @@ gsd 启动时会再检查一次（`ensureTHPNever`，`packages/gsd/main.go:196`�
 ### 4.1 一个开关管五处
 
 是否构建带 gsd 的模板由 `BuilderConfig.GSDEnabled`（`cfg/model.go:39`）决定，它只看一件事：`HostGSDPath` 是否非空。这个字段来自环境变量
-`HOST_GSD_PATH`，默认值 `/fc-gsd/gsd`（`cfg/model.go:22`）。所以**默认是开的**。
+`HOST_GSD_PATH`，默认值 `/fc-gsd/gsd`（`cfg/model.go:22`）。所以**默认是开的**。部署入口把 gsd 放在 `/fc-criu/gsd`，并在 job 里显式设 `HOST_GSD_PATH` 指向它（[27](27-deployment.md) §3.1）。
 
 `GSDEnabled` 为真时，建模板路径上有五处与上游不同；为假时这五处都走与上游相同的分支：
 
@@ -184,7 +184,7 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 要点是**只有小写的 `off` 才是关**。写成 `OFF` 或 `Off` 会被当成一个相对路径，gsd 仍然是开的，之后建模板时因为读不到这个文件而失败（[16](16-known-limits.md)）。
 
 这张表来自配置解析的测试。表里第一行"不设该变量、按默认路径注入"已于 2026-10-09 在新 920B 上真实建模板确认：orchestrator 的进程环境里没有 `HOST_GSD_PATH` 这个键，
-建出的模板里 guest 的 `/usr/bin/gsd` 与宿主 `/fc-gsd/gsd` 的 sha256 相同（[19](19-920b-functional.md) 的"落位后的复核"一节、[27](27-deployment.md)）。
+建出的模板里 guest 的 `/usr/bin/gsd` 与宿主上 `HOST_GSD_PATH` 指的 gsd 的 sha256 相同（[19](19-920b-functional.md) 的"落位后的复核"一节、[27](27-deployment.md)）。
 "关掉开关（`off`）后真实建出的模板与上游一致"这一条仍然只有单测与代码依据，没有上机结果，列在 [23](23-gaps-and-boundaries.md) 的缺口表里。
 
 ### 4.3 每建一层后的注入与自检
@@ -217,7 +217,7 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 沙箱不是"开机"出来的。模板构建的最后一步是给运行中的构建沙箱拍一个内存快照；之后每个沙箱都是从这个快照恢复出来的。由此得到三个推论：
 
 - **内核**：快照里是建模板那一刻正在运行的 guest 内核。把宿主上的内核文件换掉、或者把 `HOST_KERNELS_DIR` 指到另一个目录，**不改变任何已有模板**里的内核。
-- **gsd**：快照里是一个已经在运行的 gsd 进程，连同它的堆。宿主上换 `/fc-gsd/gsd` 同样不影响已有模板。
+- **gsd**：快照里是一个已经在运行的 gsd 进程，连同它的堆。宿主上换 gsd 文件（`HOST_GSD_PATH` 指的那个）同样不影响已有模板。
 - **`overlay-init`**：它只在建模板时的开机过程中运行过，沙箱恢复时不再运行。改它的效果只体现在此后新建的模板上。
 
 所以换这三者中的任何一样，都要重建模板。反过来看这也是一个保障：已有模板不会因为宿主上换了文件而悄悄变样。

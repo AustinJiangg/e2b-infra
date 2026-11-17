@@ -24,7 +24,7 @@ import e2b
 if not Path(e2b.__file__).resolve().is_relative_to(prefix):
     parser.error("原 SDK 未从 jll-e2b 环境加载")
 if (Path(e2b.__file__).parent / "_gsd_offline_install.json").exists():
-    parser.error("jll-e2b 中发现 GSD SDK，不能作为原沙箱级环境验收")
+    parser.error("jll-e2b 中发现进程级 SDK，不能作为原沙箱级环境验收")
 os.environ.update(load_e2b_env())
 env = dict(os.environ)
 env.pop("PYTHONPATH", None)

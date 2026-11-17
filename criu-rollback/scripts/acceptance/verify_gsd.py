@@ -3,7 +3,7 @@
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；
 凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python verify_gsd.py [模板名，默认 base-gsd] [restore 次数，默认 8]
+    python verify_gsd.py [模板名，默认 base-criu] [restore 次数，默认 8]
 
 做法：起一个沙箱，后台跑一个预分配 192 MiB 并逐页碰实的常驻进程；建第一个 checkpoint，让进程把 192 MiB
 全部改写一遍，再建第二个 checkpoint；然后对第二个 checkpoint 连续 restore N 次，每次记根盘已用量和各分段耗时。
@@ -24,7 +24,7 @@ from e2b_env import load_e2b_env
 os.environ.update(load_e2b_env())
 from e2b import Sandbox
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 8
 MEMHOG = r'''
 import time, hashlib, os

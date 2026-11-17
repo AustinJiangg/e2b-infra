@@ -5,7 +5,7 @@
 每项独立起沙箱，输出 PASS / FAIL / INFO 和证据，最后汇总成表。
 
 在宿主机上跑（gsd 栈在运行；解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python verify_multitree.py --template base-gsd \
+    python verify_multitree.py --template base-criu \
         [--old-template <对照模板>] [--only V2,V6] [--skip V12] [--perf-rounds 4] [--out-json x.json]
 
 V12 的 N=1 对照：--old-template 指向"旧 gsd + 同一内核"建的模板（gsd 是烤在模板快照里的），
@@ -20,7 +20,7 @@ import time
 import traceback
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--old-template", default="", help="V12 N=1 的对照模板（另一版 gsd + 同内核）；默认空串 = 不对照")
 ap.add_argument("--only", default="")
 ap.add_argument("--skip", default="")

@@ -8,7 +8,7 @@
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
     python demo_checkpoint_perf.py
 没有命令行参数，用环境变量调：
-    TEMPLATE   模板名，默认 base-gsd
+    TEMPLATE   模板名，默认 base-criu
     THP        guest 的透明大页设置，默认 never（gsd 的真实条件）；always 只用于诊断
     OUT_JSON   设了就把结果另存成这个 JSON 文件
 输出分档表、实际 RSS、客户端墙钟和服务端分段。每档单样本，建议连跑三次。
@@ -43,7 +43,7 @@ EXPERIMENTS = [
     {"mem_mb": 192, "file_kb": 64 * 1024},
 ]
 
-TEMPLATE = os.environ.get("TEMPLATE", "base-gsd")   # 模板名；手册统一用 base-gsd
+TEMPLATE = os.environ.get("TEMPLATE", "base-criu")   # 模板名；手册统一用 base-criu
 THP = os.environ.get("THP", "never")   # 见 main() 里的说明；只在诊断时改成 always
 
 # 常驻 Python 进程：

@@ -2,9 +2,9 @@
 """overlay 热切换 + gsd checkpoint/restore 压测。发布版内核与调试内核（KASAN/PROVE_LOCKING/DEBUG_LIST/DEBUG_OBJECTS）上各跑一遍。
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python stress_overlay_ckpt.py --template base-gsd --mode stress --rounds 300 --workers 6 --outdir <dir>
-    python stress_overlay_ckpt.py --template base-gsd --mode enospc --outdir <dir>
-通常经同目录的 run_stress_watch.sh 带看门狗跑（它负责传 --outdir）。--template 默认 base-gsd。
+    python stress_overlay_ckpt.py --template base-criu --mode stress --rounds 300 --workers 6 --outdir <dir>
+    python stress_overlay_ckpt.py --template base-criu --mode enospc --outdir <dir>
+通常经同目录的 run_stress_watch.sh 带看门狗跑（它负责传 --outdir）。--template 默认 base-criu。
 在调试内核上跑：先把 gsd 栈切到调试内核（GSD_KDIR=<调试内核目录> bash ../ops/switch-gsd-new920b.sh gsd，
 内核编法见 ../kernel/README.md），用该内核另建一个模板（内存 4096 MB），--template 指向它。
 判据：<outdir>/<mode>-summary.json；汇总与判定用同目录的 analyze_stress.py。lockdep 的 debug_locks 本脚本只记录不判，
@@ -38,7 +38,7 @@ os.environ.update(load_e2b_env())
 from e2b import Sandbox, CommandExitException  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--template", default="base-gsd")
+ap.add_argument("--template", default="base-criu")
 ap.add_argument("--mode", choices=["stress", "enospc"], default="stress")
 ap.add_argument("--rounds", type=int, default=300)
 ap.add_argument("--workers", type=int, default=6)

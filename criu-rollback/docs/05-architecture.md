@@ -243,11 +243,13 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 
 ### 6.1 宿主
 
+2026-11-17 起运行文件放在 `/fc-criu/`（`criu-rollback/deploy/README.md` 第 1 节）；之前的布局是 `/fc-gsd/`，第 19～21 章的记录保留当时的路径。
+
 | 路径 | 是什么 | 谁读 |
 |---|---|---|
-| `/fc-gsd/gsd` | gsd 二进制（arm64，静态编译） | orchestrator 建模板时读，路径来自 `HOST_GSD_PATH`，这就是它的默认值 |
-| `/fc-gsd/orchestrator` | 带 gsd 注入逻辑的 orchestrator | 宿主的服务管理 |
-| `/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin` | 打了热切层与 soft-dirty 补丁的 guest 内核 | orchestrator，经 `HOST_KERNELS_DIR=/fc-gsd/kernels` 指过去；只跑进程级的机器也可以直接放在默认的 `/fc-kernels` 下 |
+| `/fc-criu/gsd` | gsd 二进制（arm64，静态编译） | orchestrator 建模板时读，路径来自 `HOST_GSD_PATH`（内置默认 `/fc-gsd/gsd` 是旧布局，部署时显式设成这个路径） |
+| `/fc-criu/orchestrator` | 带 gsd 注入逻辑的 orchestrator | 宿主的服务管理 |
+| `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 打了热切层与 soft-dirty 补丁的 guest 内核 | orchestrator，经 `HOST_KERNELS_DIR=/fc-criu/kernels` 指过去；只跑进程级的机器也可以直接放在默认的 `/fc-kernels` 下 |
 
 宿主上**没有**任何 checkpoint 产物：镜像、层、状态文件全在 guest 里。部署细节见 [27](27-deployment.md)。
 

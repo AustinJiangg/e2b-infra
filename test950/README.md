@@ -5,10 +5,11 @@
 - 按档调用现有脚本：
   - 沙箱级：`rollback/scripts/950/run.sh` 的各档；
   - 进程级：`criu-rollback/deploy/950.sh` 的测试命令。
-- 自动切栈，跑完停在沙箱级。
+- 自动切栈，跑完停在沙箱级。切栈前删掉全部 e2b 沙箱（950 上的 e2b 只有我们在用）；同机 AgentENV 的沙箱不碰。
 - 每段开头记录身份：orchestrator、Firecracker、进程级运行文件的 sha256，宿主内核，仓库提交。
 - 默认转到后台运行，断开 ssh 不影响。中途停下，再执行同一条命令会从停下的那一步继续。
-- 最后打一个回传包，已去掉含密钥的文件。
+- e2b 网络命名空间超过 1500 个时，在下一步之前自动清理（`950.sh recycle-netns`）。
+- 结果用 `bash test950.sh report` 打印到终端，复制终端内容即可，不打包、不需要拷文件。
 
 测什么、不测什么，以及分档的理由，见工作区的《950 测试方案》。下面只讲怎么用。
 
@@ -17,7 +18,8 @@
 - 沙箱级已按 `single-node-offline-deploy.md` 部署好。
 - 测进程级之前，执行过一次 `bash criu-rollback/deploy/950.sh all`，即完成首次部署，并留下了切回沙箱级要用的基线。
 - 用 root 在仓库根目录执行。
-- 两个 conda 环境与 `950.sh` 用的相同：沙箱级 `jll-e2b`，进程级 `jll-e2b-gsd`。如果不在默认位置，在 `criu-rollback/deploy/ops/site.env` 里写明。
+- 两个 conda 环境与 `950.sh` 用的相同：沙箱级 `jll-e2b`，进程级 `jll-e2b-criu`（`950.sh all` 克隆出来的）。如果不在默认位置，在 `criu-rollback/deploy/ops/site.env` 里写明。
+- 进度文件和后台日志在 `/var/lib/test950/`，结果在仓库里的 `test950/results/`。
 - 凭据和 `950.sh` 一样，从 `~/.e2b/config.json` 与 `/opt/e2b-infra/.env` 读取，不需要另外准备。
 
 ## 2. 命令
@@ -39,6 +41,9 @@ bash test950.sh long
 ```
 ```bash
 bash test950.sh status
+```
+```bash
+bash test950.sh report
 ```
 
 默认两套都测。只测一套时加 `--stack sandbox` 或 `--stack criu`。
@@ -64,18 +69,44 @@ bash test950.sh status
 
 **extended 和 long 期间机器要独占**：
 
-- extended 会重启服务约 12 次，每次重启都会让机器上所有沙箱消失；
+- extended 会重启服务约 12 次，每次重启都会让机器上所有 e2b 沙箱消失（AgentENV 的沙箱不受影响）；
 - long 会同时开 16 个沙箱。
+
+**网络命名空间**：每次重启 orchestrator 会留下约 300 个 e2b netns，920B 上 extended 一轮从 1608 涨到 7494。现在每一步开始前和整轮结束时检查，超过 1500 个（`TEST950_NETNS_LIMIT` 可改）就调用 `950.sh recycle-netns` 清理，约 1～2 分钟，清理记录列在 `report` 里；清理失败只记录，不影响测试步骤。
 
 **HDBSS**：在没有 HDBSS 的机器上（例如 920B），`hdbss` 两项整档判 SKIP。
 
-## 4. 结果与回传
+## 4. 看结果
 
-- 结果目录：`test950/results/<时间>-<档>/`。
-  - `SUMMARY.md`：逐步结果、身份、宿主资源；
-  - `identity-*.json`：每段开头的身份；
-  - 每一步的子目录：内含该脚本自己的 `SUMMARY.md` 或 `summary.json`，以及原始数据。
-- 回传包：跑完自动生成 `test950/results/<时间>-<档>.tar.gz`，已去掉 nomad job 定义和 dotenv。把它带回来即可，不需要再挑文件。
+跑完（或跑到一半）执行：
+
+```bash
+bash test950.sh report
+```
+
+它打印最近一轮的结果，从 `==== test950` 一行到 `==== 结束 ====` 一行：逐步状态与用时、每段身份（orchestrator、Firecracker、进程级三个运行文件的 sha256，相同的只列一次）、宿主资源、自动清理 netns 的记录，以及每一步的逐项结论（沙箱级是 `run.sh` 的逐项表，带关键数字；进程级是每个子步骤，压测附轮数、create/restore 次数、p50、错误计数）。复制这一段即可。
+
+某一步要看细节时，把步骤名跟在后面，它打印该步各项日志的末尾（失败项多打印一些）；进程级验收会打印性能三轮的分档表：
+
+```bash
+bash test950.sh report sandbox/perf
+```
+```bash
+bash test950.sh report criu/stress-ext
+```
+
+还要看某个文件时，先列出文件，再用 `--file` 打印（`--lines N` 指定行数，0 为全部；`--run 目录名` 看更早的一轮）：
+
+```bash
+bash test950.sh report files
+```
+```bash
+bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
+```
+
+含密钥的文件（nomad job 定义、dotenv）不打印。
+
+- 结果目录：`test950/results/<时间>-<档>/`，内有 `SUMMARY.md`、`run.json`、`identity-*.json` 和每一步的子目录（该脚本自己的 `SUMMARY.md` 或 `summary.json`，以及原始数据）。
 - 每一步的判定：
   - 沙箱级看 `run.sh` 的退出码，等于 FAIL 项数；
   - 进程级看 `summary.json` 的 `verdict`；

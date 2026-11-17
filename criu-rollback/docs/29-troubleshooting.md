@@ -286,7 +286,7 @@ curl -s -m 3 http://127.0.0.1:49984/health
 
 | 结果 | 原因 | 处置 |
 |---|---|---|
-| `/usr/bin/gsd` 不存在，或没有 `gsd.service` | 这个模板不是在进程级栈下建的（或建模板时 `HOST_GSD_PATH=off`） | 换用 `base-gsd` 这类在进程级栈下建的模板（[27](27-deployment.md)） |
+| `/usr/bin/gsd` 不存在，或没有 `gsd.service` | 这个模板不是在进程级栈下建的（或建模板时 `HOST_GSD_PATH=off`） | 换用 `base-criu` 这类在进程级栈下建的模板（[27](27-deployment.md)） |
 | 服务不是 `active`，或在反复重启 | gsd 起不来 | `systemctl status gsd --no-pager -l`、`journalctl -u gsd --no-pager \| tail -n 40` 看退出原因 |
 | guest 里三条都正常，SDK 仍然连不上 | 问题在宿主到 guest 的路径或客户端配置 | 见下 |
 
@@ -365,7 +365,7 @@ dmesg | grep -c 'failed to get inode'      # 应为 0，见下
 
 ## 11. 模板里不是新内核或新 gsd
 
-**症状**：宿主上明明换了 `/fc-gsd/gsd` 或内核文件，沙箱的行为却没有变；或者出现了本书说已经修掉的现象（连续 restore 之后根盘被写满、`dmesg` 里成批的 `ovl_ioctl_checkpoint:` 调试输出、SDK 拿不到 `timings`、`/` 的权限是 777、`/tmp` 是单独的内存盘）。
+**症状**：宿主上明明换了 gsd（`/fc-criu/gsd`）或内核文件，沙箱的行为却没有变；或者出现了本书说已经修掉的现象（连续 restore 之后根盘被写满、`dmesg` 里成批的 `ovl_ioctl_checkpoint:` 调试输出、SDK 拿不到 `timings`、`/` 的权限是 777、`/tmp` 是单独的内存盘）。
 
 看哪里（guest 里与宿主上各一半）：
 
@@ -377,7 +377,7 @@ stat -c '%a %U:%G' / ; findmnt -n /tmp || echo "/tmp on overlay"
 dmesg | grep -c -E 'ovl_ioctl_checkpoint|ovl_lookup:'
 
 # 宿主上
-/fc-gsd/gsd -commit; sha256sum /fc-gsd/gsd /fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
+/fc-criu/gsd -commit; sha256sum /fc-criu/gsd /fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 bash scripts/ops/switch-gsd-new920b.sh status
 ```
 
@@ -396,7 +396,7 @@ bash scripts/ops/switch-gsd-new920b.sh status
 
 | 报错 | 原因 | 处置 |
 |---|---|---|
-| `error reading gsd file (HOST_GSD_PATH): open … no such file or directory` | orchestrator 要注入 gsd，但读不到二进制。路径是默认的 `/fc-gsd/gsd` 时：文件没放。路径以 orchestrator 的工作目录开头、末尾是 `OFF` 或 `Off` 时：有人想关掉注入但写了大写——只有小写 `off` 才是关，其他值被当成相对路径 | 把 gsd 放到位（[27](27-deployment.md)）；或把环境变量改成小写 `off` 后重启 orchestrator |
+| `error reading gsd file (HOST_GSD_PATH): open … no such file or directory` | orchestrator 要注入 gsd，但读不到二进制。路径是内置默认的 `/fc-gsd/gsd` 时：job 里没设 `HOST_GSD_PATH`，回落到了旧布局（现在文件在 `/fc-criu/gsd`，用 `950.sh criu` 切栈会设好）。路径是 `/fc-criu/gsd` 时：文件没放，执行 `950.sh install`。路径以 orchestrator 的工作目录开头、末尾是 `OFF` 或 `Off` 时：有人想关掉注入但写了大写——只有小写 `off` 才是关，其他值被当成相对路径 | 把 gsd 放到位（[27](27-deployment.md)）；或把环境变量改成小写 `off` 后重启 orchestrator |
 | `gsd is not healthy after injection (…): gsd check failed: gsd not healthy after 10s: systemctl is-active=<…>, /health=<…>` | 注入并重启 gsd 之后，约 10 秒内它没有同时满足"服务 active"和"`/health` 回 ok"。报错后面附着 `systemctl status gsd` 的最后 20 行 | 看附带的 `is-active` 与 `/health`：服务没起来多半是二进制不对（架构不是 arm64、文件损坏）；`/health` 是 `degraded` 时原因就在其中（按 §6 的表判断） |
 | `… gsd check failed: /usr/sbin/criu is not 4.x: …` 或 `… /usr/sbin/criu --version failed: …` | 基础镜像里没有 4.x 的 CRIU，或不在 `/usr/sbin/criu`。建模板不会替你安装 | 用 `Dockerfile.criu421` 建的镜像做基础镜像（[27](27-deployment.md)） |
 | `failed to copy gsd binary to sandbox`、`failed to inject gsd binary`、`systemctl restart gsd: …` | 往构建中的沙箱里拷文件或执行命令失败 | 不是 gsd 特有的问题，按 orchestrator 日志里紧邻的错误查沙箱本身 |

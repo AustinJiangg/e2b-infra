@@ -2,11 +2,14 @@
 
 本目录让已按 [`single-node-offline-deploy.md`](../../single-node-offline-deploy.md) 部署了沙箱级快照回滚的机器，用一条命令切到进程级快照回滚（criu-rollback），跑完验收，再切回来。950 上 `git pull` 拿到最新仓库后即可使用，不需要另外拷贝文件。
 
-- **改动范围。** 进程级产物放在 `/fc-gsd/`，通过 Nomad 切换同一个 orchestrator/template-manager job；切回时恢复**本机保存的原 job**。不重装 RPM，不执行 `build.sh -d/-i/-s`，不覆盖 `/usr/bin`、`/fc-kernels`、`/fc-versions`。
-- **产物。** gsd、guest 内核、orchestrator 是 920B 上验收过的二进制，以 xz 压缩入库。orchestrator 和 gsd 用 `strip -g` 去掉了调试段，代码段与验收版逐字节相同，详见第 1 节。
+- **改动范围。** 只改 orchestrator 所在的那一个 Nomad job（默认 `template-manager-system`）：切到进程级时换二进制路径和三个环境变量，切回时恢复**本机保存的原 job**。不重装 RPM，不执行 `build.sh -d/-i/-s`，不覆盖 `/usr/bin`、`/fc-kernels`、`/fc-versions`，API、client-proxy 等其他 job 不动。
+- **宿主上的位置。** 三个运行文件在 `/fc-criu/`，切栈基线在 `/var/lib/criu-rollback/`，客户端 conda 环境是命名环境 `jll-e2b-criu`。布局见第 1 节。
+- **产物。** gsd、guest 内核、orchestrator 是 920B 上验收过的二进制，以 xz 压缩入库。orchestrator 和 gsd 用 `strip -g` 去掉了调试段，代码段与验收版逐字节相同。
 - **镜像。** 前两层取仓库根目录已有的 `ubuntu-22.04-custom.tar.gz`，CRIU 那一层单独入库，现场拼回。拼出的镜像 ID 与验收过的相同。
-- **SDK。** 以纯 Python wheel 入库。950 上离线克隆原 `jll-e2b` 为 `jll-e2b-gsd`，只在新环境里替换 SDK。
-- **验证状态。** 2026-11-06 起已在 920B 上多次完整走过，记录见第 14 节。950 的实际兼容性、切换与验收尚未执行。950 首轮结果是它自己的基线，不能用 920B 的耗时当通过阈值。
+- **SDK。** 以纯 Python wheel 入库。离线克隆原 `jll-e2b` 为 `jll-e2b-criu`，只在新环境里替换 SDK，原 `jll-e2b` 不改。
+- **结果直接打印到终端。** `all` 结束时把逐步结论、身份、网络比对、验收与压测摘要打印出来；细节用 `950.sh report` 按部分打印。复制终端内容即可，不打包、不需要拷文件。
+- **950 上的 e2b 沙箱都是我们的。** 切栈、清 netns 之前，自动删掉全部 e2b 沙箱；同机 AgentENV 的沙箱和网络不碰。
+- **验证状态。** 已在 920B 上多次完整走过，记录见第 14 节。950 尚未执行；950 首轮结果是它自己的基线，不能用 920B 的耗时当通过阈值。
 
 下面的命令都在 **e2b-infra 仓库根目录**以 root 执行。
 
@@ -15,70 +18,71 @@
 **首次：一条命令。**
 
 ```bash
-sudo -i
-cd /e2b-infra仓库所在目录
 git pull
+```
+```bash
 bash criu-rollback/deploy/950.sh all
 ```
 
-它依次完成第 2～10 节的全部步骤，每一步打印进度，任何一步失败就停下并说明原因：
+它依次完成下面的步骤，每一步打印进度，任何一步失败就停下并说明原因：
 
 1. 校验部署目录；
 2. 把三个运行文件和镜像展开到 `criu-rollback/deploy/.work/`，逐项核对 SHA256 和镜像 ID；
-3. 没有 `jll-e2b-gsd` 就从 `jll-e2b` 离线克隆，再装 SDK；
+3. 没有 `jll-e2b-criu` 就从 `jll-e2b` 离线克隆，再装 SDK；
 4. 检查客户端凭据和 API；
 5. 导入镜像并推送到 Harbor；
-6. 预检，保存本机沙箱级基线；
+6. 删掉全部 e2b 沙箱，预检，保存本机沙箱级基线；
 7. 落位三个运行文件；
 8. 切到进程级，切换前后各抓一次宿主网络配置做比对；
-9. 建 `base-gsd`，自动等到服务能建沙箱；
+9. 建模板 `base-criu`，自动等到服务能建沙箱；
 10. 验收，然后压测；
-11. 切回沙箱级，等原模板能建沙箱，跑冒烟；
-12. 把结果打成 `criu-rollback/deploy/results/<时间>-all.tar.gz`。
+11. 切回沙箱级，等原模板 `base` 能建沙箱，跑冒烟；
+12. 把结果打印到终端（第 12 节）。
 
 920B 上全程约 11 分钟，不需要手动 `conda activate`，也不需要估等待时间。
 
-**之后的测试**：在仓库根目录用 `bash test950.sh quick|standard|extended|long`，它按档调用本目录的 `950.sh quick|acceptance|stress|stress-ext|soak` 和沙箱级的 `run.sh`，并负责切栈、记录身份、续跑和打包，说明见 [`test950/README.md`](../../test950/README.md)。
+**之后的测试**：在仓库根目录用 `bash test950.sh quick|standard|extended|long`，它按档调用本目录的 `950.sh quick|acceptance|stress|stress-ext|soak` 和沙箱级的 `run.sh`，并负责切栈、记录身份、续跑、清 netns，说明见 [`test950/README.md`](../../test950/README.md)。
 
 跑之前要具备的条件：
 
-- 950 上已有原沙箱级的 conda 环境 `jll-e2b`，conda 装在常见位置（`/root/miniforge3`、`/root/miniconda3` 等）。位置特殊时在 `criu-rollback/deploy/ops/site.env` 写 `CONDA_EXE=`。
-- 客户端凭据：默认读 root 的 `~/.e2b/config.json`，没有时按第 5 节放 `criu-rollback/scripts/.env`。
-- Harbor：没登录过的话，先执行一次 `docker login harbor:443`。950 没有 Docker、镜像在别的机器导入时，在 `ops/site.env` 写 `GSD_SKIP_IMAGE_IMPORT=1`。
+- 沙箱级已部署好，原模板 `base` 能建沙箱（`build.sh -s` 不建模板，要按单机部署文档在 `benchmark/` 下执行 `build_template.py`）。
+- 原沙箱级的 conda 环境 `jll-e2b`，conda 装在常见位置（`/root/miniforge3`、`/root/miniconda3` 等）。位置特殊时在 `criu-rollback/deploy/ops/site.env` 写 `CONDA_EXE=`。
+- 客户端凭据：默认读 root 的 `~/.e2b/config.json`（部署首次初始化数据库时写入），没有时按第 5 节放 `criu-rollback/scripts/.env`。
+- Harbor：没登录过的话，先执行一次 `docker login harbor:443`。没有 Docker、镜像在别的机器导入时，在 `ops/site.env` 写 `CRIU_SKIP_IMAGE_IMPORT=1`。
 - 部署不是默认形态（job 名、端口等）时，先按第 2 节准备 `ops/site.env`。
-- 没有人在用这台机器建沙箱或模板。
 
 **中途停下怎么办。** 按 Ctrl-C、断网或某一步失败，都只要处理完原因后再执行同一条 `bash criu-rollback/deploy/950.sh all`。它会从停下的那一步继续，已经做完的镜像导入、验收、压测、冒烟不会重做。
 
-- 验收或压测失败时，脚本先删掉由 `base-gsd` 起的测试沙箱，再自动切回沙箱级，950 不会停在一半的状态。
-- 只删 `base-gsd` 起的沙箱，不碰其他沙箱。
+- 验收或压测失败时，脚本先删掉 e2b 沙箱，再自动切回沙箱级，机器不会停在一半的状态。
 - 上一轮全部完成后再执行 `all`，会开始新的一轮；想放弃未完成的那一轮重来，加 `--new`。
-
-**结果回传。** 只需要拷回最后打印的那个 `results/<时间>-all.tar.gz`。里面有验收、压测、冒烟的全部结果，以及网络比对 `netcheck.txt`。不含凭据。
 
 **以后日常切换：**
 
 ```bash
-bash criu-rollback/deploy/950.sh gsd
+bash criu-rollback/deploy/950.sh criu
 ```
 ```bash
 bash criu-rollback/deploy/950.sh sandbox
 ```
 
 - 已经是目标栈时不重启服务。
-- 切换后等到能建沙箱才返回。
-- 切到进程级时，`base-gsd` 不在或建不出沙箱就自动重建。
-- 每次都比对切换前后宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则。
+- 切换前删掉全部 e2b 沙箱：先经 API 删，60 秒后仍在运行的 e2b Firecracker 直接结束。只认 `/fc-versions/` 下启动的 Firecracker，AgentENV 的（在 `/var/lib/aenv/` 下）不算、不碰。
+- 切换后等到能建沙箱才返回。切到进程级时，`base-criu` 不在或建不出沙箱就自动重建。
+- 每次都比对切换前后宿主上非 e2b 的网卡、路由、策略路由和 iptables 规则，有变化逐条打印。
 
-还有沙箱在运行时，这两条命令拒绝切换，不会删除任何沙箱。
+客户端要用对应的 conda 环境：进程级用 `jll-e2b-criu`，沙箱级用 `jll-e2b`。`950.sh` 和 `test950.sh` 自己会选，不需要激活。
 
-客户端仍然要用对应的 conda 环境：进程级用 `jll-e2b-gsd`，沙箱级用 `jll-e2b`。
+**同机有 AgentENV 时。** 看输出里的“宿主网络比对”。“无变化”表示 AgentENV 的网卡和规则没有被动过；有变化时把打印出的那几行复制回来核对。比对排除了 e2b 自己的 `e2bv-` 网卡、`ns-` 命名空间和 `10.13`/`10.14` 地址池。
 
-**同机有 AgentENV 时。** 看输出里的“宿主网络比对”一行。“无变化”表示 AgentENV 的网卡和规则没有被动过；有变化时逐条核对 `netcheck.txt`。比对排除了 e2b 自己的 `e2bv-` 网卡、`ns-` 命名空间和 `10.13`/`10.14` 地址池。
+**以后 `git pull` 带来新的二进制时。** `all` 和 `criu` 会重新展开并核对。`/fc-criu/` 里已有内容不同的旧文件时，落位步骤拒绝覆盖，要先确认旧文件没有在用，再移走。
 
-**以后 `git pull` 带来新的二进制时。** `all` 和 `gsd` 会重新展开并核对。`/fc-gsd/` 里已有内容不同的旧文件时，落位步骤拒绝覆盖，要先确认旧文件没有在用，再移走。
+**网络命名空间。** 每次重启 orchestrator 都会留下约 300 个 e2b 网络命名空间和对应的 iptables 规则，`all` 重启两次。积累到上千个时执行：
 
-**每次重启 orchestrator 都会留下一批网络命名空间**（约 300 个），`all` 会重启两次。积累到上千个时，按 `single-node-offline-deploy.md` 用 `build.sh --recycle-netns` 清理。
+```bash
+bash criu-rollback/deploy/950.sh recycle-netns
+```
+
+它在当前栈上做：删全部 e2b 沙箱 → 停 job → `/opt/e2b-infra/build.sh --recycle-netns`（服务停着时它只清理、不拉起；只认 `e2bv-` 网卡、`ns-<n>` 和本机地址池，不碰 AgentENV）→ 按当前栈重新拉起并等到能建沙箱。前后打印 e2b netns 数和 nat 规则数，再做一次宿主网络比对。`test950.sh` 在 e2b netns 超过 1500 个时自动调用它。
 
 第 1～13 节是逐步说明，`all` 出问题时对照着查。
 
@@ -86,7 +90,7 @@ bash criu-rollback/deploy/950.sh sandbox
 
 ```text
 criu-rollback/deploy/
-  950.sh                            唯一入口：all（首次全流程）、gsd/sandbox（日常切换）及各单步
+  950.sh                            唯一入口：all（首次全流程）、criu/sandbox（日常切换）、recycle-netns、report 及各单步
   README.md                         本操作说明
   manifest.json                     来源、版本、镜像组成，三个运行文件解压后的 SHA256
   SHA256SUMS                        本目录入库文件的校验清单
@@ -94,15 +98,16 @@ criu-rollback/deploy/
     orchestrator.xz  gsd.xz  vmlinux.bin.xz
     image/criu421-layer.tar.xz      镜像的 CRIU 层；配置、清单等小文件同目录
   sdk/
-    e2b-2.19.0+gsd.dcca61266-py3-none-any.whl  可离线安装的进程级 SDK
+    e2b-2.19.0+gsd.dcca61266-py3-none-any.whl  可离线安装的进程级 SDK（版本号是发布时定的，不随改名变化）
     test_gsd_headers.py             SDK 自带的鉴权头测试，安装后离线执行
   ops/
     unpack.py                       展开运行文件、拼镜像并核对
-    flow.py                         all 与日常切换的流程：续跑、就绪等待、模板检查、失败回切、网络比对
-    stack.py                        保存基线、预检、落位、切换与恢复
+    flow.py                         all 与日常切换的流程：续跑、就绪等待、模板检查、删 e2b 沙箱、失败回切、网络比对、终端汇报
+    stack.py                        保存基线、预检、落位、切换与恢复、清 netns
+    report.py                       把结果目录整理成终端文本（test950.sh 也用）
     envs.py                         定位 conda 与两个客户端环境，用环境自己的解释器运行，不需要激活
-    paths.py                        本目录与仓库内各位置的定义
-    probe.py                        查询模板、试建沙箱、清理本流程的测试沙箱
+    paths.py                        本目录、仓库内各位置与宿主上各位置的定义
+    probe.py                        查询模板、试建沙箱、删除全部 e2b 沙箱
     import-image.sh                 导入并推送镜像
     install_sdk.py / check_python.py / check_sdk_headers.py   SDK 安装与检查
     guest_check.py                  模板内实际版本检查
@@ -113,6 +118,17 @@ criu-rollback/deploy/
   provenance/                       内核配置、来源检查、验证记录
 运行时生成（不入库）：.work/  results/  ops/site.env
 ```
+
+宿主上由本目录生成的东西：
+
+| 位置 | 内容 |
+|---|---|
+| `/fc-criu/orchestrator`、`/fc-criu/gsd`、`/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 进程级的三个运行文件 |
+| `/var/lib/criu-rollback/` | 切栈基线（原 job、二进制路径与 SHA256）、生成的 job、`all` 的进度。**含 950 密钥**，目录 700、文件 600，只留在本机，`report` 不打印 |
+| conda 的 envs 目录下的 `jll-e2b-criu`（如 `/root/miniforge3/envs/jll-e2b-criu`） | 进程级客户端 conda 环境 |
+| 仓库内 `criu-rollback/deploy/results/` | 每轮结果与日志 |
+| Harbor `e2b-orchestration/ubuntu:22.04-custom-criu421` | 进程级模板的镜像 |
+| API 上的模板 `base-criu` | 进程级模板，2 vCPU / 2048 MiB。原沙箱级模板 `base` 不受影响 |
 
 用到的仓库其他位置：
 
@@ -132,224 +148,128 @@ criu-rollback/deploy/
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
 | SDK | 与 `dcca61266` 的 SDK 逐文件一致；包含后续流量 token 修复 |
 | 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1，image ID `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab` |
-| Python | 使用 950 本机 `jll-e2b` 克隆出的 `jll-e2b-gsd`，保留原 Python 版本；不携带 Python 环境 |
-| SDK wheel | `2.19.0+gsd.dcca61266`，源码版本 2.19.0 加本地 GSD 标识；通用 `py3-none-any` 包 |
+| Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
+| SDK wheel | `2.19.0+gsd.dcca61266`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
-SDK 与二进制的提交号不同是有意的：`dcca61266` 只是在发布版之后修复 SDK 给 gsd 转发流量 token，二进制不变。原手册全量实机验收严格覆盖 `259f1a25c`，不能把那份结果说成最后一个 SDK 提交的全量实测；到 950 后须跑验收。
+SDK 与二进制的提交号不同是有意的：`dcca61266` 只是在发布版之后修复 SDK 给 gsd 转发流量 token，二进制不变。
 
-`overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。发布内核的文件名是 `vmlinux.bin`，其父目录下面没有 `arm64/`。
+`overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。
 
-## 2. 打开 root 终端，校验
-
-下面所有现场命令都在 **950** 执行；需要向 Harbor 推镜像时，也可以在同一隔离网络中能访问该 Harbor 的 arm64 机器完成第 4 节。
+## 2. 校验与现场参数
 
 ```bash
-sudo -i
-cd /e2b-infra仓库所在目录
 bash criu-rollback/deploy/950.sh verify
+```
+```bash
 bash criu-rollback/deploy/950.sh unpack
 ```
 
-必须看到 `部署目录 SHA256 全部通过` 和 `展开完成`（或 `已展开，核对通过`）。有任何文件缺失或校验不符，停止，不部署；先 `git status` 确认仓库没有被改动，不要在现场重新生成 `SHA256SUMS`。打开 root 终端后再激活 conda；`sudo -i` 会重置之前的 shell 环境。
+必须看到 `部署目录 SHA256 全部通过` 和 `展开完成`（或 `已展开，核对通过`）。有任何文件缺失或校验不符，停止，不部署；先 `git status` 确认仓库没有被改动，不要在现场重新生成 `SHA256SUMS`。
 
-若不是默认部署，先执行：
+默认值是 job `template-manager-system`、端口 5008、服务端环境文件 `/opt/e2b-infra/.env`、运行文件 `/fc-criu`、基线目录 `/var/lib/criu-rollback`。不同时先复制模板再改：
 
 ```bash
 cp criu-rollback/deploy/ops/site.env.example criu-rollback/deploy/ops/site.env
-# 编辑 site.env：job 名、端口、状态目录、服务端环境文件位置
 ```
 
-默认值是 `template-manager-system`、5008、`/var/lib/gsd-950-offline`、`/opt/e2b-infra/.env`。状态目录名沿用最初的离线包名，已保存的基线继续有效。脚本会查找唯一对应的 raw_exec task，不要求它必须位于 TaskGroups[0].Tasks[0]。它只处理 `ORCHESTRATOR_SERVICES=orchestrator,template-manager` 的合并部署；其他部署形态会拒绝执行，不能强行继续。
+脚本会查找唯一对应的 raw_exec task，不要求它必须位于 TaskGroups[0].Tasks[0]。它只处理 `ORCHESTRATOR_SERVICES=orchestrator,template-manager` 的合并部署；其他部署形态会拒绝执行，不能强行继续。
 
-## 3. 克隆 conda 环境，离线安装 GSD SDK，再预检
+## 3. conda 环境、SDK 与预检
 
-第 3～10 节都已包含在 `bash criu-rollback/deploy/950.sh all` 里，下面是逐步说明。单步执行时，`install-sdk`、`acceptance`、`stress`、`smoke` 会自动使用对应的 conda 环境，不需要先激活。
+第 3～10 节都已包含在 `all` 里，下面是逐步说明。所有命令自动使用对应的 conda 环境，不需要激活。
 
-两套 SDK 分别安装在两个环境中：
-
-| conda 环境 | 用途 |
-|---|---|
-| `jll-e2b` | 950 原沙箱级 SDK，保留原样 |
-| `jll-e2b-gsd` | 克隆 `jll-e2b`，再安装 `sdk/` 下的进程级 SDK |
-
-先确认当前 root shell 可以使用 conda。若未初始化，先 `source <conda安装目录>/etc/profile.d/conda.sh`，例如 `/root/miniforge3/etc/profile.d/conda.sh`。以下克隆命令只在第一次创建环境时执行：
+| conda 环境 | 位置 | 用途 |
+|---|---|---|
+| `jll-e2b` | 原位置（如 `/root/miniforge3/envs/jll-e2b`） | 原沙箱级 SDK，保留原样 |
+| `jll-e2b-criu` | conda 的 envs 目录下（与 `jll-e2b` 同级） | 克隆 `jll-e2b`，再安装 `sdk/` 下的进程级 SDK |
 
 ```bash
-conda deactivate
-conda create --offline --copy --name jll-e2b-gsd --clone jll-e2b --yes
-conda activate jll-e2b-gsd
-unset PYTHONPATH PYTHONHOME
-
-# 离线安装，只替换 jll-e2b-gsd 中的 e2b SDK
 bash criu-rollback/deploy/950.sh install-sdk
-python -c 'import sys, e2b; print(sys.executable); print(e2b.__file__)'
+```
+
+没有 `jll-e2b-criu` 时先执行 `conda create --offline --copy -n jll-e2b-criu --clone jll-e2b`：`--offline` 禁止联网取包，`--copy` 使用文件副本，克隆继承原环境的 Python、pip 和第三方依赖。然后用 wheel 执行 `pip --isolated install --no-index --no-deps --force-reinstall`，不从公网下载、不更改依赖；缺依赖时在替换 SDK 前停下并列出缺项。安装后检查 `e2b`、`e2b_connect` 都从新环境加载，并执行 7 项 SDK 鉴权头测试，输出应包括 `进程级 SDK 与依赖检查 PASS`、`SDK header tests: PASS 7 / FAIL 0`。
+
+```bash
 bash criu-rollback/deploy/950.sh preflight
 ```
 
-`--offline` 禁止联网取包，`--copy` 使用文件副本。克隆继承原环境的 Python、pip 和第三方依赖；不单独搬运 920B 的 Python 环境。若 `jll-e2b-gsd` 已存在，不重复克隆，直接激活它后执行安装和检查。
+`preflight` 不修改部署。它检查包校验、aarch64、KVM、命令是否齐全、orchestrator 动态库、gsd 提交号、Nomad job 结构、沙箱地址池环境变量、运行进程和 health、e2b 沙箱，以及 `jll-e2b-criu` 的 SDK/依赖。
 
-安装脚本使用 wheel 执行 `python -m pip --isolated install --no-index --no-deps --no-cache-dir --force-reinstall ...`，不从公网下载、不调用构建后端、不更改依赖。它会先核对依赖版本；缺依赖时在替换 SDK 前停下并列出缺项，不能联网安装或从另一个 Python 版本复制二进制依赖。
+**orchestrator 是动态链接的，需要 glibc 2.38 对应符号。** 若出现动态库缺失、`GLIBC_2.38 not found` 或权限错误，先处理兼容性，不要替换系统 glibc。gsd 自身是静态编译。
 
-脚本只允许在激活的 `jll-e2b-gsd` 中安装，拒绝在 `jll-e2b`、base、系统 Python 中运行。安装后会检查 `e2b`、`e2b_connect` 都从新环境的 site-packages 加载，并执行 7 项 SDK 鉴权头测试。输出应包括 `GSD SDK 与依赖检查 PASS`、`SDK header tests: PASS 7 / FAIL 0`。
+## 4. 将镜像导入 Harbor
 
-**后续普通脚本、建模板、验收、压测都直接使用激活后的 `python`，不用 `PYTHONPATH`，也没有 `python/run` 包装器。** 原始手册里的 `PYTHONPATH=<代码仓>/py-sdk` 是源码运行方式，部署以本 README 的安装方式为准。
-
-`preflight` 不修改部署。它检查包校验、aarch64、KVM、命令是否齐全、orchestrator 动态库、gsd 提交号、Nomad job 结构、沙箱地址池环境变量、运行进程和 health、活沙箱，以及当前 `jll-e2b-gsd` 的 SDK/依赖。
-
-**orchestrator 是动态链接的，需要 glibc 2.38 对应符号。** 若出现动态库缺失、`GLIBC_2.38 not found` 或权限错误，先处理兼容性或挂载执行权限，不要替换系统 glibc。gsd 自身是静态编译。
-
-若预检提示有 Firecracker，先让使用机器的人结束沙箱，并等待模板构建任务结束。预检通过后到切换完成期间，不要让其他使用者新建沙箱或模板。
-
-## 4. 将镜像导入 950 使用的 Harbor
-
-镜像由第 2 节的展开步骤拼出，全部层都来自仓库，不需要访问公网。920B 上检查过：CRIU 4.2.1、curl、python3，以及 `systemd systemd-sysv openssh-server sudo chrony linuxptp socat ca-certificates` 均在位。缺包会导致模板 provision 执行 apt；本目录镜像已具备所需包。
-
-在有 Docker、能访问 950 Harbor 的 arm64 机器上执行；通常可以直接在 950 执行：
+镜像由第 2 节的展开步骤拼出，全部层都来自仓库，不需要访问公网。CRIU 4.2.1、curl、python3，以及 `systemd systemd-sysv openssh-server sudo chrony linuxptp socat ca-certificates` 均在位。
 
 ```bash
-# 使用 950 已有的仓库地址和证书配置；默认引用如下。
-export GSD_TEMPLATE_IMAGE=harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421
-
-# 若当前用户还未登录该仓库，先 docker login harbor:443，交互输入 950 的凭据。
 bash criu-rollback/deploy/ops/import-image.sh
 ```
 
-脚本先校验包，再 `docker load`，按确定的 image ID 在不联网的临时容器中检查 CRIU、curl、python3 和预装包，最后 tag/push 到 `$GSD_TEMPLATE_IMAGE`。
-
-如果仓库名称不同，改上面的引用，建模板时仍用完全相同的引用。确认 `harbor` 在 **950** 能解析，模板构建端能够访问仓库并通过认证。推送成功只证明导入端可访问；第 7 节模板构建成功才完成构建端拉取验证。
-
-若 950 没有 Docker，在同一隔离网络里能向其 Harbor 推送的 arm64 机器完成导入即可，不要求因此在 950 安装 Docker。不要只 load 到导入机本地缓存而没有 push。
+脚本先校验包，再 `docker load`，按确定的 image ID 在不联网的临时容器中检查 CRIU、curl、python3 和预装包，最后 tag/push 到 `harbor:443/e2b-orchestration/ubuntu:22.04-custom-criu421`（引用不同时在 `ops/site.env` 写 `CRIU_TEMPLATE_IMAGE=`）。没登录过 Harbor 时先 `docker login harbor:443`。推送成功只证明导入端可访问；第 7 节模板构建成功才完成构建端拉取验证。
 
 ## 5. 核对客户端凭据
 
-默认使用 950 当前 root 用户的 `~/.e2b/config.json`。它必须是 950 已有部署生成的配置。公共模块还支持环境变量或 `criu-rollback/scripts/.env`。
+默认使用 root 的 `~/.e2b/config.json`，它是已有部署初始化数据库时写入的。公共模块还支持环境变量或 `criu-rollback/scripts/.env`。`all` 的“客户端凭据”一步会查一次 API 并列出现有模板，不打印 key/token。
 
-```bash
-python - <<'PY'
-import sys
-sys.path.insert(0, 'criu-rollback/scripts')
-from e2b_env import load_e2b_env
-print(load_e2b_env())  # 只打印 API URL、域名、SSL 设置，不打印 key/token
-print('客户端凭据加载成功')
-PY
-```
+默认 API 是 `http://localhost:3000`。API 地址、域名或访问方式不同时，新建 `criu-rollback/scripts/.env`，填 `E2B_API_URL`、`E2B_DOMAIN`、`E2B_HTTP_SSL`、`E2B_ACCESS_TOKEN`、`E2B_API_KEY` 五项，保存为 600 权限。`/opt/e2b-infra/.env` 是服务端配置，通常不包含完整客户端凭据。
 
-默认 API 是 `http://localhost:3000`。API 地址、域名或访问方式不同，使用 950 已验证的客户端环境配置。若使用 `.env`，新建 `criu-rollback/scripts/.env`，填下面五项，保存为 600 权限：
-
-```dotenv
-E2B_API_URL=http://localhost:3000
-E2B_DOMAIN=e2b.app
-E2B_HTTP_SSL=false
-E2B_ACCESS_TOKEN=填写950自己的token
-E2B_API_KEY=填写950自己的key
-```
-
-也可以复制 950 已有且有效的客户端 `.env` 到这个位置。`/opt/e2b-infra/.env` 是服务端配置，通常不包含完整客户端凭据，不能据此认定 key/token 就绪。不要复制 920B 的 job JSON、环境文件或登录配置；本离线包没有携带它们。
-
-## 6. 保存 950 基线、落位、切换
-
-必须先保存本机原沙箱级 job，再做部署：
+## 6. 保存基线、落位、切换
 
 ```bash
 bash criu-rollback/deploy/950.sh save-baseline
+```
+```bash
 bash criu-rollback/deploy/950.sh install
-bash criu-rollback/deploy/950.sh gsd
+```
+```bash
+bash criu-rollback/deploy/950.sh criu
+```
+```bash
 bash criu-rollback/deploy/950.sh status
 ```
 
-`save-baseline` 要求当前原服务健康、无活沙箱，记录原 job、实际二进制路径与 SHA256、相关进程环境。默认保存在 `/var/lib/gsd-950-offline/`，目录 700、job 文件 600。**文件含 950 密钥，只保存在该机，不随结果回传。** 已有基线时拒绝覆盖；重复切换直接执行 `gsd` 或 `sandbox`。
+`save-baseline` 要求当前原服务健康、没有 e2b 沙箱（单独执行时先删沙箱；`all` 会自动删），记录原 job、实际二进制路径与 SHA256、相关进程环境，保存在 `/var/lib/criu-rollback/`。**文件含 950 密钥，只保存在本机，`report` 不打印。** 已有基线时拒绝覆盖；重复切换直接执行 `criu` 或 `sandbox`。
 
-`install` 再跑只读预检，要求基线存在，随后只安装：
+`install` 再跑只读预检，要求基线存在，随后只安装 `/fc-criu/` 下的三个文件。已有内容不同的文件时停下而不覆盖；相同内容可以重复安装。
 
-```text
-/fc-gsd/gsd
-/fc-gsd/orchestrator
-/fc-gsd/kernels/vmlinux-6.1.158/vmlinux.bin
-```
+`criu` 从保存的基线生成新 job，只替换选中 task 的二进制路径，并设置三个环境变量：`HOST_GSD_PATH=/fc-criu/gsd`（orchestrator 读这个名字，内置默认是旧位置 `/fc-gsd/gsd`，所以要显式设）、`HOST_KERNELS_DIR=/fc-criu/kernels`、`CRIU_ORCH_SHA256`；保留该机原有其余配置。
 
-若这些位置已有内容不同的文件，会停下而不覆盖；先核对现场那一套的用途。相同内容可以重复安装。不要把进程级内核覆盖到 `/fc-kernels`。
+切换会先停旧 job，等待退出后提交新 job，避免固定端口冲突；然后核对**实际进程**的路径、SHA256、环境和 health。最长等待旧进程退出约 120 秒、新服务就绪约 360 秒，并额外等 20 秒。随后反复试建沙箱，直到成功才返回（切换返回后立即建沙箱可能报 `500: Failed to place sandbox`，约 1.5 分钟后正常）。
 
-`gsd` 从保存的基线生成新 job，只替换选中 task 的二进制路径，设置 `HOST_KERNELS_DIR=/fc-gsd/kernels`、`GSD_ORCH_SHA256`，去掉 `HOST_GSD_PATH` 以使用默认 `/fc-gsd/gsd`，保留该机原有其余配置。
+`status` 显示当前是哪一套栈、实际进程的路径与环境、health、e2b 沙箱数、e2b netns 数和 nat 规则数。
 
-切换会先停旧 job，等待退出后提交新 job，避免固定端口冲突；然后核对 **实际进程** 的路径、SHA256、环境和 health。只看到 `nomad job run` 成功不算完成。最长等待旧进程退出约 120 秒、新服务就绪约 360 秒，并额外等 20 秒让 API 重连。失败保留基线和生成的 job，按第 11 节恢复。
-
-成功时 `status` 应显示：
-
-```text
-exe: /fc-gsd/orchestrator
-HOST_GSD_PATH: null                 # 未设，默认 /fc-gsd/gsd
-HOST_KERNELS_DIR: /fc-gsd/kernels
-GSD_ORCH_SHA256: 与交付 orchestrator 一致
-health: 200
-```
-
-切换返回后先等 1～2 分钟再建沙箱。920B 上切换返回后 1 秒建沙箱报过 `500: Failed to place sandbox`，约 1.5 分钟后同一命令正常。
-
-进程级栈运行期间，**所有新建模板**都会注入 gsd 和 overlay-init。此时不要构建其他使用者的普通模板。
+进程级栈运行期间，**所有新建模板**都会注入 gsd 和 overlay-init。
 
 ## 7. 在进程级栈下新建模板
 
-确认已经切到 gsd，再执行：
+`all` 和 `criu` 会自动建 `base-criu`（2 vCPU、2048 MiB，用第 4 节的镜像，不用缓存）。模板固定了构建时的 gsd、guest 内核和 overlay-init；以后换任意一项都要重新构建模板。不要拿沙箱级模板直接测 checkpoint，也不要在沙箱级栈上用 `base-criu`。
 
-```bash
-python criu-rollback/scripts/build_template.py \
-  --alias base-gsd --cpu 2 --memory 2048 \
-  --image "$GSD_TEMPLATE_IMAGE"
-```
-
-`GSD_TEMPLATE_IMAGE` 必须与第 4 节一致；若换过终端，先重新 export。模板名 `base-gsd` 与原沙箱级 `base` 分开，不要覆盖原模板。
-
-默认不使用缓存，不加 `--use-cache`。末行应为 `template 'base-gsd' built in ...s`。构建失败先查错误，不要直接进入验收。
-
-模板固定了构建时的 gsd、guest 内核和 overlay-init；以后换任意一项都要重新构建模板。不要拿沙箱级模板直接测 gsd checkpoint。
-
-## 8. 运行必跑验收
+## 8. 必跑验收
 
 ```bash
 bash criu-rollback/deploy/950.sh acceptance
 ```
 
-默认测试 `base-gsd`，输出目录自动创建在 `results/<时间>-acceptance/`。入口按下面顺序执行，遇到非零返回码或内容判据失败就停止，并写 `summary.json`：
+默认测试 `base-criu`，结果目录自动创建在 `results/<时间>-acceptance/`。按下面顺序执行，遇到非零返回码或内容判据失败就停止，并写 `summary.json`：
 
 | 顺序 | 内容 | 判据 |
 |---|---|---|
 | 1 | `ops/guest_check.py` | guest 内 gsd 提交号/SHA256、内核构建标识、THP never、RCU=1、服务 active、health ok、CRIU 4.2.1、根目录和 /tmp 权限、/tmp 位于 overlay、2 vCPU |
-| 2 | `acceptance/verify_gsd.py base-gsd 8` | 8 次 restore 全部 ok，根盘增量 +0，末行根盘恒定 |
+| 2 | `acceptance/verify_gsd.py base-criu 8` | 8 次 restore 全部 ok，根盘增量 +0，末行根盘恒定 |
 | 3 | `acceptance/verify_fixes.py` | 26 PASS / 0 FAIL / 2 SKIP；SKIP 只能是 G-19、G-36；无 BAD 和 dmesg 可疑行 |
 | 4 | `acceptance/verify_multitree.py --skip V12` | 12 项全 PASS；无 BAD 和可疑行，记录慢调用 |
 | 5 | `acceptance/verify_clear_refs_race.py` | 完整 30 轮、每轮漏页 0、state=T、sha 相同、writer 未卡死 |
 | 6 | `acceptance/demo_checkpoint_perf.py` 三次 | 每次 6 行恢复内容全正确，SDK/journal 最大差 0.000 ms |
 
-性能脚本采用 2026-10-16 的独立负载分档（JSON `schema_version=2`、`measurement_mode=per-tier-size`）：
-每档新建沙箱，额外负载内存为 0 / 12 / 24 / 48 / 96 / 192 MiB，文件为 0 / 4 / 8 / 16 / 32 / 64 MiB。
-建立本档全量基点后改写本档负载，测增量 create，再恢复本档基点并校验全部内存 SHA256 和文件内容。
-全量基点单列，输出实际 RSS；0 档仍有 Python 运行时开销。每档都是新沙箱第一次 restore。
-旧手册中固定 192 MiB、连续建链后的六档结果属于历史口径，不能与新结果混合统计。
-新版脚本于 2026-10-16 在新 920B 上完成三轮六档实测，18 次恢复的完整内存和文件校验全部通过，SDK / journal 分段一致。
-本轮还修复了 RPC 返回后 journal 尚不可读时的采集问题，重试在计时窗口之外进行。950 上尚未运行新版进程级脚本；920B 的结果不能直接作为 950 的通过阈值。
+性能脚本是独立负载分档（JSON `schema_version=2`、`measurement_mode=per-tier-size`）：每档新建沙箱，额外负载内存为 0 / 12 / 24 / 48 / 96 / 192 MiB，文件为 0 / 4 / 8 / 16 / 32 / 64 MiB；建立本档全量基点后改写负载，测增量 checkpoint，再恢复本档基点并校验全部内存 SHA256 和文件内容。这里只判功能正确性，不给性能达标线。V12 需要另一份仅版本不同的进程级模板作对照，首次部署跳过。
 
-原始 `verify_gsd.py` 与竞态脚本可能在内容失败时仍返回 0；新版性能脚本失败返回非零。
-入口会额外读日志和 JSON，核对六档实际负载、恢复目标与内容校验，避免误判通过。具体命令也会写进结果 `summary.json`。
-
-正常末行应为 `判定: PASS`。这里只判功能正确性，不给性能达标线。V12 需要另一份仅版本不同的进程级模板作对照，首次部署跳过；原沙箱级模板不能充当这个对照。
-
-若需自定义结果位置：
-
-```bash
-bash criu-rollback/deploy/950.sh acceptance --out /持久磁盘/950-gsd-acceptance-第一轮
-```
-
-输出目录必须尚不存在，以免竞态 JSONL 追加旧结果。
-
-## 9. 首次部署再跑探针和四组压测
-
-必跑验收通过后执行：
+## 9. 探针和四组压测
 
 ```bash
 bash criu-rollback/deploy/950.sh stress
 ```
 
-入口先跑 `probe_whiteout_bug.py` 的七个用例，再顺序跑四组：
+先跑 `probe_whiteout_bug.py` 的七个用例，再顺序跑四组：
 
 | 组 | 脚本与参数 |
 |---|---|
@@ -358,110 +278,105 @@ bash criu-rollback/deploy/950.sh stress
 | multitree | `stress_multitree.py --mode multitree --rounds 200` |
 | deldense | `stress_delete_dense.py --mode deldense --rounds 200` |
 
-四组都通过原始 `run_stress_watch.sh` 执行，停滞阈值为 150 秒。现场 job 名、服务端环境文件沿用 `ops/site.env`；自定义了这些值，压测同样会传给串口取证脚本。
-
-通过要求包括：看门狗 `DONE rc=0`；串口证据存在且无内核错误；无 `*-create-fail-*`；dmesg 无新错误；worker 只允许 ENOENT/ESTALE；心跳未过期；gsd 只允许 `create:resource_exhausted`。另外两个专项组自身 verdict 也必须 PASS。任何一组失败就停止后续组。
-
-若取不到串口日志，入口不会把证据缺失算通过。先核对现场 Nomad token、job 名、alloc 日志和串口日志格式，再重跑；缺证据不等同于已发现内核错误。
-
-本次部署现有发布内核，不需要额外准备调试内核。以后修改补丁时，按 `criu-rollback/docs/18-testing-and-debug-kernel.md` 再跑调试内核验证。
+四组都通过 `run_stress_watch.sh` 执行，停滞阈值为 150 秒。通过要求包括：看门狗 `DONE rc=0`；串口证据存在且无内核错误；无 `*-create-fail-*`；dmesg 无新错误；worker 只允许 ENOENT/ESTALE；心跳未过期；gsd 只允许 `create:resource_exhausted`；两个专项组自身 verdict 也必须 PASS。任何一组失败就停止后续组。取不到串口日志不算通过。
 
 ## 10. 切回沙箱级
 
-先等待验收/压测结束，确认测试沙箱和构建任务都退出，然后：
-
 ```bash
 bash criu-rollback/deploy/950.sh sandbox
-bash criu-rollback/deploy/950.sh status
 ```
 
-`sandbox` 使用第 6 节保存的 **950 原始 job**，恢复原二进制路径及其余配置，不用 920B 的回切脚本。恢复前会检查原二进制仍是保存时的 SHA256。它也会等待新进程、核对 SHA256 和三个相关环境变量，并确认 health 200。
+`sandbox` 使用第 6 节保存的**本机原始 job**，恢复原二进制路径及其余配置。恢复前检查原二进制仍是保存时的 SHA256；之后核对新进程的 SHA256 和三个相关环境变量（恢复成原来的状态，原来没有就是未设置），确认 health 200，再等原模板 `base` 能建沙箱。
 
-`HOST_KERNELS_DIR` 恢复原值，原来没有就恢复为未设置；`HOST_GSD_PATH`、`GSD_ORCH_SHA256` 同样恢复原来的状态。仅设置 `HOST_GSD_PATH=off` 不能替代恢复原沙箱级 orchestrator。
-
-回切服务端后，退出进程级 conda 环境并激活原沙箱级环境，再做冒烟：
+冒烟（`all` 里自动跑）：
 
 ```bash
-conda deactivate
-conda activate jll-e2b
-unset PYTHONPATH PYTHONHOME
-python -c 'import sys, e2b; print(sys.executable); print(e2b.__file__)'
-python criu-rollback/deploy/ops/sandbox_smoke.py --template base
+bash criu-rollback/deploy/950.sh smoke
 ```
 
-模板不是 `base` 就换成原沙箱级别名。冒烟入口要求当前环境是 `jll-e2b`，直接使用它的解释器和 SDK。客户端凭据仍按第 5 节读取，只通过子进程环境传递，不输出、不另写文件。SDK 覆盖层自检使用原部署的 `/opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py`。
+它用 `jll-e2b` 的解释器和 SDK 跑 `rollback/scripts/950/run.sh smoke`：SDK 自检、能力信息和 checkpoint/restore 正确性，5 项全 PASS。
 
-下次使用进程级时：
+回切后 `/fc-criu/` 和 `base-criu` 都保留，下次 `950.sh criu` 直接复用。原沙箱级 checkpoint 与进程级 checkpoint 不能互相使用。
 
-```bash
-conda deactivate
-conda activate jll-e2b-gsd
-unset PYTHONPATH PYTHONHOME
-bash criu-rollback/deploy/950.sh gsd
-bash criu-rollback/deploy/950.sh status
-```
-
-激活 conda 选择的是客户端 SDK；`gsd`/`sandbox` 切换的是服务端，两步都要执行。首次安装完成后，正常切换环境不需要重新安装 SDK。
-
-冒烟用仓库里的 `rollback/scripts/950/run.sh smoke`；需要 func/perf/hdbss/long 档时直接用该入口。完整冒烟应包括 SDK 自检、能力信息和 checkpoint/restore 正确性；有 FAIL 或未解释的 SKIP 先查原因。仅看 health 200 不足以确认 SDK 与模板也回到了原环境。
-
-回切后 `/fc-gsd/` 和 `base-gsd` 可以保留；原普通模板同样保留。原沙箱级 checkpoint 与 gsd checkpoint 不能互相使用。以后重复切到进程级时，无需再次 save-baseline/install；执行 `gsd`，确认原 `base-gsd` 对应当前产物后再验收。
+**升级沙箱级 RPM 之后。** 原二进制的 SHA256 变了，`sandbox` 会拒绝回切，防止盖掉别人的更新。此时先在沙箱级栈上核对新版本，再按需要重新保存基线（先移走 `/var/lib/criu-rollback/`），不要手改基线文件。
 
 ## 11. 失败时怎么处理
 
 | 现象 | 下一步 |
 |---|---|
-| 包校验失败 | 重拷原包，不要改校验清单 |
-| 动态库/GLIBC 不兼容 | 停在切栈前；回传预检错误，不改系统 glibc |
-| SDK 安装提示环境不对 | 激活 `jll-e2b-gsd` 后用该环境的 `python` 安装 |
+| 包校验失败 | `git status` 确认仓库没被改动，重新 `git pull`；不要改校验清单 |
+| 动态库/GLIBC 不兼容 | 停在切栈前；把预检输出复制回来，不改系统 glibc |
 | 克隆或 SDK 安装提示缺离线依赖 | 保留完整报错；缺项补齐前不切栈，原 `jll-e2b` 不受影响 |
-| 客户端 key/token 缺失 | 第 5 节使用 950 有效凭据，不重装服务 |
-| save-baseline 提示已有基线 | 正常重复切换直接用 gsd/sandbox；不要删除或覆盖基线 |
+| 客户端 key/token 缺失 | 第 5 节使用本机有效凭据，不重装服务 |
+| save-baseline 提示已有基线 | 正常重复切换直接用 criu/sandbox；不要删除或覆盖基线 |
 | job 结构不同 | 保留现状，只读核对任务结构；不要手改脚本跳过保护 |
 | 切换后端口/health 不对 | 查 `nomad job status` 和 alloc 日志；必要时执行 `bash criu-rollback/deploy/950.sh sandbox` |
 | 模板构建失败 | 查镜像引用、Harbor 解析/认证、gsd health、CRIU 版本；不要重用失败模板作验收 |
 | guest 自检发现旧 gsd/内核 | 确认当前栈和内核根目录后，无缓存重建模板 |
-| 功能失败、漏页、内核错误 | 停止后续测试，完整保留本轮结果；先结束本轮沙箱，再按第 10 节恢复 |
-| 预检提示缺沙箱地址池环境变量 | 950 部署早于 e2b-infra `870d087`；先升级部署或补齐 job 环境，不要跳过。缺这两项时 orchestrator 回落到 `10.11`/`10.12`，与同机 AgentENV 冲突 |
-| 切换后立刻建沙箱报 `500: Failed to place sandbox` | 等 1～2 分钟重试；重试仍失败再查 `/tmp/templates` 下模板文件是否还在，以及 orchestrator 日志 |
-| 回切提示原二进制变化 | 停止；核对是否有其他人更新部署，不自动覆盖现场文件 |
+| 功能失败、漏页、内核错误 | 停止后续测试，完整保留本轮结果；`all` 会自动删沙箱并回切 |
+| 预检提示缺沙箱地址池环境变量 | 部署早于 e2b-infra `870d087`；先升级部署或补齐 job 环境。缺这两项时 orchestrator 回落到 `10.11`/`10.12`，与同机 AgentENV 冲突 |
+| 切换后立刻建沙箱报 `500: Failed to place sandbox` | 脚本会自动重试 5 分钟；仍失败再查 `/tmp/templates` 下模板文件是否还在，以及 orchestrator 日志 |
+| 回切提示原二进制变化 | 见第 10 节“升级沙箱级 RPM 之后” |
+| e2b netns 上千、建沙箱变慢 | `bash criu-rollback/deploy/950.sh recycle-netns` |
 
-若失败后遗留了本轮测试沙箱，先从日志找到**该测试的沙箱 ID**，逐个清理，再回切；不要批量杀其他人的沙箱：
+若切换中断，基线保存在独立目录 `/var/lib/criu-rollback/`，重新登录后仍可在仓库根目录运行 `bash criu-rollback/deploy/950.sh sandbox`。脚本不提供强制覆盖或 purge Nomad 的选项。
+
+## 12. 看结果
+
+`all` 结束（含失败、中断）时自动打印一段结果，从 `==== 950.sh all 结果` 一行到 `==== 结束 ====` 一行，内容是：逐步状态与用时、三个运行文件的 SHA256、当前 5008 上的进程、宿主网络比对、验收与压测每一项的结论（压测附轮数、create/restore 次数、p50、错误计数）、沙箱级冒烟每一项。复制这一段即可。
+
+以后随时重新打印最近一轮：
 
 ```bash
-python - <本轮测试沙箱ID> <<'PY'
-import os, sys
-sys.path.insert(0, 'criu-rollback/scripts')
-from e2b_env import load_e2b_env
-os.environ.update(load_e2b_env())
-from e2b import Sandbox
-print(Sandbox.kill(sys.argv[1]))
-PY
+bash criu-rollback/deploy/950.sh report
 ```
 
-若切换中断，950 基线保存在独立持久目录，重新登录后仍可在仓库根目录运行 `bash criu-rollback/deploy/950.sh sandbox`。脚本不提供强杀沙箱、强制覆盖或 purge Nomad 的选项。
+细节按部分打印：
 
-## 12. 结果回传
+| 命令 | 打印什么 |
+|---|---|
+| `bash criu-rollback/deploy/950.sh report acceptance` | 性能三轮的分档表（全量基点、增量 checkpoint、restore）和各项日志末尾 |
+| `bash criu-rollback/deploy/950.sh report stress` | 四组压测摘要；失败组的错误样本、日志末尾和看门狗结果 |
+| `bash criu-rollback/deploy/950.sh report smoke` | 冒烟各项日志末尾 |
+| `bash criu-rollback/deploy/950.sh report netcheck` | 宿主网络比对全文 |
+| `bash criu-rollback/deploy/950.sh report log` | 全流程日志末尾 |
+| `bash criu-rollback/deploy/950.sh report files` | 结果目录里的全部文件 |
 
-用 `all` 时只需拷回最后打印的 `results/<时间>-all.tar.gz`，它包含下面说的全部内容、`all.log`（每步的进度与结论）、建模板日志、沙箱级冒烟结果、网络比对 `netcheck.txt`；单步执行时按本节拷目录。
+需要某个文件时，用 `report files` 找到它的相对路径，再用 `--file` 打印，`--lines N` 指定行数（0 为全部），例如：
 
-每轮结果位于 `results/`，含 `summary.json`、三个运行文件的 `deliverables.sha256`、每步日志、功能 JSON/JSONL、性能三轮结果、压测子目录。`summary.json` 会明确标记 PASS/FAIL，失败时列出停止原因。
+```bash
+bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
+```
 
-把验收和压测两个结果目录一起拷回；失败压测保留整个目录，包含 `console.txt`、dmesg、操作日志。另记下机器、起止时间、模板 ID、vCPU/内存、未跑项目、回切冒烟结果。成功后再据此更新原手册中的 950 状态。
-
-回传结果时不要携带 `criu-rollback/scripts/.env`、`/var/lib/gsd-950-offline`、Nomad job JSON 或现场登录配置。
+含密钥的文件（job 定义、基线、dotenv）不在结果目录里，`report` 也拒绝打印这类文件名。
 
 ## 13. 校验清单与验证范围
 
-`SHA256SUMS` 覆盖本目录入库的文件，不包含运行后新建的 `.work/`、`results/`、`ops/site.env`；新建这些文件不影响校验。展开出的三个运行文件和镜像按 `manifest.json` 另行核对。conda 环境安装在本机 conda 管理的目录，环境内部文件不在校验范围内。
+`SHA256SUMS` 覆盖本目录入库的文件，不包含运行后新建的 `.work/`、`results/`、`ops/site.env`。展开出的三个运行文件和镜像按 `manifest.json` 另行核对。conda 环境内部文件不在校验范围内。
 
-打包方已在 920B 的临时环境实测：从 `jll-e2b` 离线克隆、安装 GSD wheel、7 项 SDK 鉴权头测试、激活切回 `jll-e2b`，并核对原 SDK 文件哈希未改变；临时环境已清理。950 本机的 Python 版本与依赖仍由现场克隆和检查确认。
+打包方已验证：三个二进制哈希；镜像归档和层结构；镜像的离线依赖；SDK wheel 完整性和源码对应关系；conda 克隆环境的离线安装检查；job 处理单测、脚本语法和包完整性。具体记录见 `provenance/package-validation.json`。
 
-打包方还已验证：三个二进制哈希；镜像归档和层结构；920B 原镜像的离线依赖；SDK wheel 完整性和源码对应关系；conda 克隆环境的离线安装检查；新增 job 处理单测、脚本语法和包完整性。具体记录见 `provenance/package-validation.json`。
-
-这套运维入口已在 920B 实际切换过服务（第 14 节），没有在 950 切换服务或创建沙箱。只有按第 8、9、10 节完成现场测试之后，才能确认这台 950 的实际运行结果。
+这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-17：gsd 改名 criu，结果打印到终端，切栈前自动删 e2b 沙箱
+
+- **改名与位置。** 运行文件 `/fc-gsd/` → `/fc-criu/`，基线 `/var/lib/gsd-950-offline/` → `/var/lib/criu-rollback/`，`950.sh gsd` → `950.sh criu`，模板 `base-gsd` → `base-criu`，conda 环境 `jll-e2b-gsd` → `jll-e2b-criu`，脚本变量 `GSD_*` → `CRIU_*`。job 里改为显式设 `HOST_GSD_PATH=/fc-criu/gsd`（orchestrator 内置默认是旧位置 `/fc-gsd/gsd`）。gsd 二进制、orchestrator 读的 `HOST_GSD_PATH`、SDK wheel 的版本号、`verify_gsd.py` 等以 gsd 守护进程命名的脚本不变。
+- **结果。** 去掉打包步骤，`all` 结束时打印结果，新增 `950.sh report`、`test950.sh report`。
+- **沙箱。** 切栈、清 netns 之前自动删掉全部 e2b 沙箱（只认 `/fc-versions/` 下的 Firecracker，AgentENV 的不碰）。
+- **netns。** 新增 `950.sh recycle-netns`；`test950.sh` 在 e2b netns 超过 1500 个时自动调用。
+- 二进制、镜像、SDK 没有变化。
+
+新 920B 演练，模拟首次上机（旧的 `/fc-gsd/`、基线、`site.env` 先挪到备份目录）：
+
+| 项目 | 结果 |
+|---|---|
+| `all --new` | 13 步全部 PASS，约 10 分钟：克隆环境并装 SDK 9 秒、切到进程级 61 秒、建 `base-criu` 11 秒、验收 204 秒、压测 192 秒、切回 57 秒、冒烟 42 秒（PASS 5 / FAIL 0）；网络比对无变化 |
+| 有沙箱时 `950.sh criu` | 先起一个 `base` 沙箱，切换时经 API 删掉后切换，用时 1 分 15 秒；`950.sh sandbox` 1 分 41 秒 |
+| `950.sh recycle-netns`（沙箱级栈上） | e2b netns 1740 → 175、nat 规则 12185 → 1237，共 1 分 42 秒 |
+| `report` | 拒绝打印基线文件；`report stress` 打印各组摘要 |
+| `test950.sh quick --new` | 3 步 PASS，3.5 分钟；`test950.sh report` 输出正常 |
 
 ### 2026-11-16：并入 e2b-infra，改名 criu-rollback，二进制去调试段
 

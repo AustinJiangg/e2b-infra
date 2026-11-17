@@ -26,11 +26,11 @@ class FlowTests(unittest.TestCase):
 
     def test_env_by_name_and_path(self):
         listing = [Path("/root/miniforge3"), Path("/root/miniforge3/envs/jll-e2b"),
-                   Path("/root/miniforge3/envs/jll-e2b-gsd"), Path("/data/tmp/conda/jll-e2b-gsd")]
-        self.assertEqual(envs.prefix("jll-e2b-gsd", listing), Path("/root/miniforge3/envs/jll-e2b-gsd"))
+                   Path("/root/miniforge3/envs/jll-e2b-criu"), Path("/data/tmp/conda/jll-e2b-criu")]
+        self.assertEqual(envs.prefix("jll-e2b-criu", listing), Path("/root/miniforge3/envs/jll-e2b-criu"))
         self.assertIsNone(envs.prefix("missing", listing))
         with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "jll-e2b-gsd"
+            target = Path(tmp) / "jll-e2b-criu"
             self.assertIsNone(envs.prefix(str(target)))
             (target / "conda-meta").mkdir(parents=True)
             self.assertEqual(envs.prefix(str(target)), target)
@@ -42,7 +42,7 @@ class FlowTests(unittest.TestCase):
 
     def test_runtime_sets_conda_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "jll-e2b-gsd"
+            target = Path(tmp) / "jll-e2b-criu"
             (target / "conda-meta").mkdir(parents=True)
             with patch.dict(envs.os.environ, {"PYTHONPATH": "/x", "PATH": "/usr/bin"}, clear=True):
                 command, env = envs.runtime(str(target))
@@ -53,11 +53,10 @@ class FlowTests(unittest.TestCase):
 
     def test_roll_back_unless_sandbox(self):
         # 切换中途失败、5008 上没有进程（current() 为 None）时也要回切；已是沙箱级才不动
-        for cur, expect in (("gsd", True), (None, True), ("sandbox", False)):
+        for cur, expect in (("criu", True), (None, True), ("sandbox", False)):
             with patch.object(flow.stack, "current", return_value=cur), \
                     patch.object(flow.stack, "switch") as sw, \
-                    patch.object(flow, "cleanup_test_sandboxes"), \
-                    patch.object(flow, "wait_firecracker_exit"), \
+                    patch.object(flow, "clear_e2b_sandboxes"), \
                     patch.object(flow, "log"):
                 flow.roll_back()
             self.assertEqual(sw.called, expect, cur)

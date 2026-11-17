@@ -6,7 +6,7 @@
 
 在宿主机上跑（解释器要能 import 到带 checkpoint 接口的 SDK：PYTHONPATH=<代码仓>/py-sdk；
 凭据由本目录或上一级目录的 e2b_env.py 读取）：
-    python stress_gsd.py [模板名，默认 base-gsd] [restore 次数，默认 8]
+    python stress_gsd.py [模板名，默认 base-criu] [restore 次数，默认 8]
 
 判定：只有末行的根盘判定——结束时根盘已用量比起点多出不超过 2 MB 打印"判定: 根盘恒定 ✓"，
 否则"根盘仍在增长 ✗（内核未换或模板未重建）"。MemAvail 与 procs 两栏不判，要人看有没有单调变化。
@@ -20,7 +20,7 @@ from e2b_env import load_e2b_env
 os.environ.update(load_e2b_env())
 from e2b import Sandbox
 
-TPL = sys.argv[1] if len(sys.argv) > 1 else "base-gsd"
+TPL = sys.argv[1] if len(sys.argv) > 1 else "base-criu"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 8
 MEMHOG = r'''
 import time, hashlib, os

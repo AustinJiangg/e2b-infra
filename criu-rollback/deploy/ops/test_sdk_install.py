@@ -35,13 +35,13 @@ class SDKInstallTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.guard('base')
 
     def test_unactivated_environment_refused(self):
-        with self.assertRaises(RuntimeError): self.guard('jll-e2b-gsd', active=False)
+        with self.assertRaises(RuntimeError): self.guard('jll-e2b-criu', active=False)
 
     def test_pythonpath_override_refused(self):
-        with self.assertRaises(RuntimeError): self.guard('jll-e2b-gsd', extra={'PYTHONPATH':'/other/sdk'})
+        with self.assertRaises(RuntimeError): self.guard('jll-e2b-criu', extra={'PYTHONPATH':'/other/sdk'})
 
-    def test_gsd_clone_accepted(self):
-        self.assertEqual(self.guard('jll-e2b-gsd').name, 'jll-e2b-gsd')
+    def test_criu_clone_accepted(self):
+        self.assertEqual(self.guard('jll-e2b-criu').name, 'jll-e2b-criu')
 
     def test_wheel_record_matches_content(self):
         root = Path(__file__).resolve().parents[1]
