@@ -44,8 +44,19 @@ def require(ok, reason):
         raise RuntimeError(reason)
 
 
+class CmdError(subprocess.CalledProcessError):
+    """报错时带上命令自己输出的最后几行（例如 nomad 的 ACL 拒绝、找不到 job），否则只看得到退出码。"""
+
+    def __str__(self):
+        tail = " ".join((self.output or "").strip().splitlines()[-3:])[:300]
+        return super().__str__() + ("：" + tail if tail else "")
+
+
 def run(*args):
-    return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT)
+    r = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if r.returncode != 0:
+        raise CmdError(r.returncode, args, output=r.stdout)
+    return r.stdout
 
 
 def sha(path):

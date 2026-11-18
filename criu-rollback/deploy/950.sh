@@ -11,9 +11,12 @@ load_site() {
     set -a; source "$ROOT/ops/site.env"; set +a
   fi
   export E2B_INFRA_ENV="${E2B_INFRA_ENV:-/opt/e2b-infra/.env}"
-  # 只从服务端环境文件取 Nomad 令牌，不把其余服务端变量带进客户端脚本。
-  if [ -z "${NOMAD_TOKEN:-}" ] && [ -r "$E2B_INFRA_ENV" ]; then
-    NOMAD_TOKEN=$(set +eu; set -a; source "$E2B_INFRA_ENV" >/dev/null 2>&1; echo "${NOMAD_ACL_TOKEN:-${NOMAD_TOKEN:-}}") || true
+  # Nomad 令牌以服务端环境文件为准（重新部署 build.sh -s 会换令牌，shell 里留着的旧 NOMAD_TOKEN
+  # 就失效了），文件里没有时才用 shell 里的。只取令牌，不把其余服务端变量带进客户端脚本。
+  if [ -r "$E2B_INFRA_ENV" ]; then
+    _tok=$(unset NOMAD_TOKEN NOMAD_ACL_TOKEN; set +eu; set -a; source "$E2B_INFRA_ENV" >/dev/null 2>&1; echo "${NOMAD_ACL_TOKEN:-${NOMAD_TOKEN:-}}") || true
+    [ -n "$_tok" ] && NOMAD_TOKEN=$_tok
+    unset _tok
   fi
   export NOMAD_TOKEN="${NOMAD_TOKEN:-}"
 }

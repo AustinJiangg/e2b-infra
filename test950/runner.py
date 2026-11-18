@@ -51,22 +51,24 @@ STACKS = ("sandbox", "criu")
 # 每一步：(栈, 名字, 命令类型, 参数, 预估分钟)。命令类型 run = 沙箱级 run.sh，criu = 950.sh 的测试命令
 SANDBOX_STEPS = {
     "quick": [("smoke", "run", ["smoke"], 3)],
-    # standard 的预估按 950 2026-11-17 实测：smoke 1、func 18.5、perf 9、hdbss 4 分钟，留少量余量
-    "standard": [("smoke", "run", ["smoke"], 2),
+    # 预估（分钟）：standard 按 950 2026-11-17 实测（smoke 1、func 18.5、perf 9、hdbss 4）；
+    # extended 按 920B 2026-11-18 实测（special 10.8、perf-full 5.7、idle 9.5），perf-full 按 950 上
+    # perf 约为 920B 的 4 倍放大；hdbss-orders 在 920B 上不跑（非 HDBSS），950 上每个 order 重启一次 job
+    "standard": [("smoke", "run", ["smoke"], 1),
                  ("func", "run", ["func"], 20),
-                 ("perf", "run", ["perf"], 12),
+                 ("perf", "run", ["perf"], 10),
                  ("hdbss", "run", ["hdbss"], 5)],
-    "extended": [("special", "run", ["special", "--allow-restart", "--kill-sandboxes-ok"], 30),
-                 ("hdbss-orders", "run", ["hdbss", "--orders", "1,9", "--allow-restart", "--kill-sandboxes-ok"], 15),
-                 ("perf-full", "run", ["perf", "--full"], 60),
-                 ("idle", "run", ["idle"], 25)],
+    "extended": [("special", "run", ["special", "--allow-restart", "--kill-sandboxes-ok"], 12),
+                 ("hdbss-orders", "run", ["hdbss", "--orders", "1,9", "--allow-restart", "--kill-sandboxes-ok"], 10),
+                 ("perf-full", "run", ["perf", "--full"], 20),
+                 ("idle", "run", ["idle"], 10)],
     "long": [("soak", "run", ["soak", "--hours", "{hours}"], None)],
 }
 CRIU_STEPS = {
     "quick": [("quick", "criu", ["quick"], 2)],
     "standard": [("acceptance", "criu", ["acceptance"], 4),   # 950 实测 3 分 09 秒
                  ("stress", "criu", ["stress"], 5)],          # 950 实测 3 分 52 秒，另有 netns 清理约 2 分钟
-    "extended": [("stress-ext", "criu", ["stress-ext"], 45)],
+    "extended": [("stress-ext", "criu", ["stress-ext"], 30)],    # 920B 实测 28 分钟
     "long": [("soak", "criu", ["soak", "--hours", "{hours}"], None)],
 }
 
@@ -79,15 +81,15 @@ def plan(level, stacks, hours):
             if level == "native":
                 args = ["benchmark/native_snapshot_tiers.py", "--mode", "both", "--passes", "3", "--iters", "8",
                         "--template", TEMPLATES[st]]
-                est = 25
+                est = 8      # 920B 实测每套 7.5 分钟
             else:
                 args = ["benchmark/ckpt_same_workload.py", "--stack", st, "--template", TEMPLATES[st]]
-                est = 30
+                est = 4      # 920B 实测每套 2.5～3 分钟
             steps.append({"id": "%s/%s" % (st, level), "stack": st, "kind": "py", "args": args,
                           "est_min": est, "status": "待跑"})
         if "criu" in stacks:
             steps.append({"id": "sandbox/smoke-after", "stack": "sandbox", "kind": "run",
-                          "args": ["smoke"], "est_min": 3, "status": "待跑"})
+                          "args": ["smoke"], "est_min": 1, "status": "待跑"})
         return steps
     order = {"quick": ["quick"], "standard": ["standard"], "extended": ["standard", "extended"],
              "long": ["long"]}[level]
@@ -104,8 +106,18 @@ def plan(level, stacks, hours):
     # 进程级测完回到沙箱级，再跑一次沙箱级冒烟，确认原服务完好
     if "criu" in stacks:
         steps.append({"id": "sandbox/smoke-after", "stack": "sandbox", "kind": "run",
-                      "args": ["smoke"], "est_min": 3, "status": "待跑"})
+                      "args": ["smoke"], "est_min": 1, "status": "待跑"})
     return steps
+
+
+SWITCH_MIN = 2     # 每次切栈（950.sh criu / sandbox）约 1～2 分钟；netns 清理每次约 2 分钟另计
+
+
+def estimate(steps):
+    """还没通过的步骤的预估合计，加上其间的切栈。"""
+    todo = [s for s in steps if s["status"] != "PASS"]
+    switches = sum(1 for a, b in zip(todo, todo[1:]) if a["stack"] != b["stack"])
+    return sum(s["est_min"] for s in todo) + switches * SWITCH_MIN, switches
 
 
 def dur(seconds):
@@ -364,8 +376,9 @@ def execute(args):
     run_dir = Path(data["run_dir"])
     data["resources"].setdefault("开始", resources())
     save(data)
-    total = sum(s["est_min"] for s in data["steps"] if s["status"] != "PASS")
-    log("共 %d 步，预计约 %d 分钟。进度：bash test950.sh status" % (len(data["steps"]), total))
+    total, switches = estimate(data["steps"])
+    log("共 %d 步，预计约 %d 分钟（含 %d 次切栈；中途清理 netns 每次另加约 2 分钟）。进度：bash test950.sh status"
+        % (len(data["steps"]), total, switches))
     current = None
     for step in data["steps"]:
         if step["status"] == "PASS":
