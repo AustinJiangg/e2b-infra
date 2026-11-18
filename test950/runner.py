@@ -523,7 +523,38 @@ def print_perf(run, step, indent=""):
         print(indent + line)
 
 
+def latest_per_level():
+    """每一档最近的一轮结果目录（目录名是 <时间>-<档>），按开始时间排。"""
+    latest = {}
+    for p in sorted(p for p in RESULTS.glob("*-*") if p.is_dir()):
+        level = p.name.split("-", 2)[-1]
+        if level not in LEVELS + EXTRA:
+            continue
+        rj = p / "run.json"
+        if rj.is_file():  # 一步都没开跑的（开始后马上被停掉）不算
+            try:
+                if all(st["status"] == "待跑" for st in json.loads(rj.read_text())["steps"]):
+                    continue
+            except (ValueError, KeyError):
+                pass
+        latest[level] = p
+    return sorted(latest.values(), key=lambda p: p.name)
+
+
 def print_report(args):
+    if not args.run and not args.file and not args.target:
+        # 不带参数：每一档各打印最近一轮，几档跑完后执行一次就拿到全部结果
+        runs = latest_per_level()
+        if not runs:
+            sys.exit("还没有结果（%s 下是空的）" % RESULTS)
+        print("==== test950 结果：每档最近一轮，共 %d 轮（从这一行复制到最后的“全部结束”）====" % len(runs))
+        for run in runs:
+            print("  %s" % run.name)
+        for run in runs:
+            print()
+            print_overview(run)
+        print("\n==== 全部结束 ====")
+        return 0
     run = pick_run(args.run)
     if args.file:
         report.show_file(run / args.file, args.lines, root=run)
@@ -555,7 +586,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("level", choices=LEVELS + EXTRA + ("status", "report"))
     ap.add_argument("target", nargs="?", help="report：步骤名（如 criu/stress-ext），或 files 列出全部文件")
-    ap.add_argument("--run", help="report：结果目录名，默认最近一轮")
+    ap.add_argument("--run", help="report：只看这一轮（结果目录名）；不给时每档各打印最近一轮，给了步骤名时看最近一轮")
     ap.add_argument("--file", help="report：打印结果目录里的这个文件（相对路径）")
     ap.add_argument("--lines", type=int, default=40, help="report：每个文件打印的行数，0 为全部")
     ap.add_argument("--stack", choices=("both",) + STACKS, default="both", help="测哪套，默认两套都测")

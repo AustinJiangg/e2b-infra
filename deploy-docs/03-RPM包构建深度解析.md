@@ -236,7 +236,7 @@ x86_64 : goose(x86) / vmlinux.bin(x86)（无 firecracker——x86 用官方发�
 
 ### 3.6 `%changelog`
 
-记录每个 Release 改了什么（当前最新 2026.09-4）。**每次发新包在顶部追加一条**，
+记录每个 Release 改了什么（当前 2026.09-3，Release 固定不变）。**每次改补丁在顶部追加一条**，
 格式 `* 星期 月 日 年 作者 <邮箱> - 版本-Release`，正文一行一个要点。
 
 ## 4. `e2b-deploy/` 怎样进 RPM
@@ -289,7 +289,7 @@ rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
 # 产物：~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-<Release>.aarch64.rpm
 
 # 3) 安装/升级到部署机
-rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm
+rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm
 #   --force：同 Release 反复迭代时也能覆盖安装
 #   ⚠️ 写明 Release，别用 e2b-infra-*.rpm 通配（RPMS 里留着旧包会一起匹配报冲突）
 

@@ -13472,7 +13472,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <h3 id="d24-48-同一负载下的对比2026-11-18test950sh-compare">4.8 同一负载下的对比（2026-11-18，<code>test950.sh compare</code>）</h3>
 <p>§4.3～§4.6 的两侧负载构造不同，分不开"改动量"和"进程大小"。2026-11-18 用 <code>benchmark/ckpt_same_workload.py</code> 在新 920B 上补了一组两侧完全相同的负载：一个常驻进程预分配 P MiB 并写满，每次原地改写其中 d MiB；文件负载是根盘上一个 f MiB 的文件。每个测点新建 2 个沙箱、各 10 次（另有 1 次预热不计），n = 20；每次测量是"改写 → checkpoint A → 再改写 → checkpoint B → restore 回基点 → 校验整块内存 SHA256 与文件"，A 紧跟在上一次 restore 之后，B 紧跟在 A 之后。</p>
 <blockquote>
-<p>平台：新 920B。沙箱级：RPM <code>2026.09-4</code>（<code>/usr/bin/template-manager</code> sha256 <code>b125e518…</code>），<code>kvm-wp</code>，模板 <code>base</code>。进程级：gsd <code>daae6968f</code>，orchestrator <code>063e580e…</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB、客户端墙钟 p50，单位 ms；每侧 460 次测量，校验全部一致。</p>
+<p>平台：新 920B。沙箱级：RPM <code>2026.09-3</code>（2026-11-17 修复版；<code>/usr/bin/template-manager</code> sha256 <code>b125e518…</code>），<code>kvm-wp</code>，模板 <code>base</code>。进程级：gsd <code>daae6968f</code>，orchestrator <code>063e580e…</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB、客户端墙钟 p50，单位 ms；每侧 460 次测量，校验全部一致。</p>
 </blockquote>
 <p><strong>改动量变化，进程固定 256 MiB：</strong></p>
 <div class="tw"><table>

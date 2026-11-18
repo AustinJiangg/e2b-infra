@@ -461,9 +461,9 @@ ls -la ubuntu-22.04-custom.tar.gz          # 自检：仓库根的 ubuntu 镜像
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
 
 # 4) 安装到 /opt（会生成 /opt/e2b-infra/ 及 /opt/e2b-infra/dep/）
-#    Release 要写明（当前 -4，与 e2b-infra.spec 的 Release 同步递增）；
+#    Release 要写明（当前 -3；Release 固定不变，改补丁也不递增）；
 #    别用 e2b-infra-*.rpm 通配——RPMS 目录里若还留着旧包会一起匹配进来报冲突
-rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm      # 升级用 rpm -Uvh --force
+rpm -ivh ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm      # 升级用 rpm -Uvh --force
 ```
 
 > 关键：`dep/.env` 的 `SERVER_IP=` 必须改成本机 IP，否则 harbor/registry/nomad 地址全错。
@@ -640,7 +640,7 @@ done
 
 ```bash
 bash build.sh -d        # 停止并清空 nomad/consul 数据（含 ACL 状态）
-rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm   # 若改了源码
+rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm   # 若改了源码
 bash build.sh -i
 bash build.sh -s        # 全新 bootstrap，自动生成新 token 并写回 .env
 ```
@@ -649,10 +649,10 @@ bash build.sh -s        # 全新 bootstrap，自动生成新 token 并写回 .en
 
 ```bash
 # 1) 重建并安装 RPM（只为更新 /opt/e2b-infra/bin 下的二进制）
-#    --force：同一个 Release（当前 -4）反复改源码重建时也能覆盖安装，不然 rpm 会报 already installed；
+#    --force：同一个 Release（当前 -3）反复改源码重建时也能覆盖安装，不然 rpm 会报 already installed；
 #    版本号写明 -4，别用 e2b-infra-*.rpm 通配（会把旧包一起匹配进来报冲突）
 rpmbuild -bb e2b-infra.spec --define "_sourcedir $PWD"
-rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-4.aarch64.rpm
+rpm -Uvh --force ~/rpmbuild/RPMS/aarch64/e2b-infra-2026.09-3.aarch64.rpm
 
 # 2) 重放 dep overlay（见 5.0——rpm 之后的必做动作，不做则下次 render/-r/-f 必炸）
 

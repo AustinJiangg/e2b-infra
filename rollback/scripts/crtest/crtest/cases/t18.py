@@ -307,7 +307,7 @@ def run(ctx):
 
     # 重启后旧沙箱的 FC 可能还没退出。2026-11-17 在 920B 查实：nomad job restart 时 orchestrator 关网络池
     # 超过 30 s 的 kill_timeout 被 SIGKILL，FC 在自己的进程组里不随之退出、被 init 收养；RPM 2026.09-3 的
-    # orchestrator 启动时不清理它们，所以一直留着。2026.09-4 起启动时结束这些 FC（fc/orphans.go），
+    # orchestrator 启动时不清理它们，所以一直留着。2026-11-17 修复版 RPM（2026.09-3）起启动时结束这些 FC（fc/orphans.go），
     # 新 orchestrator 起来后几秒内就没了。等它最多 90 s 再判，等了多久记下来
     t_left = time.monotonic()
     left = common.fc_processes(box_a.id)

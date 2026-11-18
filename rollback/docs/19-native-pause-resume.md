@@ -176,7 +176,7 @@ resume 返回时页还没有加载。内存读恢复后比快照前慢 6.9～111
 
 ### 4.3 两套代码上各跑一遍（2026-11-18）
 
-为回答"我们对原生路径的改动有没有让它变慢"，2026-11-18 用 `bash test950.sh native` 在新 920B 上把同一脚本在两套代码上各跑了一遍：沙箱级是交付的 RPM `2026.09-4`（`/usr/bin/template-manager` sha256 `b125e518…`，`kvm-wp`，模板 `base`）；进程级是 `/fc-criu/orchestrator`（sha256 `063e580e…`，不开脏页跟踪，模板 `base-criu`）。进程级的 orchestrator 不含精确增量，但也不是纯上游：pause 要等快照上传完才返回（KASandbox 提交 `01665a0c9`，上游不等），模板注入了 gsd、guest 内核打了补丁。两套用同一份 Firecracker。每档每种模式 `repeat` n = 24，客户端墙钟 p50，单位 ms。
+为回答"我们对原生路径的改动有没有让它变慢"，2026-11-18 用 `bash test950.sh native` 在新 920B 上把同一脚本在两套代码上各跑了一遍：沙箱级是交付的 RPM `2026.09-3`（2026-11-17 修复版；`/usr/bin/template-manager` sha256 `b125e518…`，`kvm-wp`，模板 `base`）；进程级是 `/fc-criu/orchestrator`（sha256 `063e580e…`，不开脏页跟踪，模板 `base-criu`）。进程级的 orchestrator 不含精确增量，但也不是纯上游：pause 要等快照上传完才返回（KASandbox 提交 `01665a0c9`，上游不等），模板注入了 gsd、guest 内核打了补丁。两套用同一份 Firecracker。每档每种模式 `repeat` n = 24，客户端墙钟 p50，单位 ms。
 
 | 档（总改动 MiB） | pause 沙箱级 | pause 进程级 | resume 沙箱级 | resume 进程级 | 导出内存 MiB 沙箱级 | 导出内存 MiB 进程级 |
 |---|---|---|---|---|---|---|

@@ -84,15 +84,19 @@ bash test950.sh report
 
 ## 4. 看结果
 
-跑完（或跑到一半）执行：
+`report` 只把已有结果打印到终端，方便复制回传；它不跑测试、不改任何东西，什么时候执行、执行几次都一样。结果本身一直保存在 `test950/results/<时间>-<档>/` 下。
+
+几档都跑完（或想看进度）时执行一次：
 
 ```bash
 bash test950.sh report
 ```
 
-它打印最近一轮的结果，从 `==== test950` 一行到 `==== 结束 ====` 一行：逐步状态与用时、每段身份（orchestrator、Firecracker、进程级三个运行文件的 sha256，相同的只列一次）、宿主资源、自动清理 netns 的记录，以及每一步的逐项结论（沙箱级是 `run.sh` 的逐项表，带关键数字；进程级是每个子步骤，压测附轮数、create/restore 次数、p50、错误计数）。复制这一段即可。
+不带参数时，**每一档各打印最近一轮**（一步都没开跑的轮次不算），开头列出是哪几轮，从 `==== test950 结果` 一行复制到 `==== 全部结束 ====` 一行即可。所以 extended、native、compare 连着跑完后只需要执行这一次。只看某一轮时加 `--run 目录名`。
 
-某一步要看细节时，把步骤名跟在后面，它打印该步各项日志的末尾（失败项多打印一些）；进程级验收会打印性能三轮的分档表：
+每一轮打印的内容：逐步状态与用时、每段身份（orchestrator、Firecracker、进程级三个运行文件的 sha256，相同的只列一次）、宿主资源、自动清理 netns 的记录，以及每一步的逐项结论（沙箱级是 `run.sh` 的逐项表，带关键数字；进程级是每个子步骤，压测附轮数、create/restore 次数、p50、错误计数）。
+
+某一步要看细节时，把步骤名跟在后面，它打印最近一轮里该步各项日志的末尾（失败项多打印一些）；进程级验收会打印性能三轮的分档表：
 
 ```bash
 bash test950.sh report sandbox/perf
@@ -121,7 +125,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 ## 5. 已知会 FAIL 的项
 
-2026-11-16～17 在新 920B 上逐档演练、11-17 在 950 上跑 standard，发现下面五项。五项都已在 2026-11-17 修复；2026-11-18 在 920B 上用最终版本（RPM `2026.09-4`、gsd `daae6968f`）完整跑了一遍 extended，五项都通过。第五项改的是沙箱级 orchestrator，随 RPM `2026.09-4` 发布，950 要重新构建并部署 RPM 才生效。
+2026-11-16～17 在新 920B 上逐档演练、11-17 在 950 上跑 standard，发现下面五项。五项都已在 2026-11-17 修复；2026-11-18 在 920B 上用最终版本（2026-11-17 修复版 RPM `2026.09-3`、gsd `daae6968f`）完整跑了一遍 extended，五项都通过。第五项改的是沙箱级 orchestrator，随 2026-11-17 修复版 RPM `2026.09-3` 发布，950 要重新构建并部署 RPM 才生效。
 
 | 步骤 | 项 | 原因 | 状态 |
 |---|---|---|---|
@@ -129,15 +133,15 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 | `criu/stress-ext` | `multitree-capacity` | 1000 轮把 snapshot store 涨到 guest 内存的九成，容量预检只要求放得下镜像，guest OOM 杀了用户进程 | 已修（gsd 预检要求 dump 后至少留 MemTotal 的 1/8）；920B 复验 PASS，无 OOM |
 | `criu/stress-ext` | `deldense-capacity` | 1000 轮把沙箱根盘写满。restore 杀掉用户进程之后，层切换要在内核里新建 `work/work` 目录，ENOSPC，只能报 `data_loss`（3～4 次） | 已修（gsd 常驻预留空间、杀进程前按 `f_bavail` 检查、根盘写满报 `resource_exhausted`）；这一组改用 `--capacity` 判据：只允许安全失败。920B 复验见下 |
 | `sandbox/perf` | 并发 `checkpoint_concurrent.py` | A 段 N=16 有 1 次 restore 客户端等满 300 s。根因在客户端：SDK 全部沙箱共用的 httpcore 连接池在连接总数超过 20 时，会关掉刚分给另一个线程的连接（沙箱级手册第 21 章 §2.3） | 已修（SDK keepalive 上限默认等于最大连接数）；920B 4800 次 restore 从 6 次失败降到 0 |
-| `sandbox/special` | `crtest T18` | `nomad job restart` 时 orchestrator 关网络池超过 job 的 30 s kill_timeout，被 SIGKILL；Firecracker 在自己的进程组里，没被带走，由 init 收养。RPM 版 orchestrator 不含 deltabox 分支里启动时清理遗留 Firecracker 的代码（`fc/orphans.go`），所以一直留着 | 已修（RPM `2026.09-4`：orchestrator 启动时结束父进程为 init 的遗留 Firecracker）；920B 复验 T18 通过，FC 在新 orchestrator 起来时即被清掉 |
+| `sandbox/special` | `crtest T18` | `nomad job restart` 时 orchestrator 关网络池超过 job 的 30 s kill_timeout，被 SIGKILL；Firecracker 在自己的进程组里，没被带走，由 init 收养。RPM 版 orchestrator 不含 deltabox 分支里启动时清理遗留 Firecracker 的代码（`fc/orphans.go`），所以一直留着 | 已修（2026-11-17 修复版 RPM `2026.09-3`：orchestrator 启动时结束父进程为 init 的遗留 Firecracker）；920B 复验 T18 通过，FC 在新 orchestrator 起来时即被清掉 |
 
 `stress-ext` 里各组互不依赖，一组失败不影响其余组的结果。
 
 2026-11-18 起 `stress-ext` 的 `append` 组按容量耗尽判：修好"restore 之后的第一次 checkpoint 是全量"（进程级手册第 16 章 L-18）之后，guest 内的镜像区不再先满，这一组 1000 轮会把沙箱根盘写满；6 个 worker 是 restore 管不到的 root 进程、一直追加，盘满后 checkpoint 和 restore 都只能安全拒绝（L-19）。判据允许 `resource_exhausted` 和 worker 的 ENOSPC，`data_loss`、`internal`、内核报错、校验失败仍判失败。
 
-**920B 2026-11-18 extended 实测**（RPM `2026.09-4`，gsd `daae6968f`）：沙箱级 smoke、func（PASS 18 · SKIP 4）、perf（含 N=16 并发）、special（T18、T21 四条、T37 两道全过；T38 要带故障注入的 FC，不跑）、perf --full、idle 全部 PASS，hdbss 两项整档 SKIP；进程级 acceptance（含新加的 `restore_incremental`）、stress PASS；stress-ext 27 组：26 组按原判据 PASS，`append` 按上面的判据离线重判 PASS；兼容矩阵 OK 15 / REFUSED 1 / BROKEN 0。各步用时合计约 85 分钟（另有切栈）。
+**920B 2026-11-18 extended 实测**（2026-11-17 修复版 RPM `2026.09-3`，gsd `daae6968f`）：沙箱级 smoke、func（PASS 18 · SKIP 4）、perf（含 N=16 并发）、special（T18、T21 四条、T37 两道全过；T38 要带故障注入的 FC，不跑）、perf --full、idle 全部 PASS，hdbss 两项整档 SKIP；进程级 acceptance（含新加的 `restore_incremental`）、stress PASS；stress-ext 27 组：26 组按原判据 PASS，`append` 按上面的判据离线重判 PASS；兼容矩阵 OK 15 / REFUSED 1 / BROKEN 0。各步用时合计约 85 分钟（另有切栈）。
 
-沙箱级的两项修复都在 RPM `2026.09-4` 里（orchestrator 与 SDK 覆盖层），按部署文档重新构建、部署 RPM 后生效；只想先拿到连接池修复而不重新部署时，可对客户端 conda 环境单独执行一次 `e2b-deploy/dep/e2b-sdk-checkpoint/install.py`（装完会自动重放 `patch_e2b.py`）；进程级的 gsd 与 SDK 由 `950.sh criu` 自动更新（`criu-rollback/deploy/README.md` 第 14 节）。
+沙箱级的两项修复都在 2026-11-17 修复版 RPM `2026.09-3` 里（orchestrator 与 SDK 覆盖层），按部署文档重新构建、部署 RPM 后生效；只想先拿到连接池修复而不重新部署时，可对客户端 conda 环境单独执行一次 `e2b-deploy/dep/e2b-sdk-checkpoint/install.py`（装完会自动重放 `patch_e2b.py`）；进程级的 gsd 与 SDK 由 `950.sh criu` 自动更新（`criu-rollback/deploy/README.md` 第 14 节）。
 
 ## 6. 两项单独的性能测量：`native` 与 `compare`
 

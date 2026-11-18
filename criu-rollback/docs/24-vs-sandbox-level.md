@@ -287,7 +287,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 
 §4.3～§4.6 的两侧负载构造不同，分不开"改动量"和"进程大小"。2026-11-18 用 `benchmark/ckpt_same_workload.py` 在新 920B 上补了一组两侧完全相同的负载：一个常驻进程预分配 P MiB 并写满，每次原地改写其中 d MiB；文件负载是根盘上一个 f MiB 的文件。每个测点新建 2 个沙箱、各 10 次（另有 1 次预热不计），n = 20；每次测量是"改写 → checkpoint A → 再改写 → checkpoint B → restore 回基点 → 校验整块内存 SHA256 与文件"，A 紧跟在上一次 restore 之后，B 紧跟在 A 之后。
 
-> 平台：新 920B。沙箱级：RPM `2026.09-4`（`/usr/bin/template-manager` sha256 `b125e518…`），`kvm-wp`，模板 `base`。进程级：gsd `daae6968f`，orchestrator `063e580e…`，模板 `base-criu`。两侧都是 2 vCPU / 2048 MB、客户端墙钟 p50，单位 ms；每侧 460 次测量，校验全部一致。
+> 平台：新 920B。沙箱级：RPM `2026.09-3`（2026-11-17 修复版；`/usr/bin/template-manager` sha256 `b125e518…`），`kvm-wp`，模板 `base`。进程级：gsd `daae6968f`，orchestrator `063e580e…`，模板 `base-criu`。两侧都是 2 vCPU / 2048 MB、客户端墙钟 p50，单位 ms；每侧 460 次测量，校验全部一致。
 
 **改动量变化，进程固定 256 MiB：**
 

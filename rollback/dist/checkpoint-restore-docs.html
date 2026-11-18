@@ -12943,7 +12943,7 @@ JSON / JSONL 未回传：按日志统计归档，未从精确原始记录独立�
 <p><code>create_snapshot()</code> 比 pause 多一次重新拉起沙箱，所以更慢。这里的恢复是另起新沙箱：<code>Sandbox.create()</code> 约 50 ms 返回，第一条命令要等 guest 就绪，恢复耗时主要在这一段。</p>
 <p>精确增量构建这一轮的 216 个样本里，有 4 次恢复超过 1 s，都在 snapshot 模式：64 MiB 档 <code>first</code> 的 5068.5 ms，以及 128 MiB 档 <code>repeat</code> 的 5150.5、5060.2、1267.7 ms。128 MiB 档这 3 次都在上表的 15 个样本内，max 为 5150.5 ms，p50 仍是 215.5 ms。对照轮 216 个样本没有超过 1 s 的恢复。原因未查。</p>
 <h3 id="d19-43-两套代码上各跑一遍2026-11-18">4.3 两套代码上各跑一遍（2026-11-18）</h3>
-<p>为回答"我们对原生路径的改动有没有让它变慢"，2026-11-18 用 <code>bash test950.sh native</code> 在新 920B 上把同一脚本在两套代码上各跑了一遍：沙箱级是交付的 RPM <code>2026.09-4</code>（<code>/usr/bin/template-manager</code> sha256 <code>b125e518…</code>，<code>kvm-wp</code>，模板 <code>base</code>）；进程级是 <code>/fc-criu/orchestrator</code>（sha256 <code>063e580e…</code>，不开脏页跟踪，模板 <code>base-criu</code>）。进程级的 orchestrator 不含精确增量，但也不是纯上游：pause 要等快照上传完才返回（KASandbox 提交 <code>01665a0c9</code>，上游不等），模板注入了 gsd、guest 内核打了补丁。两套用同一份 Firecracker。每档每种模式 <code>repeat</code> n = 24，客户端墙钟 p50，单位 ms。</p>
+<p>为回答"我们对原生路径的改动有没有让它变慢"，2026-11-18 用 <code>bash test950.sh native</code> 在新 920B 上把同一脚本在两套代码上各跑了一遍：沙箱级是交付的 RPM <code>2026.09-3</code>（2026-11-17 修复版；<code>/usr/bin/template-manager</code> sha256 <code>b125e518…</code>，<code>kvm-wp</code>，模板 <code>base</code>）；进程级是 <code>/fc-criu/orchestrator</code>（sha256 <code>063e580e…</code>，不开脏页跟踪，模板 <code>base-criu</code>）。进程级的 orchestrator 不含精确增量，但也不是纯上游：pause 要等快照上传完才返回（KASandbox 提交 <code>01665a0c9</code>，上游不等），模板注入了 gsd、guest 内核打了补丁。两套用同一份 Firecracker。每档每种模式 <code>repeat</code> n = 24，客户端墙钟 p50，单位 ms。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -20853,8 +20853,8 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 </tr>
 <tr>
 <td>重启 orchestrator 后旧沙箱的 Firecracker 残留</td>
-<td>已修复（RPM <code>2026.09-4</code>），950 待复验</td>
-<td><code>nomad job restart</code> 时 orchestrator 关网络池超过 job 的 30 s kill_timeout，被 SIGKILL；Firecracker 在自己的进程组里，不随之退出，由 init 收养，一直占着内存和网络槽位（920B 2026-11-17 复现）。deltabox 分支 2026-07 已有启动时清理遗留 Firecracker 的代码，构建 RPM 的 <code>0001</code> 补丁没有带上。<code>2026.09-4</code> 的补丁加了同样的清理（只结束父进程为 init、路径在 <code>/fc-versions/</code> 下、API socket 名为 <code>fc-&lt;沙箱&gt;-&lt;随机&gt;.sock</code> 的进程），920B 复验 T18 通过；被结束的 Firecracker 占过的 NBD 设备暂不回收</td>
+<td>已修复（2026-11-17 修复版 RPM <code>2026.09-3</code>），950 待复验</td>
+<td><code>nomad job restart</code> 时 orchestrator 关网络池超过 job 的 30 s kill_timeout，被 SIGKILL；Firecracker 在自己的进程组里，不随之退出，由 init 收养，一直占着内存和网络槽位（920B 2026-11-17 复现）。deltabox 分支 2026-07 已有启动时清理遗留 Firecracker 的代码，构建 RPM 的 <code>0001</code> 补丁没有带上。<code>2026.09-3</code> 的补丁加了同样的清理（只结束父进程为 init、路径在 <code>/fc-versions/</code> 下、API socket 名为 <code>fc-&lt;沙箱&gt;-&lt;随机&gt;.sock</code> 的进程），920B 复验 T18 通过；被结束的 Firecracker 占过的 NBD 设备暂不回收</td>
 </tr>
 <tr>
 <td>netns 泄漏、偶发 GC 长暂停</td>
