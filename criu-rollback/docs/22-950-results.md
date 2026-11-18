@@ -339,7 +339,8 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 | 项 | 值 |
 |---|---|
-| 仓库提交 | e2b-infra `1dd8525`（950 上的工作区有未提交改动，内容未回传） |
+| 仓库提交 | e2b-infra `1dd8525`（950 上工作区里多出来的是用 LFS 拉下来的 tar.gz 包，不是代码改动） |
+| UB（灵衢远端内存） | 宿主 11:22 宕机重启之后没有配置 UB，下面各步都在这之后跑；第一、二轮（2026-11-17）跑的时候配置了 UB，当时没有记录进程内存落点 |
 | 被测文件 | gsd `1a0a3b67…`（前两轮是 `421597e5…`），orchestrator `063e580e…`、guest 内核 `b81306e7…` 与前两轮相同 |
 | 结果目录 | extended `test950/results/20261118-111424-extended/`，native `…/20261118-142626-native/`，compare `…/20261118-144513-compare/` |
 | 验收 `criu/acceptance` | 13:49:10 起，3 分 51 秒，**PASS**：guest-check、verify_gsd、verify_fixes、verify_multitree、clear_refs_race、restore_incremental、perf-run1..3 全部 PASS。`restore_incremental` 是本轮新加的一步，核对 [16](16-known-limits.md) 的 L-18 在 950 上已修复 |

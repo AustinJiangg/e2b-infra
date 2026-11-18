@@ -26,7 +26,7 @@
 
 手册的讲解源码为 `KASandbox_0904/deltabox-dev@57a30632cb9cb8eb67a35dd226d9ef4b40458af4`。这是代码阅读基准，不是对所有被测二进制身份的认定。
 
-- 2026-11-18 的三档（extended、native、compare）在重新部署之后跑，沙箱级 orchestrator sha256 是 `e54489e4…`，与 11-17 那一轮不是同一份二进制，两轮的耗时不直接相减。extended 的 perf 表、hdbss-orders 的 order 对比表、idle 的逐臂明细已经回传，见手册[第 18 章 §9](../../docs/18-950-performance.md#9-第二轮2026-11-18-extended)；这一轮的 `analyze.log`（分段、产物、拟合）没有回传。
+- 2026-11-18 的三档（extended 续跑部分、native、compare）在宿主重启之后、没有配置 UB（灵衢远端内存）时跑；2026-11-17 及更早的各轮跑的时候配置了 UB，当时没有记录进程内存落点。三档在重新部署之后跑，沙箱级 orchestrator sha256 是 `e54489e4…`，与 11-17 那一轮不是同一份二进制，两轮的耗时不直接相减。extended 的 perf 表、hdbss-orders 的 order 对比表、idle 的逐臂明细已经回传，见手册[第 18 章 §9](../../docs/18-950-performance.md#9-第二轮2026-11-18-extended)；perf-full 的 `analyze.log` 也已回传，short 档组的没有。
 - 2026-11-17 standard 的 orchestrator（`/usr/bin/template-manager` sha256 `a5d03902…`）与 FC（`18f3faa7…`）身份由 `test950.sh` 在同一轮记录，与 2026-11-06 原生分档是同一份 orchestrator。能力文件自报 commit `4853232`，与源码、部署包的对应仍需核实。
 - perf、func、HDBSS 的原始 JSON / JSONL 没有回传，统计值来自日志文本，未独立重算；并发 A 段 N=16 的 96 个操作起止时间已回传。原生分档一轮 JSON 已回传。
 - 950 小时级持续运行、滚动保留与资源收敛，及已跳过专项，需要对应验证。
