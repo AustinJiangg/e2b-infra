@@ -1,4 +1,4 @@
-# 29 · 排障
+# 30 · 排障
 
 ## 本章目标
 
@@ -9,8 +9,8 @@
 3. 分清哪些症状调用方自己就能处理、哪些要运维动手、哪些是已知项不必处理；
 4. 知道每条症状背后的原理在哪一章。
 
-上一章（[28](28-configuration-and-observability.md)）讲了有哪些开关、计时键、日志和状态文件；本章把它们用在出问题的时候。每条按"症状 / 看哪里 / 怎么处置 / 原理"写，报错文本都是代码里的原文，可以直接搜索。
-错误码与异常类的完整定义在 [14](14-failure-semantics.md)，已知限制的总表在 [16](16-known-limits.md)，本章不重复定义，只讲怎么查、怎么办。下一章（[30](30-acceptance-runbook.md)）是上机验收。
+上一章（[29](29-configuration-and-observability.md)）讲了有哪些开关、计时键、日志和状态文件；本章把它们用在出问题的时候。每条按"症状 / 看哪里 / 怎么处置 / 原理"写，报错文本都是代码里的原文，可以直接搜索。
+错误码与异常类的完整定义在 [14](14-failure-semantics.md)，已知限制的总表在 [16](16-known-limits.md)，本章不重复定义，只讲怎么查、怎么办。下一章（[31](31-acceptance-runbook.md)）是上机验收。
 
 ---
 
@@ -42,7 +42,7 @@ journalctl -u gsd --no-pager -o cat | grep '^{' | grep -E '"level":"(warn|error)
 python3 -m json.tool < /var/lib/gsd/snapshots/state.json                          # 层栈、checkpoint、增量关系
 ```
 
-日志里每条消息的含义在 [28](28-configuration-and-observability.md) 的"日志"一节，状态文件的字段在同一章的"state.json"一节。连续做过很多次 checkpoint 之后如果发现 gsd 的日志残缺，见 §14。
+日志里每条消息的含义在 [29](29-configuration-and-observability.md) 的"日志"一节，状态文件的字段在同一章的"state.json"一节。连续做过很多次 checkpoint 之后如果发现 gsd 的日志残缺，见 §14。
 
 **宿主上 orchestrator 的日志**（建模板失败、guest 失联时用）。新 920B 上 orchestrator 由 nomad 的 job `template-manager-system` 运行，日志这样取：
 
@@ -74,7 +74,7 @@ ps -eo pid,ppid,uid,stat,cmd --forest | awk '$3==1000 || NR==1'                 
 ls -l /proc/<信息里的进程号>/fd                                                       # 找到 pipe:[…] 或 socket:[…] 的那一项
 ```
 
-怎么处置：让相连的进程待在同一棵树里——由同一条命令起，并且不要让其中某个进程脱离出去被 PID 1 收养。改写的例子见 [25](25-quickstart.md) 的"第一次用会遇到的三件事"。如果多出来的那棵树是早先某条命令遗留的孤儿进程，杀掉它即可。
+怎么处置：让相连的进程待在同一棵树里——由同一条命令起，并且不要让其中某个进程脱离出去被 PID 1 收养。改写的例子见 [26](26-quickstart.md) 的"第一次用会遇到的三件事"。如果多出来的那棵树是早先某条命令遗留的孤儿进程，杀掉它即可。
 
 原理：[10](10-process-trees.md)。
 
@@ -101,7 +101,7 @@ grep -E 'MemAvailable|MemTotal' /proc/meminfo
 journalctl -u gsd --no-pager -o cat | grep -F 'not enough room' | tail -n 3   # store_short / mem_short 指明是哪一项
 ```
 
-怎么处置：删掉不需要的 checkpoint。注意删除的顺序——有增量子节点的 checkpoint 被删时只是隐藏、镜像不释放，要从新往旧删或整条链一起删（[26](26-semantics-and-limits.md)）；删完再看一次 `df` 确认真的腾出来了。
+怎么处置：删掉不需要的 checkpoint。注意删除的顺序——有增量子节点的 checkpoint 被删时只是隐藏、镜像不释放，要从新往旧删或整条链一起删（[27](27-semantics-and-limits.md)）；删完再看一次 `df` 确认真的腾出来了。
 是 `MemAvailable` 不够时，除了删 checkpoint（镜像占的就是内存），还可以让沙箱里的进程少占内存，或者给模板配更大的内存。估算按全量乘 1.2，偏保守是有意的：写到一半才发现放不下，后果是 guest 内存耗尽。
 
 **（二）`… layer stack too deep: N lower layers, ioctl options M bytes > kernel limit 4096`**
@@ -170,7 +170,7 @@ journalctl -u gsd --no-pager -o cat | grep '^{' | grep -E 'criu dump failed|resu
 ps -eo pid,stat,rss,cmd --sort=-rss | head        # 进程是否都回到了运行状态（STAT 不是 T）、哪个进程最大
 ```
 
-怎么处置：正常负载下保存远用不到 60 秒（量级见 [20](20-920b-performance.md)），超时多半说明 guest 当时极度缺内存或缺 CPU，先查这个。确实需要更长时限时调 gsd 的 `-criu-dump-timeout`，并相应调大客户端的 `request_timeout`（[28](28-configuration-and-observability.md)）。
+怎么处置：正常负载下保存远用不到 60 秒（量级见 [20](20-920b-performance.md)），超时多半说明 guest 当时极度缺内存或缺 CPU，先查这个。确实需要更长时限时调 gsd 的 `-criu-dump-timeout`，并相应调大客户端的 `request_timeout`（[29](29-configuration-and-observability.md)）。
 
 **restore 一侧的超时不是这个错误码。** CRIU 恢复超时发生在进程已经被杀之后，按 restore 半途失败处理，抛的是 `CheckpointRestoreException`，信息里同样带 `context deadline exceeded`。转 §5。
 
@@ -204,7 +204,7 @@ ps -eo pid,ppid,uid,stat,cmd --forest | awk '$3==1000 || NR==1'                 
 怎么处置：**再 restore 一次。** 这是唯一的出路，也是设计好的出路：下一次 restore 会先把残留的用户进程（包括上一次已经恢复出来的那几棵树）全部杀掉，再从头做。
 
 - 先重试同一个 checkpoint。失败如果是偶发的（例如超时），这一次多半就成功了。
-- 同一个 checkpoint 反复失败，读 `criu-restore.log` 的尾部找原因。一类已知原因是被恢复的进程开着 `/dev/shm` 或 `/run` 里的文件，而这些目录不回滚、文件已经被删或改了大小（[26](26-semantics-and-limits.md)）。这时这个 checkpoint 的进程镜像实际上恢复不了，换一个 checkpoint restore；任何一个成功的 restore 都能解除降级。
+- 同一个 checkpoint 反复失败，读 `criu-restore.log` 的尾部找原因。一类已知原因是被恢复的进程开着 `/dev/shm` 或 `/run` 里的文件，而这些目录不回滚、文件已经被删或改了大小（[27](27-semantics-and-limits.md)）。这时这个 checkpoint 的进程镜像实际上恢复不了，换一个 checkpoint restore；任何一个成功的 restore 都能解除降级。
 - 实在没有能恢复进程的 checkpoint 时，restore 一个只有文件系统的 checkpoint（`has_process_image` 为 `False`）也能解除降级，然后重新起进程。
 - 都不行就销毁沙箱重建。
 
@@ -264,7 +264,7 @@ T=$(curl -s -m 2 -X PUT -H 'X-metadata-token-ttl-seconds: 60' http://169.254.169
 curl -s -m 2 -H "X-metadata-token: $T" -H 'Accept: application/json' http://169.254.169.254/ | head -c 300
 ```
 
-怎么处置：前两种改客户端——用 [25](25-quickstart.md) 的 SDK，经 `Sandbox.create()` 或 `Sandbox.connect()` 拿到的沙箱对象会自动带对令牌。在 guest 里手工调 gsd 的 RPC 时，加 `-H 'X-Access-Token: <这个沙箱的访问令牌>'`；非 secure 沙箱不需要；`/health` 任何时候都不需要。
+怎么处置：前两种改客户端——用 [26](26-quickstart.md) 的 SDK，经 `Sandbox.create()` 或 `Sandbox.connect()` 拿到的沙箱对象会自动带对令牌。在 guest 里手工调 gsd 的 RPC 时，加 `-H 'X-Access-Token: <这个沙箱的访问令牌>'`；非 secure 沙箱不需要；`/health` 任何时候都不需要。
 第三种是宿主一侧的问题：上面两条 `curl` 也拿不到内容时，是沙箱的元数据服务不通，收集 orchestrator 的日志上报；偶发一次可以直接重试，gsd 每个请求都重新读元数据。
 
 原理：[05](05-architecture.md)。
@@ -286,14 +286,14 @@ curl -s -m 3 http://127.0.0.1:49984/health
 
 | 结果 | 原因 | 处置 |
 |---|---|---|
-| `/usr/bin/gsd` 不存在，或没有 `gsd.service` | 这个模板不是在进程级栈下建的（或建模板时 `HOST_GSD_PATH=off`） | 换用 `base-criu` 这类在进程级栈下建的模板（[27](27-deployment.md)） |
+| `/usr/bin/gsd` 不存在，或没有 `gsd.service` | 这个模板不是在进程级栈下建的（或建模板时 `HOST_GSD_PATH=off`） | 换用 `base-criu` 这类在进程级栈下建的模板（[28](28-deployment.md)） |
 | 服务不是 `active`，或在反复重启 | gsd 起不来 | `systemctl status gsd --no-pager -l`、`journalctl -u gsd --no-pager \| tail -n 40` 看退出原因 |
 | guest 里三条都正常，SDK 仍然连不上 | 问题在宿主到 guest 的路径或客户端配置 | 见下 |
 
-guest 里正常时查客户端：SDK 实际连的地址是 `sbx.checkpointd_api_url`，打印出来看。它应当是 `http://49984-<沙箱 ID>.<域名>`，除非设了 `E2B_CHECKPOINTD_URL` 或 `E2B_SANDBOX_URL`——这两个变量如果是为别的环境留下的，会把请求带到错误的地方（[28](28-configuration-and-observability.md) 的 SDK 开关表）。宿主代理是按 `Host` 里的 `49984-<沙箱 ID>` 解析目标的，`E2b-Sandbox-Port` 请求头只在本地开发环境下才被采用，所以地址写错时请求头救不回来。
+guest 里正常时查客户端：SDK 实际连的地址是 `sbx.checkpointd_api_url`，打印出来看。它应当是 `http://49984-<沙箱 ID>.<域名>`，除非设了 `E2B_CHECKPOINTD_URL` 或 `E2B_SANDBOX_URL`——这两个变量如果是为别的环境留下的，会把请求带到错误的地方（[29](29-configuration-and-observability.md) 的 SDK 开关表）。宿主代理是按 `Host` 里的 `49984-<沙箱 ID>` 解析目标的，`E2b-Sandbox-Port` 请求头只在本地开发环境下才被采用，所以地址写错时请求头救不回来。
 如果报错是 403，消息里有 `Sandbox is secured with traffic access token`（`is_running()` 此时是抛 `SandboxException` 而不是返回 `False`），说明沙箱是用 `allow_public_traffic=False` 创建的，而 SDK 没有给 gsd 的请求带入口流量令牌：升级到含提交 `dcca61266` 的 SDK；自己拼请求时加上请求头 `e2b-traffic-access-token`，值取 `sbx.traffic_access_token`。
 
-切栈刚完成时建沙箱报 `500: Failed to place sandbox` 是另一回事：等 1～2 分钟重试即可（[27](27-deployment.md)），原因没有单独查过。
+切栈刚完成时建沙箱报 `500: Failed to place sandbox` 是另一回事：等 1～2 分钟重试即可（[28](28-deployment.md)），原因没有单独查过。
 
 地址没问题时，确认同一个沙箱的普通命令（`sbx.commands.run("true")`）能通：它走的是同一个代理、只是端口不同；普通命令也不通就不是 gsd 的问题。
 
@@ -334,7 +334,7 @@ python3 -c "import json; print(json.load(open('/var/lib/gsd/snapshots/state.json
 
 | 检查 | 命令 | 含义与处置 |
 |---|---|---|
-| 透明大页 | `cat /sys/kernel/mm/transparent_hugepage/enabled` 应为 `always madvise [never]`；`journalctl -u gsd --no-pager -o cat \| grep -F transparent_hugepage` | 不是 `[never]` 时，脏页按 2 MiB 记，零散的小写入会让增量膨胀成接近全量。看 `dmesg \| grep overlay-init` 里有没有 `WARNING: failed to set transparent_hugepage=never`。模板有问题，重建（[27](27-deployment.md)）；不要为了别的目的把它改回 `always` |
+| 透明大页 | `cat /sys/kernel/mm/transparent_hugepage/enabled` 应为 `always madvise [never]`；`journalctl -u gsd --no-pager -o cat \| grep -F transparent_hugepage` | 不是 `[never]` 时，脏页按 2 MiB 记，零散的小写入会让增量膨胀成接近全量。看 `dmesg \| grep overlay-init` 里有没有 `WARNING: failed to set transparent_hugepage=never`。模板有问题，重建（[28](28-deployment.md)）；不要为了别的目的把它改回 `always` |
 | 脏页标记没重置 | 上一次 checkpoint 的 `clear_refs_failed`；日志 `clear_refs failed; next incremental dump of this process will be larger` | 上一次 checkpoint 之后有进程没能重置标记，这一次它的增量偏大。偶发、且那个进程此后正常则不必处理 |
 | 负载自己 | 两次 checkpoint 之间进程是否新分配了大块内存 | 新分配的内存区域整个算脏，这是内核记账的方式，与实际写了多少无关。高频 checkpoint 的负载应预先分配、原地改写（[03](03-criu-and-incremental-memory.md) 的"假全量"） |
 | 确实写了那么多 | — | 增量的大小就是两次之间改过的内存 |
@@ -355,7 +355,7 @@ ls -l /proc/<进程号>/fd | head -n 30       # 它一直开着的文件
 dmesg | grep -c 'failed to get inode'      # 应为 0，见下
 ```
 
-怎么处置：这是既定语义，不是故障。不在回滚范围内的进程没有被重启，但它脚下的文件系统被换掉了：它的当前目录如果只属于被丢弃的那段历史，从那里出发的写操作就返回 `ESTALE`。让这个进程重新 `cd` 到一个绝对路径、重新打开文件，或者在 restore 之后重启这个服务。需要长期运行又会碰文件的辅助进程，要么以默认用户运行（让它跟着回滚），要么只用绝对路径、不长期持有 overlay 上的句柄（[26](26-semantics-and-limits.md)）。
+怎么处置：这是既定语义，不是故障。不在回滚范围内的进程没有被重启，但它脚下的文件系统被换掉了：它的当前目录如果只属于被丢弃的那段历史，从那里出发的写操作就返回 `ESTALE`。让这个进程重新 `cd` 到一个绝对路径、重新打开文件，或者在 restore 之后重启这个服务。需要长期运行又会碰文件的辅助进程，要么以默认用户运行（让它跟着回滚），要么只用绝对路径、不长期持有 overlay 上的句柄（[27](27-semantics-and-limits.md)）。
 
 需要区分的另一种情况：如果 restore 之后**按绝对路径**访问一些本该存在的目录也整条路径 `ESTALE`，并且 `dmesg` 里有 `failed to get inode (-116)`，那是修复之前的内核的缺陷，说明模板固化的是旧内核，转 §11。
 
@@ -381,7 +381,7 @@ dmesg | grep -c -E 'ovl_ioctl_checkpoint|ovl_lookup:'
 bash scripts/ops/switch-gsd-new920b.sh status
 ```
 
-怎么处置：guest 里的提交号、sha256、内核版本串与宿主上的对不上，原因只有一个——**模板是换文件之前建的**。模板固化了建模板那一刻的内核、gsd 和启动脚本，沙箱从它的快照恢复，不会去读宿主上后来的文件。不用缓存地重建模板（[27](27-deployment.md)），再核对一次。
+怎么处置：guest 里的提交号、sha256、内核版本串与宿主上的对不上，原因只有一个——**模板是换文件之前建的**。模板固化了建模板那一刻的内核、gsd 和启动脚本，沙箱从它的快照恢复，不会去读宿主上后来的文件。不用缓存地重建模板（[28](28-deployment.md)），再核对一次。
 宿主上 `status` 显示的 `HOST_KERNELS_DIR` 不是你放补丁内核的目录时，是切栈没有生效，先重新切栈再重建模板。
 
 还有一种更隐蔽的情况：模板是在进程级栈下建的，但建模板时 `HOST_KERNELS_DIR` 指向了没打补丁的内核。建模板时的自检只验证 gsd 服务、`/health` 和 CRIU 的版本，**不验证内核是否带补丁**（[16](16-known-limits.md) 的 L-16），所以这样的模板能建成功，要到第一次 checkpoint 才失败（切层的 ioctl 被内核拒绝，或 CRIU 因内核没有脏页跟踪而报错；这两种失败的具体报错文本没有实测过）。判断办法仍然是上面的 `cat /proc/version`，与补丁内核的版本串对照（参考值在 [19](19-920b-functional.md)）。
@@ -396,16 +396,16 @@ bash scripts/ops/switch-gsd-new920b.sh status
 
 | 报错 | 原因 | 处置 |
 |---|---|---|
-| `error reading gsd file (HOST_GSD_PATH): open … no such file or directory` | orchestrator 要注入 gsd，但读不到二进制。路径是内置默认的 `/fc-gsd/gsd` 时：job 里没设 `HOST_GSD_PATH`，回落到了旧布局（现在文件在 `/fc-criu/gsd`，用 `950.sh criu` 切栈会设好）。路径是 `/fc-criu/gsd` 时：文件没放，执行 `950.sh install`。路径以 orchestrator 的工作目录开头、末尾是 `OFF` 或 `Off` 时：有人想关掉注入但写了大写——只有小写 `off` 才是关，其他值被当成相对路径 | 把 gsd 放到位（[27](27-deployment.md)）；或把环境变量改成小写 `off` 后重启 orchestrator |
+| `error reading gsd file (HOST_GSD_PATH): open … no such file or directory` | orchestrator 要注入 gsd，但读不到二进制。路径是内置默认的 `/fc-gsd/gsd` 时：job 里没设 `HOST_GSD_PATH`，回落到了旧布局（现在文件在 `/fc-criu/gsd`，用 `950.sh criu` 切栈会设好）。路径是 `/fc-criu/gsd` 时：文件没放，执行 `950.sh install`。路径以 orchestrator 的工作目录开头、末尾是 `OFF` 或 `Off` 时：有人想关掉注入但写了大写——只有小写 `off` 才是关，其他值被当成相对路径 | 把 gsd 放到位（[28](28-deployment.md)）；或把环境变量改成小写 `off` 后重启 orchestrator |
 | 导入镜像后 `docker images` 里 `ubuntu:22.04-custom-criu421` 是 0B、架构为空，`docker run` 报 `content digest sha256:b7a2fdd2…: not found` | docker 用 containerd 镜像存储，读归档里的 `index.json` 和它指向的 OCI 清单；e2b-infra `f5c01d5` 之前的归档缺这份清单 | `git pull` 后重跑 `950.sh all`：归档会重新拼出，导入脚本先去掉旧的空镜像标签 |
 | 推送镜像报 `504 Gateway Time-out`；或 `502 Bad Gateway`、`connect: connection refused` | 504：docker daemon 配了代理，推送的主机名不在 `NO_PROXY` 里，请求被转给代理。502 和 connection refused：Harbor 的 2900 端口没有在服务，常见于重启 docker 之后 | 504：推送走 `SERVER_IP:2900`（`57b333e` 起默认如此），或把 `harbor` 加进 docker 的 `NO_PROXY`。502 和 connection refused：`curl --noproxy '*' http://127.0.0.1:2900/v2/` 应返回 401；不是 401 时重启 Harbor 或重新执行沙箱级部署 |
 | `gsd is not healthy after injection (…): gsd check failed: gsd not healthy after 10s: systemctl is-active=<…>, /health=<…>` | 注入并重启 gsd 之后，约 10 秒内它没有同时满足"服务 active"和"`/health` 回 ok"。报错后面附着 `systemctl status gsd` 的最后 20 行 | 看附带的 `is-active` 与 `/health`：服务没起来多半是二进制不对（架构不是 arm64、文件损坏）；`/health` 是 `degraded` 时原因就在其中（按 §6 的表判断） |
-| `… gsd check failed: /usr/sbin/criu is not 4.x: …` 或 `… /usr/sbin/criu --version failed: …` | 基础镜像里没有 4.x 的 CRIU，或不在 `/usr/sbin/criu`。建模板不会替你安装 | 用 `Dockerfile.criu421` 建的镜像做基础镜像（[27](27-deployment.md)） |
+| `… gsd check failed: /usr/sbin/criu is not 4.x: …` 或 `… /usr/sbin/criu --version failed: …` | 基础镜像里没有 4.x 的 CRIU，或不在 `/usr/sbin/criu`。建模板不会替你安装 | 用 `Dockerfile.criu421` 建的镜像做基础镜像（[28](28-deployment.md)） |
 | `failed to copy gsd binary to sandbox`、`failed to inject gsd binary`、`systemctl restart gsd: …` | 往构建中的沙箱里拷文件或执行命令失败 | 不是 gsd 特有的问题，按 orchestrator 日志里紧邻的错误查沙箱本身 |
 
 取 orchestrator 日志时把 §0 那条命令的关键字换成 `gsd check failed`、`error reading gsd file` 或 `inject-gsd`。
 
-另有两点提醒。第一，建模板成功只说明自检通过，不说明内核对（§11）。第二，换了 gsd 或内核之后重建模板要保证不用构建缓存，否则可能复用旧的基础层（[27](27-deployment.md)）。
+另有两点提醒。第一，建模板成功只说明自检通过，不说明内核对（§11）。第二，换了 gsd 或内核之后重建模板要保证不用构建缓存，否则可能复用旧的基础层（[28](28-deployment.md)）。
 
 原理：[06](06-guest-boot-and-injection.md)。
 
@@ -446,7 +446,7 @@ print('当前层栈', len(s['overlay']['layers']), '层；checkpoint', len(s['ch
 
 看哪里：`journalctl -u systemd-journald --no-pager | grep -c Suppressed`，非 0 即是。
 
-怎么处置：journald 对每个服务限流，CRIU 的详细输出把额度用完后，gsd 自己的日志也被一起丢掉。需要完整日志的场合，开始之前给 `gsd.service` 加一个关闭限流的 drop-in 并重启 gsd，做法在 [28](28-configuration-and-observability.md) 的"取日志时要知道的三件事"。已经丢掉的日志找不回来；这时 `state.json` 和各镜像目录里的 `criu-restore.log` 仍然可用。
+怎么处置：journald 对每个服务限流，CRIU 的详细输出把额度用完后，gsd 自己的日志也被一起丢掉。需要完整日志的场合，开始之前给 `gsd.service` 加一个关闭限流的 drop-in 并重启 gsd，做法在 [29](29-configuration-and-observability.md) 的"取日志时要知道的三件事"。已经丢掉的日志找不回来；这时 `state.json` 和各镜像目录里的 `criu-restore.log` 仍然可用。
 
 ---
 

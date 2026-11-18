@@ -195,9 +195,9 @@ bash rollback/scripts/950/run.sh long
 | 11 | 字节配额默认关 | 是否在交付件里默认开、开多大待定；crtest 没有对应用例，端到端验证只在工作区脚本里做过 |
 | 12 | SDK 覆盖层自检 | 判据是“原有异常子类都在、映射表全是子类”，在两次部署件上重跑 smoke 都是 5 / 5（[附录 B §5](B-920b-results.md#5-部署后回归)） |
 | 13 | 开发态工具 | `correctness.py` 已在两次部署件上跑过，都是 ALL PASS（[附录 B §5](B-920b-results.md#5-部署后回归)）。`correctness.py`、`pause_verify.py`、`loop.py` 不在 950 上跑，覆盖关系见[第 16 章](16-test-methodology.md)的验证项总表；`compat_matrix.py` 已移到 `acceptance/`，由 `run.sh func` 运行；`timing.py` 未在代码基准上跑 |
-| 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-功能回归结果)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)，原生分档见 [第 19 章](19-native-pause-resume.md)，perf 的 12 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 21 章](21-concurrency-and-longrun.md)。2026-11-17 standard 一轮的 orchestrator 与 FC sha256、宿主内核和机器型号由 `test950.sh` 在同一轮记录；原始 JSON / JSONL 未回传，源码 commit 与部署包的对应仍待核实。950 重启 / 注入 / 配额专项已跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 21 章 §3](21-concurrency-and-longrun.md#10-到-950-上要重测什么) |
+| 14 | 950 已归档范围与身份条件 | func 见 [第 17 章 §3](17-functional-verification.md#3-功能回归结果)，smoke 见 [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收)，原生分档见 [第 19 章](19-native-pause-resume.md)，2026-11-18 perf-full 的 18 档与串行 100 次见 [第 18 章 §2](18-950-performance.md#2-条件与来源)～[第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)，2026-11-17 的 12 档见 [第 18 章 §10](18-950-performance.md#10-第一轮2026-11-17-standard配置了-ub)，HDBSS 专项见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)，并发 A/B 与 func 短稳态在 [第 21 章](21-concurrency-and-longrun.md)。2026-11-17 standard 一轮的 orchestrator 与 FC sha256、宿主内核和机器型号由 `test950.sh` 在同一轮记录；原始 JSON / JSONL 未回传，源码 commit 与部署包的对应仍待核实。950 重启 / 注入 / 配额专项已跳过，空闲后专项与小时级并发长跑仍缺结果；见 [第 21 章 §3](21-concurrency-and-longrun.md#10-到-950-上要重测什么) |
 | 15 | HDBSS 与软件写保护的收益对照 | 已决定不做：950 上只量 HDBSS 自身的性能，不测写保护 |
-| 16 | 950 上的 HDBSS L3 证据落盘 | 已回传 2026-11-17 16:58 默认 order 1 的能力、自报、dmesg / FC 日志、冷 / 热写与 debugfs 退出计数，见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)；JSON / JSONL 尚未回传，不从文本推定长期表现 |
+| 16 | 950 上的 HDBSS L3 证据落盘 | 已回传 2026-11-17 16:58 与 2026-11-18 13:19 两轮默认 order 1 的能力、自报、dmesg / FC 日志、冷 / 热写与 debugfs 退出计数，2026-11-18 另有 order 9 的对比，见 [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测)；JSON / JSONL 尚未回传，不从文本推定长期表现 |
 | 17 | `FC_HDBSS_ORDER` 取值对比 | 已确认默认 order 1 生效；已跑的只有 `run.sh hdbss`，没有 `--orders`，其他 order 比较仍待补。入口为 `run.sh hdbss --orders 1,2,4,6,9 --allow-restart`（[§5.1](#51-hdbss-档hdbss-专项)） |
 | 18 | 跨树回滚 | 有单元测试（丢失 epoch 后跨树 restore 三种 sidecar 形态），无端到端用例 |
 | 19 | HDBSS 在 vCPU 创建之后武装 | 只靠调用点位置保证，没有断言 |
@@ -224,9 +224,9 @@ bash rollback/scripts/950/run.sh long
 |---|---|---|---|
 | 部署预检与直链正确性（smoke） | 2026-11-17：PASS 5，59 / 59；结尾 smoke-after 同样 PASS 5 | 2026-11-06 部署：PASS 5，59 项通过，预检 WARN 1（无 HDBSS） | [第 17 章 §4](17-functional-verification.md#4-部署预检与正确性验收) |
 | 默认功能回归（func） | 2026-11-17：PASS 17 / FAIL 0 / SKIP 5，16 个用例 863 条硬断言；SDK pytest 未跑 | 2026-11-06：PASS 17 / FAIL 0 / SKIP 4，SDK 67 passed | [第 17 章 §3](17-functional-verification.md#3-功能回归结果) |
-| 分档性能 | 2026-11-17：十二档 270 次迭代，判定见第 18 章 | 全表 3 遍 1040 次迭代 | [第 18 章](18-950-performance.md)、[第 20 章 §2](20-920b-performance.md#2-分档基准与判定) |
-| 同点串行 restore | 100 次 | 5000 次 | [第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)、[第 20 章 §3](20-920b-performance.md#3-单沙箱串行与空闲后-restore) |
-| HDBSS | 默认 order 1：69 次增量迭代，MD5 不一致 0 | 无 HDBSS，只作负样本与流程验证 | [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测) |
+| 分档性能 | 2026-11-18：十八档 1040 次迭代（2026-11-17：十二档 270 次），判定见第 18 章 | 全表 3 遍 1040 次迭代 | [第 18 章](18-950-performance.md)、[第 20 章 §2](20-920b-performance.md#2-分档基准与判定) |
+| 同点串行 restore | 100 次（11-17、11-18 各轮） | 5000 次 | [第 18 章 §7](18-950-performance.md#7-同-checkpoint-串行-restore-100-次)、[第 20 章 §3](20-920b-performance.md#3-单沙箱串行与空闲后-restore) |
+| HDBSS | 默认 order 1：69 次增量迭代，MD5 不一致 0；2026-11-18 order 1 与 9 各 63 次，MD5 不一致 0 | 无 HDBSS，只作负样本与流程验证 | [第 18 章 §8](18-950-performance.md#8-hdbss-专项默认-order-1-的启用证据与写密集实测) |
 | 原生 pause / resume 分档 | 2026-11-06：pause 模式 108 个样本，失败 0 | 2026-11-06：精确增量与对照构建各 216 个样本，失败 0，含 snapshot 模式 | [第 19 章](19-native-pause-resume.md) |
 | 短时并发与短稳态 | A/B 段（N=16 有 1 次 restore 应答丢失）、T36 4 沙箱 × 120 s、T40 | A/B 段、T36、T40 | [第 21 章](21-concurrency-and-longrun.md) |
 | 长跑、滚动保留与资源走平 | 无结果 | 历史长测，含 T36 全规模 | [附录 B §10](B-920b-results.md#10-最终版的结果) |

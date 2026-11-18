@@ -7,7 +7,7 @@
 
 代码基准是 KASandbox_0904 的 `criu-rollback-dev@bc3cce913`，gsd 守护进程、orchestrator 注入、Python SDK 和 guest 内核补丁同仓。新 920B 上已验证，950 未运行，只支持 arm64 guest。
 
-在 Firecracker 层回滚整个虚拟机的方案是另一本书，即[沙箱级手册](../../rollback/docs/README.md)；两者的对比只在 [24](24-vs-sandbox-level.md)，读本书不需要先读它。
+在 Firecracker 层回滚整个虚拟机的方案是另一本书，即[沙箱级手册](../../rollback/docs/README.md)；两者的对比只在 [24](24-vs-sandbox-level.md)、[25](25-tiered-performance-testing.md)，读本书不需要先读它。
 
 ---
 
@@ -15,7 +15,7 @@
 
 ### 按顺序读
 
-第一篇讲问题和原理，不要求内核或 CRIU 背景；第二篇逐个机制讲实现，默认读过第一篇；第三篇讲耗时由什么构成；第四篇讲怎么测、测出了什么、哪些没有测；第五篇与沙箱级对比；第六篇是使用与运维。
+第一篇讲问题和原理，不要求内核或 CRIU 背景；第二篇逐个机制讲实现，默认读过第一篇；第三篇讲耗时由什么构成；第四篇讲怎么测、测出了什么、哪些没有测；第五篇与沙箱级对比，并讨论两套的分档性能测试该怎么设计；第六篇是使用与运维。
 
 每一章开头的"本章目标"列出读完应能回答的问题，结尾的"本章要点"是复习用的摘要。后面的章会用前面的概念；前面的章需要后面的结论时，写明在哪一章。
 
@@ -23,11 +23,11 @@
 
 | 你是 | 建议路径 |
 |---|---|
-| **开发者**：要在代码里调用 checkpoint / restore | [25](25-quickstart.md) → [26](26-semantics-and-limits.md) → [14](14-failure-semantics.md)；想知道大概多快再看 [19](19-920b-functional.md) 的"结论先行"和 [20](20-920b-performance.md) |
-| **运维**：部署、建模板、配置、排障、上机验收 | [27](27-deployment.md) → [28](28-configuration-and-observability.md) → [29](29-troubleshooting.md) → [30](30-acceptance-runbook.md)；错误含义查 [14](14-failure-semantics.md)，已知限制查 [16](16-known-limits.md) |
+| **开发者**：要在代码里调用 checkpoint / restore | [26](26-quickstart.md) → [27](27-semantics-and-limits.md) → [14](14-failure-semantics.md)；想知道大概多快再看 [19](19-920b-functional.md) 的"结论先行"和 [20](20-920b-performance.md) |
+| **运维**：部署、建模板、配置、排障、上机验收 | [28](28-deployment.md) → [29](29-configuration-and-observability.md) → [30](30-troubleshooting.md) → [31](31-acceptance-runbook.md)；错误含义查 [14](14-failure-semantics.md)，已知限制查 [16](16-known-limits.md) |
 | **评审**：判断设计是否成立、证据是否充分 | [04](04-goals-and-tradeoffs.md) → [14](14-failure-semantics.md) → [16](16-known-limits.md) → [18](18-testing-and-debug-kernel.md) → [19](19-920b-functional.md) → [23](23-gaps-and-boundaries.md)；关心内核侧的正确性论证再读 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)，关心修了什么读[附录 C](C-issue-resolution.md) |
 | **接手开发** | 按顺序读完第一到第三篇，再读[附录 B](B-extending.md)；动性能相关的代码前读[附录 D](D-restore-slowness-case.md)、[附录 E](E-regression-case.md) |
-| **选型**：进程级和沙箱级该用哪个 | [02](02-problem-and-scope.md) → [24](24-vs-sandbox-level.md) |
+| **选型**：进程级和沙箱级该用哪个 | [02](02-problem-and-scope.md) → [24](24-vs-sandbox-level.md) → [25](25-tiered-performance-testing.md) |
 
 ---
 
@@ -81,17 +81,18 @@
 | 章 | 一句话 |
 |---|---|
 | [24 设计差异与性能对比](24-vs-sandbox-level.md) | 两种方案的逐项对比、成本模型的差别、什么时候用哪个 |
+| [25 分档性能测试：怎么测、怎么比](25-tiered-performance-testing.md) | 三类测试、现在的分档测法与 950 结果、为什么不合理、两次分析的测试设计 |
 
 ### 第六篇　使用与运维
 
 | 章 | 一句话 |
 |---|---|
-| [25 快速上手](25-quickstart.md) | 用仓库里的 SDK 跑通 checkpoint、restore、list、delete，以及第一次用会遇到的三件事 |
-| [26 语义与使用边界](26-semantics-and-limits.md) | 能回滚什么、进程树怎么组织、打开的文件、历史是一棵树、容量与生命周期 |
-| [27 部署](27-deployment.md) | 部件与构建、运行时布局、切到进程级栈、建模板、部署后自检、950 的部署流程 |
-| [28 配置与可观测性](28-configuration-and-observability.md) | 开关总表与计时键定义、日志、`/health`、`state.json` |
-| [29 排障](29-troubleshooting.md) | 按症状：看哪里、怎么处置、原理在哪一章 |
-| [30 上机验收](30-acceptance-runbook.md) | 前置条件、执行顺序与每步判据、怎么对数、结果怎么留档 |
+| [26 快速上手](26-quickstart.md) | 用仓库里的 SDK 跑通 checkpoint、restore、list、delete，以及第一次用会遇到的三件事 |
+| [27 语义与使用边界](27-semantics-and-limits.md) | 能回滚什么、进程树怎么组织、打开的文件、历史是一棵树、容量与生命周期 |
+| [28 部署](28-deployment.md) | 部件与构建、运行时布局、切到进程级栈、建模板、部署后自检、950 的部署流程 |
+| [29 配置与可观测性](29-configuration-and-observability.md) | 开关总表与计时键定义、日志、`/health`、`state.json` |
+| [30 排障](30-troubleshooting.md) | 按症状：看哪里、怎么处置、原理在哪一章 |
+| [31 上机验收](31-acceptance-runbook.md) | 前置条件、执行顺序与每步判据、怎么对数、结果怎么留档 |
 
 ### 附录
 
@@ -120,7 +121,7 @@
 
 **措辞。** "初始实现"指修复之前的代码；"修改前 / 修复后"指同一份代码的两个阶段；"进程级"指本书的方案，"沙箱级"指沙箱级手册的方案；"回滚"即 restore；拍快照的操作写 checkpoint，只有引用接口名时才写 `CreateCheckpoint`、`create()`。过程性的叙述（先怀疑什么、后来推翻什么）只在[附录 D](D-restore-slowness-case.md)、[附录 E](E-regression-case.md) 和 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) 各主题的"根因"小节里，其余章只写现状。
 
-**全书唯一的表。** 目录与层布局（[05](05-architecture.md)）、错误表（[14](14-failure-semantics.md)）、已知限制表（[16](16-known-limits.md)）、缺口表（[23](23-gaps-and-boundaries.md)）、两种方案的对比表（[24](24-vs-sandbox-level.md)）、开关总表与计时键（[28](28-configuration-and-observability.md)）、问题处理总表（[附录 C](C-issue-resolution.md)）。别的章需要时链接过去，不复述。
+**全书唯一的表。** 目录与层布局（[05](05-architecture.md)）、错误表（[14](14-failure-semantics.md)）、已知限制表（[16](16-known-limits.md)）、缺口表（[23](23-gaps-and-boundaries.md)）、两种方案的对比表（[24](24-vs-sandbox-level.md)）、开关总表与计时键（[29](29-configuration-and-observability.md)）、问题处理总表（[附录 C](C-issue-resolution.md)）。别的章需要时链接过去，不复述。
 
 ---
 

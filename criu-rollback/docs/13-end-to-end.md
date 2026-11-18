@@ -15,7 +15,7 @@
 本章按时间顺序把它们串起来，每一步都标注它在哪一章讲过，可以按需回查。**全书的时序图只在本章**。
 
 本章只描述正常路径和最直接的失败出口。失败的完整分级在 [14](14-failure-semantics.md)，状态、并发与容量在 [15](15-state-concurrency-capacity.md)。
-计时键在这里只讲"落在哪一步"，定义见 [28](28-configuration-and-observability.md)，实测见 [20](20-920b-performance.md)。
+计时键在这里只讲"落在哪一步"，定义见 [29](29-configuration-and-observability.md)，实测见 [20](20-920b-performance.md)。
 
 主体代码：`ckpt/service.go`（编排）、`ckpt/overlay.go`（切换）、`ckpt/criu.go`（criu 与杀进程）。
 
@@ -144,7 +144,7 @@ restore 没有冻结窗口，更贴切的说法是**不可用窗口**：
 | 被切换挡住 | guest 里所有访问这个 overlay 的进程 | 内核取到切换的写锁，到放开 | 包含在 `overlay_restore_ms` 里 |
 
 从调用方的角度，一次 restore 期间用户进程不可用的时间约等于 `total_ms`。多棵树时各棵先后恢复，排在后面的树回来得更晚。
-对范围外的进程，restore 的影响除了那一下切换，还有切换之后它们手里旧的目录和文件可能变成陈旧的（[07](07-overlay-hot-switch.md)、[26](26-semantics-and-limits.md)）。
+对范围外的进程，restore 的影响除了那一下切换，还有切换之后它们手里旧的目录和文件可能变成陈旧的（[07](07-overlay-hot-switch.md)、[27](27-semantics-and-limits.md)）。
 
 ---
 
@@ -221,7 +221,7 @@ SDK 把它转成字典，放在 `create()` 返回值的 `timings` 属性和 `Che
 两者之差约 47 ms，与同一轮里单棵树全量 dump 的 49.66 ms 相近——差的那一份正是排在最前面的 A 自己的 dump 时间。
 
 这条时间线还说明了"树之间不是原子的"具体指什么：镜像里 A 的状态是时刻 0 的，C 的状态是时刻 dA + dB 的。B 和 C 在 A 冻住之后还各自多跑了一段。
-文件系统的内容则是所有树都停住之后的——它与 C 的内存同步，对 A 来说则包含了"A 冻住之后 B、C 写的文件"。互不相干的后台命令不在意这一点；相互协作的进程应当做成一棵树（[11](11-checkpoint.md)、[26](26-semantics-and-limits.md)）。
+文件系统的内容则是所有树都停住之后的——它与 C 的内存同步，对 A 来说则包含了"A 冻住之后 B、C 写的文件"。互不相干的后台命令不在意这一点；相互协作的进程应当做成一棵树（[11](11-checkpoint.md)、[27](27-semantics-and-limits.md)）。
 
 ---
 

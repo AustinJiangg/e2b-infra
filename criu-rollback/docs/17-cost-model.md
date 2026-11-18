@@ -69,7 +69,7 @@ checkpoint 的 `total_ms` 约等于 `criu_dump_ms` 加 1～2 ms。`criu_dump_ms`
 每多一棵 64 MiB 的树的边际代价（新 920B，2026-10-08，`gsd-final-20261008` 那一轮，8 轮的 p50，与第 20 章的确认验证不是同一轮）：restore 约 +28 ms，增量 dump 约 +11 ms，全量 dump 约 +45 ms。
 
 多树时要特别留意 `stopped_ms`。它从**第一棵**树 dump 完算起，而先 dump 完的树要一直停到最后一棵 dump 完，所以它约等于"其余各棵的 dump 时间之和"：
-同一口径下，三棵树全量时最先 dump 的那棵要多停约 92 ms，而单树时只有 2.4 ms。对停顿敏感的负载，应当尽量让需要一起保存的进程成为一棵树（[26](26-semantics-and-limits.md)）。
+同一口径下，三棵树全量时最先 dump 的那棵要多停约 92 ms，而单树时只有 2.4 ms。对停顿敏感的负载，应当尽量让需要一起保存的进程成为一棵树（[27](27-semantics-and-limits.md)）。
 
 多树独有的预检（查树间共享的管道和 socket）开销很小：`precheck_ms` 从单树的 0.04 涨到三棵树的 0.13。
 
@@ -85,7 +85,7 @@ checkpoint 的 `total_ms` 约等于 `criu_dump_ms` 加 1～2 ms。`criu_dump_ms`
 这项开销与文件大小成正比，折合每 MiB 约 0.8 ms（新 920B，口径是 `overlay_sink_ms`，分档数字和测量所用的内核版本见 [20](20-920b-performance.md) §5.2）。这段时间里用户进程是停着的，而且所有访问 overlay 的操作都被写锁挡住。
 
 guest 里常驻的、以写方式打开的大文件只有系统日志，它不在 overlay 的层里，不产生这项开销；需要留意的是用户自己长期开着的大文件，例如数据库文件。
-这一行为可以用内核模块参数 `overlay.ckpt_move_open` 调整（[28](28-configuration-and-observability.md)），限制见 [16](16-known-limits.md)。
+这一行为可以用内核模块参数 `overlay.ckpt_move_open` 调整（[29](29-configuration-and-observability.md)），限制见 [16](16-known-limits.md)。
 
 ---
 
@@ -105,7 +105,7 @@ guest 里常驻的、以写方式打开的大文件只有系统日志，它不�
 这是性能上最大的一项"明知可以更快而不去做"的代价，理由不是性能上的权衡，而是正确性上的前提：增量 dump 靠 soft-dirty 位，而一个大页只有一个位，
 THP 开着时零散的写入会让每次增量都退化成全量。原理和实测在 [03](03-criu-and-incremental-memory.md)。
 所以 THP 为 never 不在可调项之列：开机脚本在切换根文件系统之前设置它，gsd 启动时再检查一次并兜底（`ensureTHPNever`，`main.go:196`）。
-如果在部署里看到增量 checkpoint 忽然变得和全量一样大，首先要查的就是 THP 是不是被改回去了（[29](29-troubleshooting.md)）。
+如果在部署里看到增量 checkpoint 忽然变得和全量一样大，首先要查的就是 THP 是不是被改回去了（[30](30-troubleshooting.md)）。
 
 ---
 

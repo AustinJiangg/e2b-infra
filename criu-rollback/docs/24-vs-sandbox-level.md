@@ -103,10 +103,10 @@
 | **什么时候失效** | 沙箱删除或回收、orchestrator 重启、宿主重启、迁移、原生 pause / resume 之后 | 沙箱删除或回收、guest 重启。沙箱被暂停再恢复之后按设计仍可用，但未验证（[04](04-goals-and-tradeoffs.md)） |
 | **依赖** | 成对交付的 orchestrator 与分叉 Firecracker；宿主侧的脏页跟踪能力；对 guest 内核没有要求 | guest 内核必须打补丁并打开相应配置；基础镜像必须带 CRIU 4.x；对 Firecracker 和宿主内核没有额外要求 |
 | **平台** | 宿主为 aarch64（鲲鹏 920B / 950）；有无硬件脏页跟踪只影响代价，不影响正确性 | 只支持 arm64 的 guest；已在新 920B 与 950 上验证 |
-| **SDK** | `sandbox.checkpoint` 的四个方法；响应里回报这次是全量还是增量 | `sandbox.checkpoint` 的同名四个方法；响应里回报各阶段耗时、进程树数量、镜像大小等。两份 SDK 不是同一份（[25](25-quickstart.md)） |
+| **SDK** | `sandbox.checkpoint` 的四个方法；响应里回报这次是全量还是增量 | `sandbox.checkpoint` 的同名四个方法；响应里回报各阶段耗时、进程树数量、镜像大小等。两份 SDK 不是同一份（[26](26-quickstart.md)） |
 | **鉴权** | 请求在宿主的代理处被截下，由宿主侧校验 token | 请求进到沙箱，gsd 对照元数据服务里的 token 摘要校验，与 envd 用同一个 token（[05](05-architecture.md)） |
 | **成本模型** | 固定开销加上与**改动量**（checkpoint）或**回滚量**（restore）成正比的一项，与虚拟机规格基本无关；每个沙箱的第一次是全量 | checkpoint：与**用户进程的改动量**成正比，每棵树的第一次是全量；restore：与**被恢复进程的内存大小**成正比，再加杀进程的开销；两者都随树的数量线性增长（§3） |
-| **对范围外进程的影响** | 沙箱内没有范围外的进程。跨越 restore 的 TCP 连接作废、在途的 SDK 调用被打断、单调时钟倒退 | envd 和系统服务不受打扰，时钟不变；但它们手里的旧目录和旧文件可能属于被丢弃的时间线，从陈旧目录出发的写返回 `ESTALE`（[26](26-semantics-and-limits.md)） |
+| **对范围外进程的影响** | 沙箱内没有范围外的进程。跨越 restore 的 TCP 连接作废、在途的 SDK 调用被打断、单调时钟倒退 | envd 和系统服务不受打扰，时钟不变；但它们手里的旧目录和旧文件可能属于被丢弃的时间线，从陈旧目录出发的写返回 `ESTALE`（[27](27-semantics-and-limits.md)） |
 | **对被保存对象的要求** | 没有要求，不看进程内部 | 进程必须是 CRIU 能保存的；树与树之间不能共用管道或 socket（[10](10-process-trees.md)） |
 
 ### 2.1 协议字段对照
@@ -125,7 +125,7 @@
 | `CheckpointInfo` 字段 5～7 | `has_process_image`、`parent_checkpoint_id`、`process_trees` | 没有 |
 | `RestoreCheckpointResponse` | `success`、`timings` | 只有 `success` |
 
-同一个字段编号在两边是不同类型，所以两套 SDK 不能混用：进程级必须用本仓库的 `py-sdk`（[25](25-quickstart.md)），沙箱级用它自己那一份。
+同一个字段编号在两边是不同类型，所以两套 SDK 不能混用：进程级必须用本仓库的 `py-sdk`（[26](26-quickstart.md)），沙箱级用它自己那一份。
 两边用同一个端口号 49984 和同一个路径前缀，是因为沙箱级的协议文件由进程级 SDK 那份协议改名而来（`5c42b3968`）。区别在请求最终由谁应答：沙箱级由宿主截下，进程级走进 guest。同一个沙箱同时启用两套没有实施（[§8](#8-能不能在同一个沙箱上一起用)）。
 
 ---
@@ -197,7 +197,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 | restore 每 MiB 文件写入 | 0.43 | 0.07 | 0.21 | 0.04 | f = 16 → 64 MiB |
 | 第一次全量 | 254～433，与进程无关 | 36～206，随进程大小 | —— | —— | 每个测点新沙箱上的第一次 |
 
-沙箱级手册[第 18 章 §9](../../rollback/docs/18-950-performance.md#9-第二轮2026-11-18-extended)在 950 上用另一种负载（tmpfs 文件当内存、根盘大文件覆写后 `sync`）测得：纯内存 checkpoint 冻结窗口每 MiB 0.087 ms，纯文件每 MiB 1.29 ms，restore 冻结窗口分别为每 MiB 0.25 与 0.36 ms。量级与上表一致。
+沙箱级手册[第 18 章 §5.3](../../rollback/docs/18-950-performance.md#53-文件改动是-checkpoint-的大头)在 950 上用另一种负载（tmpfs 文件当内存、根盘大文件覆写后 `sync`）测得：纯内存 checkpoint 冻结窗口每 MiB 0.087 ms，纯文件每 MiB 1.29 ms，restore 冻结窗口分别为每 MiB 0.25 与 0.36 ms。量级与上表一致。
 
 由此可以粗算两侧的分界（950，只看 p50）：
 
@@ -354,7 +354,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 
 ### 5.5 沙箱级写文件为什么贵
 
-compare 那一轮，沙箱级写 64 MiB 文件的 checkpoint 里 `snapshot` 段是 90.0 ms，同量内存改动只有 16.5 ms；封存写层（`seal`）11.2 ms。沙箱级手册[第 18 章 §9](../../rollback/docs/18-950-performance.md#9-第二轮2026-11-18-extended)的 perf-full 分段给出同样的形状：纯文件 64 MiB 的 `snapshot` 84.4 ms、内存差分 89.1 MB；纯内存 128 MiB 的 `snapshot` 只有 22.8 ms、内存差分 152.4 MB。差分更小，`snapshot` 反而慢了 3.7 倍，所以多出来的时间不在写内存差分上。
+compare 那一轮，沙箱级写 64 MiB 文件的 checkpoint 里 `snapshot` 段是 90.0 ms，同量内存改动只有 16.5 ms；封存写层（`seal`）11.2 ms。沙箱级手册[第 18 章 §5](../../rollback/docs/18-950-performance.md#5-分段产物与文件改动的代价)的 perf-full 分段给出同样的形状：纯文件 64 MiB 的 `snapshot` 84.4 ms、内存差分 89.1 MB；纯内存 128 MiB 的 `snapshot` 只有 22.8 ms、内存差分 152.4 MB。差分更小，`snapshot` 反而慢了 3.7 倍，所以多出来的时间不在写内存差分上。
 
 按代码，多出来的时间在把磁盘数据推进写层：
 
@@ -363,9 +363,9 @@ compare 那一轮，沙箱级写 64 MiB 文件的 checkpoint 里 `snapshot` 段�
 3. checkpoint 调 Firecracker 的快照接口，Firecracker 在保存设备状态前对块设备做 `drain_and_flush`，同步引擎就是 `sync_all`（`io/sync_io.rs` 的 `flush`）。这一步把块设备页缓存里的脏页经 NBD 全部推给 orchestrator，发生在 vCPU 暂停期间，计入 `snapshot` 段。
 4. 随后 `seal` 再做一次 `BLKFLSBUF` 和刷盘屏障，换上新的写层（`rootfs/nbd.go` 的 `SealLayer`），这时要推的已经很少。
 
-64 MiB 多出约 70 ms，相当于每秒约 0.9 GiB 经 NBD 推进写层。这是按代码路径和分段做的推断，`snapshot` 段内部没有再分开计时。
+64 MiB 多出约 70 ms，相当于每秒约 0.9 GiB 经 NBD 推进写层。按代码路径和分段做的这个推断，已由 920B 上的实验证实：checkpoint 期间 NBD 设备正好写出本次落盘的数据量，先在宿主上 `sync` 再 checkpoint，这段时间就移出了暂停窗口（下段）。
 
-**这对测量意味着什么。** 宿主内核会按 `dirty_expire_centisecs`（默认 30 s）和 `dirty_writeback_centisecs`（默认 5 s）自行把这些脏页写回。分档测试是写完、`sync` 之后立刻 checkpoint，所以测到的是最坏情况；文件写完之后过了几十秒才 checkpoint，这部分时间多半已经在暂停窗口之外花掉。这一点没有实测，验证办法是在 checkpoint 之前等待 0 / 10 / 40 s 各测一组，或者 checkpoint 前读宿主 `/proc/meminfo` 的 `Dirty`。
+**这对测量意味着什么。** 宿主内核会按 `dirty_expire_centisecs`（默认 30 s）和 `dirty_writeback_centisecs`（默认 5 s）自行把这些脏页写回。分档测试是写完、`sync` 之后立刻 checkpoint，测到的是最贵的情况。2026-11-18 在新 920B 上用同一个 64 MiB 文件实测（沙箱级手册[第 18 章 §5.4](../../rollback/docs/18-950-performance.md#54-写文件的代价由什么决定)）：只 `write` 不 `sync`、立刻 checkpoint，墙钟 15.4 ms，数据还在 guest 页缓存里，按内存计价；`fsync` + `sync` 后立刻 checkpoint，72.8 ms，期间经 NBD 推送 64.2 MiB；`sync` 后等 40 s，推送为 0。这件事与平台是否用 `O_DIRECT` 的关系见 [25](25-tiered-performance-testing.md) §4。
 
 **沙箱级 restore 也为文件付费，但少得多。** 写文件时 guest 页缓存里那些页算作内存改动，要按内存回滚；磁盘视图只是换层（perf-full 纯文件 64 MiB 的 `reset_view` 3.2 ms）。所以文件写入的 restore 代价（约 0.36～0.43 ms/MiB）与内存改动接近，远小于 checkpoint 那一侧。
 
@@ -407,16 +407,18 @@ compare 那一轮，沙箱级写 64 MiB 文件的 checkpoint 里 `snapshot` 段�
 
 ![950 同机：两套方案的增量 checkpoint 与 restore 客户端墙钟（旧混合分档）](img/24-4-950同机对比.svg)
 
-沙箱级来源：[沙箱级手册第 18 章 §4](../../rollback/docs/18-950-performance.md#4-十二档性能与判定)；进程级来源：[22](22-950-results.md) §9.3。这一组六档全部是进程级更低，与 §4.1 相反，原因就是上面三条：每档 1/4 的文件对沙箱级最贵，进程级一侧 256 MiB 档的进程只有约 205 MiB。这一轮跑的时候宿主配置了 UB（灵衢远端内存），当时没有记录进程内存落在哪些 NUMA 节点上；2026-11-18 的同负载对比是在没有配置 UB 时跑的。
+沙箱级来源：[沙箱级手册第 18 章 §10.2](../../rollback/docs/18-950-performance.md#102-十二档性能与判定)；进程级来源：[22](22-950-results.md) §9.3。这一组六档全部是进程级更低，与 §4.1 相反，原因就是上面三条：每档 1/4 的文件对沙箱级最贵，进程级一侧 256 MiB 档的进程只有约 205 MiB。这一轮跑的时候宿主配置了 UB（灵衢远端内存），当时没有记录进程内存落在哪些 NUMA 节点上；2026-11-18 的同负载对比是在没有配置 UB 时跑的。
 
 ### 5.7 测试设计的局限与下一步
+
+本节是第一次分析时列的局限。测试分类、两次分析的完整讨论和新的测试设计见 [25](25-tiered-performance-testing.md)。
 
 同负载对比把三个自变量分开了，但还有几处没有覆盖：
 
 | 局限 | 影响 | 下一步 |
 |---|---|---|
-| 文件写完立刻 checkpoint | 沙箱级的文件代价是最坏情况（§5.5） | 加“写完等待 0 / 10 / 40 s 再 checkpoint”一组 |
-| 内存改写只有连续页 | 沙箱级随机散页的代价高得多（沙箱级手册[第 18 章 §8.3](../../rollback/docs/18-950-performance.md#83-正式基准连续页与随机散页)：256 MiB 散页 checkpoint 170.9 ms，连续 35.3 ms）；进程级按页表区间写镜像，也会受影响 | 每个改动量加一组随机散页 |
+| 文件写完立刻 checkpoint | 沙箱级的文件代价是最坏情况（§5.5，920B 已实测证实） | 加“写完等待”与“不 `sync`”两个开关（[25](25-tiered-performance-testing.md) §6） |
+| 内存改写只有连续页 | 沙箱级随机散页的代价高得多（沙箱级手册[第 18 章 §8.3](../../rollback/docs/18-950-performance.md#83-正式基准连续页与随机散页)：256 MiB 散页 checkpoint 164.4 ms，连续 35.5 ms）；进程级按页表区间写镜像，也会受影响 | 每个改动量加一组随机散页 |
 | 只有一棵进程树、一个进程 | 进程级随进程树数线性增长（[20](20-920b-performance.md) §3），多进程、多线程的状态收集也更贵 | 加进程数、线程数两组 |
 | 每个测点只有 n = 20、跑一次 | p99 没有意义，N = 8 那个异常无法判断 | 关键测点 n ≥ 100，两侧交替跑两遍 |
 | 改动比例靠经验 | 混合负载的结果取决于比例 | 不再测固定比例的混合档；用 §4.2 的各项代价加上真实负载的画像去估（见下） |
@@ -449,7 +451,7 @@ compare 那一轮，沙箱级写 64 MiB 文件的 checkpoint 里 `snapshot` 段�
 
 这张表可以概括成一句话：**沙箱级让沙箱内的一切回到同一时刻；进程级只恢复用户进程和文件，其余的保持 restore 那一刻的状态。**
 前者不需要使用者理解范围，代价是所有跨越回滚的连接和时间感都要重新建立；后者保住了范围外的一切，
-代价是使用者需要知道分界线在哪里（[26](26-semantics-and-limits.md)）。
+代价是使用者需要知道分界线在哪里（[27](27-semantics-and-limits.md)）。
 
 表里"用户进程自己持有的连接"一行需要说明：gsd 没有给 CRIU 加任何放宽的选项，进程如果用了 CRIU 默认不保存的东西，
 checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（[23](23-gaps-and-boundaries.md) 的缺口表）。
@@ -485,7 +487,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 - 两套的 SDK 都把请求发往沙箱地址的 49984 端口。沙箱级的 orchestrator 在宿主的代理处把这个端口的 checkpoint 请求截下、自己应答，
   请求进不了沙箱；进程级所用的 orchestrator 不截这个端口，请求被转进沙箱由 gsd 应答。
 - 这两种行为分别在两个代码分支的 orchestrator 里。一台宿主的同一个服务端口上同一时刻只能运行其中一个，
-  所以实际形态是"按宿主切换"：运行哪一套的 orchestrator，这台宿主上的沙箱就走哪一套（切换的操作见 [27](27-deployment.md)）。
+  所以实际形态是"按宿主切换"：运行哪一套的 orchestrator，这台宿主上的沙箱就走哪一套（切换的操作见 [28](28-deployment.md)）。
 - 进程级还要求模板是在它的 orchestrator 下构建的（里面有 gsd 和 `overlay-init`）。一套之下构建的模板拿到另一套之下去派生新模板，
   这种跨模式的情形没有处理（[16](16-known-limits.md)）。
 

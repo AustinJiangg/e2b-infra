@@ -3,7 +3,7 @@
 </defs>
 <rect width="1600" height="1208" fill="#FFFFFF"/>
 <text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">950 混合 128 / 256 / 512 MiB：checkpoint 与 restore 各分段的 p50</text>
-<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">950，2026-11-17 standard 的 perf 步骤，analyze.log 各分段中位数，每档 n = 20 / 20 / 10（§4 表）。每个分段三根条分别是三档；单位 ms。</text>
+<text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">950，2026-11-18 extended 的 perf-full，analyze.log 各分段中位数，每档 n = 60 / 60 / 30（§4 表）。每个分段三根条分别是三档；单位 ms。</text>
 <rect x="48.0" y="109.0" width="22.0" height="14.0" rx="3" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.2"/>
 <text x="78.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">混合 128</text>
 <rect x="165.5" y="109.0" width="22.0" height="14.0" rx="3" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.2"/>
@@ -28,19 +28,19 @@
 <text x="1379.8" y="438.0" font-size="12.5" fill="#888780" text-anchor="middle">200 ms</text>
 <line x1="258.0" y1="228.0" x2="258.0" y2="418.0" stroke="#B4B2A9" stroke-width="1.2"/>
 <text x="244.0" y="279.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">snapshot</text>
-<rect x="258.0" y="236.0" width="287.2" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
-<text x="555.2" y="252.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">51.2</text>
-<rect x="258.0" y="263.0" width="514.4" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
-<text x="782.4" y="279.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">91.7</text>
-<rect x="258.0" y="290.0" width="1034.9" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
-<text x="1302.9" y="306.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">184.5</text>
+<rect x="258.0" y="236.0" width="317.5" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="585.5" y="252.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">56.6</text>
+<rect x="258.0" y="263.0" width="582.8" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="850.8" y="279.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">103.9</text>
+<rect x="258.0" y="290.0" width="1109.5" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="1377.5" y="306.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">197.8</text>
 <text x="244.0" y="377.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">seal</text>
-<rect x="258.0" y="334.0" width="34.8" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
-<text x="302.8" y="350.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">6.2</text>
-<rect x="258.0" y="361.0" width="65.1" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
-<text x="333.1" y="377.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">11.6</text>
-<rect x="258.0" y="388.0" width="104.9" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
-<text x="372.9" y="404.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">18.7</text>
+<rect x="258.0" y="334.0" width="37.0" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="305.0" y="350.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">6.6</text>
+<rect x="258.0" y="361.0" width="62.8" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="330.8" y="377.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">11.2</text>
+<rect x="258.0" y="388.0" width="101.5" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="369.5" y="404.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">18.1</text>
 <circle cx="63" cy="500" r="15" fill="#2C2C2A"/>
 <text x="63.0" y="505.5" font-size="16" fill="#FFFFFF" font-weight="600" text-anchor="middle">2</text>
 <text x="90.0" y="507.0" font-size="20" fill="#2C2C2A" font-weight="600" text-anchor="start">restore 分段</text>
@@ -57,33 +57,33 @@
 <text x="1379.8" y="1098.0" font-size="12.5" fill="#888780" text-anchor="middle">200 ms</text>
 <line x1="258.0" y1="550.0" x2="258.0" y2="1078.0" stroke="#B4B2A9" stroke-width="1.2"/>
 <text x="244.0" y="601.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">materialize</text>
-<rect x="258.0" y="558.0" width="147.5" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
-<text x="415.5" y="574.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">26.3</text>
-<rect x="258.0" y="585.0" width="264.7" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
-<text x="532.7" y="601.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">47.2</text>
-<rect x="258.0" y="612.0" width="466.1" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
-<text x="734.1" y="628.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">83.1</text>
+<rect x="258.0" y="558.0" width="165.5" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="433.5" y="574.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">29.5</text>
+<rect x="258.0" y="585.0" width="302.9" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="570.9" y="601.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">54</text>
+<rect x="258.0" y="612.0" width="594.6" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="862.6" y="628.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">106</text>
 <text x="244.0" y="699.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">fc_memory</text>
-<rect x="258.0" y="656.0" width="78.0" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
-<text x="346.0" y="672.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">13.9</text>
-<rect x="258.0" y="683.0" width="140.2" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
-<text x="408.2" y="699.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">25</text>
-<rect x="258.0" y="710.0" width="266.4" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
-<text x="534.4" y="726.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">47.5</text>
+<rect x="258.0" y="656.0" width="76.8" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="344.8" y="672.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">13.7</text>
+<rect x="258.0" y="683.0" width="166.6" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="434.6" y="699.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">29.7</text>
+<rect x="258.0" y="710.0" width="357.3" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="625.3" y="726.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">63.7</text>
 <text x="244.0" y="797.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">reset_view</text>
-<rect x="258.0" y="754.0" width="27.5" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
-<text x="295.5" y="770.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">4.9</text>
-<rect x="258.0" y="781.0" width="25.8" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
-<text x="293.8" y="797.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">4.6</text>
-<rect x="258.0" y="808.0" width="40.9" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
-<text x="308.9" y="824.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">7.3</text>
+<rect x="258.0" y="754.0" width="11.2" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="279.2" y="770.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">2</text>
+<rect x="258.0" y="781.0" width="16.8" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="284.8" y="797.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">3</text>
+<rect x="258.0" y="808.0" width="33.7" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="301.7" y="824.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">6</text>
 <text x="244.0" y="895.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">wait_envd</text>
-<rect x="258.0" y="852.0" width="16.8" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
-<text x="284.8" y="868.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">3</text>
-<rect x="258.0" y="879.0" width="15.1" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
-<text x="283.1" y="895.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">2.7</text>
-<rect x="258.0" y="906.0" width="12.3" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
-<text x="280.3" y="922.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">2.2</text>
+<rect x="258.0" y="852.0" width="7.9" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
+<text x="275.9" y="868.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">1.4</text>
+<rect x="258.0" y="879.0" width="7.9" height="22.0" rx="4" fill="#CFE3F7" stroke="#378ADD" stroke-width="1.1"/>
+<text x="275.9" y="895.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">1.4</text>
+<rect x="258.0" y="906.0" width="8.4" height="22.0" rx="4" fill="#7FB0E6" stroke="#185FA5" stroke-width="1.1"/>
+<text x="276.4" y="922.0" font-size="14" fill="#0C447C" font-weight="600" text-anchor="start">1.5</text>
 <text x="244.0" y="993.0" font-size="15" fill="#2C2C2A" font-weight="600" text-anchor="end">fc_bitmap</text>
 <rect x="258.0" y="950.0" width="8.4" height="22.0" rx="4" fill="#E6F1FB" stroke="#6FA6E0" stroke-width="1.1"/>
 <text x="276.4" y="966.0" font-size="14" fill="#185FA5" font-weight="600" text-anchor="start">1.5</text>

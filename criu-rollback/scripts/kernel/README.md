@@ -41,7 +41,7 @@ lockdep 一旦报告过一次问题就把自己关掉，之后不再检查任何
 
 **源码树**：amazonlinux/linux 的 tag `microvm-kernel-6.1.158-15.288.amzn2023`，依次打上代码仓
 `fc-kernels/patches/6.1.158/` 下的三个补丁（`0001-virtio_balloon-…`、`0002-overlayfs-hot-switch-checkpoint.patch`、
-`0003-overlayfs-hot-switch-fixes.patch`）。与发布版内核是同一棵树，只是 config 不同（发布版内核的构建见手册 [27 章](../../docs/27-deployment.md)）。
+`0003-overlayfs-hot-switch-fixes.patch`）。与发布版内核是同一棵树，只是 config 不同（发布版内核的构建见手册 [28 章](../../docs/28-deployment.md)）。
 
 **工具链**（新 920B 上实际用的）：gcc 12.3.1、GNU ld 2.41、flex、bison；在 arm64 机器上原生编译。
 

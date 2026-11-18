@@ -67,7 +67,7 @@
 | 并发与长稳：多沙箱随机操作逐项校验 | `acceptance/checkpoint_concurrent.py` D 段；crtest T36 全规模 | restore 后五字段逐项一致 | 已跑 | T36 默认短稳态通过并归档（[第 21 章 §3](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；全规模、D 段与小时级长稳仍缺结果 |
 | 恢复返回后立即请求 | crtest T40 | 线程完成、账本与活体硬判；另核对请求失败计数 | 已跑，含 2026-11-06 func | 默认非 overlap 场景通过并归档（[第 21 章 §3](21-concurrency-and-longrun.md#3-950-func-中的短稳态与恢复后请求)）；不外推为在途命令可跨 restore |
 | SDK 异常语义 | `crtest/sdktests/test_checkpoint_errors.py` | pytest 全过 | 已跑，2026-11-06 为 67 passed | 2026-11-17 func 中因客户端未装 pytest 判 SKIP，待下一轮（[第 17 章 §3.3](17-functional-verification.md#33-跳过项)） |
-| 分档性能、串行长尾、空闲后 restore | 见 [§6](#6-基准脚本分工)、[§7](#7-空闲后-restore-与串口的专项测法) | —— | 已跑 | 12 档与串行 100 次文本已归档（[第 18 章](18-950-performance.md)），2026-11-18 又跑了 18 档 perf-full（[第 18 章 §9](18-950-performance.md#9-第二轮2026-11-18-extended)）；空闲后专项 2026-11-18 在 950 上跑过一轮，七臂 restore p50 16.1～22.4 ms（[第 18 章 §9.5](18-950-performance.md#95-空闲之后的-restore)） |
+| 分档性能、串行长尾、空闲后 restore | 见 [§6](#6-基准脚本分工)、[§7](#7-空闲后-restore-与串口的专项测法) | —— | 已跑 | 2026-11-18 的 18 档 perf-full 与串行 100 次为主数据（[第 18 章 §4](18-950-performance.md#4-十八档性能与判定)），2026-11-17 的 12 档留作对照（[第 18 章 §10](18-950-performance.md#10-第一轮2026-11-17-standard配置了-ub)）；空闲后专项 2026-11-18 在 950 上跑过一轮，七臂 restore p50 16.1～22.4 ms（[第 18 章 §9](18-950-performance.md#9-空闲之后的-restore)） |
 
 默认功能回归通过不意味着未运行的重启 / 注入项也通过；perf 与两分钟混合操作都不能替代小时级稳定性。
 两种脏页后端向上层提供同一种位图，可以沿用上层正确性论证与用例设计；目标机实际启用、部署版本与现场通过情况仍要核实，

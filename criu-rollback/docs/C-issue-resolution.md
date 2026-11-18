@@ -167,13 +167,13 @@ provision 不再安装 criu；注入 gsd 之后的自检要求 `/usr/sbin/criu -
 这一组不改变核心行为，逐条简述：
 
 - **G-12 并发**：服务没有互斥，并发的 checkpoint 和 restore 会交错。现在 checkpoint、restore、delete 全程持同一把锁，后来的请求排队（§4）；list 不持锁。见 [15](15-state-concurrency-capacity.md)。
-- **G-29 返回信息**：各阶段耗时原来只进日志。现在随响应返回，另加创建时间、是否有进程镜像、父 checkpoint、镜像大小、`clear_refs` 失败数、进程树数。见 [05](05-architecture.md)、[28](28-configuration-and-observability.md)。
+- **G-29 返回信息**：各阶段耗时原来只进日志。现在随响应返回，另加创建时间、是否有进程镜像、父 checkpoint、镜像大小、`clear_refs` 失败数、进程树数。见 [05](05-architecture.md)、[29](29-configuration-and-observability.md)。
 - **G-30 测试**：有一条单测断言因为拼错路径永远通过，编排逻辑完全没有测试。现在外部依赖（`/proc`、CRIU、信号、ioctl）都可注入，编排逻辑有成套单测。见 [18](18-testing-and-debug-kernel.md)。
 - **G-31 文档与注释**、**G-32 死代码**：两份 README、overlay-init 头注释与代码对齐；死代码和整个旧的 overlay-setup 方案删除。
 - **G-33 根目录权限**：guest 的 `/` 原来是 777。现在是 755，并在每次切换时保持（§4）。见 [06](06-guest-boot-and-injection.md)。
-- **G-34 平台与基线**：内核构建脚本原来取"最新的上游 tag"，基线不可复现；现在固定在 `kernel_base_tags.txt`。只支持 arm64 guest 这一点是设计边界，转为限制（[16](16-known-limits.md)）。见 [27](27-deployment.md)。
-- **G-35 可观测性**：restore 的 CRIU 输出落到镜像目录里的日志文件，失败时尾部进错误信息（dump 失败同样处理）；`clear_refs` 失败不再静默；每次 ioctl 的调试行改为 debug 级日志。见 [28](28-configuration-and-observability.md)。
-- **G-36 SDK**：checkpoint 的请求地址不认 `sandbox_url` 覆盖、每个对象新建一个从不关闭的 HTTP 客户端。两处都改了，并删掉了不再需要的 Basic 头。见 [25](25-quickstart.md)。
+- **G-34 平台与基线**：内核构建脚本原来取"最新的上游 tag"，基线不可复现；现在固定在 `kernel_base_tags.txt`。只支持 arm64 guest 这一点是设计边界，转为限制（[16](16-known-limits.md)）。见 [28](28-deployment.md)。
+- **G-35 可观测性**：restore 的 CRIU 输出落到镜像目录里的日志文件，失败时尾部进错误信息（dump 失败同样处理）；`clear_refs` 失败不再静默；每次 ioctl 的调试行改为 debug 级日志。见 [29](29-configuration-and-observability.md)。
+- **G-36 SDK**：checkpoint 的请求地址不认 `sandbox_url` 覆盖、每个对象新建一个从不关闭的 HTTP 客户端。两处都改了，并删掉了不再需要的 Basic 头。见 [26](26-quickstart.md)。
 
 ---
 
@@ -291,14 +291,14 @@ dump 失败的错误信息指向一个已被删除的日志文件；SDK 把 gsd 
 | G-26 | 注释说被恢复的进程是 gsd 的子进程，实际由 PID 1 收养 | 按决定处理（只改注释） | gsd: kill whole user process trees on restore and drop the PID cache | [12](12-restore.md) |
 | G-27 | dump 后的 SIGCONT 把用户原本停着的进程也放开 | 已修 | gsd: rewrite user process discovery (…) | [10](10-process-trees.md) |
 | G-28 | CRIU 没有超时，卡住时 RPC 无限挂起 | 已修 | gsd: serialize checkpoint ops, bound criu runtime, clean up failed dumps | [11](11-checkpoint.md)、[14](14-failure-semantics.md) |
-| G-29 | 各阶段耗时不返回 SDK，checkpoint 不返回创建时间等信息 | 已修 | gsd: return stage timings and checkpoint metadata to the SDK；py-sdk: report the number of process trees in CheckpointInfo | [05](05-architecture.md)、[28](28-configuration-and-observability.md) |
+| G-29 | 各阶段耗时不返回 SDK，checkpoint 不返回创建时间等信息 | 已修 | gsd: return stage timings and checkpoint metadata to the SDK；py-sdk: report the number of process trees in CheckpointInfo | [05](05-architecture.md)、[29](29-configuration-and-observability.md) |
 | G-30 | 一条单测断言永远通过；编排逻辑没有测试 | 已修 | gsd: make checkpoint orchestration testable with injectable system ops | [18](18-testing-and-debug-kernel.md) |
 | G-31 | 文档和注释与代码不符 | 已修 | gsd: bring the READMEs and overlay-init comments in line with the code | — |
 | G-32 | 死代码与整个旧的 overlay-setup 方案 | 已修 | gsd: remove dead code and the overlay-setup scheme, stop making / world-writable | [06](06-guest-boot-and-injection.md) |
 | G-33 | guest 根目录对所有人可写 | 按决定处理（最终为 755，分两步完成） | 同上；orchestrator: stop making the guest's / world-writable in overlay-init | [06](06-guest-boot-and-injection.md) |
-| G-34 | 只支持 arm64；内核基线取"最新 tag"不可复现 | 部分转为限制（基线已固定；只支持 arm64 为限制） | fc-kernels: pin the upstream base tag the patches are made against | [04](04-goals-and-tradeoffs.md)、[27](27-deployment.md)、[16](16-known-limits.md) |
-| G-35 | restore 的 CRIU 输出不落文件、`clear_refs` 失败被忽略、每次 ioctl 打调试行 | 已修 | gsd: check before killing on restore, (…)；gsd: return stage timings and checkpoint metadata to the SDK；gsd: carry the criu dump log tail in the error instead of pointing at a deleted file | [28](28-configuration-and-observability.md) |
-| G-36 | SDK 的 checkpoint 地址不认 `sandbox_url` 覆盖；HTTP 客户端从不关闭 | 已修 | py-sdk: honour URL overrides for gsd, stop per-Checkpoint HTTP clients, drop Basic auth | [25](25-quickstart.md) |
+| G-34 | 只支持 arm64；内核基线取"最新 tag"不可复现 | 部分转为限制（基线已固定；只支持 arm64 为限制） | fc-kernels: pin the upstream base tag the patches are made against | [04](04-goals-and-tradeoffs.md)、[28](28-deployment.md)、[16](16-known-limits.md) |
+| G-35 | restore 的 CRIU 输出不落文件、`clear_refs` 失败被忽略、每次 ioctl 打调试行 | 已修 | gsd: check before killing on restore, (…)；gsd: return stage timings and checkpoint metadata to the SDK；gsd: carry the criu dump log tail in the error instead of pointing at a deleted file | [29](29-configuration-and-observability.md) |
+| G-36 | SDK 的 checkpoint 地址不认 `sandbox_url` 覆盖；HTTP 客户端从不关闭 | 已修 | py-sdk: honour URL overrides for gsd, stop per-Checkpoint HTTP clients, drop Basic auth | [26](26-quickstart.md) |
 
 表中"(…)"是为排版省略的标题后半段，完整标题见 §5。
 

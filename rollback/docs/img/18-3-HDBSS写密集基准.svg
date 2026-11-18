@@ -2,7 +2,7 @@
 <defs>
 </defs>
 <rect width="1600" height="1094" fill="#FFFFFF"/>
-<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">950 HDBSS 写密集基准：连续页与随机散页的 checkpoint、restore 墙钟</text>
+<text x="48.0" y="62.0" font-size="30" fill="#2C2C2A" font-weight="600" text-anchor="start">950 HDBSS 写密集基准（2026-11-17 完整组合）：连续页与随机散页的 checkpoint、restore 墙钟</text>
 <text x="48.0" y="96.0" font-size="15.5" fill="#5F5E5A" text-anchor="start">950（Kunpeng 950 7592C），2026-11-17 standard 的 HDBSS 步骤（20261117-165758-hdbss），默认 order 1；arena 1024 MiB，每页写 1 字节，每组合 n = 3 取中位数。只画单写者，双写者见正文表。</text>
 <line x1="48.0" y1="116.0" x2="74.0" y2="116.0" stroke="#378ADD" stroke-width="2.6"/>
 <text x="82.0" y="121.0" font-size="14" fill="#5F5E5A" text-anchor="start">seq：写 arena 开头连续 N 页</text>

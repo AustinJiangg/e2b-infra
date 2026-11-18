@@ -165,7 +165,7 @@ Handler: withCORS(withOpenHealth(m, middleware.Wrap(m))),
 | 字段 | 含义 |
 |---|---|
 | `checkpoint_id` | 形如 `ckpt_<纳秒时间戳>`（`generateCheckpointID`，`ckpt/service.go:895`） |
-| `timings` | 各阶段耗时，毫秒，gsd 在 guest 内自己量的；没执行的阶段为 0。每个键落在哪一步见 [13](13-end-to-end.md)，定义见 [28](28-configuration-and-observability.md) |
+| `timings` | 各阶段耗时，毫秒，gsd 在 guest 内自己量的；没执行的阶段为 0。每个键落在哪一步见 [13](13-end-to-end.md)，定义见 [29](29-configuration-and-observability.md) |
 | `created_at` | Unix 纳秒 |
 | `has_process_image` | 这次是否 dump 了用户进程。为假表示这是一个只有文件系统的 checkpoint：restore 它会杀掉当前用户进程，但不恢复出任何进程 |
 | `parent_checkpoint_id` | 本次 CRIU 镜像是哪个 checkpoint 的增量；全部树都是全量或没有进程时为空。父 checkpoint 可能已经被删除而只是隐藏着（[15](15-state-concurrency-capacity.md)） |
@@ -188,7 +188,7 @@ Handler: withCORS(withOpenHealth(m, middleware.Wrap(m))),
 
 ### 4.3 SDK 不能混用
 
-进程级必须用本仓库的 `py-sdk`（[25](25-quickstart.md)）。沙箱级有自己的 SDK 和协议文件，与本协议的服务路径相同，但响应字段互不兼容，协议对照见 [24](24-vs-sandbox-level.md)。
+进程级必须用本仓库的 `py-sdk`（[26](26-quickstart.md)）。沙箱级有自己的 SDK 和协议文件，与本协议的服务路径相同，但响应字段互不兼容，协议对照见 [24](24-vs-sandbox-level.md)。
 
 ---
 
@@ -200,7 +200,7 @@ Handler: withCORS(withOpenHealth(m, middleware.Wrap(m))),
 
 1. 解析参数。模板里的 `gsd.service` 给出的值是 `--overlay-mount=/`、`--base-layer=/mnt/lower`、`--layers-root=/overlay/layers`、
    `--work-root=/overlay/workspace`、`--snapshot-store=/var/lib/gsd/snapshots`（[06](06-guest-boot-and-injection.md)）。注意 `main.go:30-31` 里
-   `overlay-mount` 与 `base-layer` 的编译期默认值仍是早期方案的路径，实际运行值以服务文件为准；全部参数见 [28](28-configuration-and-observability.md)。
+   `overlay-mount` 与 `base-layer` 的编译期默认值仍是早期方案的路径，实际运行值以服务文件为准；全部参数见 [29](29-configuration-and-observability.md)。
 2. `enableExpeditedRCU`（`main.go:178`）：向 `/sys/kernel/rcu_expedited` 写 1，原因见 [12](12-restore.md) 与 [附录 D](D-restore-slowness-case.md)。
 3. `ensureTHPNever`（`main.go:196`）：确认透明大页是 `never`，不是就改掉并告警；这是对 `overlay-init` 的兜底（[03](03-criu-and-incremental-memory.md)、[06](06-guest-boot-and-injection.md)）。
 4. `checkpointRpc.Handle`（`ckpt/service.go:115`）：建 `OverlayManager`、建 `Service`、加载 `state.json`、后台预热 envd 的主进程号缓存、注册四个 RPC。
@@ -251,7 +251,7 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 | `/fc-criu/orchestrator` | 带 gsd 注入逻辑的 orchestrator | 宿主的服务管理 |
 | `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 打了热切层与 soft-dirty 补丁的 guest 内核 | orchestrator，经 `HOST_KERNELS_DIR=/fc-criu/kernels` 指过去；只跑进程级的机器也可以直接放在默认的 `/fc-kernels` 下 |
 
-宿主上**没有**任何 checkpoint 产物：镜像、层、状态文件全在 guest 里。部署细节见 [27](27-deployment.md)。
+宿主上**没有**任何 checkpoint 产物：镜像、层、状态文件全在 guest 里。部署细节见 [28](28-deployment.md)。
 
 ### 6.2 guest：程序与配置（建模板时写入，之后只读）
 
@@ -299,7 +299,7 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 
 下面这些挂载点在 overlay 根里可见，但内容不属于任何层，因此**不随 restore 回滚**：`/run`、`/dev/shm`（tmpfs）、`/var/lib/gsd/snapshots`（tmpfs）、
 `/var/log`、`/var/lib/systemd`、`/var/lib/chrony`（从 ext4 经 bind 进来）、`/overlay` 与 `/mnt/lower`（同上）、`/dev`、`/proc`、`/sys`。
-`/tmp` 在 overlay 上，随 restore 回滚。各自的原因见 [06](06-guest-boot-and-injection.md)，对使用者的含义见 [26](26-semantics-and-limits.md)。
+`/tmp` 在 overlay 上，随 restore 回滚。各自的原因见 [06](06-guest-boot-and-injection.md)，对使用者的含义见 [27](27-semantics-and-limits.md)。
 
 ---
 

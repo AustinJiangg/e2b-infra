@@ -1,4 +1,4 @@
-# 25 · 快速上手
+# 26 · 快速上手
 
 ## 本章目标
 
@@ -11,8 +11,8 @@
 5. 第一次使用时遇到"进程树之间共享管道被拒""镜像放不下""restore 半途失败"三种情况，知道各自该怎么办。
 
 第六篇是实践手册，不再追问"为什么这样设计"，只讲怎么用、怎么部署、怎么运维、出了问题怎么查：
-本章与下一章（[26](26-semantics-and-limits.md)）面向在代码里调用 checkpoint / restore 的开发者，[27](27-deployment.md) 到 [30](30-acceptance-runbook.md) 面向部署、运维与验收。
-本章只做一件事：把 SDK 装好，跑通第一个例子。回滚的语义与边界在 [26](26-semantics-and-limits.md)，错误码与异常类的完整对照在 [14](14-failure-semantics.md)。
+本章与下一章（[27](27-semantics-and-limits.md)）面向在代码里调用 checkpoint / restore 的开发者，[28](28-deployment.md) 到 [31](31-acceptance-runbook.md) 面向部署、运维与验收。
+本章只做一件事：把 SDK 装好，跑通第一个例子。回滚的语义与边界在 [27](27-semantics-and-limits.md)，错误码与异常类的完整对照在 [14](14-failure-semantics.md)。
 
 ---
 
@@ -20,7 +20,7 @@
 
 ### 1.1 服务端
 
-宿主已经切到进程级这套栈，并且在这套栈下建过模板 `base-criu`（做法见 [27](27-deployment.md)）。本章示例都用这个模板。
+宿主已经切到进程级这套栈，并且在这套栈下建过模板 `base-criu`（做法见 [28](28-deployment.md)）。本章示例都用这个模板。
 
 checkpoint 接口由沙箱**里面**的守护进程 gsd 提供，监听 guest 的 49984 端口；宿主上的代理只负责把请求按端口转进去，不参与 checkpoint 本身（请求路径见 [05](05-architecture.md)）。
 所以"这个沙箱能不能做 checkpoint"取决于它的模板：只有在进程级栈下建出来的模板，里面才有 gsd、补丁内核和 overlay 根文件系统。拿一个普通模板起的沙箱调用本章的接口，`is_running()` 会返回 `False`。
@@ -145,8 +145,8 @@ finally:
 - `state.txt` 和 `/tmp/scratch.txt` 读回 `v1`，checkpoint 之后新建的 `new.txt` 不见了；
 - 删掉 `cp1` 之后 `list()` 为空。
 
-两处容易忽略的细节。第一，`sh()` 里的前台命令也是 uid 1000 的进程，只是它们在 `create()` 之前就结束了，所以没有被算成一棵树；如果 `create()` 的那一刻有前台命令还在跑，它同样会被保存下来（[26](26-semantics-and-limits.md)）。
-第二，被恢复出来的进程不再是原来那个由 envd 拉起的进程：它的进程号不变，但父进程变成了 PID 1，通向 envd 的标准输出管道也接不回去。所以需要在 restore 之后还能看到的输出，应当像例子里这样写进文件，而不是指望 `on_stdout` 回调（[26](26-semantics-and-limits.md)）。
+两处容易忽略的细节。第一，`sh()` 里的前台命令也是 uid 1000 的进程，只是它们在 `create()` 之前就结束了，所以没有被算成一棵树；如果 `create()` 的那一刻有前台命令还在跑，它同样会被保存下来（[27](27-semantics-and-limits.md)）。
+第二，被恢复出来的进程不再是原来那个由 envd 拉起的进程：它的进程号不变，但父进程变成了 PID 1，通向 envd 的标准输出管道也接不回去。所以需要在 restore 之后还能看到的输出，应当像例子里这样写进文件，而不是指望 `on_stdout` 回调（[27](27-semantics-and-limits.md)）。
 
 ---
 
@@ -183,7 +183,7 @@ finally:
 
 - **增量按树做。** 计数器那棵树从 `cp1` 起一直是同一个根进程，`cp2` 里它的镜像只存 `cp1` 之后改过的内存页，所以 `cp2.parent_checkpoint_id` 指向 `cp1`；时钟那棵树是新起的，存全量。只要有一棵树是增量，`parent_checkpoint_id` 就有值（[11](11-checkpoint.md)）。
 - **restore 先杀后恢复。** 不管目标 checkpoint 里有什么，当前的用户进程都会被全部杀掉；目标里没有的进程（这里是回到 `cp1` 时的时钟进程）就此消失（[12](12-restore.md)）。
-- **restore 不剪枝。** 回到 `cp1` 之后 `cp2` 仍然在，可以再前进到它。历史是一棵树，怎么分支、怎么删见 [26](26-semantics-and-limits.md)。
+- **restore 不剪枝。** 回到 `cp1` 之后 `cp2` 仍然在，可以再前进到它。历史是一棵树，怎么分支、怎么删见 [27](27-semantics-and-limits.md)。
 
 多棵树时各棵依次保存、依次恢复，耗时随树的数量大致线性增加；树与树之间不是同一瞬间冻住的，也不能共享管道或 socket（§7.1）。这些限制的由来在 [10](10-process-trees.md)。
 
@@ -256,7 +256,7 @@ asyncio.run(main())
 | `is_running(request_timeout=None)` | `bool` | 向 gsd 的 `/health` 发一次 GET。能通返回 `True`，代理回 502（沙箱里没有 gsd 在听）返回 `False` |
 
 关于 `is_running()` 要多说一句：gsd 的 `/health` 在服务降级（degraded）时仍然回 HTTP 200，只是响应体里带原因，所以 `is_running()` 为 `True` 只说明 gsd 进程活着，不说明 checkpoint / restore 当前可用。
-降级的含义与查看办法见 [14](14-failure-semantics.md) 和 [28](28-configuration-and-observability.md)。
+降级的含义与查看办法见 [14](14-failure-semantics.md) 和 [29](29-configuration-and-observability.md)。
 
 checkpoint 的 ID 由 gsd 生成，形如 `ckpt_<纳秒时间戳>`，只在这一个沙箱里有意义。
 
@@ -271,10 +271,10 @@ checkpoint 的 ID 由 gsd 生成，形如 `ckpt_<纳秒时间戳>`，只在这�
 | `created_at` | `Optional[int]` | 两者 | 创建时间，Unix **纳秒**，取的是沙箱里 gsd 的时钟 |
 | `has_process_image` | `bool` | 两者 | 是否保存了用户进程。`False` 表示创建时没有用户进程，这个 checkpoint 只有文件系统；restore 到它会杀掉当前用户进程并且不恢复任何进程 |
 | `process_trees` | `int` | 两者 | 保存了几棵用户进程树；`has_process_image` 为 `False` 时是 0 |
-| `parent_checkpoint_id` | `Optional[str]` | 两者 | 这个 checkpoint 的进程镜像是在哪个 checkpoint 的基础上做的增量；全部树都是全量、或没有进程时为 `None`。父节点可能已经被删除（此时它不在 `list()` 里，但镜像还留着，见 [26](26-semantics-and-limits.md)） |
+| `parent_checkpoint_id` | `Optional[str]` | 两者 | 这个 checkpoint 的进程镜像是在哪个 checkpoint 的基础上做的增量；全部树都是全量、或没有进程时为 `None`。父节点可能已经被删除（此时它不在 `list()` 里，但镜像还留着，见 [27](27-semantics-and-limits.md)） |
 | `image_bytes` | `int` | 两者 | 这个 checkpoint 自己的进程镜像占用的字节数，不含父镜像。镜像放在 guest 内存里的 tmpfs 上，所以这也是它占掉的 guest 内存 |
-| `timings` | `Optional[Dict[str, float]]` | 仅 `create()` | gsd 内各阶段耗时，毫秒。键有 `total_ms`、`find_pids_ms`、`precheck_ms`、`criu_dump_ms`、`overlay_sink_ms`、`stopped_ms`；没有发生的阶段不出现（例如没有用户进程时就没有 `criu_dump_ms`）。键的定义见 [28](28-configuration-and-observability.md) |
-| `clear_refs_failed` | `int` | 仅 `create()` | checkpoint 之后有几个进程没能重置脏页标记。非 0 不影响这次 checkpoint 的正确性，只意味着这些进程下一次的增量会偏大（[29](29-troubleshooting.md)） |
+| `timings` | `Optional[Dict[str, float]]` | 仅 `create()` | gsd 内各阶段耗时，毫秒。键有 `total_ms`、`find_pids_ms`、`precheck_ms`、`criu_dump_ms`、`overlay_sink_ms`、`stopped_ms`；没有发生的阶段不出现（例如没有用户进程时就没有 `criu_dump_ms`）。键的定义见 [29](29-configuration-and-observability.md) |
+| `clear_refs_failed` | `int` | 仅 `create()` | checkpoint 之后有几个进程没能重置脏页标记。非 0 不影响这次 checkpoint 的正确性，只意味着这些进程下一次的增量会偏大（[30](30-troubleshooting.md)） |
 
 ### 5.3 `last_timings`
 
@@ -343,7 +343,7 @@ sbx.commands.run("sh -c 'producer | consumer > /home/user/out.txt'", background=
 
 - `not enough room for checkpoint images: estimated images … snapshot store free …, MemAvailable …`：进程镜像放在 guest 内存里一个 2 GiB 的 tmpfs 上，gsd 在保存之前按进程占用的内存估算镜像大小，tmpfs 剩余空间或 guest 可用内存任何一个不够就拒绝。
   处理办法是 `delete()` 掉不再需要的 checkpoint（每个的占用看 `image_bytes`），或者让沙箱里的进程少占些内存。
-- `layer stack too deep`：文件系统每做一次 checkpoint 多一层，层数有上限。处理办法是删掉旧 checkpoint，或者 restore 到较早的 checkpoint 再继续（[26](26-semantics-and-limits.md)）。
+- `layer stack too deep`：文件系统每做一次 checkpoint 多一层，层数有上限。处理办法是删掉旧 checkpoint，或者 restore 到较早的 checkpoint 再继续（[27](27-semantics-and-limits.md)）。
 
 两种情况下沙箱都没有被改动，进程照常在跑，可以直接重试。
 
@@ -353,7 +353,7 @@ restore 分两段：先做完所有检查与准备，再杀掉当前用户进程
 **杀进程之后**再失败，抛的就是 `CheckpointRestoreException`。这时沙箱处于一个中间状态：原来的用户进程已经没了，信息里会写明文件系统停在旧状态（`filesystem at old state`）还是已经切到了目标（`filesystem at target state`）；多棵树时还会写明哪几棵已经恢复、哪棵失败、哪几棵没有尝试。
 
 此后 gsd 拒绝 `create()`（不能把一个中间状态存成 checkpoint），直到有一次 restore 成功。所以调用方唯一该做的事是**再 restore 一次**——可以是同一个 checkpoint，也可以换一个；成功之后一切恢复正常。
-如果反复失败，按 [29](29-troubleshooting.md) 的"restore 返回 data_loss"一条取日志。
+如果反复失败，按 [30](30-troubleshooting.md) 的"restore 返回 data_loss"一条取日志。
 
 ---
 

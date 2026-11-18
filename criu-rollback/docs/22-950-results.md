@@ -27,7 +27,7 @@
 导入镜像一步停下的三次都与 950 的 docker 配置有关，处理后不影响本轮结果：
 
 1. 950 的 docker 使用 containerd 镜像存储，导入时读归档里的 `index.json` 及其指向的 OCI 清单。当时仓库里的归档缺这份清单，导入出 0B 的空镜像。补上后归档同时满足两种存储（`criu-rollback/deploy/README.md` 第 14 节）。
-2. docker daemon 配了代理，`harbor` 不在 `NO_PROXY` 里，推送 `harbor:443` 返回 504。现在推送走 Harbor 的 http 端口 `SERVER_IP:2900`，模板仍引用 `harbor:443/...`（[27](27-deployment.md) §7）。
+2. docker daemon 配了代理，`harbor` 不在 `NO_PROXY` 里，推送 `harbor:443` 返回 504。现在推送走 Harbor 的 http 端口 `SERVER_IP:2900`，模板仍引用 `harbor:443/...`（[28](28-deployment.md) §7）。
 3. 重启 docker 后 Harbor 的 2900 端口没有恢复，重新执行沙箱级部署（`build.sh -d/-i/-s`）后正常。
 
 ---
