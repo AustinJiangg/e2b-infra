@@ -18,13 +18,17 @@ bytearray，且进程大小随档位一起变），并列时分不开"改动量"
 
 一次测量：改写 → checkpoint A（计时）→ 再改写 → checkpoint B（计时）→ restore 回基点（计时）→
 校验内存 SHA256 与文件 → 删掉 A、B。A 紧跟在上一次 restore 之后，是"restore 之后的 checkpoint"；
-B 紧跟在 A 之后，是"连续的 checkpoint"。两者要分开看：进程级 restore 之后的第一次 checkpoint
-是全量（CRIU 的 PID 复用检测，进程级手册第 16 章 L-18），沙箱级两者都是增量。基点是每个沙箱
-改写之前的一次全量 checkpoint，单列不进统计。
+B 紧跟在 A 之后，是"连续的 checkpoint"。两者分开列：进程级 restore 之后的第一次 checkpoint
+曾经是全量（CRIU 的 PID 复用检测，进程级手册第 16 章 L-18，gsd daae6968f 起修复为增量），
+分开列可以核对修复是否生效。基点是每个沙箱改写之前的一次全量 checkpoint，单列不进统计。
 
 记录：客户端墙钟；服务端分段（进程级取 SDK 返回的 gsd 分段，沙箱级读宿主上
 <store>/<sandbox>/<checkpoint>/timings.json 与 last-restore-timings.json，需要 root）；产物字节
-（进程级 image_bytes；沙箱级 checkpoint 目录里各文件的实占字节）。
+（进程级 image_bytes；沙箱级 checkpoint 目录里各文件的实占字节）；Firecracker 自报的脏页后端
+（hdbss = 硬件标脏、kvm-wp = KVM 写保护、off = 没开；沙箱级的增量靠它，进程级不用它）。
+汇总在总耗时表之后再打一张服务端分段表（选几个代表测点的 p50），用来看时间花在哪一段。
+进程级另外读 CRIU 自己的统计（guest 里镜像目录下的 stats-dump / stats-restore：冻结、扫页、写页、
+fork、恢复各段耗时与页数），把 criu_dump / criu_restore 再拆开；读在每轮核对之后，不在计时区间内。
 
 在部署宿主上运行，用当前栈对应的 SDK 环境：
     python3 ckpt_same_workload.py --out result.json
@@ -33,6 +37,7 @@ B 紧跟在 A 之后，是"连续的 checkpoint"。两者要分开看：进程�
     --smoke                         每组只跑一个测点、1 个沙箱 3 次，约 2 分钟
     --stack sandbox|criu            默认按正在运行的 orchestrator 判断
     --template                      默认沙箱级 base、进程级 base-criu
+    --print result.json             不跑测试，只把已有结果的汇总重新打印一遍
 结果写 JSON，stdout 打印汇总表；校验失败退出码非零。
 """
 import argparse
@@ -51,6 +56,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefm
 logging.getLogger("e2b").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 LOG = logging.getLogger("same")
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from native_snapshot_tiers import fc_info  # noqa: E402  向 Firecracker API 问脏页后端
 
 MIB = 1 << 20
 WD = "/tmp/swl"
@@ -223,6 +231,7 @@ class Hog:
 class Ctx:
     def __init__(self, args, stack, store):
         self.args, self.stack, self.store = args, stack, store
+        self.prov = None
 
     def server(self, sb, ck_id, op, sdk_timings):
         """服务端分段：进程级用 SDK 带回的 gsd 分段；沙箱级读宿主上的 timings 文件。"""
@@ -242,14 +251,89 @@ class Ctx:
         return {"files": files, "bytes": sum(files.values()) if files else None}
 
 
+# 进程级：CRIU 写在镜像目录里的统计（stats-dump / stats-restore，protobuf，时间单位微秒）。
+# 字段号取自 CRIU images/stats.proto：StatsEntry{dump=1, restore=2}。
+GUEST_STORE = "/var/lib/gsd/snapshots"
+CRIU_STATS_PY = r"""
+import glob, json, os, struct, sys
+DUMP = {1: "freezing", 2: "frozen", 3: "memdump", 4: "memwrite", 5: "pages_scanned",
+        6: "pages_skipped_parent", 7: "pages_written", 8: "irmap_resolve", 9: "pages_lazy"}
+RESTORE = {1: "pages_compared", 2: "pages_skipped_cow", 3: "forking", 4: "restore", 5: "pages_restored"}
+def uv(b, i):
+    r = s = 0
+    while True:
+        c = b[i]; i += 1; r |= (c & 0x7f) << s; s += 7
+        if c < 0x80:
+            return r, i
+def fields(b):
+    i, out = 0, {}
+    while i < len(b):
+        k, i = uv(b, i); f, w = k >> 3, k & 7
+        if w == 0:
+            v, i = uv(b, i)
+        elif w == 2:
+            n, i = uv(b, i); v = b[i:i + n]; i += n
+        elif w == 1:
+            v = b[i:i + 8]; i += 8
+        elif w == 5:
+            v = b[i:i + 4]; i += 4
+        else:
+            return out
+        out[f] = v
+    return out
+def read(path, which, names):
+    b = open(path, "rb").read()
+    off = 8 if struct.unpack_from("<I", b)[0] in (0x54564319, 0x55105940) else 4
+    n = struct.unpack_from("<I", b, off)[0]
+    top = fields(b[off + 4:off + 4 + n])
+    sub = fields(top.get(which, b""))
+    return {names[k]: v for k, v in sub.items() if k in names and isinstance(v, int)}
+res = {}
+for key, ck, kind in zip(sys.argv[1::3], sys.argv[2::3], sys.argv[3::3]):
+    acc = {}
+    for path in glob.glob(os.path.join(%r, ck + "_mem", "t*", "stats-" + kind)):
+        try:
+            one = read(path, 1 if kind == "dump" else 2, DUMP if kind == "dump" else RESTORE)
+        except Exception:
+            continue
+        for k, v in one.items():
+            acc[k] = acc.get(k, 0) + v
+    res[key] = acc
+print(json.dumps(res))
+""" % GUEST_STORE
+CRIU_TIME_FIELDS = ("freezing", "frozen", "memdump", "memwrite", "irmap_resolve", "forking", "restore")
+
+
+def criu_stats(hog, wanted):
+    """wanted: [(行里的键, checkpoint_id, "dump"|"restore")]。返回 {键: {字段: 值}}，时间换成 ms。"""
+    args = " ".join("%s %s %s" % w for w in wanted)
+    try:
+        raw = json.loads(hog.sh("python3 %s/criu_stats.py %s" % (WD, args), timeout=30) or "{}")
+    except Exception as exc:  # 读不到统计不影响测量
+        LOG.warning("读 CRIU 统计失败：%s", exc)
+        return {}
+    out = {}
+    for key, d in raw.items():
+        out[key] = {(k + "_ms" if k in CRIU_TIME_FIELDS else k): (v / 1000.0 if k in CRIU_TIME_FIELDS else v)
+                    for k, v in d.items()}
+    return out
+
+
 def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
     P, d, f = point["P"], point["d"], point["f"]
     sb = Sandbox.create(template=ctx.args.template, timeout=SBX_TIMEOUT)
     try:
+        if ctx.prov is not None and "dirty_tracking" not in ctx.prov:
+            info = fc_info(sb.sandbox_id)
+            with lock:
+                ctx.prov.setdefault("dirty_tracking", info.get("dirty_tracking") if info else None)
+                ctx.prov.setdefault("firecracker_version", info.get("vmm_version") if info else None)
         if ctx.stack == "criu":
             sb.commands.run("echo never > /sys/kernel/mm/transparent_hugepage/enabled", user="root")
         hog = Hog(sb)
         hog.start(P)
+        if ctx.stack == "criu":
+            sb.files.write(WD + "/criu_stats.py", CRIU_STATS_PY)
         hog.dirty(P, "base")
         if f:
             hog.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=fsync 2>/dev/null" % (WD, f))
@@ -282,6 +366,8 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
             rs_server = ctx.server(sb, base.checkpoint_id, "restore", getattr(sb.checkpoint, "last_timings", None))
             got = hog.state(f)
             ok = got == want
+            stats = criu_stats(hog, [("ckpt_criu", cp.checkpoint_id, "dump"), ("ckpt2_criu", cp2.checkpoint_id, "dump"),
+                                     ("restore_criu", base.checkpoint_id, "restore")]) if ctx.stack == "criu" else {}
             for c in (cp2, cp):   # 先删子节点
                 try:
                     sb.checkpoint.delete(c.checkpoint_id)
@@ -291,7 +377,7 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
                    "kind": "warmup" if rep < warmup else "sample", "ckpt_ms": ck_ms, "restore_ms": rs_ms,
                    "ckpt_server": ck_server, "restore_server": rs_server, "artifact": art,
                    "ckpt2_ms": ck2_ms, "ckpt2_server": ck2_server, "artifact2": art2,
-                   "mem_mode": getattr(cp, "mem_mode", None), "sandbox_id": sb.sandbox_id, "ok": ok}
+                   "mem_mode": getattr(cp, "mem_mode", None), "sandbox_id": sb.sandbox_id, "ok": ok, **stats}
             with lock:
                 rows.append(row)
             if not ok:
@@ -366,6 +452,9 @@ def print_summary(result):
     print("栈 %s · 宿主 %s · 内核 %s · orchestrator %s %s · 模板 %s" % (
         result["stack"], prov["hostname"], prov["kernel"], prov["orchestrator_exe"],
         (prov["orchestrator_sha256"] or "?")[:16], result["template"]))
+    print("脏页后端 %s（Firecracker 自报；hdbss=硬件标脏，kvm-wp=KVM 写保护，off=没开）· FC_TRACK_DIRTY_PAGES=%s · FC %s"
+          % (prov.get("dirty_tracking") or "?", prov.get("FC_TRACK_DIRTY_PAGES") or "未设",
+             prov.get("firecracker_version") or "?"))
     titles = {"dirty": "dirty：进程固定 256 MiB，改动量变化", "size": "size：改动固定 16 MiB，进程大小变化",
               "file": "file：只写文件", "conc": "conc：N 个沙箱同时做，每个进程 64 MiB、改动 16 MiB"}
     for series, title in titles.items():
@@ -383,8 +472,76 @@ def print_summary(result):
                 fmt(e["ckpt_ms"]), fmt(e["ckpt_ms"], "p90"), fmt(e["ckpt_server_ms"]), fmt(e["artifact_mib"]),
                 fmt(e["restore_ms"]), fmt(e["restore_ms"], "p90"), fmt(e["restore_server_ms"]),
                 fmt(e["base_ckpt_ms"]), "  失败 %d" % e["failed"] if e["failed"] else ""))
+    print_stages(result)
     print("\n判定: %s（测量 %d 次，失败 %d）" % (result["verdict"], sum(1 for r in result["rows"] if r["kind"] != "base"),
                                          sum(1 for r in result["rows"] if not r["ok"])))
+
+
+# 分段表只取几个代表测点，篇幅控制在便于复制的长度。
+STAGE_POINTS = [("dirty", 1, 256, 0, 0), ("dirty", 1, 256, 16, 0), ("dirty", 1, 256, 64, 0), ("dirty", 1, 256, 256, 0),
+                ("size", 1, 32, 16, 0), ("size", 1, 384, 16, 0), ("file", 1, 16, 0, 64), ("conc", 16, 64, 16, 0)]
+STAGE_OPS = (("ckpt2_server", "连续 ckpt"), ("ckpt_server", "restore 后 ckpt"), ("restore_server", "restore"))
+STAGE_TOP = 9      # 每行最多列几段（按 p50 从大到小）
+STAGE_MIN_MS = 0.3
+
+
+def stage_p50(rows, key):
+    """一组样本里各分段的 p50。字段名去掉 _ms 后缀；计数（*_count）、字节量（*_mb）和总计不列。"""
+    acc = {}
+    for r in rows:
+        for k, v in (r.get(key) or {}).items():
+            if not isinstance(v, (int, float)) or isinstance(v, bool):
+                continue
+            name = k[:-3] if k.endswith("_ms") else k
+            if name == "total" or name.endswith("_count") or name.endswith("_mb"):
+                continue
+            acc.setdefault(name, []).append(float(v))
+    return {k: statistics.median(v) for k, v in acc.items()}
+
+
+def criu_p50(rows, key):
+    """CRIU 统计的 p50：时间（ms）与页数（4 KiB 页）。"""
+    acc = {}
+    for r in rows:
+        for k, v in (r.get(key) or {}).items():
+            acc.setdefault(k, []).append(v)
+    if not acc:
+        return ""
+    order = ("freezing_ms", "frozen_ms", "memdump_ms", "memwrite_ms", "irmap_resolve_ms", "forking_ms", "restore_ms",
+             "pages_scanned", "pages_skipped_parent", "pages_written", "pages_compared", "pages_skipped_cow",
+             "pages_restored")
+    out = []
+    for k in order:
+        if k in acc:
+            v = statistics.median(acc[k])
+            out.append("%s %.1f" % (k[:-3], v) if k.endswith("_ms") else "%s %d" % (k, v))
+    return "  ".join(out)
+
+
+def print_stages(result):
+    rows = [r for r in result["rows"] if r["kind"] == "sample"]
+    if not rows:
+        return
+    print("\n服务端分段（p50，ms；每行按耗时从大到小，最多 %d 段、不列 <%.1f ms 的段；分段之间有包含关系，"
+          "不能相加。total 是服务端总计）" % (STAGE_TOP, STAGE_MIN_MS))
+    if result["stack"] == "criu":
+        print("  CRIU 统计：时间单位 ms，页数按 4 KiB 页；frozen 是进程被冻住的总时长，含 memdump；"
+              "memwrite 是把页写进镜像文件")
+    for series, n_conc, P, d, f in STAGE_POINTS:
+        rs = [r for r in rows if (r["series"], r.get("N", 1), r["P"], r["d"], r["f"]) == (series, n_conc, P, d, f)]
+        if not rs:
+            continue
+        print("  %s N=%d P=%d d=%d f=%d（%d 次）" % (series, n_conc, P, d, f, len(rs)))
+        for key, label in STAGE_OPS:
+            st = stage_p50(rs, key)
+            tot = [server_total(r, key) for r in rs]
+            tot = [v for v in tot if v is not None]
+            parts = sorted(((v, k) for k, v in st.items() if v >= STAGE_MIN_MS), reverse=True)[:STAGE_TOP]
+            print("    %-14s total %6s | %s" % (label, "%.1f" % statistics.median(tot) if tot else "-",
+                                               "  ".join("%s %.1f" % (k, v) for v, k in parts) or "-"))
+            crit = criu_p50(rs, key.replace("_server", "_criu"))
+            if crit:
+                print("    %-14s CRIU 统计 | %s" % ("", crit))
 
 
 def main():
@@ -399,7 +556,12 @@ def main():
     ap.add_argument("--template")
     ap.add_argument("--out", default="same-workload-%s.json" % time.strftime("%Y%m%d-%H%M%S"))
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--print", dest="reprint", metavar="RESULT_JSON", help="只重新打印已有结果的汇总")
     args = ap.parse_args()
+    if args.reprint:
+        with open(args.reprint, encoding="utf-8") as f:
+            print_summary(json.load(f))
+        return 0
     exe, env = orchestrator_proc()
     stack = args.stack or detect_stack(exe)
     args.template = args.template or ("base-criu" if stack == "criu" else "base")
@@ -416,6 +578,7 @@ def main():
                              "FC_TRACK_DIRTY_PAGES": env.get("FC_TRACK_DIRTY_PAGES"), "args": vars(args)},
               "rows": [], "summary": [], "verdict": "FAIL"}
     ctx = Ctx(args, stack, store)
+    ctx.prov = result["provenance"]
     lock = threading.Lock()
     failure = None
     try:
