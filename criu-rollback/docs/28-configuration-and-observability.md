@@ -1,4 +1,4 @@
-# 29 · 配置与可观测性
+# 28 · 配置与可观测性
 
 ## 本章目标
 
@@ -10,8 +10,8 @@
 4. 在 guest 里取到 gsd 的日志、CRIU 的日志和内核的相关输出，知道每条关键消息意味着什么；
 5. 读懂 `/health` 的两种响应和 `state.json`，把它们当作排障时的第一手状态。
 
-上一章（[28](28-deployment.md)）把部件装好、模板建好。本章讲装好之后**能调什么、能看什么**。本书**唯一的开关总表**和**唯一的计时键定义表**都在这里，别的章用到时只链接、不复述；
-每个默认值都对着 `criu-rollback-dev@bc3cce913` 的代码核对过。出了问题怎么用这些信息定位，在下一章（[30](30-troubleshooting.md)）。
+上一章（[27](27-deployment.md)）把部件装好、模板建好。本章讲装好之后**能调什么、能看什么**。本书**唯一的开关总表**和**唯一的计时键定义表**都在这里，别的章用到时只链接、不复述；
+每个默认值都对着 `criu-rollback-dev@bc3cce913` 的代码核对过。出了问题怎么用这些信息定位，在下一章（[29](29-troubleshooting.md)）。
 
 ---
 
@@ -22,7 +22,7 @@
 | 位置 | 有哪些 | 什么时候读 | 改了之后 |
 |---|---|---|---|
 | **guest 里的 gsd** | 命令行参数与 `GSD_*` 环境变量（§2.1） | gsd 进程启动时 | 参数写在模板里的 `gsd.service` 中。要对所有沙箱生效：改 orchestrator 里的服务单元模板，重编 orchestrator，重建模板。只改一个正在运行的沙箱：在沙箱里加 systemd drop-in 后重启 gsd |
-| **宿主的 orchestrator** | `HOST_GSD_PATH`、`HOST_KERNELS_DIR`（§2.2） | orchestrator 进程启动时读一次 | 改 job 的环境变量并重启 orchestrator（切栈脚本做的就是这件事，[28](28-deployment.md)）；只影响**之后建的模板** |
+| **宿主的 orchestrator** | `HOST_GSD_PATH`、`HOST_KERNELS_DIR`（§2.2） | orchestrator 进程启动时读一次 | 改 job 的环境变量并重启 orchestrator（切栈脚本做的就是这件事，[27](27-deployment.md)）；只影响**之后建的模板** |
 | **guest 内核** | 模块参数 `overlay.ckpt_move_open`（§2.3） | 每次 checkpoint 时读当前值 | 在沙箱里写 sysfs 立即生效，只影响这一个沙箱 |
 | **客户端 SDK** | 连接参数与 `E2B_*` 环境变量（§2.4） | 创建或连接沙箱对象时 | 重新创建沙箱对象 |
 
@@ -57,7 +57,7 @@ gsd 的参数在 `parseFlags`（`packages/gsd/main.go:55`）里定义。除 `-po
 - **前两行的编译默认值不可用。** `/home/user-sandbox` 与 `/home/user-sandbox-data` 是更早一套方案留下的值，现在的 guest 里没有这两个目录。模板里的 `gsd.service` 总是显式传入 `/` 和 `/mnt/lower`，所以平时不会碰到；手工在 guest 里直接运行 `gsd` 而不带参数时，它会因为打不开挂载点而进入降级状态（`overlay manager init failed`）。
 - **五个路径参数互相关联，并且要和启动脚本一致。** 启动脚本 `overlay-init` 用同一组值建目录、挂内存盘；两边的值都出自 orchestrator 里的同一处（`newTemplateModel`，`packages/orchestrator/internal/template/build/core/rootfs/templates.go:49`）。不要单独改其中一个。
 - **时长的写法**是 Go 的格式，如 `90s`、`2m`。环境变量的值解析不了或不大于 0 时被忽略，gsd 在启动输出里打一行 `ignoring invalid GSD_CRIU_DUMP_TIMEOUT="…", using 1m0s` 并使用默认值；命令行传入 0 或负值同样回落到 60 秒。字符串类的环境变量设成空串等同于没设。
-- **两个时限是 gsd 自己的**，与 SDK 的 `request_timeout` 无关（[26](26-quickstart.md)）。把它们调大时，客户端的 `request_timeout` 要跟着调大，否则 SDK 会先放弃等待。
+- **两个时限是 gsd 自己的**，与 SDK 的 `request_timeout` 无关（[25](25-quickstart.md)）。把它们调大时，客户端的 `request_timeout` 要跟着调大，否则 SDK 会先放弃等待。
 - `gsd.service` 里还有几项固定设置，不是 gsd 的参数但影响它的行为：`Restart=always`（崩溃后自动拉起）、`StartLimitIntervalSec=0`（重启次数不设上限，因为建多层模板时每层都要重启一次 gsd）、`OOMScoreAdjust=-1000`（内存不足时内核不杀 gsd；这个值会被它拉起的 CRIU 继承，所以才需要容量预检，见 [15](15-state-concurrency-capacity.md)）。
 
 在一个正在运行的沙箱里临时改时限，用 drop-in 设环境变量即可（因为 `ExecStart` 没有显式传这两个参数，环境变量会生效）。这个做法依据的是参数解析的代码，没有单独做过实机验证：
@@ -117,7 +117,7 @@ cat /sys/module/overlay/parameters/ckpt_move_open
 echo 1 > /sys/module/overlay/parameters/ckpt_move_open
 ```
 
-默认值 2 是正确性优先的选择。只有在确认沙箱里长期以写方式打开的大文件不需要被 checkpoint 精确保存时，才考虑调低；代价的量级见 [27](27-semantics-and-limits.md) 与 [20](20-920b-performance.md)。无论取哪个值，有多个硬链接的文件都不搬，内核会打一条限速告警（§4.3）。
+默认值 2 是正确性优先的选择。只有在确认沙箱里长期以写方式打开的大文件不需要被 checkpoint 精确保存时，才考虑调低；代价的量级见 [26](26-semantics-and-limits.md) 与 [20](20-920b-performance.md)。无论取哪个值，有多个硬链接的文件都不搬，内核会打一条限速告警（§4.3）。
 
 ### 2.4 SDK 的连接参数与环境变量
 
@@ -163,7 +163,7 @@ SDK 一侧与 gsd 有关的配置都在 `py-sdk/e2b/connection_config.py`。每�
 ### 3.1 定义
 
 gsd 对每次 checkpoint 和 restore 分段计时，结果放在响应的 `Timings` 消息里（`packages/gsd/spec/checkpoint/checkpoint.proto` 第 17 行起），单位都是毫秒、带小数，由 gsd 在 guest 里用自己的时钟量出。
-SDK 把 checkpoint 的结果放进 `CheckpointInfo.timings`，把最近一次成功的 checkpoint 或 restore 的结果放进 `sandbox.checkpoint.last_timings`（[26](26-quickstart.md)）。
+SDK 把 checkpoint 的结果放进 `CheckpointInfo.timings`，把最近一次成功的 checkpoint 或 restore 的结果放进 `sandbox.checkpoint.last_timings`（[25](25-quickstart.md)）。
 
 | 键 | checkpoint | restore | 从哪里计到哪里 |
 |---|---|---|---|
@@ -221,7 +221,7 @@ journalctl -u gsd --no-pager -o cat | grep -F '"checkpoint_id":"ckpt_17599280001
 journalctl -u gsd --no-pager -o cat | grep -E '"level":"(warn|error)"'
 ```
 
-`grep '^{'` 是为了滤掉混在同一个 journal 里的 CRIU 输出（§4.2）。从宿主上取，就通过 SDK 以 root 身份在沙箱里跑这些命令（[30](30-troubleshooting.md) 开头有现成的写法）。
+`grep '^{'` 是为了滤掉混在同一个 journal 里的 CRIU 输出（§4.2）。从宿主上取，就通过 SDK 以 root 身份在沙箱里跑这些命令（[29](29-troubleshooting.md) 开头有现成的写法）。
 
 下面是值得认识的消息。左列是 `message` 的原文，可以直接拿去 grep。
 
@@ -323,7 +323,7 @@ guest 内核的输出用 `dmesg` 看。与 gsd 有关的有三类。
 
 初始实现的补丁里有大量调试输出（每次 ioctl、每次查找都打一行），已全部删除。原始补丁文件 `0002-…` 本身没有改动，其输出是在 `0003-…` 里去掉的；如果在某个 guest 的 `dmesg` 里看到成批的 `ovl_ioctl_checkpoint:`、`ovl_lookup:` 之类的行，说明这个模板固化的是修复之前的内核，应当重建模板。本书没有逐行清点过修复后内核在所有路径上的输出，是否还有个别残留以实际的 `dmesg` 为准。
 
-**内核自己的故障报告。** `BUG`、`Oops`、`KASAN`、`soft lockup` 之类。出现任何一条都是严重问题；guest 已经失去响应、跑不了 `dmesg` 时，从宿主取串口输出（[30](30-troubleshooting.md)）。
+**内核自己的故障报告。** `BUG`、`Oops`、`KASAN`、`soft lockup` 之类。出现任何一条都是严重问题；guest 已经失去响应、跑不了 `dmesg` 时，从宿主取串口输出（[29](29-troubleshooting.md)）。
 
 ### 4.4 取日志时要知道的三件事
 
@@ -331,7 +331,7 @@ guest 内核的输出用 `dmesg` 看。与 gsd 有关的有三类。
 2026-10-09 在新 920B 上做过确认：guest 里 `/var/log` 是来自 `/dev/root` 的独立 ext4 挂载，journald 的存储在 `/var/log/journal`；checkpoint 之后写入的 journal 条目和在 `/var/log` 下新建的文件，restore 之后都还在，而同时在 `/home/user` 下新建的对照文件被回滚掉了。那次用的是没有用户进程的 checkpoint，带进程镜像的 restore 没有单独测（`/var/log` 是独立挂载，按理不受影响）。随手册附带的 `verify_clear_refs_race` 脚本在开头把 journald 改成了只写内存（`Storage=volatile`），目的是不让长时间的测试把根盘写满，不要据此认为 journal 会回滚。
 
 **journal 会持续增长。** 每次 checkpoint 都把 `-v4` 级别的 CRIU 输出写进 journal。新 920B 上 2026-10-08 的循环测试里，journal 每轮增长约 0.1 到 0.7 MB，直到 journald 自己的容量上限为止；`/var/log` 与文件系统的各层在同一块根盘上，所以这部分增长会体现在根盘占用里，容易被误认为是层没有回收。
-长时间高频做 checkpoint 的沙箱要么给 journald 设一个明确的上限，要么定期清理（[30](30-troubleshooting.md)）。
+长时间高频做 checkpoint 的沙箱要么给 journald 设一个明确的上限，要么定期清理（[29](29-troubleshooting.md)）。
 
 **journald 的限流会丢 gsd 的日志。** journald 默认对每个服务按时间窗口限流。CRIU 的 `-v4` 输出量很大，连续做十来次 checkpoint 就可能触发限流，这时被丢掉的不只是 CRIU 的行，gsd 自己的 JSON 日志也会一起丢。
 症状是 gsd 的日志在某个时刻之后变得残缺，同时 `journalctl -u systemd-journald` 里有 `Suppressed` 字样的行。需要完整日志时（验收、排障、压测），先给 gsd 关掉按单元的限流再开始：
@@ -373,7 +373,7 @@ curl -s http://127.0.0.1:49984/health        # 在 guest 里
 | `restore of <ID> failed after user processes were killed; filesystem at old state` 或 `… at target state` | restore 半途失败 | 只拒绝 checkpoint | 一次成功的 restore。这个原因写在状态文件里，gsd 重启后仍然保留 |
 | `cannot persist state to <路径>:` | 状态文件写失败 | checkpoint 与 restore 开头先重试写入，仍失败则拒绝；delete 照常 | 下一次写入成功即自动解除 |
 
-各类降级的语义与设计理由在 [14](14-failure-semantics.md)，处置步骤在 [30](30-troubleshooting.md)。
+各类降级的语义与设计理由在 [14](14-failure-semantics.md)，处置步骤在 [29](29-troubleshooting.md)。
 
 ---
 
@@ -423,9 +423,9 @@ python3 -m json.tool < /var/lib/gsd/snapshots/state.json | head -n 60
 |---|---|---|
 | `version` | 文件格式版本，当前是 2 | — |
 | `overlay.current_upper` / `current_work` | 当前的可写层和它的工作目录 | 这两个目录必须存在；`/proc/mounts` 里显示的始终是开机时的那一对，不能用来判断当前状态，要看这里 |
-| `overlay.layers` | 当前的只读层栈，**最上层在前**，最后一项是基础层 | 长度就是当前这条链的深度（[27](27-semantics-and-limits.md) 的层栈上限） |
+| `overlay.layers` | 当前的只读层栈，**最上层在前**，最后一项是基础层 | 长度就是当前这条链的深度（[26](26-semantics-and-limits.md) 的层栈上限） |
 | `overlay.layer_seq` / `restore_seq` | 层名 `L<n>` 和 restore 临时目录用到的序号，只增不减 | `restore_seq` 随每一次进入准备阶段的 restore 加一，可以当作开机以来 restore 的次数来看 |
-| `last_trees` | 下一次 checkpoint 时，哪些树可以做增量、各自以哪个镜像目录为父。按根进程的进程号与启动时间认定"同一棵树" | 为空表示下一次全部存全量；"增量忽然变成全量"时先看这里（[30](30-troubleshooting.md)） |
+| `last_trees` | 下一次 checkpoint 时，哪些树可以做增量、各自以哪个镜像目录为父。按根进程的进程号与启动时间认定"同一棵树" | 为空表示下一次全部存全量；"增量忽然变成全量"时先看这里（[29](29-troubleshooting.md)） |
 | `restore_failure` | 上一次半途失败的 restore 留下的原因；正常时没有这个字段 | 有值即处于"只能先 restore"的降级 |
 | `checkpoints[]` | 全部 checkpoint，按创建时间从旧到新，**包括已被隐藏的** | `list()` 看不到的隐藏项在这里能看到 |
 | `checkpoints[].layers` | 这个 checkpoint 对应的层栈，restore 时原样切过去 | 这里引用的层目录都必须存在 |

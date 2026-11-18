@@ -1,4 +1,4 @@
-# 31 · 上机验收
+# 30 · 上机验收
 
 ## 本章目标
 
@@ -10,9 +10,9 @@
 4. 决定要不要加跑压测，以及怎么带看门狗跑、怎么判一组压测是否通过；
 5. 把结果按固定的目录结构留档并回传，写清这份结果的条件。
 
-上一章（[30](30-troubleshooting.md)）按症状讲了排障。本章是第六篇的最后一章，也是部署的最后一步：按 [28](28-deployment.md) 部署完之后，把 checkpoint 与 restore 在这台机器上验一遍。
+上一章（[29](29-troubleshooting.md)）按症状讲了排障。本章是第六篇的最后一章，也是部署的最后一步：按 [27](27-deployment.md) 部署完之后，把 checkpoint 与 restore 在这台机器上验一遍。
 每个脚本测什么、判据为什么长成那样，在 [18](18-testing-and-debug-kernel.md)；每一步该看到什么数，在 [19](19-920b-functional.md) 到 [21](21-920b-stress.md)——**本章不另写数字**，需要对数的地方都指向对应章的具体小节。
-跑的过程中某一步不过，按症状去查 [30](30-troubleshooting.md)。
+跑的过程中某一步不过，按症状去查 [29](29-troubleshooting.md)。
 
 ---
 
@@ -20,7 +20,7 @@
 
 **在哪跑。** 在运行进程级栈的那台宿主机上跑。脚本通过 SDK 起沙箱，其中几个还要在 guest 里直连 gsd、读 guest 的 dmesg 与 journal；压测的看门狗要读宿主上 orchestrator 的日志取串口输出。
 
-**这台机器是不是只有你在用。** 验收要建模板、起几十个沙箱，压测还会明显抬高机器负载。开始之前确认机器上没有别人的沙箱在跑；进程级栈运行期间建的**所有**模板都会被注入 gsd（[28](28-deployment.md)），所以验收期间别人也不要在这台机器上建模板。
+**这台机器是不是只有你在用。** 验收要建模板、起几十个沙箱，压测还会明显抬高机器负载。开始之前确认机器上没有别人的沙箱在跑；进程级栈运行期间建的**所有**模板都会被注入 gsd（[27](27-deployment.md)），所以验收期间别人也不要在这台机器上建模板。
 
 **进程级栈在运行，三个文件是要验的那一套。** 宿主上带 gsd 注入的 orchestrator 已经在服务，gsd 二进制与补丁内核在运行时布局的位置上：
 
@@ -29,10 +29,10 @@
 sha256sum /fc-criu/gsd /fc-criu/orchestrator /fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 ```
 
-三个 sha256 与交付清单逐一相同；验收的若是 [19](19-920b-functional.md) 所述的那个版本，值在该章"条件标签"一节。再确认正在运行的 orchestrator 就是这一个二进制、环境变量符合 [28](28-deployment.md) 的两种机器形态之一；
+三个 sha256 与交付清单逐一相同；验收的若是 [19](19-920b-functional.md) 所述的那个版本，值在该章"条件标签"一节。再确认正在运行的 orchestrator 就是这一个二进制、环境变量符合 [27](27-deployment.md) 的两种机器形态之一；
 新 920B 上用随手册附带的 `scripts/ops/switch-gsd-new920b.sh status` 看（它只读，不改任何东西），其他机器按本机的部署方式核对。
 
-**模板。** 在进程级栈下建好别名为 `base-criu` 的模板：2 vCPU / 2048 MB，不使用缓存（[28](28-deployment.md)）。所有脚本的默认模板名都是它。
+**模板。** 在进程级栈下建好别名为 `base-criu` 的模板：2 vCPU / 2048 MB，不使用缓存（[27](27-deployment.md)）。所有脚本的默认模板名都是它。
 模板固化了建模板时的内核、gsd 与 overlay-init——**换过三者中的任何一样而没有重建模板，接下来测的就是旧的那一套**，这是最常见的白跑原因，§3 的部署自检专门查这一点。
 规格与 19 章的条件标签不同（更多 vCPU、更大内存）时功能判定仍然有效，但性能数字不能与 20 章对照。
 
@@ -116,12 +116,12 @@ EOF
 |---|---|---|
 | guest 内 `gsd -commit` | 等于宿主上 `/fc-criu/gsd -commit` 的输出 | 模板是换 gsd 之前建的，要重建模板 |
 | guest 内 `/usr/bin/gsd` 的 sha256 | 等于宿主上 `/fc-criu/gsd` 的 sha256 | 同上 |
-| `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[28](28-deployment.md)） |
+| `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[27](27-deployment.md)） |
 | THP | `always madvise [never]` | overlay-init 不是当前版本；增量会退化成接近全量（[03](03-criu-and-incremental-memory.md)） |
 | `rcu_expedited` | `1` | gsd 不是当前版本或没有正常启动（[12](12-restore.md)） |
-| `gsd.service` | `active` | 见 [30](30-troubleshooting.md) |
+| `gsd.service` | `active` | 见 [29](29-troubleshooting.md) |
 | `/health` | `{"status":"ok"}` | 返回 degraded 时 body 里带原因（[14](14-failure-semantics.md)） |
-| criu 版本 | `Version: 4.2.1` | 基础镜像不对（[28](28-deployment.md)） |
+| criu 版本 | `Version: 4.2.1` | 基础镜像不对（[27](27-deployment.md)） |
 | `/` 与 `/tmp` 的权限 | `/ 755 root:root`，`/tmp 1777 root:root` | overlay-init 不是当前版本（[06](06-guest-boot-and-injection.md)） |
 | `df /tmp` 的第一列 | `overlay` | `/tmp` 被单独挂载了，不会随 restore 回滚 |
 
@@ -141,7 +141,7 @@ python acceptance/verify_gsd.py base-criu 8 2>&1 | tee $OUT/func/verify_gsd.log
 
 **对数。** `total_ms` 与各分段的 p50 对照 [20](20-920b-performance.md) 里 `verify_gsd.py` 单棵 192 MiB 的表。同一台机器、同一规格、同一版本下，重复跑的读数应当落在那张表的最小值与最大值之间或其附近；怎么算"附近"见 §6。
 
-**不过时。** 末行是 `根盘仍在增长 ✗`：内核不是当前版本或模板没有重建（[附录 D](D-restore-slowness-case.md) 讲了这个现象的来历）。某次 `ok=False`：看 [30](30-troubleshooting.md) 里 restore 失败的各条。
+**不过时。** 末行是 `根盘仍在增长 ✗`：内核不是当前版本或模板没有重建（[附录 D](D-restore-slowness-case.md) 讲了这个现象的来历）。某次 `ok=False`：看 [29](29-troubleshooting.md) 里 restore 失败的各条。
 
 ### 4.2 `verify_fixes.py`
 
@@ -300,7 +300,7 @@ EOF
 **对数。** 压测以通过与否为准。checkpoint / restore / delete 的成功次数、worker 的错误分类可以对照 [21](21-920b-stress.md) 的四组压测结果：脚本用固定的种子，同样的代码在 all 与 noworkers 两组上走的是同一条操作序列，同一规格下这三个次数应当与那一节的表相同或非常接近（checkpoint 因容量不足被拒的次数会随镜像大小略有出入，并带动后面的序列）；
 worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，不必相同。结果文件里脚本侧的墙钟耗时不是 gsd 的耗时，不要拿来对数。
 
-**不过时。** 把整个输出目录原样留好：`console.txt`、各个 `*-dmesg-*.txt`、`*-ops.log` 是定位内核问题的全部证据，沙箱一销毁就再也取不到。然后按 [30](30-troubleshooting.md) 与 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) 对应的主题查。
+**不过时。** 把整个输出目录原样留好：`console.txt`、各个 `*-dmesg-*.txt`、`*-ops.log` 是定位内核问题的全部证据，沙箱一销毁就再也取不到。然后按 [29](29-troubleshooting.md) 与 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) 对应的主题查。
 
 ### 5.3 调试内核
 
@@ -358,7 +358,7 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 
 950 上 2026-11-17 用 `criu-rollback/deploy/950.sh all` 跑了本章的必跑验收和四组压测，全部 PASS，结果在 [22](22-950-results.md)。已经确定的有：gsd 只支持 arm64 的 guest（[04](04-goals-and-tradeoffs.md)），950 满足这一条；第四篇的数字都来自 920B，950 上第一轮跑出的结果就是它自己的基线，不用 920B 的耗时作通过阈值，§6 的"对数"以这一轮为准。
 
-部署步骤见 [28](28-deployment.md) §7。验收由 `criu-rollback/deploy/950.sh` 执行（`all` 会依次跑下面两步），顺序和判据与本章相同，由入口自动判读，不需要手工 grep：
+部署步骤见 [27](27-deployment.md) §7。验收由 `criu-rollback/deploy/950.sh` 执行（`all` 会依次跑下面两步），顺序和判据与本章相同，由入口自动判读，不需要手工 grep：
 
 | 入口 | 内容 | 判据 |
 |---|---|---|

@@ -76,7 +76,7 @@ overlay 根目录（也就是 chroot 之后 guest 的 `/`）的属主与权限**
 而在原始内核补丁上这会导致内核崩溃。这类崩溃的根因后来在内核里修掉了（[08](08-overlay-switch-consistency.md) 的"切换与所有 overlay 入口的互斥"一节），
 现在即使有 root 服务在 overlay 上读写，切换也是安全的。但这三处 bind 保留了下来，它们同时起到另一个作用：日志、systemd 的持久状态和时钟漂移数据本来就不该被回滚到过去。
 
-对使用者的含义是：restore 之后这三个目录里是 restore 那一刻的内容，不是 checkpoint 时的内容（[27](27-semantics-and-limits.md)）。
+对使用者的含义是：restore 之后这三个目录里是 restore 那一刻的内容，不是 checkpoint 时的内容（[26](26-semantics-and-limits.md)）。
 另外，gsd 把 CRIU 的详细日志打进 journal，而 journal 就在根盘的 `/var/log` 里，会一直涨到 journald 自己的上限（[16](16-known-limits.md)）。
 
 ### 2.3 步骤 6：透明大页必须在任何用户进程出现之前关掉
@@ -153,7 +153,7 @@ gsd 启动时会再检查一次（`ensureTHPNever`，`packages/gsd/main.go:196`�
 ### 4.1 一个开关管五处
 
 是否构建带 gsd 的模板由 `BuilderConfig.GSDEnabled`（`cfg/model.go:39`）决定，它只看一件事：`HostGSDPath` 是否非空。这个字段来自环境变量
-`HOST_GSD_PATH`，默认值 `/fc-gsd/gsd`（`cfg/model.go:22`）。所以**默认是开的**。部署入口把 gsd 放在 `/fc-criu/gsd`，并在 job 里显式设 `HOST_GSD_PATH` 指向它（[28](28-deployment.md) §3.1）。
+`HOST_GSD_PATH`，默认值 `/fc-gsd/gsd`（`cfg/model.go:22`）。所以**默认是开的**。部署入口把 gsd 放在 `/fc-criu/gsd`，并在 job 里显式设 `HOST_GSD_PATH` 指向它（[27](27-deployment.md) §3.1）。
 
 `GSDEnabled` 为真时，建模板路径上有五处与上游不同；为假时这五处都走与上游相同的分支：
 
@@ -184,7 +184,7 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 要点是**只有小写的 `off` 才是关**。写成 `OFF` 或 `Off` 会被当成一个相对路径，gsd 仍然是开的，之后建模板时因为读不到这个文件而失败（[16](16-known-limits.md)）。
 
 这张表来自配置解析的测试。表里第一行"不设该变量、按默认路径注入"已于 2026-10-09 在新 920B 上真实建模板确认：orchestrator 的进程环境里没有 `HOST_GSD_PATH` 这个键，
-建出的模板里 guest 的 `/usr/bin/gsd` 与宿主上 `HOST_GSD_PATH` 指的 gsd 的 sha256 相同（[19](19-920b-functional.md) 的"落位后的复核"一节、[28](28-deployment.md)）。
+建出的模板里 guest 的 `/usr/bin/gsd` 与宿主上 `HOST_GSD_PATH` 指的 gsd 的 sha256 相同（[19](19-920b-functional.md) 的"落位后的复核"一节、[27](27-deployment.md)）。
 "关掉开关（`off`）后真实建出的模板与上游一致"这一条仍然只有单测与代码依据，没有上机结果，列在 [23](23-gaps-and-boundaries.md) 的缺口表里。
 
 ### 4.3 每建一层后的注入与自检
@@ -225,7 +225,7 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 这条事实不是理论推演，它曾经让一次性能对照作废：对照实验切换了宿主的内核目录，以为在比较两个内核，实际上两组用的是同一个已有模板、同一个内核，
 "内核对耗时的影响很小"的结论因此不成立（经过与教训见 [附录 E](E-regression-case.md)）。此后凡是比较内核或 gsd 版本，一律为每个版本各建一个模板。
 
-验证一个模板里到底是什么，可以在沙箱里看三样：`/proc/version` 里的内核构建时间、`gsd -commit` 输出的提交号、`/usr/bin/gsd` 的校验和（做法见 [31](31-acceptance-runbook.md)）。
+验证一个模板里到底是什么，可以在沙箱里看三样：`/proc/version` 里的内核构建时间、`gsd -commit` 输出的提交号、`/usr/bin/gsd` 的校验和（做法见 [30](30-acceptance-runbook.md)）。
 
 这条事实也解释了 [05](05-architecture.md) 里"鉴权不能缓存"的原因：gsd 的内存是从快照来的，凡是和具体沙箱有关的东西都不能留在它的内存里跨越快照。
 
@@ -248,7 +248,7 @@ gsd 相关的模板文件单独放在 `gsdfiles/` 目录而不是上游的 `file
 3. orchestrator 一侧，强制标志为真时 base 层直接返回"未命中缓存"，不去查索引（`template/build/phases/base/builder.go:364`）；
    后续各层同样因为强制标志而重建（`template/build/builder.go:384`）。
 
-所以本书里所有"重建模板"的步骤，都默认采用不带缓存的方式（命令见 [28](28-deployment.md)）。跨"带 gsd"与"不带 gsd"两种模式的模板派生（以一种模式的模板为基础、用另一种模式的构建器继续建）没有做处理，
+所以本书里所有"重建模板"的步骤，都默认采用不带缓存的方式（命令见 [27](27-deployment.md)）。跨"带 gsd"与"不带 gsd"两种模式的模板派生（以一种模式的模板为基础、用另一种模式的构建器继续建）没有做处理，
 也没有测过（[16](16-known-limits.md)）。
 
 ---

@@ -35,7 +35,7 @@
 | guest 内核 | 两个补丁：`0002-overlayfs-hot-switch-checkpoint.patch`（热切层 ioctl 与 arm64 的 soft-dirty）和 `0003-overlayfs-hot-switch-fixes.patch`（在它之上的全部修复） | [07](07-overlay-hot-switch.md)、[08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) |
 | guest 守护进程 | gsd 本身：进程发现、调用 CRIU、驱动层切换、状态管理 | [10](10-process-trees.md)–[15](15-state-concurrency-capacity.md) |
 | 模板构建 | orchestrator 建模板时把 gsd、它的 systemd 单元和开机脚本放进模板，换掉启动入口，并做一次自检 | [06](06-guest-boot-and-injection.md) |
-| SDK | `sandbox.checkpoint` 的四个方法、连接配置、错误映射 | [26](26-quickstart.md)、[14](14-failure-semantics.md) |
+| SDK | `sandbox.checkpoint` 的四个方法、连接配置、错误映射 | [25](25-quickstart.md)、[14](14-failure-semantics.md) |
 
 值得注意的是 orchestrator 的参与**只在建模板的时候**。沙箱运行期间，宿主对 checkpoint / restore 一无所知，
 它只是像转发其他端口一样把发往 49984 的请求送进沙箱（[05](05-architecture.md)）。
@@ -87,7 +87,7 @@ CRIU 的镜像写在 `/var/lib/gsd/snapshots`，这是开机脚本挂的一个�
 
 代价是直接的：**镜像占的是 guest 自己的内存**。一个 2 GiB 内存的沙箱里，用户进程占得越多，留给镜像的就越少；
 而镜像的大小又正比于用户进程的内存。两者此消彼长，所以 gsd 在每次保存之前做容量预检，估算放不下就拒绝，
-而不是写到一半把内存耗尽（估算方法见 [15](15-state-concurrency-capacity.md)）。这也是使用上"要定期删除不用的 checkpoint"的原因（[27](27-semantics-and-limits.md)）。
+而不是写到一半把内存耗尽（估算方法见 [15](15-state-concurrency-capacity.md)）。这也是使用上"要定期删除不用的 checkpoint"的原因（[26](26-semantics-and-limits.md)）。
 
 与此相对，文件那一半（overlay 的层）占的是 guest 的根盘，不占内存。
 
@@ -161,7 +161,7 @@ gsd 的部署形态天然满足这条约束：所有的层目录都在 `/overlay
 每个 CRIU 恢复都要把进程迁回原来的 cgroup、按指定的 PID 建进程，并发时对内核里相关锁的争用没有实测过；一棵失败时其余几棵的收尾也更复杂。
 先保证正确和可解释，并行留给以后（[附录 B](B-extending.md)）。
 
-**给使用者的含义。** 需要严格一致、或者彼此用管道相连的一组进程，应当由同一个命令启动，使它们成为一棵树（[27](27-semantics-and-limits.md)）。
+**给使用者的含义。** 需要严格一致、或者彼此用管道相连的一组进程，应当由同一个命令启动，使它们成为一棵树（[26](26-semantics-and-limits.md)）。
 
 ---
 
@@ -187,7 +187,7 @@ gsd 的部署形态天然满足这条约束：所有的层目录都在 `/overlay
 **换来了什么。** envd、SDK 的连接、系统服务在 restore 前后一直可用，不需要重连，也不需要重启。
 
 **付出了什么。** 范围外的长期运行进程如果把当前工作目录放在会被回滚的路径下，或者长期开着会被回滚的文件，
-restore 之后可能遇到 `ESTALE` 或者读到旧内容。这些情形的完整描述和建议在 [27](27-semantics-and-limits.md)，限制条目在 [16](16-known-limits.md)。
+restore 之后可能遇到 `ESTALE` 或者读到旧内容。这些情形的完整描述和建议在 [26](26-semantics-and-limits.md)，限制条目在 [16](16-known-limits.md)。
 此外，`/proc/mounts` 里显示的 overlay 选项一直是开机时的那一组，不反映当前的层栈，也是这一类"只保证工作、不保证看起来一致"的遗留。
 
 ---

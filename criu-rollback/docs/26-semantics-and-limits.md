@@ -1,4 +1,4 @@
-# 27 · 语义与使用边界
+# 26 · 语义与使用边界
 
 ## 本章目标
 
@@ -10,7 +10,7 @@
 4. 把 checkpoint 历史当成一棵树来用：分支、删除、空间什么时候真正释放；
 5. 估算一个沙箱能放多少 checkpoint，知道哪些事件会让 checkpoint 全部失效。
 
-上一章（[26](26-quickstart.md)）跑通了接口。本章讲这些接口**承诺什么、不承诺什么**，全部从调用方的角度写；每一条背后的机制都在前面的章里，这里只给结论和指向。
+上一章（[25](25-quickstart.md)）跑通了接口。本章讲这些接口**承诺什么、不承诺什么**，全部从调用方的角度写；每一条背后的机制都在前面的章里，这里只给结论和指向。
 出错时返回什么、该怎么处理，统一在 [14](14-failure-semantics.md)；全部已知限制的总表在 [16](16-known-limits.md)，本章只展开调用方每天会碰到的那几条。
 
 ---
@@ -36,7 +36,7 @@
 - **要跟着回滚的状态，放在用户进程的内存里或 overlay 上的文件里。** 放在 `/dev/shm`、`/run` 里的文件不会回滚；更糟的是，被恢复的进程如果在 checkpoint 时开着这些目录里的某个文件，而这个文件后来被删了或改了大小，CRIU 可能无法重新打开它，restore 会失败（§7）。
 - **以 root 身份起的进程不在范围内。** `commands.run(..., user="root")` 起的进程既不会被保存，也不会被 restore 杀掉；它看到的文件系统会在 restore 时"从脚下换掉"（§3.3）。需要回滚的工作负载一律用默认用户起。
   例外是用户进程自己派生出来的子孙：它们不论 uid 都算在那棵树里，一起保存、一起恢复、一起被杀（例如用户进程经 `sudo` 起的子进程）。
-- **日志不回滚。** `/var/log` 下的系统日志（包括 gsd 自己的日志）在 restore 之后仍然完整，排障时可以放心看（[29](29-configuration-and-observability.md)）。
+- **日志不回滚。** `/var/log` 下的系统日志（包括 gsd 自己的日志）在 restore 之后仍然完整，排障时可以放心看（[28](28-configuration-and-observability.md)）。
 - **时间不回滚。** 被恢复的进程醒来时墙钟已经前进了；依赖"上次时间戳"的逻辑（超时、租约、缓存过期）会看到一次时间跳变。
 - **网络连接不保证。** 被恢复的进程在 checkpoint 时持有的 TCP 连接，gsd 没有为它启用 CRIU 的连接保存选项，这类进程的保存结果没有专门验证过（§7）。需要回滚的负载应当能在恢复之后重新建立连接。
 
@@ -67,7 +67,7 @@ gsd 把"uid 1000、且父进程不是用户进程"的进程当作一棵树的根
 sbx.commands.run("sh -c 'server & worker; wait'", background=True, timeout=0)
 ```
 
-**树之间不能共享管道或 socket。** 每棵树单独恢复，树间的连接接不回去。一条匿名管道的读端和写端分在两棵树里，或者两棵树持有同一个 socket，`create()` 会在动手之前被拒绝（`SandboxException`，`failed_precondition`，什么都没改）；两棵树之间的 unix socket 连接由 CRIU 在保存时报错。改写办法见 [26](26-quickstart.md) 的"第一次用会遇到的三件事"。
+**树之间不能共享管道或 socket。** 每棵树单独恢复，树间的连接接不回去。一条匿名管道的读端和写端分在两棵树里，或者两棵树持有同一个 socket，`create()` 会在动手之前被拒绝（`SandboxException`，`failed_precondition`，什么都没改）；两棵树之间的 unix socket 连接由 CRIU 在保存时报错。改写办法见 [25](25-quickstart.md) 的"第一次用会遇到的三件事"。
 gsd 检查不出来的一种情况是树之间共享的匿名共享内存（只可能来自共同的祖先）：保存和恢复都会成功，但恢复之后两棵树各有一份，不再共享。
 
 多棵树的保存与恢复都是串行的，耗时随树的数量大致线性增长。原因与取舍见 [10](10-process-trees.md)。
@@ -105,7 +105,7 @@ restore 的语义是"回到 checkpoint 那一刻"，所以它先把**当前全�
 
 做到这一点是有代价的：checkpoint 时，凡是被以写方式打开着（或被共享可写映射着）的 overlay 上的文件，内核要给 checkpoint 留一份拷贝，拷贝期间对文件系统的其他操作会被短暂挡住。
 代价与文件大小成正比——新 920B 上 2026-09-30 的专项测量是 16 / 64 / 128 MiB 的文件分别让 checkpoint 多花 12.9 / 48.0 / 101.5 ms，约 0.8 ms/MiB（判定值与条件见 [20](20-920b-performance.md)）。
-所以**沙箱里有大文件长期以写方式打开着（例如一个几百 MiB 的数据库文件）时，每次 checkpoint 都会付这笔钱**。这个行为可以用内核参数调低，见 [29](29-configuration-and-observability.md)。
+所以**沙箱里有大文件长期以写方式打开着（例如一个几百 MiB 的数据库文件）时，每次 checkpoint 都会付这笔钱**。这个行为可以用内核参数调低，见 [28](28-configuration-and-observability.md)。
 有两种文件不在此列：有多个硬链接的文件不做拷贝，checkpoint 之后经旧文件描述符的写入会改到 checkpoint 里（内核日志有告警）；`/var/log` 等不在 overlay 上的目录里的文件不涉及。
 
 ### 3.3 不在回滚范围内的进程
@@ -125,7 +125,7 @@ root 起的服务、envd 的文件接口这类进程不会被杀也不会被恢�
 第二，SDK 的 `files.*` 和每一条新的 `commands.run()` 都是按绝对路径重新进入文件系统的，不受影响——受影响的只是那些跨过 restore 一直开着的句柄。
 `ESTALE` 的由来与这套语义的取舍见 [09](09-overlay-cache-and-reclaim.md)。
 
-另外一个只影响排障的现象：`/proc/mounts` 里根文件系统那一行始终显示开机时的层，不随 checkpoint / restore 变化；当前真实的层栈要看 gsd 的状态文件（[29](29-configuration-and-observability.md)）。
+另外一个只影响排障的现象：`/proc/mounts` 里根文件系统那一行始终显示开机时的层，不随 checkpoint / restore 变化；当前真实的层栈要看 gsd 的状态文件（[28](28-configuration-and-observability.md)）。
 
 ---
 
@@ -160,7 +160,7 @@ restore 不删除任何 checkpoint。回到较早的 `A` 之后，比它新的 `
 估算偏保守：增量保存也按全量估，父子进程共享的页会被重复计。也就是说，**一个占 500 MiB 匿名内存的进程，要求 guest 至少还有约 600 MiB 可用内存才允许 checkpoint，哪怕这一次实际只会写出几 MiB 的增量**。给需要 checkpoint 的沙箱配内存时，按"工作负载的内存 × 2 以上"留余量。
 每个 checkpoint 实际占了多少看 `image_bytes`。
 
-**文件系统层占根盘。** 两次 checkpoint 之间写过的文件构成一层，层留在 guest 的根盘上，直到引用它的 checkpoint 都被删掉。`/tmp` 也在根盘上。根盘写满时后续的 checkpoint、restore 以及普通的文件写入都会失败，所以长跑的沙箱要留意根盘余量（查看办法见 [30](30-troubleshooting.md)）。
+**文件系统层占根盘。** 两次 checkpoint 之间写过的文件构成一层，层留在 guest 的根盘上，直到引用它的 checkpoint 都被删掉。`/tmp` 也在根盘上。根盘写满时后续的 checkpoint、restore 以及普通的文件写入都会失败，所以长跑的沙箱要留意根盘余量（查看办法见 [29](29-troubleshooting.md)）。
 
 **层栈深度有上限。** 文件系统每做一次（有文件改动的）checkpoint 就多一层，而内核切换层栈的接口有长度限制，按现在的命名大约能放 190 层（判定值见 [20](20-920b-performance.md)）。到顶时 `create()` 返回 `NotEnoughSpaceException`，信息里有 `layer stack too deep`；gsd 保证不会建出一个将来恢复不了的 checkpoint。被这样拒绝时文件系统和 checkpoint 列表都没有变，但进程已经被保存过一次（镜像随即丢弃），所以下一次成功的 `create()` 存的是全量（[14](14-failure-semantics.md)）。
 这个上限针对的是**当前所在的这条链**的深度，不是 checkpoint 的总个数：restore 到一个较早的 checkpoint 之后，深度回到那个点，可以继续 checkpoint。两次 checkpoint 之间没有任何文件改动时不产生新层。

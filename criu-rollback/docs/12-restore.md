@@ -134,7 +134,7 @@ CRIU 恢复一棵树时要让每个进程拿回它**原来的进程号**，进�
 | `--pidfile` | 把恢复出来的根进程号写到文件里。gsd 每次运行前先删掉旧的，运行后读它（`execCriuRestore`，`criu.go:114`） |
 
 恢复出来的根进程是 criu 的子进程；criu 一退出，它就被 PID 1 收养。所以 **restore 之后每棵树的根的父进程都是 PID 1**，而不是 envd，也不是 gsd。
-这带来一个使用上的后果：恢复出来的进程与当初启动它的那次 SDK 调用之间的连接（通向 envd 的标准输出管道）不会被接回去，SDK 那一端原来的命令句柄不再收到它的输出（[27](27-semantics-and-limits.md)）。
+这带来一个使用上的后果：恢复出来的进程与当初启动它的那次 SDK 调用之间的连接（通向 envd 的标准输出管道）不会被接回去，SDK 那一端原来的命令句柄不再收到它的输出（[26](26-semantics-and-limits.md)）。
 
 CRIU 另有一个选项可以让恢复出来的进程成为调用者的兄弟进程，这里没有用；代码里对应的注释只是把现状说清楚（`criu.go:101-102`）。
 
@@ -222,7 +222,7 @@ C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，
 1. **恢复出来的进程要从干净的 soft-dirty 开始。** CRIU 把内存写回时每一页都被置上 soft-dirty，新建的内存区域带区域级标志（[03](03-criu-and-incremental-memory.md) §3）。所以 restore 也用 `--leave-stopped`：全部树恢复完、都停着的时候，gsd 给恢复出来的每个进程写 `clear_refs`，然后才放行。dump 前就停着的进程（用户 Ctrl-Z）在 checkpoint 时记进条目（状态文件里的 `stopped_pids`），放行时跳过，恢复出来仍是停着的。
 2. **CRIU 要肯用这份父镜像。** CRIU 4.2.1 在增量 dump 前做 PID 复用检测（`criu/mem.c` 的 `detect_pid_reuse`）：进程的启动时间（时钟节拍）不早于父镜像 `inventory.img` 里的 dump 时刻（`dump_uptime`，微秒），就认为这个 PID 可能已经换了进程，不用父镜像、整个进程重新写出。restore 出来的进程 PID 不变、启动时间是新的，必然命中。对 gsd 刚恢复出来的进程这是误判，所以 gsd 在目标镜像目录旁边建一个**替身父目录**（`t0.rp` 等）：镜像文件都是指向原镜像的符号链接，只有 `inventory.img` 是一份拷贝，`dump_uptime` 改成全部树恢复完之后再加一个时钟节拍。下一次 dump 以它为父；子镜像的 `parent` 链接指向替身目录，restore 时经符号链接读到原镜像。restore 之后新起的进程、真的复用了 PID 的进程，启动时间都晚于这个时刻，CRIU 的保护对它们照样生效。读不到 uptime 或 inventory 不认识时，退回原镜像目录（下一次全量）。
 
-这两步是 2026-11-18 补上的（`daae6968f`，[16](16-known-limits.md) 的 L-18）。之前 restore 之后的第一次 checkpoint 一律全量：新 920B 上 256 MiB 的进程一页不改，restore 之前的增量写出 0.1 MiB、约 16 ms，restore 之后写出 260.8 MiB、约 115～125 ms；修复后两者都是 0.1 MiB。验证：`verify_restore_incremental.py`（[31](31-acceptance-runbook.md) 的验收里）每轮只改一部分内存、restore 到这份增量核对整块内存的 SHA256，并让替身目录一代接一代；漏页测试 `verify_clear_refs_race.py` 30 轮 0 漏页。
+这两步是 2026-11-18 补上的（`daae6968f`，[16](16-known-limits.md) 的 L-18）。之前 restore 之后的第一次 checkpoint 一律全量：新 920B 上 256 MiB 的进程一页不改，restore 之前的增量写出 0.1 MiB、约 16 ms，restore 之后写出 260.8 MiB、约 115～125 ms；修复后两者都是 0.1 MiB。验证：`verify_restore_incremental.py`（[30](30-acceptance-runbook.md) 的验收里）每轮只改一部分内存、restore 到这份增量核对整块内存的 SHA256，并让替身目录一代接一代；漏页测试 `verify_clear_refs_race.py` 30 轮 0 漏页。
 
 ---
 

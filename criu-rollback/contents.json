@@ -46,19 +46,18 @@
     {
       "title": "第五篇：与沙箱级对比",
       "chapters": [
-        "24-vs-sandbox-level.md",
-        "25-tiered-performance-testing.md"
+        "24-vs-sandbox-level.md"
       ]
     },
     {
       "title": "第六篇：使用与运维",
       "chapters": [
-        "26-quickstart.md",
-        "27-semantics-and-limits.md",
-        "28-deployment.md",
-        "29-configuration-and-observability.md",
-        "30-troubleshooting.md",
-        "31-acceptance-runbook.md"
+        "25-quickstart.md",
+        "26-semantics-and-limits.md",
+        "27-deployment.md",
+        "28-configuration-and-observability.md",
+        "29-troubleshooting.md",
+        "30-acceptance-runbook.md"
       ]
     }
   ],

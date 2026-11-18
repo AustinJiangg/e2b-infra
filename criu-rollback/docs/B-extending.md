@@ -24,10 +24,10 @@
 | gsd（Go，guest 内守护进程） | `packages/gsd/`：编排在 `internal/services/checkpoint/`（本书简写 `ckpt/`），鉴权在 `internal/permissions/` | 同目录 `*_test.go`；`ckpt/fake_test.go` 提供假的 `/proc` 和假的 CRIU | `cd packages/gsd && go vet ./... && go test -race -count=1 ./...` |
 | orchestrator 的注入（Go） | `packages/orchestrator/internal/cfg/`、`internal/template/build/`（`core/rootfs/`、`layer/`、`phases/base/`） | 同目录 `*_test.go` | `cd packages/orchestrator && go test -count=1 ./internal/template/... ./internal/cfg/...` |
 | Python SDK | `py-sdk/`：`e2b/sandbox_sync/checkpoint.py`、`e2b/sandbox_async/checkpoint.py`、`e2b/gsd/` | `py-sdk/tests/test_gsd_*.py` | `cd py-sdk && pytest tests/test_gsd_checkpoint.py tests/test_gsd_errors.py tests/test_gsd_headers.py` |
-| guest 内核补丁 | `fc-kernels/patches/6.1.158/`（三个补丁）、`fc-kernels/build.sh`、`kernel_base_tags.txt` | 无单测，靠调试内核压测（§4.3） | [28](28-deployment.md) |
+| guest 内核补丁 | `fc-kernels/patches/6.1.158/`（三个补丁）、`fc-kernels/build.sh`、`kernel_base_tags.txt` | 无单测，靠调试内核压测（§4.3） | [27](27-deployment.md) |
 
 离线构建时 Go 的环境变量是 `GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly`；
-gsd 以 `CGO_ENABLED=0` 静态编译，orchestrator 需要 `CGO_ENABLED=1`；两者都用 `-ldflags "-X main.commitSHA=<提交号>"` 把提交号编进去。完整命令在 [28](28-deployment.md)。
+gsd 以 `CGO_ENABLED=0` 静态编译，orchestrator 需要 `CGO_ENABLED=1`；两者都用 `-ldflags "-X main.commitSHA=<提交号>"` 把提交号编进去。完整命令在 [27](27-deployment.md)。
 
 手册与测试脚本在 `e2b-infra` 仓库的 `criu-rollback/` 下：`docs/` 是本书源文件，`scripts/` 是验收、压测与探针脚本，`scripts/kernel/` 是调试内核的配置与说明。
 
@@ -64,7 +64,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 `CheckpointInfo`
 
 ### 2.3 改 guest 的启动或注入
 
-- `overlay-init.sh.tpl` 在 PID 1 之前运行，出错的后果是 guest 起不来；改动后至少要重建模板并跑一遍 [31](31-acceptance-runbook.md) 的部署自检。
+- `overlay-init.sh.tpl` 在 PID 1 之前运行，出错的后果是 guest 起不来；改动后至少要重建模板并跑一遍 [30](30-acceptance-runbook.md) 的部署自检。
 - **模板固化了建模板时的内核、gsd、overlay-init。** 改了这三样中的任何一样，已有模板不受影响，必须重建模板才能测到；做性能对照时这一点曾导致一次结论作废（[附录 E](E-regression-case.md)）。
 - 受 `GSDEnabled()` 控制的五个点（[附录 A](A-glossary-and-code-map.md) 的代码地图）要保持"关掉开关后与上游的建模板路径完全一致"，新增注入逻辑时放在开关之内。
 - base 层缓存键不含 gsd 或内核的版本。换了 gsd 或内核后重建模板不要用缓存。
@@ -72,7 +72,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 `CheckpointInfo`
 ### 2.4 改内核补丁
 
 - 在内核源码树的开发分支上按主题一个提交一个提交地做，验证通过后再压成一个补丁替换仓库里的 0003，并更新它文件头的提交说明。0002 保持不动。
-- 替换后做可重放性核对：从 `kernel_base_tags.txt` 里的基线 tag 依次 `git apply` 三个补丁，`git write-tree` 的结果必须与开发分支末端的树相同（[28](28-deployment.md)）。
+- 替换后做可重放性核对：从 `kernel_base_tags.txt` 里的基线 tag 依次 `git apply` 三个补丁，`git write-tree` 的结果必须与开发分支末端的树相同（[27](27-deployment.md)）。
 - 发布版和调试版两种配置都要编过，不引入新的告警。
 - 必须满足 §3.2 的四条内核不变量，并通过 §4.3 的调试内核压测。
 
@@ -125,7 +125,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 `CheckpointInfo`
 | 层 | 跑什么 | 什么时候必须跑 |
 |---|---|---|
 | 单测 | §1.1 表里的三条命令 | 每次改动 |
-| 实机功能验证 | `verify_gsd`、`verify_fixes`、`verify_multitree`、`verify_clear_refs_race`（顺序与判据见 [31](31-acceptance-runbook.md)） | 改了 gsd、注入、overlay-init 或内核之后；要先重建模板 |
+| 实机功能验证 | `verify_gsd`、`verify_fixes`、`verify_multitree`、`verify_clear_refs_race`（顺序与判据见 [30](30-acceptance-runbook.md)） | 改了 gsd、注入、overlay-init 或内核之后；要先重建模板 |
 | 实机压测与探针 | 四个压测脚本加各个探针（[18](18-testing-and-debug-kernel.md)） | 改了内核，或改了 gsd 里与切换、回收、杀进程有关的逻辑 |
 
 ### 4.2 按改动选最小集合
@@ -189,7 +189,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 `CheckpointInfo`
 
 ### 5.3 两套栈合进一个部署包
 
-目前进程级靠切换宿主上的 orchestrator 与沙箱级轮流使用（[28](28-deployment.md)）。要让一个部署包同时带两套，还有这些事没有做：
+目前进程级靠切换宿主上的 orchestrator 与沙箱级轮流使用（[27](27-deployment.md)）。要让一个部署包同时带两套，还有这些事没有做：
 
 | 事项 | 现状 | 要做的 |
 |---|---|---|

@@ -202,7 +202,7 @@ restore 不保留旧 upper，而且 lower 也可能整个换了一组。缓存�
 
 对进程的含义是：restore 之后，从根开始的新路径查找看到的是目标 checkpoint 的文件系统；而在 restore 之前就拿着的当前目录、打开的文件，可能看到旧时间线，或者得到 `-ESTALE`。
 用户进程不受影响——它们在切换之前已经被 gsd 全部杀掉，恢复出来的进程由 CRIU 在新层栈上重新打开文件（[12](12-restore.md)）。
-受影响的是不在回滚范围内的进程：root 起的服务、envd 的文件接口。这是 [04](04-goals-and-tradeoffs.md) 的取舍三，细节和它引出的几个修复在 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)，对使用者的说明在 [27](27-semantics-and-limits.md)。
+受影响的是不在回滚范围内的进程：root 起的服务、envd 的文件接口。这是 [04](04-goals-and-tradeoffs.md) 的取舍三，细节和它引出的几个修复在 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)，对使用者的说明在 [26](26-semantics-and-limits.md)。
 
 ### 4.3 代数还用在哪
 
@@ -303,7 +303,7 @@ work 目录只有内核使用，固定 0755。
 ### 6.5 一个会让人困惑的现象
 
 切换不更新 `/proc/mounts` 里这个 overlay 的挂载选项：无论做过多少次 checkpoint 和 restore，那里显示的始终是开机时的
-`lowerdir=/mnt/lower,upperdir=/overlay/workspace/upper,…`。要知道当前真正的层栈，看 gsd 的 `state.json` 或日志，不要看 `/proc/mounts`（[16](16-known-limits.md)、[30](30-troubleshooting.md)）。
+`lowerdir=/mnt/lower,upperdir=/overlay/workspace/upper,…`。要知道当前真正的层栈，看 gsd 的 `state.json` 或日志，不要看 `/proc/mounts`（[16](16-known-limits.md)、[29](29-troubleshooting.md)）。
 
 ---
 

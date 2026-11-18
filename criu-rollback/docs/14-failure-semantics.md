@@ -15,7 +15,7 @@
 上一章（[13](13-end-to-end.md)）按时间顺序走完了一次 checkpoint 和一次 restore 的正常路径。
 本章转向"出错时怎么办，以及怎么让调用方知道"，把 [11](11-checkpoint.md)、[12](12-restore.md) 两章沿途标出的失败出口收拢到同一个框架里：
 先讲提交点，再给出全书唯一的一张错误表，然后是 degraded 状态、SDK 的异常映射和一份不变量清单。
-状态文件怎么写、请求怎么排队、容量怎么预检是下一章（[15](15-state-concurrency-capacity.md)）的主题；面向排障的"看到某个报错该查哪里"在 [30](30-troubleshooting.md)。
+状态文件怎么写、请求怎么排队、容量怎么预检是下一章（[15](15-state-concurrency-capacity.md)）的主题；面向排障的"看到某个报错该查哪里"在 [29](29-troubleshooting.md)。
 
 ---
 
@@ -131,16 +131,16 @@ criu 运行时用的是脱离了请求的超时上下文（`context.WithoutCance
 | # | 场景 | Connect 码（产生处） | SDK 异常类 | 失败后状态 | 调用方该做什么 |
 |---|---|---|---|---|---|
 | 1 | restore 或 delete 的 checkpoint 不存在，或已经被删除（含"有子节点、只是被隐藏"的，见 [15](15-state-concurrency-capacity.md)） | `not_found`（`ckpt/service.go:477`、`:771`） | `NotFoundException` | 什么都没动 | 用 `list()` 取当前可见的 checkpoint |
-| 2 | secure 沙箱的请求没带 `X-Access-Token`，或 token 不对 | `unauthenticated`（`permissions/authenticate.go:64`、`:68`） | `AuthenticationException` | 什么都没动 | 检查连接配置是否带上了沙箱的 access token（[26](26-quickstart.md)）；用别的沙箱的 token 也是这个错误 |
-| 3 | gsd 读不到 MMDS，无法校验 token | `unavailable`（`permissions/authenticate.go:57`） | `TimeoutException`（沿用 envd 的映射，提示语见§5的说明） | 什么都没动 | 稍后重试；持续出现时按 [30](30-troubleshooting.md) 查 guest 到 MMDS 的通路 |
-| 4 | checkpoint：两棵用户进程树之间有一条管道（读写两端分在两棵树里），或持有同一个 socket | `failed_precondition`（`ckpt/service.go:204`） | `SandboxException` | 什么都没动，进程没有被停过 | 把相连的进程改成从同一条命令启动，使它们成为一棵树（[10](10-process-trees.md)、[27](27-semantics-and-limits.md)） |
+| 2 | secure 沙箱的请求没带 `X-Access-Token`，或 token 不对 | `unauthenticated`（`permissions/authenticate.go:64`、`:68`） | `AuthenticationException` | 什么都没动 | 检查连接配置是否带上了沙箱的 access token（[25](25-quickstart.md)）；用别的沙箱的 token 也是这个错误 |
+| 3 | gsd 读不到 MMDS，无法校验 token | `unavailable`（`permissions/authenticate.go:57`） | `TimeoutException`（沿用 envd 的映射，提示语见§5的说明） | 什么都没动 | 稍后重试；持续出现时按 [29](29-troubleshooting.md) 查 guest 到 MMDS 的通路 |
+| 4 | checkpoint：两棵用户进程树之间有一条管道（读写两端分在两棵树里），或持有同一个 socket | `failed_precondition`（`ckpt/service.go:204`） | `SandboxException` | 什么都没动，进程没有被停过 | 把相连的进程改成从同一条命令启动，使它们成为一棵树（[10](10-process-trees.md)、[26](26-semantics-and-limits.md)） |
 | 5 | restore：目标 checkpoint 的进程镜像不可用（`inventory.img` 读不了，或父镜像链断了） | `failed_precondition`（`ckpt/service.go:488`） | `SandboxException` | 什么都没动 | 这个 checkpoint 已不可恢复，换一个目标；它本身可以 delete |
 | 6 | checkpoint 或 restore：gsd 处于 degraded（三类原因见§4） | `failed_precondition`（`ckpt/service.go:688`、`:691`、`:695`） | `SandboxException` | 什么都没动 | 读错误信息或 `/health` 里的原因：restore 半途失败的，先 restore 一个 checkpoint；其余见§4 |
 | 7 | checkpoint：估算的镜像放不进 snapshot store，或超过 guest 的 `MemAvailable` | `resource_exhausted`（`ckpt/service.go:216`） | `NotEnoughSpaceException` | 什么都没动 | 删掉一些 checkpoint，或释放沙箱里的内存后重试；错误信息里有估算值与两个剩余量 |
 | 8 | checkpoint：层栈太深，切换 ioctl 的选项串会超过内核上限；或者这个 checkpoint 建出来之后将来无法 restore | `resource_exhausted`（`overlayErrorCode`，`ckpt/service.go:874`，经 `:326`） | `NotEnoughSpaceException` | 文件系统与 checkpoint 列表没动；dump 已做过并被丢弃，下一次 checkpoint 全量（见 §2.1） | restore 到一个层数少的 checkpoint 之后再继续，或删掉不用的 checkpoint；上限见 [15](15-state-concurrency-capacity.md) |
-| 9 | checkpoint：某棵树的 `criu dump` 超过时限（单棵默认 60 s，一次 checkpoint 合计上限为其 3 倍） | `deadline_exceeded`（`criuErrorCode`，`ckpt/service.go:865`，经 `:280`、`:282`） | `TimeoutException` | 进程已放开、照常运行；镜像已丢弃；下一次 checkpoint 全量 | 这不是 SDK 的 `request_timeout`，调大它没有用；查进程为什么 dump 不完（[30](30-troubleshooting.md)），必要时调 `-criu-dump-timeout`（[29](29-configuration-and-observability.md)） |
+| 9 | checkpoint：某棵树的 `criu dump` 超过时限（单棵默认 60 s，一次 checkpoint 合计上限为其 3 倍） | `deadline_exceeded`（`criuErrorCode`，`ckpt/service.go:865`，经 `:280`、`:282`） | `TimeoutException` | 进程已放开、照常运行；镜像已丢弃；下一次 checkpoint 全量 | 这不是 SDK 的 `request_timeout`，调大它没有用；查进程为什么 dump 不完（[29](29-troubleshooting.md)），必要时调 `-criu-dump-timeout`（[28](28-configuration-and-observability.md)） |
 | 10 | checkpoint：`criu dump` 自己报错（例如进程用了 CRIU 不支持的特性、连着树外的 unix socket） | `internal`（同上，经 `:280`、`:282`） | `SandboxException` | 同 9 | 错误信息末尾带 `criu-dump.log` 的最后 2048 字节，按它判断；完整日志在 gsd 的 journal 里 |
-| 11 | checkpoint：扫描 `/proc` 失败、读不到容量数字、建镜像目录失败 | `internal`（`ckpt/service.go:183`、`:212`、`:226`） | `SandboxException` | 什么都没动 | 属于环境异常，按 [30](30-troubleshooting.md) 排查 |
+| 11 | checkpoint：扫描 `/proc` 失败、读不到容量数字、建镜像目录失败 | `internal`（`ckpt/service.go:183`、`:212`、`:226`） | `SandboxException` | 什么都没动 | 属于环境异常，按 [29](29-troubleshooting.md) 排查 |
 | 12 | checkpoint：沉下 upper 失败（建目录、改名或 ioctl 失败，层栈太深以外的原因） | `internal`（`ckpt/service.go:326`） | `SandboxException` | 文件系统没动（改名已撤回）；下一次 checkpoint 全量 | 最常见的是根盘写满，错误信息里有 `no space left on device`；腾出空间后重试 |
 | 13 | restore：杀进程之前的准备失败（建目录失败、层目录缺失、扫描失败），或切换失败而此前没有杀任何进程 | `internal`，层栈太深时为 `resource_exhausted`（`ckpt/service.go:498`、`:511`、`:543`） | `SandboxException` / `NotEnoughSpaceException` | 什么都没动，错误信息含 `nothing was changed` | 可以直接重试，或换一个目标 |
 | 14 | restore：杀进程之后失败（切换层栈失败，或 `criu restore` 报错、超时） | `data_loss`（`restoreFailed`，`ckpt/service.go:641`，经 `:545`、`:594`、`:603`） | `CheckpointRestoreException` | 用户进程已被杀；文件系统处于 `old` 或 `target`（信息里写明）；多树时可能有一部分树已恢复；gsd 进入 degraded，拒绝 checkpoint | **只能再 restore 一次**（同一个或另一个 checkpoint），成功后解除；`criu restore` 失败时信息末尾带 `criu-restore.log` 的尾部 |
@@ -148,7 +148,7 @@ criu 运行时用的是脱离了请求的超时上下文（`context.WithoutCance
 对这张表的几点补充：
 
 - `list` 不会返回上表里除 2、3 以外的任何错误：它只读内存里的池，不查 degraded、不排队。`delete` 只会返回 1、2、3。
-- 配置了入口流量令牌的沙箱上，代理可能在请求到达 gsd 之前返回 403。这不是 gsd 的错误，不在本表里，见 [05](05-architecture.md)、[30](30-troubleshooting.md)。
+- 配置了入口流量令牌的沙箱上，代理可能在请求到达 gsd 之前返回 403。这不是 gsd 的错误，不在本表里，见 [05](05-architecture.md)、[29](29-troubleshooting.md)。
 - 第 8 行的第二种情形（"将来无法 restore"）是 checkpoint 替 restore 把关：restore 的选项串比 checkpoint 的长（它要把整个层栈显式写出来，再加上名字更长的 upper 和 work 目录），
   所以 checkpoint 时就用"最坏情况下的 restore 目录名"再算一遍，放不下就拒绝，避免建出一个恢复不了的 checkpoint。
   正因为有这道检查，第 13 行里 `resource_exhausted` 那一支按现在的流程不应出现。

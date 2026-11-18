@@ -21,7 +21,7 @@
 3. **性能由两个量决定。** checkpoint 的耗时随本次改动量增长；restore 要杀掉并重建进程，耗时随被恢复进程的大小增长，
    多棵树时随树数近似线性增长（§2.3，代价模型见 [17](17-cost-model.md)）。
 4. **边界是清楚的。** 只回滚用户进程和 overlay 根文件系统，范围外的进程可能看到旧时间线或得到 `ESTALE`，
-   已知限制集中在 [16](16-known-limits.md)，使用语义在 [27](27-semantics-and-limits.md)。
+   已知限制集中在 [16](16-known-limits.md)，使用语义在 [26](26-semantics-and-limits.md)。
 5. **还有缺口。** 950 只跑了首轮验收和四组压测（全部 PASS，[22](22-950-results.md)），只支持 arm64 的 guest，更大规格、三棵以上的树和小时级连续运行都没有数据（§2.4）。
 
 ---
@@ -146,7 +146,7 @@ gsd 正是按这个范围做的：只保存 uid 1000 的用户进程和 overlay 
 **不适用**：
 
 - **需要连内核状态一起回滚**：内核态、页缓存、root 起的系统服务都不在回滚范围里（[02](02-problem-and-scope.md)）；
-- **进程用了 CRIU 保存不了的东西**：这样的进程 checkpoint 会失败，错误信息里带 CRIU 日志的尾部（[27](27-semantics-and-limits.md)）；
+- **进程用了 CRIU 保存不了的东西**：这样的进程 checkpoint 会失败，错误信息里带 CRIU 日志的尾部（[26](26-semantics-and-limits.md)）；
 - **跨沙箱、跨宿主、长期保存**：镜像放在沙箱内部的内存文件系统里，层放在沙箱自己的根盘上，都随沙箱消失（[04](04-goals-and-tradeoffs.md)）；
 - **x86 的沙箱**：目前只支持 arm64 的 guest（[04](04-goals-and-tradeoffs.md)）；
 - **撤销对外部世界的影响**：已经发出去的请求、写进外部数据库的数据，任何快照都退不回来。
@@ -163,7 +163,7 @@ gsd 正是按这个范围做的：只保存 uid 1000 的用户进程和 overlay 
 
 | # | 这一步做什么 | 原理 / 实现在哪 |
 |---|---|---|
-| 1 | SDK 把请求发到沙箱地址的 49984 端口，带上沙箱的 access token | 用法 [26](26-quickstart.md)；请求路径 [05](05-architecture.md) |
+| 1 | SDK 把请求发到沙箱地址的 49984 端口，带上沙箱的 access token | 用法 [25](25-quickstart.md)；请求路径 [05](05-architecture.md) |
 | 2 | 宿主的代理把请求转进沙箱；gsd 校验 token | [05](05-architecture.md) |
 | 3 | gsd 取串行锁，检查自己是否处于可服务状态 | [15](15-state-concurrency-capacity.md)、[14](14-failure-semantics.md) |
 | 4 | 扫描一次 `/proc`，找出全部用户进程树的根，记下每个进程此刻是否停着 | [10](10-process-trees.md) |
@@ -171,7 +171,7 @@ gsd 正是按这个范围做的：只保存 uid 1000 的用户进程和 overlay 
 | 6 | 对每棵树各做一次 CRIU dump，做完的树停在原地；能做增量的树只写脏页 | 原理 [03](03-criu-and-incremental-memory.md)；实现 [11](11-checkpoint.md) |
 | 7 | 所有树都停住之后，把当前可写层沉成只读层，换上新的空可写层 | 机制 [07](07-overlay-hot-switch.md)；并发与内核侧保证 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) |
 | 8 | 给刚才保存过的进程重新清一次 soft-dirty，再让它们继续运行 | 为什么要重清 [03](03-criu-and-incremental-memory.md)；实现 [11](11-checkpoint.md) |
-| 9 | 记录这个 checkpoint，把状态写进状态文件，把各阶段耗时随响应返回 | [15](15-state-concurrency-capacity.md)、[29](29-configuration-and-observability.md) |
+| 9 | 记录这个 checkpoint，把状态写进状态文件，把各阶段耗时随响应返回 | [15](15-state-concurrency-capacity.md)、[28](28-configuration-and-observability.md) |
 | 10 | 任何一步失败：放开已停住的进程，删掉这次的镜像，沙箱回到原状 | [14](14-failure-semantics.md) |
 
 ### 4.2 一次 restore
@@ -220,14 +220,14 @@ gsd 守护进程的核心包路径较长，统一简写为 `ckpt/`，即 `packag
 
 ## 6. 使用上最容易踩到的边界
 
-细节都在 [27](27-semantics-and-limits.md) 和 [16](16-known-limits.md)：
+细节都在 [26](26-semantics-and-limits.md) 和 [16](16-known-limits.md)：
 
 - **被回滚的只有用户进程和 overlay 根文件系统。** `/run`、`/dev/shm`、`/var/log` 不回滚；`/tmp` 回滚。
 - **每个后台命令是一棵独立的进程树。** 树和树之间如果用管道或 socket 相连，checkpoint 会被拒绝；
   需要严格一致的一组进程应当由同一个命令启动，成为一棵树。
 - **镜像占的是沙箱自己的内存。** gsd 在保存之前先估算，放不下时直接拒绝并给出数字，而不是写到一半把沙箱的内存耗尽。
 - **restore 一旦开始杀进程就没有回头路。** 之后再失败，沙箱里的用户进程已经没有了，要再成功 restore 一次才能恢复到一个完整的状态。
-- **模板里固化了建模板时的内核和 gsd。** 换了内核或 gsd 之后必须重建模板，已有模板不会跟着变（[06](06-guest-boot-and-injection.md)、[28](28-deployment.md)）。
+- **模板里固化了建模板时的内核和 gsd。** 换了内核或 gsd 之后必须重建模板，已有模板不会跟着变（[06](06-guest-boot-and-injection.md)、[27](27-deployment.md)）。
 
 下一章（[02](02-problem-and-scope.md)）从问题本身讲起：进程级回滚到底回滚什么、不回滚什么，它的定位是什么。
 

@@ -12,7 +12,7 @@
 
 各段成本的来源在 [17](17-cost-model.md)，脚本和判据在 [18](18-testing-and-debug-kernel.md)，测试条件在 [19](19-920b-functional.md) §1。950 的结果在 [22](22-950-results.md)。
 
-本章所有耗时都是 gsd 自报的服务端分段（[29](29-configuration-and-observability.md) 的计时键），不含客户端到 gsd 的网络往返，单位 ms。负载的形状、统计的方式、进程树的棵数在各节之间都不一样，**同名指标不能跨节比较，更不能相减**。
+本章所有耗时都是 gsd 自报的服务端分段（[28](28-configuration-and-observability.md) 的计时键），不含客户端到 gsd 的网络往返，单位 ms。负载的形状、统计的方式、进程树的棵数在各节之间都不一样，**同名指标不能跨节比较，更不能相减**。
 
 ---
 

@@ -89,7 +89,7 @@ overlay 管理器回到初始值：当前 upper 指向开机时的 `/overlay/wor
 - checkpoint 条目上的 `parent_id`、`had_processes`、`image_bytes` 是从 `trees` 汇总出来的冗余值，写出来只为了人读方便，加载时以 `trees` 为准。
 - `restore_failure` 只在上一次 restore 半途失败时出现，内容就是 degraded 的原因字符串。
 
-排障时这个文件是第一手材料：它是 gsd 眼里的全部事实。怎么读、怎么与磁盘对照在 [29](29-configuration-and-observability.md) 和 [30](30-troubleshooting.md)。
+排障时这个文件是第一手材料：它是 gsd 眼里的全部事实。怎么读、怎么与磁盘对照在 [28](28-configuration-and-observability.md) 和 [29](29-troubleshooting.md)。
 
 ### 2.3 原子写
 
@@ -97,7 +97,7 @@ overlay 管理器回到初始值：当前 upper 指向开机时的 `/overlay/wor
 `rename` 在同一文件系统内是原子的，所以任何时刻读 `state.json`，看到的要么是完整的旧版本，要么是完整的新版本，不会是写了一半的文件。
 写到一半崩溃留下的临时文件（名字形如 `.state.json.tmp-*`）在下次启动时清掉（`ckpt/state.go:345-350`）。
 
-snapshot store 是 tmpfs，`fsync` 在上面没有落盘的含义。保留这两次调用，是让这段代码不依赖"底下一定是 tmpfs"这个部署细节：snapshot store 的位置可以通过参数改（[29](29-configuration-and-observability.md)）。
+snapshot store 是 tmpfs，`fsync` 在上面没有落盘的含义。保留这两次调用，是让这段代码不依赖"底下一定是 tmpfs"这个部署细节：snapshot store 的位置可以通过参数改（[28](28-configuration-and-observability.md)）。
 
 ### 2.4 什么时候写
 
@@ -201,7 +201,7 @@ restore 之后再 checkpoint，新 checkpoint 的父是被恢复的那个，而�
 
 被标记删除的条目对外等同于不存在：`list` 不返回它，`restore` 和再次 `delete` 都得到 `not_found`（`get` 只返回未标记的条目，`ckpt/pool.go:129`）。
 但它的镜像仍占着 snapshot store 的空间，直到最后一个依赖它的子 checkpoint 被删掉。**所以删除一个 checkpoint 并不保证立刻腾出空间。**
-这一点对使用者的影响（"历史是一棵树，空间要等子节点删完"）在 [27](27-semantics-and-limits.md)。
+这一点对使用者的影响（"历史是一棵树，空间要等子节点删完"）在 [26](26-semantics-and-limits.md)。
 
 验证过的序列（新 920B，`verify_fixes`）：建 A，再建 B（B 以 A 为父）；删 A 之后 list 只剩 B、A 的镜像目录还在，restore A 得到 `not_found`，restore B 成功；再删 B，A 和 B 的目录一起消失。
 
@@ -322,7 +322,7 @@ CRIU 镜像写在 snapshot store 里，而它是 tmpfs，占的是 guest 的内�
 这个估算有意偏保守，偏的方向有三处（`ckpt/capacity.go` 文件头）：
 
 - **增量 dump 也按全量估。** 增量只写脏页，实际可能只有全量的百分之几，但事先无法知道脏了多少。
-  后果是：一个本来放得下的增量 checkpoint，在剩余空间小于"进程的全部匿名内存 × 1.2"时会被拒绝。这是当前实现最主要的保守之处，使用上的影响见 [27](27-semantics-and-limits.md)。
+  后果是：一个本来放得下的增量 checkpoint，在剩余空间小于"进程的全部匿名内存 × 1.2"时会被拒绝。这是当前实现最主要的保守之处，使用上的影响见 [26](26-semantics-and-limits.md)。
 - **共享的页被重复计算。** fork 出来的父子进程以写时复制方式共享的匿名页、多个进程映射的同一段共享内存，在每个进程的 RSS 里各算一次。
 - **系数 1.2** 覆盖 CRIU 的其他镜像文件（页表映射、文件描述符等的描述）和详细日志。
 

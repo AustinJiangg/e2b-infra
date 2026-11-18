@@ -11,7 +11,7 @@
 5. 知道调试内核开了什么、为什么必须关掉 `VMGENID`、它能代替什么和不能代替什么。
 
 前面各篇讲的是 gsd 怎么工作、出了问题怎么收场、时间花在哪里。这一篇回答另一个问题：凭什么相信它是对的。本章讲"用什么测、怎么判"；按这套办法测到的结果分布在 [19](19-920b-functional.md)（新 920B 功能）、[20](20-920b-performance.md)（新 920B 性能）、[21](21-920b-stress.md)（新 920B 压测）和 [22](22-950-results.md)（950，待填），还没有测到的部分在 [23](23-gaps-and-boundaries.md)。
-上机逐步执行的操作在 [31](31-acceptance-runbook.md)。
+上机逐步执行的操作在 [30](30-acceptance-runbook.md)。
 
 本章不放实测数字。脚本里写死的阈值（例如"根盘增量不超过 2 MB""差值在 ±3 ms 内"）属于判据，会在这里出现；测出来是多少，一律见 [19](19-920b-functional.md)～[22](22-950-results.md)。
 
@@ -258,7 +258,7 @@ TEMPLATE=base-gsd THP=never OUT_JSON=perf-run1.json python scripts/acceptance/de
 ```
 
 JSON 为 `schema_version=2`、`measurement_mode=per-tier-size`，恢复路径为 `modified-child-to-full-baseline`。
-每次每档一个样本，建议连跑三次；用 `summarize_checkpoint_perf.py` 校验三轮并取中位数，命令见 [31](31-acceptance-runbook.md)。
+每次每档一个样本，建议连跑三次；用 `summarize_checkpoint_perf.py` 校验三轮并取中位数，命令见 [30](30-acceptance-runbook.md)。
 脚本失败返回非零并保留已完成的部分 JSON；成功末行为 `判定: PASS`，6 次恢复完整内容正确，SDK 与 journal 对应事件的分段一致。
 journal 按 checkpoint ID 和 checkpoint / restore 完成事件匹配，在计时之外有界重试，字段缺失也判失败。
 
@@ -356,7 +356,7 @@ possible circular locking  possible recursive locking  sleeping function called 
 ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stalls
 ```
 
-只算"新命中"：开机阶段就有的行（存在 `*-dmesg-boot.txt` 里）不算。`WARNING:` 这个词会抓到内核补丁里几处一次性的告警，那正是想要的——它们出现就说明走到了不该走到的分支（[29](29-configuration-and-observability.md)）。
+只算"新命中"：开机阶段就有的行（存在 `*-dmesg-boot.txt` 里）不算。`WARNING:` 这个词会抓到内核补丁里几处一次性的告警，那正是想要的——它们出现就说明走到了不该走到的分支（[28](28-configuration-and-observability.md)）。
 
 一组压测判为通过，要同时满足：
 
@@ -370,7 +370,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 | 调试内核上另加：结束时 `debug_locks` 为 1 | 见 §7 |
 
 worker 为什么允许出错：restore 会把 worker 脚下的目录树整个换成另一个时刻的样子，它刚要访问的文件可能在目标时刻并不存在（`ENOENT`），
-它的当前目录可能已经属于被丢弃的时间线（`ESTALE`，[27](27-semantics-and-limits.md)）。这两种是切换的语义后果，不是缺陷。删文件密集的场景里，worker 自己删了又建的名字与 restore 换进来的内容相撞，还会得到 `EEXIST` 与 `ENOTEMPTY`。
+它的当前目录可能已经属于被丢弃的时间线（`ESTALE`，[26](26-semantics-and-limits.md)）。这两种是切换的语义后果，不是缺陷。删文件密集的场景里，worker 自己删了又建的名字与 restore 换进来的内容相撞，还会得到 `EEXIST` 与 `ENOTEMPTY`。
 除此之外的任何 errno——修复过程中出现过 `ELOOP`、`ENXIO`、`ENOTDIR`——都要当作内核里的真实问题去查。
 
 `stress_overlay_ckpt.py` 自己只在日志末尾打印一行 `判定:`，把上面几项的原始计数列出来，不给出 PASS 或 FAIL，退出码也不反映判定；按上表逐条对照的工作在 2026-10-08 的验证里是由结果目录 `tools/` 下的一个汇总脚本做的。
@@ -393,7 +393,7 @@ SCRIPT=stress_delete_dense.py bash scripts/stress/run_stress_watch.sh <输出目
 `--mode` 对后两个脚本只决定输出文件名的前缀，看门狗靠它找到要数行数的日志，所以两边必须一致。几组并行跑时机器负载高、单次操作变慢，`STALL` 要相应调大。
 
 `fc_console.sh <沙箱 id> [输出文件]` 负责取串口输出：guest 的控制台输出被 orchestrator 收进了自己的日志，这个脚本从 orchestrator 的日志里按沙箱 id 把它们筛出来，每行前面保留宿主机时间，
-用来和压测脚本的操作日志（`<mode>-ops.log`，每个 gsd 操作的起止各一行，毫秒精度）对时间。guest 内核崩溃时的 oops 与 KASAN 报告只能从这里看到。它依赖本机 orchestrator 的部署方式，换机器要相应调整（[30](30-troubleshooting.md)）。
+用来和压测脚本的操作日志（`<mode>-ops.log`，每个 gsd 操作的起止各一行，毫秒精度）对时间。guest 内核崩溃时的 oops 与 KASAN 报告只能从这里看到。它依赖本机 orchestrator 的部署方式，换机器要相应调整（[29](29-troubleshooting.md)）。
 
 ### 5.6 `stress_gsd.py`
 
@@ -469,7 +469,7 @@ lockdep 有一个特性：它一旦报告过一次问题，就把自己关掉，
 
 调试内核与发布版内核一样是固化在模板里的，所以流程是"换内核目录 → 用它另建一个模板 → 在这个模板上跑压测"：
 
-1. 把进程级栈切到调试内核所在的目录。随手册附带的 `scripts/ops/switch-gsd-new920b.sh` 支持用环境变量 `GSD_KDIR` 临时指定内核目录（[28](28-deployment.md)）；
+1. 把进程级栈切到调试内核所在的目录。随手册附带的 `scripts/ops/switch-gsd-new920b.sh` 支持用环境变量 `GSD_KDIR` 临时指定内核目录（[27](27-deployment.md)）；
 2. 用这个内核另建一个模板，**guest 内存给 4096 MB**——KASAN 的影子内存和隔离区要额外占用内存，历次调试模板都按这个规格建；建模板不使用缓存；
 3. 起一个沙箱确认环境：`/proc/lockdep_stats` 里 `debug_locks` 为 1，dmesg 里有 `kasan: KernelAddressSanitizer initialized (generic)`，没有 vmgenid 或 `sleeping function` 相关的行；
 4. 用看门狗跑压测，`--template` 指向调试模板。调试内核慢，`STALL` 要调大；
@@ -487,9 +487,9 @@ lockdep 有一个特性：它一旦报告过一次问题，就把自己关掉，
 
 ## 8. 运行条件
 
-跑功能验证、性能与压测之前要具备的条件，逐条的核对命令在 [31](31-acceptance-runbook.md)：
+跑功能验证、性能与压测之前要具备的条件，逐条的核对命令在 [30](30-acceptance-runbook.md)：
 
-- **进程级栈在运行。** 宿主上是带 gsd 注入的那一版 orchestrator，补丁内核与 gsd 二进制在位（[28](28-deployment.md)）。同一个端口同时只能跑一套栈。
+- **进程级栈在运行。** 宿主上是带 gsd 注入的那一版 orchestrator，补丁内核与 gsd 二进制在位（[27](27-deployment.md)）。同一个端口同时只能跑一套栈。
 - **模板 `base-gsd`。** 在进程级栈下建的、2 vCPU / 2048 MB 的模板。所有脚本的默认模板名都是它。模板固化了建模板时的内核、gsd 与 overlay-init，三者换了任何一样都要重建模板，否则测的还是旧的。
 - **Python 环境与 SDK。** 用装有 SDK 依赖的 conda 环境，并把 `PYTHONPATH` 指向代码仓的 `py-sdk` 目录，让脚本用到的是带 checkpoint 接口的那份 SDK，而不是环境里可能装着的别的版本。
   判断用对了没有：`python -c 'import e2b; print(e2b.__file__)'` 应当落在代码仓的 `py-sdk` 下。

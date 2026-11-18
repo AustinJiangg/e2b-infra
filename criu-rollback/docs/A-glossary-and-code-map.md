@@ -10,7 +10,7 @@
 4. 四个 RPC 和内核接口；
 5. 结果文件里的开发期名字对应本书的什么说法。
 
-开关与计时键见 [29](29-configuration-and-observability.md)，错误码与异常见 [14](14-failure-semantics.md)，
+开关与计时键见 [28](28-configuration-and-observability.md)，错误码与异常见 [14](14-failure-semantics.md)，
 已知限制见 [16](16-known-limits.md)，问题编号见 [附录 C](C-issue-resolution.md)。
 
 **路径简写**（全书通用，在这里声明一次）：`ckpt/` = `packages/gsd/internal/services/checkpoint/`。
@@ -47,7 +47,7 @@
 | **snapshot store** | `/var/lib/gsd/snapshots` | 放 CRIU 镜像和 `state.json` 的 2 GiB tmpfs，占 guest 内存 | [05](05-architecture.md)、[15](15-state-concurrency-capacity.md) |
 | **注入** | injection | 建模板时 orchestrator 把 gsd、gsd.service、overlay-init 放进模板并自检 | [06](06-guest-boot-and-injection.md) |
 | **模板固化** | — | 模板快照里带着建模板时的内核、gsd、overlay-init；换其中任何一样都要重建模板 | [06](06-guest-boot-and-injection.md)、[附录 E](E-regression-case.md) |
-| **冻结窗口** | `stopped_ms` | 用户进程从被停住到被放开的时间；多树时从第一棵 dump 完算起 | [13](13-end-to-end.md)、[29](29-configuration-and-observability.md) |
+| **冻结窗口** | `stopped_ms` | 用户进程从被停住到被放开的时间；多树时从第一棵 dump 完算起 | [13](13-end-to-end.md)、[28](28-configuration-and-observability.md) |
 
 ### 1.2 内核侧（overlayfs 热切层）
 
@@ -247,7 +247,7 @@ gsd 监听 guest 的 `0.0.0.0:49984`，Connect 协议，服务名 `checkpoint.Ch
 | `DeleteCheckpoint` | 删除一个 checkpoint（有子节点时只隐藏） | `success` |
 | `GET /health` | 恒为 HTTP 200；body 是 `{"status":"ok"}` 或 `{"reason":"...","status":"degraded"}`（键按字母序输出，不要依赖键序） | — |
 
-错误码与每种错误之后的状态见 [14](14-failure-semantics.md)；计时键的定义见 [29](29-configuration-and-observability.md)。
+错误码与每种错误之后的状态见 [14](14-failure-semantics.md)；计时键的定义见 [28](28-configuration-and-observability.md)。
 
 内核接口只有一个：`OVL_IOCTL_CHECKPOINT`（`_IOW('O', 1, struct ovl_checkpoint_args)`），对 overlay 挂载点的目录 fd 调用，需要 `CAP_SYS_ADMIN`；
 参数是一个长度不超过 4096 字节的选项串（[07](07-overlay-hot-switch.md)）。以及一个模块参数 `overlay.ckpt_move_open`（0、1、2，默认 2）。
@@ -430,7 +430,7 @@ gsd 监听 guest 的 `0.0.0.0:49984`，Connect 协议，服务名 `checkpoint.Ch
 | 三、性能原理 | [17](17-cost-model.md) 代价模型 |
 | 四、验证与实测 | [18](18-testing-and-debug-kernel.md) 测试体系与调试内核 · [19](19-920b-functional.md) 920B 功能结果 · [20](20-920b-performance.md) 920B 性能结果 · [21](21-920b-stress.md) 920B 压测结果 · [22](22-950-results.md) 950 结果 · [23](23-gaps-and-boundaries.md) 缺口与结论边界 |
 | 五、与沙箱级对比 | [24](24-vs-sandbox-level.md) 设计差异与性能对比 |
-| 六、使用与运维 | [26](26-quickstart.md) 快速上手 · [27](27-semantics-and-limits.md) 语义与边界 · [28](28-deployment.md) 部署 · [29](29-configuration-and-observability.md) 配置与可观测性 · [30](30-troubleshooting.md) 排障 · [31](31-acceptance-runbook.md) 上机验收 |
+| 六、使用与运维 | [25](25-quickstart.md) 快速上手 · [26](26-semantics-and-limits.md) 语义与边界 · [27](27-deployment.md) 部署 · [28](28-configuration-and-observability.md) 配置与可观测性 · [29](29-troubleshooting.md) 排障 · [30](30-acceptance-runbook.md) 上机验收 |
 | 附录 | [附录 A](A-glossary-and-code-map.md) 术语与代码地图 · [附录 B](B-extending.md) 继续开发 · [附录 C](C-issue-resolution.md) 问题处理与修复历程 · [附录 D](D-restore-slowness-case.md) restore 慢的归因案例 · [附录 E](E-regression-case.md) 修复后回退的归因案例 |
 
 ---

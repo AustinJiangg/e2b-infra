@@ -1,7 +1,7 @@
 # `criu-rollback/scripts/` —— 进程级 checkpoint / restore 的测试脚本
 
 手册 [18 章](../docs/18-testing-and-debug-kernel.md)（每个脚本测什么、判据怎么设计的）与
-[31 章](../docs/31-acceptance-runbook.md)（上机验收的顺序、确切命令、期望末行）讲的就是这里的脚本。
+[30 章](../docs/30-acceptance-runbook.md)（上机验收的顺序、确切命令、期望末行）讲的就是这里的脚本。
 本页是速查：每个脚本一行，做什么、怎么跑、判据看哪里。
 
 ```
@@ -18,9 +18,9 @@ kernel/             调试内核的 config 与构建说明
 
 ## 前置条件
 
-在宿主机上跑。逐条的核对命令在 [31 章 §1](../docs/31-acceptance-runbook.md)，这里只列要点：
+在宿主机上跑。逐条的核对命令在 [30 章 §1](../docs/30-acceptance-runbook.md)，这里只列要点：
 
-1. **进程级栈在运行**：宿主上是带 gsd 注入的 orchestrator，补丁内核与 gsd 二进制在位（[28 章](../docs/28-deployment.md)）。
+1. **进程级栈在运行**：宿主上是带 gsd 注入的 orchestrator，补丁内核与 gsd 二进制在位（[27 章](../docs/27-deployment.md)）。
    同一个端口同时只能跑一套栈；机器与别人共用时，起沙箱、切栈之前先打招呼。
 2. **模板 `base-criu`**：在进程级栈下建的、2 vCPU / 2048 MB 的模板，所有脚本的默认模板名都是它。
    模板固化了建模板时的内核、gsd 与 overlay-init，三者换了任何一样都要重建，否则测的还是旧的。
@@ -165,7 +165,7 @@ python3 -m unittest discover -s acceptance -p 'test_demo_checkpoint_perf.py' -v
 ## `ops/` —— 切栈
 
 `ops/switch-gsd-new920b.sh` 针对新 920B 的部署方式（RPM 部署，orchestrator 由 nomad 的 job `template-manager-system` 拉起、监听 5008）写的，
-换机器要照它的思路改。逐步行为见 [28 章 §4](../docs/28-deployment.md)。
+换机器要照它的思路改。逐步行为见 [27 章 §4](../docs/27-deployment.md)。
 
 ```bash
 bash ops/switch-gsd-new920b.sh status   # 只看现状，不改任何东西

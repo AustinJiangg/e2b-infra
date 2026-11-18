@@ -305,7 +305,7 @@ soft-dirty 的粒度是由"一个页表项一个位"决定的，在这个前提�
 - 第一次增量偏大、之后恢复正常，多半是这个原因，不是故障。
 
 **怎么判断是不是它。** `CreateCheckpoint` 的响应里有 `image_bytes`（本次镜像的实际大小）和 `parent_checkpoint_id`（是否做了增量）。
-如果 `parent_checkpoint_id` 不为空而 `image_bytes` 接近进程大小，就是假全量；排查步骤在 [30](30-troubleshooting.md)。
+如果 `parent_checkpoint_id` 不为空而 `image_bytes` 接近进程大小，就是假全量；排查步骤在 [29](29-troubleshooting.md)。
 
 ### 5.2 来源二：overlay 切换本身
 
@@ -352,7 +352,7 @@ soft-dirty 的粒度是由"一个页表项一个位"决定的，在这个前提�
 再 checkpoint、restore、逐页比对"。新 920B 上 2026-10-08 对提交 `259f1a25c` 跑了 30 轮，没有一轮出现内容不符的页
 （判定值与脚本说明见 [19](19-920b-functional.md)、[18](18-testing-and-debug-kernel.md)）。
 
-进程停着的时间会计入响应里的 `stopped_ms`，它的定义和量级见 [13](13-end-to-end.md)、[29](29-configuration-and-observability.md)。
+进程停着的时间会计入响应里的 `stopped_ms`，它的定义和量级见 [13](13-end-to-end.md)、[28](28-configuration-and-observability.md)。
 
 ---
 
