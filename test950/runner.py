@@ -32,6 +32,18 @@ import report  # noqa: E402
 import stack  # noqa: E402
 
 
+def stdout_target():
+    """本进程标准输出写到哪里：普通文件返回绝对路径（后台跑是 test950-bg.log，nohup 串跑是
+    重定向到的文件），终端返回设备名，其他情况返回空串。status 按它打印日志路径。"""
+    try:
+        target = os.readlink("/proc/self/fd/1")
+    except OSError:
+        return ""
+    if target.startswith("/dev/") or (target.startswith("/") and Path(target).is_file()):
+        return target
+    return ""
+
+
 def state_dir():
     """进度与后台日志。"""
     return Path(os.environ.get("TEST950_STATE") or "/var/lib/test950")
@@ -373,6 +385,7 @@ def execute(args):
                 "started": datetime.now().isoformat(), "pid": os.getpid(),
                 "steps": plan(args.level, stacks, args.hours), "identity": {}, "resources": {}}
     data["pid"] = os.getpid()
+    data["log"] = stdout_target()
     run_dir = Path(data["run_dir"])
     data["resources"].setdefault("开始", resources())
     save(data)
@@ -431,9 +444,13 @@ def status():
         print("  %-6s %-26s %s" % (s["status"], s["id"], extra))
     print("结果目录：%s" % data["run_dir"])
     print("打印结果：bash test950.sh report")
-    log_file = state_dir() / "test950-bg.log"
-    if log_file.is_file():
-        print("日志：tail -f %s" % log_file)
+    target = data.get("log")
+    if target is None:
+        target = str(state_dir() / "test950-bg.log")
+    if target.startswith("/dev/"):
+        print("日志：输出在启动它的终端上（%s）" % target)
+    elif target and Path(target).is_file():
+        print("日志：tail -f %s" % target)
     return 0
 
 
