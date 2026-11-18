@@ -9804,7 +9804,7 @@ checkpoint 与 restore 会从两个方向打破这个朴素做法。</p>
 <td>见 <a href="#d16-6-基准脚本分工">§6</a>、<a href="#d16-7-空闲后-restore-与串口的专项测法">§7</a></td>
 <td>——</td>
 <td>已跑</td>
-<td>12 档与串行 100 次文本已归档（<a href="#d18">第 18 章</a>）；空闲后专项 2026-11-18 在 950 上跑过一轮，七臂 restore p50 16.1～22.4 ms，逐臂明细未回传</td>
+<td>12 档与串行 100 次文本已归档（<a href="#d18">第 18 章</a>），2026-11-18 又跑了 18 档 perf-full（<a href="#d18-9-第二轮2026-11-18-extended">第 18 章 §9</a>）；空闲后专项 2026-11-18 在 950 上跑过一轮，七臂 restore p50 16.1～22.4 ms（<a href="#d18-95-空闲之后的-restore">第 18 章 §9.5</a>）</td>
 </tr>
 </tbody>
 </table></div>
@@ -11458,8 +11458,9 @@ E 反向（pause / resume 之后走完整 checkpoint 流程）1 格；F kill 1 �
 <li>给出 950 上 checkpoint / restore 按改动量分档的墙钟结果，并按客户参考线判定。</li>
 <li>说明这些结果的条件、样本、计时口径和仍未闭合的验证边界。</li>
 <li>给出默认 order 1 的 HDBSS 启用证据和写密集实测。</li>
+<li>给出 2026-11-18 第二轮的 18 档结果、order 1 与 order 9 的对比和空闲后 restore（§9）。</li>
 </ul>
-<p>本章数据全部来自 2026-11-17 在 950（141.61.11.24）上跑的 <code>bash test950.sh standard</code>，结果目录 <code>test950/results/20261117-161710-standard/</code>。<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/evidence/950/README.md">950 测试结果摘要</a>记录各轮结论与验证边界。原始 JSON / JSONL 只保留在被测机上，不提交或分发；本章统计值取自终端回传的 <code>analyze.log</code>、<code>compliance.log</code>、<code>serial-restore.log</code> 和 HDBSS 汇总表。达标判断按客户端墙钟，功能 PASS 与性能达标分别判断。</p>
+<p>§1～§8 的数据来自 2026-11-17 在 950（141.61.11.24）上跑的 <code>bash test950.sh standard</code>，结果目录 <code>test950/results/20261117-161710-standard/</code>。§9 是 2026-11-18 重新部署之后 <code>test950.sh extended</code> 的第二轮（结果目录 <code>test950/results/20261118-111424-extended/</code>），含 18 档 perf-full、order 1 与 order 9 的对比和空闲后 restore。<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/evidence/950/README.md">950 测试结果摘要</a>记录各轮结论与验证边界。原始 JSON / JSONL 只保留在被测机上，不提交或分发；本章统计值取自终端回传的 <code>analyze.log</code>、<code>compliance.log</code>、<code>serial-restore.log</code> 和 HDBSS 汇总表。达标判断按客户端墙钟，功能 PASS 与性能达标分别判断。</p>
 <p>2026-10 曾在另一台 950（主机名 <code>slot6</code>，宿主内核 <code>6.6.0-159.4.12.166</code>）上测过一轮。那台机器已改用其他地址，与本章的被测机不是同一台；那一轮的数字已由本章取代，不再列出。</p>
 <p>本章只讲增量性能和 HDBSS。原生 pause / resume 的分档结果在 <a href="#d19">第 19 章</a>，那一路径不适用 checkpoint / restore 的客户参考线。</p>
 <h2 id="d18-1-性能模型与判定摘要">1. 性能模型与判定摘要</h2>
@@ -11500,6 +11501,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 </tbody>
 </table></div>
 <p>这些结论受下面的条件、样本量和回传范围约束。</p>
+<p>上表是 2026-11-17 的第一轮。2026-11-18 第二轮的 perf-full 测了 18 档、样本更多：混合档 p50 与 p99 全部达标的最高已测档是 192 MiB，256 MiB 档 restore p50 落在 100 ms 线上、p99 121 ms，512 MiB 档两项超线，见 <a href="#d18-9-第二轮2026-11-18-extended">§9</a>。</p>
 <h2 id="d18-2-条件与来源">2. 条件与来源</h2>
 <p><a href="#d18-2-条件与来源">§2</a>～<a href="#d18-7-同-checkpoint-串行-restore-100-次">§7</a> 来自 standard 的 <code>sandbox/perf</code> 步骤（子目录 <code>sandbox-perf/20261117-164848-perf/</code>）；HDBSS 专项在 <a href="#d18-8-hdbss-专项默认-order-1-的启用证据与写密集实测">§8</a> 单列。
 <code>sandbox/perf</code> 汇总为 <strong>PASS 3 · FAIL 1</strong>：分档基准、达标判定、串行长尾通过；并发 A/B 一条 restore 超时，判 FAIL，数据与分析见 <a href="#d21">第 21 章</a>，本章只列非并发部分。
@@ -12410,8 +12412,669 @@ JSON / JSONL 未回传：按日志统计归档，未从精确原始记录独立�
     33.0 / 81.3 / 273.1 / 529.7 / 1042.4 MiB。随机单写者 1024 MiB 为 1076.3 MiB，其中可能含选页列表等程序活动带来的额外脏页；
     与连续方式的差额不是 HDBSS 误记的直接证明。该表只列内存产物，没有测根盘封层容量。</li>
 </ul>
-<p>这轮可以作为默认 order 1 的启用、内容一致性与写密集性能证据；没有 order 扫描、同机软件写保护对照、长期运行或大样本尾延迟。
+<p>这轮可以作为默认 order 1 的启用、内容一致性与写密集性能证据；这一轮没有 order 扫描（2026-11-18 的 order 1 与 9 对比见 <a href="#d18-94-hdbssorder-1-与-order-9-的对比">§9.4</a>）、同机软件写保护对照、长期运行或大样本尾延迟。
 日志中的原始 JSON / JSONL 仍保留在被测机上，以便后续追查精确分位数、内部阶段与异常。</p>
+<h2 id="d18-9-第二轮2026-11-18-extended">9. 第二轮：2026-11-18 extended</h2>
+<h3 id="d18-91-条件与来源">9.1 条件与来源</h3>
+<p>2026-11-18 用 e2b-infra <code>1dd8525</code> 重新构建 RPM 并重新部署之后，<code>bash test950.sh extended</code> 又跑了一遍分档、串行、并发、HDBSS 和空闲后 restore。结果目录 <code>test950/results/20261118-111424-extended/</code>，统计值取自 <code>bash test950.sh report &lt;步骤&gt; --run 20261118-111424-extended</code> 的终端回传（工作区归档 <code>rollback-reports/950-test950-20261118/extended-detail.txt</code>，不入库）。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>条件</th>
+<th>本轮记录</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>机器、宿主内核</td>
+<td>与 <a href="#d18-2-条件与来源">§2</a> 同一台、同一内核。extended 在 11:22 因宿主宕机中断，12:39 起从中断的步骤续跑；下面各步都在续跑之后</td>
+</tr>
+<tr>
+<td>orchestrator</td>
+<td><code>/usr/bin/template-manager</code>，sha256 <code>e54489e4…</code>（RPM <code>2026.09-3</code>）；与 §2～§8 的 <code>a5d03902…</code> 不是同一份二进制，两轮的差值不归因到某一处改动</td>
+</tr>
+<tr>
+<td>Firecracker、脏页后端</td>
+<td>与 §2 相同（自报 <code>1.12.1</code>，<code>hdbss</code>）；<code>FC_HDBSS_ORDER</code> 只在 §9.4 的两段里设置，其余未设</td>
+</tr>
+<tr>
+<td>产物位置</td>
+<td><code>/orchestrator/build/checkpoints</code>，ext4，<code>openeuler-root</code></td>
+</tr>
+<tr>
+<td><code>sandbox/perf</code></td>
+<td>12:57:46 起；<code>bench_tiers.py</code> short 档组两遍，272 条操作记录；PASS 4 · FAIL 0</td>
+</tr>
+<tr>
+<td><code>sandbox/perf-full</code></td>
+<td>13:30:37 起；full 档组三遍，18 档，1043 条操作记录；PASS 4 · FAIL 0</td>
+</tr>
+<tr>
+<td><code>sandbox/hdbss-orders</code></td>
+<td>13:19:53 起；先跑默认 order 的证据项，再把 job 环境改成 order 1、order 9 各跑一遍写密集基准，最后恢复原 job；PASS 7 · FAIL 0</td>
+</tr>
+<tr>
+<td><code>sandbox/idle</code></td>
+<td>13:38:32 起；七臂 200 次操作；PASS 1 · FAIL 0</td>
+</tr>
+</tbody>
+</table></div>
+<p>这一轮回传的是 <code>compliance.log</code> 的表，<strong>没有回传 <code>analyze.log</code></strong>。所以本节的 p50、p99 都是 <code>compliance.py</code> 的取法（按 <code>round(q × (n−1))</code> 选一个排序值，见 <a href="#d18-3-负载样本与统计口径">§3</a>），没有分段、产物大小和拟合；§4 的 p50 取自 <code>analyze.log</code>，两者在多数档只差零点几毫秒，偶数 n 时可能差得更多。</p>
+<h3 id="d18-92-分档perf-full-十八档">9.2 分档：perf-full 十八档</h3>
+<p>perf-full 在 short 档组之外加了混合 192 MiB、纯内存 4 / 48 / 128 MiB 和纯文件 4 / 64 MiB，样本也多：混合 ≤ 64 MiB 每档 100 次，128 / 192 / 256 MiB 每档 60 次。单位 ms，客户端墙钟；判定按 ck ≤ 200、rs ≤ 100 ms，依次是 p50、p99。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>档（名义改动 MiB）</th>
+<th>n</th>
+<th>ck p50</th>
+<th>ck p99</th>
+<th>ck max</th>
+<th>rs p50</th>
+<th>rs p99</th>
+<th>rs max</th>
+<th>判定 ck</th>
+<th>判定 rs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>混合 0</td>
+<td>100</td>
+<td>15.5</td>
+<td>20.0</td>
+<td>21.9</td>
+<td>19.0</td>
+<td>28.6</td>
+<td>28.7</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 4</td>
+<td>100</td>
+<td>16.6</td>
+<td>21.5</td>
+<td>21.9</td>
+<td>20.3</td>
+<td>29.7</td>
+<td>33.2</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 8</td>
+<td>100</td>
+<td>17.7</td>
+<td>25.4</td>
+<td>26.0</td>
+<td>21.5</td>
+<td>30.3</td>
+<td>32.6</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 16</td>
+<td>100</td>
+<td>20.1</td>
+<td>27.2</td>
+<td>27.3</td>
+<td>23.6</td>
+<td>33.3</td>
+<td>33.9</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 32</td>
+<td>100</td>
+<td>25.3</td>
+<td>36.3</td>
+<td>37.3</td>
+<td>28.4</td>
+<td>37.9</td>
+<td>38.3</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 64</td>
+<td>100</td>
+<td>37.4</td>
+<td>49.7</td>
+<td>51.8</td>
+<td>37.3</td>
+<td>50.3</td>
+<td>52.6</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 128</td>
+<td>60</td>
+<td>66.3</td>
+<td>79.4</td>
+<td>80.1</td>
+<td>54.7</td>
+<td>72.6</td>
+<td>72.6</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 192</td>
+<td>60</td>
+<td>92.3</td>
+<td>111</td>
+<td>114</td>
+<td>76.6</td>
+<td>94.6</td>
+<td>109</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>混合 256</td>
+<td>60</td>
+<td>119</td>
+<td>143</td>
+<td>143</td>
+<td><strong>100</strong></td>
+<td><strong>121</strong></td>
+<td>123</td>
+<td>✓ ✓</td>
+<td><strong>✗ ✗</strong></td>
+</tr>
+<tr>
+<td>混合 512（极限）</td>
+<td>30</td>
+<td><strong>219</strong></td>
+<td><strong>253</strong></td>
+<td>253</td>
+<td><strong>189</strong></td>
+<td><strong>229</strong></td>
+<td>229</td>
+<td><strong>✗ ✗</strong></td>
+<td><strong>✗ ✗</strong></td>
+</tr>
+<tr>
+<td>纯内存 4</td>
+<td>30</td>
+<td>16.9</td>
+<td>20.7</td>
+<td>20.7</td>
+<td>22.2</td>
+<td>32.0</td>
+<td>32.0</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>纯内存 16</td>
+<td>30</td>
+<td>18.1</td>
+<td>25.0</td>
+<td>25.0</td>
+<td>25.6</td>
+<td>41.5</td>
+<td>41.5</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>纯内存 48</td>
+<td>30</td>
+<td>21.0</td>
+<td>28.5</td>
+<td>28.5</td>
+<td>33.6</td>
+<td>42.4</td>
+<td>42.4</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>纯内存 128</td>
+<td>30</td>
+<td>25.8</td>
+<td>36.5</td>
+<td>36.5</td>
+<td>52.2</td>
+<td>70.9</td>
+<td>70.9</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>纯文件 4</td>
+<td>30</td>
+<td>18.8</td>
+<td>25.7</td>
+<td>25.7</td>
+<td>20.6</td>
+<td>31.3</td>
+<td>31.3</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>纯文件 16</td>
+<td>30</td>
+<td>32.0</td>
+<td>41.5</td>
+<td>41.5</td>
+<td>25.7</td>
+<td>33.1</td>
+<td>33.1</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>纯文件 64</td>
+<td>30</td>
+<td>98.2</td>
+<td>120</td>
+<td>120</td>
+<td>43.2</td>
+<td>52.3</td>
+<td>52.3</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+<tr>
+<td>只读触碰 192（名义写入 0）</td>
+<td>20</td>
+<td>17.2</td>
+<td>22.3</td>
+<td>22.3</td>
+<td>24.0</td>
+<td>29.0</td>
+<td>29.0</td>
+<td>✓ ✓</td>
+<td>✓ ✓</td>
+</tr>
+</tbody>
+</table></div>
+<p>混合 256 MiB 的 restore p50 日志显示为 100，脚本判为超线，说明未舍入的值略大于 100 ms。三遍首次全量单列：n = 3，p50 504 ms，最大 525 ms。</p>
+<p><strong>达标边界。</strong> 混合档 p50 与 p99 全部达标的最高已测档，从 §4 的 128 MiB 提到 192 MiB（checkpoint 92.3 / 111 ms，restore 76.6 / 94.6 ms）；256 MiB 档 restore 的 p50 落在 100 ms 线上、p99 121 ms 超线；512 MiB 档两项都超线。仍是已测档位的结论，不是连续区间的保证。</p>
+<p><strong>文件改动是 checkpoint 的大头。</strong> 纯内存从 4 MiB 到 128 MiB，checkpoint p50 只从 16.9 ms 升到 25.8 ms，约 0.07 ms/MiB；纯文件从 4 MiB 到 64 MiB，从 18.8 ms 升到 98.2 ms，约 1.3 ms/MiB，是内存的十几倍。按这两个斜率估混合档（文件占 1/4）：</p>
+<div class="hl"><pre><span></span><code>增量 checkpoint ≈ 15.5 + 0.07 × 内存 MiB + 1.3 × 文件 MiB   （ms，15.5 取混合 0 档）
+</code></pre></div>
+
+<p>代入混合 128 / 192 / 256 / 512 MiB 得 64 / 88 / 112 / 209 ms，实测 p50 为 66.3 / 92.3 / 119 / 219 ms，估值都偏低，相差在 6% 以内。也就是说，混合档 checkpoint 随改动量的增长，大部分来自那 1/4 的文件。restore 两边差得没有这么多：纯内存约 0.24 ms/MiB，纯文件约 0.38 ms/MiB。这几个斜率只用了各 3～4 档的中位数，用来说明量级，不是代价模型。</p>
+<p>文件改动为什么贵，这一轮没有分段可查。§5 已记下纯文件 16 MiB 的 <code>snapshot</code>、<code>seal</code> 偏高；进程级手册第 24 章 §5.4 的同负载对比里，沙箱级写 64 MiB 文件时 <code>snapshot</code> 段约 90 ms、<code>seal</code> 11.2 ms，同量内存改动的 <code>snapshot</code> 只有十几毫秒。文件数据经过 guest 页缓存，也会出现在内存差分里（§5 的产物表）；<code>sync</code> 之后的回写、封层与 FC 写差分各占多少，要拿原始分段再拆。</p>
+<p><strong>与 §4 的对照。</strong> short 档组两遍（<code>sandbox/perf</code>）的 p50：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>档</th>
+<th>ck p50（11-18）</th>
+<th>ck p50（11-17，§4）</th>
+<th>rs p50（11-18）</th>
+<th>rs p50（11-17，§4）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>混合 0</td>
+<td>15.1</td>
+<td>22.1</td>
+<td>20.9</td>
+<td>21.3</td>
+</tr>
+<tr>
+<td>混合 16</td>
+<td>19.7</td>
+<td>26.2</td>
+<td>24.9</td>
+<td>26.4</td>
+</tr>
+<tr>
+<td>混合 64</td>
+<td>33.3</td>
+<td>42.2</td>
+<td>37.9</td>
+<td>38.3</td>
+</tr>
+<tr>
+<td>混合 128</td>
+<td>58.3</td>
+<td>60.1</td>
+<td>56.8</td>
+<td>68.5</td>
+</tr>
+<tr>
+<td>混合 256</td>
+<td>109</td>
+<td>107.0</td>
+<td>97.8</td>
+<td>93.2</td>
+</tr>
+<tr>
+<td>混合 512</td>
+<td>206</td>
+<td>208.0</td>
+<td>166</td>
+<td>157.9</td>
+</tr>
+<tr>
+<td>纯内存 16</td>
+<td>17.6</td>
+<td>24.0</td>
+<td>27.1</td>
+<td>25.3</td>
+</tr>
+<tr>
+<td>纯文件 16</td>
+<td>30.1</td>
+<td>35.4</td>
+<td>26.6</td>
+<td>27.4</td>
+</tr>
+<tr>
+<td>只读触碰 192</td>
+<td>15.0</td>
+<td>23.6</td>
+<td>19.6</td>
+<td>24.1</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>64 MiB 及以下各档的 checkpoint 低了 5～9 ms，混合 128 MiB 及以上只差约 2 ms。restore 多数档相差 2 ms 以内，混合 128 MiB 低 11.7 ms，256 / 512 MiB 高 4.6 / 8.1 ms。</li>
+<li>首次全量从 11-17 的 376 / 461 ms（n = 2）变成 498 / 504 ms（perf，n = 2）和 504 / 525 ms（perf-full，n = 3）。</li>
+<li>两轮之间换了 orchestrator 二进制，宿主也重启过一次，取法也不同（见 §9.1），所以这些差值只记录，不归因。</li>
+</ul>
+<h3 id="d18-93-同-checkpoint-串行-restore-与并发">9.3 同 checkpoint 串行 restore 与并发</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>perf</th>
+<th>perf-full</th>
+<th>11-17（§7）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>客户端墙钟 p50 / p99 / 最大 / 最小</td>
+<td>9.62 / 16.2 / 17.6 / 8.41</td>
+<td>12.7 / 19.8 / 23.9 / 9.76</td>
+<td>10.6 / 17.7 / 17.8 / 8.33</td>
+</tr>
+<tr>
+<td>服务端 frozen p50 / p99</td>
+<td>6.31 / 12.5</td>
+<td>8.33 / 15.0</td>
+<td>6.95 / 12.2</td>
+</tr>
+<tr>
+<td>服务端 total p50 / p99</td>
+<td>8.50 / 15.1</td>
+<td>11.4 / 18.3</td>
+<td>9.29 / 16.6</td>
+</tr>
+<tr>
+<td>累计 p50 是否随次数上升</td>
+<td>否（9.95 → 9.62）</td>
+<td>否（13.6 → 12.7）</td>
+<td>否</td>
+</tr>
+</tbody>
+</table></div>
+<p>两次都是 100 次全部成功、抽验一致。perf-full 那次比 perf 高约 3 ms，它跑在 perf-full 的分档之后，宿主上残留的 netns 已到 1069 个（perf 收尾时 307 个）；本轮没有拆开这两件事，只记录。</p>
+<p>两步各跑一次并发 A/B（<code>checkpoint_concurrent.py</code>），A / D 段的失败或不一致都是 0；B 段（同一沙箱四个调用方）各有 19 条 <code>mark</code> 命令被并发的 restore 打断，属于已声明的使用边界。详见 <a href="#d21-26-2026-11-18-两次复跑">第 21 章 §2.6</a>。</p>
+<h3 id="d18-94-hdbssorder-1-与-order-9-的对比">9.4 HDBSS：order 1 与 order 9 的对比</h3>
+<p><strong>做法。</strong> 先在默认环境（<code>FC_HDBSS_ORDER</code> 未设）下跑证据项，再把 orchestrator 的 job 环境改成 <code>FC_HDBSS_ORDER=1</code> 重启、跑写密集基准，改成 <code>9</code> 再跑一遍，最后恢复原 job。每次重启后核对了新进程的环境变量；每一段都由 dmesg 的 <code>HDBSS buffer size</code> 和 FC 日志的 <code>buffer order</code> 两处核实实际生效的 order（1 / 1、9 / 9）。恢复后进程环境里该变量未设，启动命令与 Env 与扫描前完全相同。</p>
+<p><strong>证据项</strong>（默认 order 1，256 MiB 连续单写者，n = 3）：冷写 5.12 ms、热写 2.36 ms，冷/热 2.17；冷写每页 0.0063 次 KVM 退出，热写 0.0049 次；checkpoint 34.6 ms，restore 73.6 ms，差分 271.3 MiB，MD5 3/3 一致。与 §8.2 的 11-17 证据项（5.94 / 2.19 ms，0.0054 次/页）同一量级。</p>
+<p><strong>写密集基准。</strong> 两个 order 各 21 个组合、63 次迭代，MD5 不一致 0、非增量 0。下表是回传里有的 256 / 512 / 1024 MiB 档（0 / 16 / 64 MiB 档在汇总表前半段，没有回传）；n = 3 的中位数，单位 ms，差分为 MiB。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>脏页量</th>
+<th>写法</th>
+<th>写者</th>
+<th>冷写 o1 / o9</th>
+<th>热写 o1 / o9</th>
+<th>退出/页 o1 / o9</th>
+<th>checkpoint o1 / o9</th>
+<th>restore o1 / o9</th>
+<th>差分 o1 / o9</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>256</td>
+<td>seq</td>
+<td>1</td>
+<td>5.51 / 5.24</td>
+<td>2.45 / 2.06</td>
+<td>0.0063 / 0.0042</td>
+<td>35.5 / 38.9</td>
+<td>76.8 / 73.9</td>
+<td>275.1 / 274.7</td>
+</tr>
+<tr>
+<td>256</td>
+<td>seq</td>
+<td>2</td>
+<td>2.81 / 2.54</td>
+<td>1.25 / 1.03</td>
+<td>0.0065 / 0.0038</td>
+<td>35.9 / 36.1</td>
+<td>75.8 / 72.6</td>
+<td>276.6 / 275.5</td>
+</tr>
+<tr>
+<td>256</td>
+<td>rand</td>
+<td>1</td>
+<td>13.49 / 13.13</td>
+<td>9.30 / 8.16</td>
+<td>0.0064 / 0.0042</td>
+<td>164.4 / 164.2</td>
+<td>324.8 / 326.9</td>
+<td>289.1 / 288.2</td>
+</tr>
+<tr>
+<td>256</td>
+<td>rand</td>
+<td>2</td>
+<td>10.33 / 9.54</td>
+<td>5.56 / 5.04</td>
+<td>0.0062 / 0.0046</td>
+<td>164.5 / 166.8</td>
+<td>324.7 / 345.8</td>
+<td>301.0 / 300.4</td>
+</tr>
+<tr>
+<td>512</td>
+<td>seq</td>
+<td>1</td>
+<td>11.16 / 10.09</td>
+<td>4.98 / 4.19</td>
+<td>0.0035 / 0.0018</td>
+<td>56.4 / 56.6</td>
+<td>127.0 / 128.0</td>
+<td>531.2 / 530.5</td>
+</tr>
+<tr>
+<td>512</td>
+<td>seq</td>
+<td>2</td>
+<td>6.01 / 5.48</td>
+<td>2.58 / 2.08</td>
+<td>0.0037 / 0.0021</td>
+<td>56.8 / 55.6</td>
+<td>130.4 / 127.9</td>
+<td>532.5 / 531.0</td>
+</tr>
+<tr>
+<td>512</td>
+<td>rand</td>
+<td>1</td>
+<td>24.09 / 23.32</td>
+<td>17.96 / 16.30</td>
+<td>0.0036 / 0.0021</td>
+<td>251.1 / 251.8</td>
+<td>496.8 / 499.4</td>
+<td>550.2 / 549.2</td>
+</tr>
+<tr>
+<td>512</td>
+<td>rand</td>
+<td>2</td>
+<td>34.34 / 18.08</td>
+<td>15.49 / 9.05</td>
+<td>0.0034 / 0.0019</td>
+<td>250.3 / 250.6</td>
+<td>509.9 / 502.9</td>
+<td>562.2 / 561.3</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>seq</td>
+<td>1</td>
+<td>22.23 / 20.32</td>
+<td>9.85 / 8.12</td>
+<td>0.0020 / 0.0007</td>
+<td>96.7 / 96.3</td>
+<td>241.8 / 240.3</td>
+<td>1044.3 / 1043.0</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>seq</td>
+<td>2</td>
+<td>11.60 / 10.25</td>
+<td>5.55 / 4.06</td>
+<td>0.0022 / 0.0009</td>
+<td>100.6 / 99.3</td>
+<td>279.5 / 247.6</td>
+<td>1043.5 / 1043.0</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>rand</td>
+<td>1</td>
+<td>40.76 / 40.25</td>
+<td>31.39 / 28.33</td>
+<td>0.0025 / 0.0013</td>
+<td>99.5 / 102.3</td>
+<td>256.3 / 251.1</td>
+<td>1077.9 / 1077.4</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>rand</td>
+<td>2</td>
+<td>65.84 / 34.62</td>
+<td>25.25 / 15.28</td>
+<td>0.0026 / 0.0013</td>
+<td>104.0 / 101.1</td>
+<td>265.7 / 258.0</td>
+<td>1089.3 / 1088.6</td>
+</tr>
+</tbody>
+</table></div>
+<p>怎么读：</p>
+<ul>
+<li><strong>order 9 减少的是 KVM 退出。</strong> 每页退出数降到 order 1 的 0.35～0.74 倍，脏页量越大降得越多（1024 MiB 连续单写者 0.0020 → 0.0007）。两者都远小于每页 1 次，所以 HDBSS 在两个 order 下都生效。</li>
+<li><strong>checkpoint、restore 和差分体积看不出差别。</strong> 12 对 checkpoint 中位数相差都在 10% 以内，方向不一致；restore 只有两处差到 6%～11%（256 rand 2 写者 324.7 / 345.8，1024 seq 2 写者 279.5 / 247.6），方向相反；差分体积差不到 0.3%。n = 3，这些差别在本轮的波动范围内。</li>
+<li><strong>双写者随机写的冷写差一倍，但不能算作 order 的效果。</strong> 512、1024 MiB 随机双写者，order 1 的冷写是 34.34、65.84 ms，order 9 是 18.08、34.62 ms。但 11-17 同样是 order 1，这两组是 18.88、35.55 ms（§8.3），与本轮 order 9 相同；本轮 order 1 这两组偏高，没有在 11-17 出现，只能记为本轮的波动。其余组合 order 9 的冷写低 1%～12%。</li>
+<li><strong>冷/热比没有因 order 9 接近 1。</strong> 1024 MiB 连续单写者，order 1 为 2.23、order 9 为 2.47。冷写多出来的时间主要不在 KVM 退出上（§8.2 已说明冷/热还受缓存、TLB 等影响）。</li>
+</ul>
+<p>结论：在这组负载上，把 order 从 1 调到 9 只减少了 KVM 退出，checkpoint、restore 的耗时和产物体积没有可分辨的变化；默认值保持 1。没有测 order 9 对宿主内存的占用，也没有测 1、9 之外的取值。</p>
+<h3 id="d18-95-空闲之后的-restore">9.5 空闲之后的 restore</h3>
+<p>测法见 <a href="#d16-7-空闲后-restore-与串口的专项测法">第 16 章 §7</a>：同一沙箱串行，循环“空闲 T 秒 → checkpoint cpB → restore cpA → 删 cpB”，另加“空闲 2 s 后不拍 cpB 直接 restore”（nockpt）和“guest 内常驻忙循环”（busy）两组对照。客户端墙钟 ms；右三列是新 920B 2026-09-29 的结果（<a href="#d20-32-空闲后-restore">第 20 章 §3.2</a>，<code>kvm-wp</code>），跨机只看趋势。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>臂</th>
+<th>n</th>
+<th>restore p50</th>
+<th>&gt; 100 ms</th>
+<th>cpB p50</th>
+<th>920B restore p50</th>
+<th>920B cpB p50</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>空闲 0 s</td>
+<td>30</td>
+<td>16.1</td>
+<td>0 / 30</td>
+<td>11.0</td>
+<td>15.4</td>
+<td>10.6</td>
+</tr>
+<tr>
+<td>空闲 0.5 s</td>
+<td>30</td>
+<td>17.8</td>
+<td>0 / 30</td>
+<td>12.5</td>
+<td>19.0</td>
+<td>12.8</td>
+</tr>
+<tr>
+<td>空闲 2 s</td>
+<td>30</td>
+<td>19.7</td>
+<td>0 / 30</td>
+<td>13.7</td>
+<td>23.2</td>
+<td>75.9</td>
+</tr>
+<tr>
+<td>空闲 5 s</td>
+<td>30</td>
+<td>22.1</td>
+<td>0 / 30</td>
+<td>22.5</td>
+<td>25.1</td>
+<td>77.9</td>
+</tr>
+<tr>
+<td>空闲 10 s</td>
+<td>20</td>
+<td>22.4</td>
+<td>0 / 20</td>
+<td>17.9</td>
+<td>29.1</td>
+<td>66.8</td>
+</tr>
+<tr>
+<td>空闲 2 s 后不拍 cpB（nockpt）</td>
+<td>30</td>
+<td>20.9</td>
+<td>0 / 30</td>
+<td>——</td>
+<td>80.9</td>
+<td>——</td>
+</tr>
+<tr>
+<td>guest 内常驻忙循环（busy）</td>
+<td>30</td>
+<td>19.3</td>
+<td>0 / 30</td>
+<td>13.5</td>
+<td>27.1</td>
+<td>76.3</td>
+</tr>
+</tbody>
+</table></div>
+<p>200 次操作全部成功、现场一致，没有一次 restore 超过 100 ms。restore p50 随空闲时长从 16.1 ms 升到 22.4 ms，幅度比 920B 小。</p>
+<p>920B 上的两种变慢在 950 上都没有出现：空闲 ≥ 2 s 之后的那次 checkpoint，920B 是 66.8～77.9 ms，950 是 13.7～22.5 ms；nockpt 那一臂，920B 是 80.9 ms（其中 FC 的 <code>fc_quiesce</code> 47.1 ms），950 是 20.9 ms。两台机器的 CPU、脏页后端（<code>kvm-wp</code> 与 <code>hdbss</code>）和 orchestrator 构建都不同，本轮也没有回传服务端分段，所以不据此判断 920B 那两种变慢的原因。</p>
+<h3 id="d18-96-这一轮补上了什么">9.6 这一轮补上了什么</h3>
+<ul>
+<li>18 档 perf-full：混合档 p50 与 p99 全部达标的最高已测档是 192 MiB；纯内存测到 128 MiB、纯文件测到 64 MiB，checkpoint 的增长主要来自文件改动。</li>
+<li>order 1 与 order 9 在同一台机器、同一部署上的对比。</li>
+<li>950 上的空闲后 restore 七臂。</li>
+</ul>
+<p>仍然没有：本轮的 <code>analyze.log</code>（分段、产物、拟合）、同机软件写保护对照、长期运行与大样本尾延迟。</p>
 <h2 id="d18-本章要点">本章要点</h2>
 <ul>
 <li>混合负载下，checkpoint、restore 的 p50 与 p99 全部达标的最高已测档是 128 MiB。256 MiB 档两项 p50 达标（107.0 / 93.2 ms），restore p99 128.2 ms 超线；512 MiB 档 restore p50 157.9 ms 超线，checkpoint p50 落在参考线上下。这是已测档位的结论，不是连续区间的保证。</li>
@@ -12420,7 +13083,11 @@ JSON / JSONL 未回传：按日志统计归档，未从精确原始记录独立�
 <li>默认 order 1 的 HDBSS 启用已有能力、自报、启用日志、数据面和内容一致性证据。69 次增量迭代 MD5 不一致 0。</li>
 <li>冷/热写比约 2.6，不代表 HDBSS 未生效，需要与 KVM 退出数和启用日志一起判断。</li>
 <li>改动量相同时，页分布影响很大：单写者 256 MiB 的 seq / rand，checkpoint 为 35.3 / 170.9 ms，restore 为 72.8 / 364.0 ms。</li>
-<li>部署身份（orchestrator、FC、宿主内核、机器型号）已在同一轮记录齐全；仍缺原始样本的独立重算、其他 order 的比较、同机软件写保护对照和长期或大样本尾延迟。不据跨机器差值判断 HDBSS 的净收益。</li>
+<li>部署身份（orchestrator、FC、宿主内核、机器型号）已在同一轮记录齐全；仍缺原始样本的独立重算、同机软件写保护对照和长期或大样本尾延迟。不据跨机器差值判断 HDBSS 的净收益。</li>
+<li>2026-11-18 第二轮（§9）：perf-full 18 档里，混合档 p50 与 p99 全部达标的最高已测档是 192 MiB（checkpoint 92.3 / 111、restore 76.6 / 94.6 ms）；256 MiB 档 restore p50 落在 100 ms 线上，512 MiB 档两项超线。</li>
+<li>checkpoint 随改动量的增长主要来自文件改动：纯内存约 0.07 ms/MiB，纯文件约 1.3 ms/MiB；混合档按这两个斜率估算，与实测相差在 6% 以内。</li>
+<li>order 9 把每页 KVM 退出降到 order 1 的 0.35～0.74 倍，checkpoint、restore 耗时与差分体积没有可分辨的变化，默认保持 order 1。</li>
+<li>950 上空闲后 restore 七臂 p50 16.1～22.4 ms，没有一次超过 100 ms；920B 上的空闲后 checkpoint 变慢、不拍 cpB 直接 restore 变慢（80.9 ms）在 950 上都没有出现。</li>
 </ul><nav class="pager" data-n="18"></nav></article><article id="v19" class="doc" hidden><h1 id="d19-原生-pause--resume-分档实测">原生 pause / resume 分档实测</h1>
 <h2 id="d19-本章目标">本章目标</h2>
 <ul>
@@ -14127,6 +14794,7 @@ JSON / JSONL 未回传：按日志统计归档，未从精确原始记录独立�
 <li><strong>空闲后不先 checkpoint 直接 restore 更慢。</strong> “不拍 cpB”那一臂的服务端分段是 <code>total</code> 77.8、<code>frozen</code> 73.7、<code>fc_rollback</code> 52.1、<code>materialize</code> 5.8 ms，其中 FC 的 <code>fc_quiesce</code> 47.1 ms，其他臂 <code>fc_quiesce</code> 为 0。</li>
 </ul>
 <p>时间主要花在 FC 的 quiesce，根因未查，当前只作记录（<a href="#d28">第 28 章</a>）。</p>
+<p>950 上 2026-11-18 用同一测法跑过一轮（<code>hdbss</code>）：空闲 ≥ 2 s 后的 cpB p50 是 13.7～22.5 ms，不拍 cpB 那一臂 restore p50 20.9 ms，这两种变慢都没有出现（<a href="#d18-95-空闲之后的-restore">第 18 章 §9.5</a>）。机器、脏页后端和构建都不同，不据此判断原因。</p>
 <h3 id="d20-33-串口">3.3 串口</h3>
 <p>10 段 × 180 s 单沙箱负载，restore 7383 / 7383 成功且逐项一致。每段串口未卡死、无停顿、无 &gt; 2 s 的串口行缺口，串口行间隔最大 1.595 s。这组结果同时计入长跑的 restore 总数，见<a href="#d21-5-两天-15-组长跑731877-次-restore-逐项一致">第 21 章 §5</a>。</p>
 <h2 id="d20-4-写保护的运行期代价与平台差异">4. 写保护的运行期代价与平台差异</h2>
@@ -15031,6 +15699,38 @@ JSON / JSONL 未回传：按日志统计归档，未从精确原始记录独立�
 <p>本轮给出了 950、<code>hdbss</code>、ext4 下最多 16 沙箱的短时突发延迟与现场一致性，以及同沙箱四调用方的 RPC 收敛与连接边界；部署身份在同一轮记录。另有 func 的 120 s 混合短稳态（<a href="#d21-3-950-func-中的短稳态与恢复后请求">§3</a>）。
 本轮发现的一次 restore 应答丢失是客户端 SDK 的连接池问题，不是数据问题，已在 SDK 中修复（<a href="#d21-23-n16-的一次-restore-应答丢失">§2.3</a>）。
 950 尚没有持续混合 D 段、小时级滚动保留、资源走平与长期尾延迟证据，也没有据本轮计算持续 QPS。950 的长期结论按 <a href="#d21-10-到-950-上要重测什么">§10</a> 另行安排；短时 A/B 不并入 <a href="#dB-101-731877-次-restore0-不一致">附录 B §10.1</a> 的 920B restore 累计数。</p>
+<h3 id="d21-26-2026-11-18-两次复跑">2.6 2026-11-18 两次复跑</h3>
+<p>2026-11-18 重新部署之后（orchestrator <code>e54489e4…</code>，SDK 覆盖层自检 <code>install.py --check</code> 通过，覆盖层已含 <a href="#d21-23-n16-的一次-restore-应答丢失">§2.3</a> 的连接池修复），extended 的 <code>sandbox/perf</code> 与 <code>sandbox/perf-full</code> 各跑了一次同样参数的 A/B（<code>concurrent-ab.json</code> 各 287 条操作记录，总耗时 24 s、25 s）。回传的是日志末尾和判定行，A 段各 N 的分位数表没有回传。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>项</th>
+<th>perf</th>
+<th>perf-full</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A / D 段失败或不一致</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>B 段风暴后逐个回</td>
+<td>21 / 21 成功，心跳 pid 不变</td>
+<td>21 / 21 成功，心跳 pid 不变</td>
+</tr>
+<tr>
+<td>B 段 <code>mark</code> 命令被打断</td>
+<td>19 条</td>
+<td>19 条</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>A 段没有再出现超时或应答丢失。</strong> 11-17 那一次是 N=16 的 restore 应答丢在客户端连接池里；这两次 A 段（N 最多 16）全部成功、一致。两次只是两轮，不足以单独证明修复，修复的证据仍以 920B 上 4800 次 restore 0 失败为准（§2.3）。</li>
+<li><strong>B 段 19 条 <code>mark</code> 都是跨 restore 的连接被打断</strong>，错误为 <code>sandbox ... was rolled back to a checkpoint</code>（409 <code>sandbox_restored</code>）或 <code>incomplete chunked read</code>，与 11-17 的 18 条同类，属于 <a href="#d21-24-b同一沙箱的四调用方争用">§2.4</a> 说的使用边界，不计入判定。</li>
+</ul>
 <h2 id="d21-3-950-func-中的短稳态与恢复后请求">3. 950 func 中的短稳态与恢复后请求</h2>
 <p>来源为 2026-11-17 standard 的 <code>sandbox/func</code> 步骤（<code>sandbox-func/20261117-163014-func/</code>）的 <code>crtest-T36.log</code>、<code>crtest-T40.log</code>，
 整步 16:30:14–16:48:47（+08:00）。机器与身份同 <a href="#d21-21-条件与证据">§2.1</a>；模板 <code>base</code>、私有沙箱，FC 自报 <code>hdbss</code> / 1.12.1，产物盘 ext4。完整功能结果见 <a href="#d17-3-功能回归结果">第 17 章 §3</a>。
@@ -16678,7 +17378,7 @@ checkpoint 一行包含各沙箱首次全量，未按 <code>mem_mode</code> 拆�
 </tr>
 <tr>
 <td>“restore 请求一定能收到应答”</td>
-<td>修复前的 SDK 在多线程并发时会丢应答（<a href="#d21-23-n16-的一次-restore-应答丢失">§2.3</a>）；修复后 920B 复验未再出现，950 尚未复验</td>
+<td>修复前的 SDK 在多线程并发时会丢应答（<a href="#d21-23-n16-的一次-restore-应答丢失">§2.3</a>）；修复后 920B 复验未再出现；950 在 2026-11-18 的两次复跑中 A 段 0 失败（<a href="#d21-26-2026-11-18-两次复跑">§2.6</a>）</td>
 </tr>
 <tr>
 <td>“占盘永远走平”</td>

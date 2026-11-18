@@ -12439,13 +12439,188 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </ul>
 <h3 id="d22-104-l-18-在-950-上的复核">10.4 L-18 在 950 上的复核</h3>
 <p>两处证据：验收里的 <code>restore_incremental</code> 通过；同负载对比里，进程级"restore 后 checkpoint"一列的产物与"连续 checkpoint"一列相同（256 MiB 进程改 16 MiB 时都是 17.5～17.6 MiB），耗时也相同（25.0 对 24.4 ms，<a href="#d24">24</a> §5.3）。修复之前，这一列在新 920B 上是整个进程全量写出（260.8 MiB）。</p>
+<h3 id="d22-105-验收明细与分档性能">10.5 验收明细与分档性能</h3>
+<p><strong>验收各步。</strong> <code>verify_fixes</code> 28 项 FAIL 0（G-19、G-36 两项 SKIP，与前两轮相同）；<code>verify_multitree</code> 12 项 FAIL 0，慢调用（墙钟比 gsd 自报多 1.5 秒以上）0 次；<code>verify_gsd</code> 反复 restore 同一个 checkpoint（guest 里有一个占 192 MiB 的进程），根盘用量恒定，restore 分段 <code>totalMs</code> p50 74.4 ms，其中 <code>killMs</code> 11.6、<code>overlayRestoreMs</code> 0.5 ms；<code>clear_refs_race</code> 的 journald Suppressed 0 行、writer stderr 0 字节；<code>restore_incremental</code> 20 轮全部合格，每轮改 1～4 MiB 时 A 镜像 2.6～5.6 MiB（约为改动量加 1.6 MiB），CRIU PID 复用 0 次、替身目录回退 0 次。扩展压测里的 <code>compat_matrix</code> 为 OK 15 / REFUSED 1 / BROKEN 0，被拒的一项是“kill 之后 connect”，服务端明确拒绝，不是损坏。</p>
+<p><strong>分档性能。</strong> 三轮 <code>demo_checkpoint_perf.py</code> 各自 PASS，内容校验 18 / 18，SDK 与 journal 最大差 0.000 ms。服务端 <code>total_ms</code> 和墙钟的三轮中位数，单位 ms：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>总改动量 MiB</th>
+<th>内存 / 文件 MiB</th>
+<th style="text-align: right;">全量基点</th>
+<th style="text-align: right;">增量 checkpoint</th>
+<th style="text-align: right;">restore</th>
+<th style="text-align: right;">全量基点墙钟</th>
+<th style="text-align: right;">增量 checkpoint 墙钟</th>
+<th style="text-align: right;">restore 墙钟</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>0 / 0</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">7.9</td>
+<td style="text-align: right;">8.6</td>
+<td style="text-align: right;">20.4</td>
+<td style="text-align: right;">9.8</td>
+<td style="text-align: right;">10.4</td>
+</tr>
+<tr>
+<td>16</td>
+<td>12 / 4</td>
+<td style="text-align: right;">23.7</td>
+<td style="text-align: right;">14.0</td>
+<td style="text-align: right;">13.9</td>
+<td style="text-align: right;">27.4</td>
+<td style="text-align: right;">16.1</td>
+<td style="text-align: right;">15.9</td>
+</tr>
+<tr>
+<td>32</td>
+<td>24 / 8</td>
+<td style="text-align: right;">27.1</td>
+<td style="text-align: right;">19.9</td>
+<td style="text-align: right;">18.1</td>
+<td style="text-align: right;">31.1</td>
+<td style="text-align: right;">22.0</td>
+<td style="text-align: right;">20.3</td>
+</tr>
+<tr>
+<td>64</td>
+<td>48 / 16</td>
+<td style="text-align: right;">37.3</td>
+<td style="text-align: right;">28.5</td>
+<td style="text-align: right;">28.1</td>
+<td style="text-align: right;">40.7</td>
+<td style="text-align: right;">30.8</td>
+<td style="text-align: right;">30.3</td>
+</tr>
+<tr>
+<td>128</td>
+<td>96 / 32</td>
+<td style="text-align: right;">57.9</td>
+<td style="text-align: right;">47.5</td>
+<td style="text-align: right;">44.6</td>
+<td style="text-align: right;">61.8</td>
+<td style="text-align: right;">49.5</td>
+<td style="text-align: right;">47.1</td>
+</tr>
+<tr>
+<td>256</td>
+<td>192 / 64</td>
+<td style="text-align: right;">95.2</td>
+<td style="text-align: right;">86.3</td>
+<td style="text-align: right;">81.3</td>
+<td style="text-align: right;">98.9</td>
+<td style="text-align: right;">88.9</td>
+<td style="text-align: right;">83.6</td>
+</tr>
+</tbody>
+</table></div>
+<p>三轮的服务端逐轮样本：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>总改动量 MiB</th>
+<th style="text-align: right;">全量基点 轮 1</th>
+<th style="text-align: right;">轮 2</th>
+<th style="text-align: right;">轮 3</th>
+<th style="text-align: right;">增量 checkpoint 轮 1</th>
+<th style="text-align: right;">轮 2</th>
+<th style="text-align: right;">轮 3</th>
+<th style="text-align: right;">restore 轮 1</th>
+<th style="text-align: right;">轮 2</th>
+<th style="text-align: right;">轮 3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">15.5</td>
+<td style="text-align: right;">22.8</td>
+<td style="text-align: right;">7.9</td>
+<td style="text-align: right;">7.9</td>
+<td style="text-align: right;">7.3</td>
+<td style="text-align: right;">8.6</td>
+<td style="text-align: right;">8.3</td>
+<td style="text-align: right;">8.6</td>
+</tr>
+<tr>
+<td>16</td>
+<td style="text-align: right;">23.7</td>
+<td style="text-align: right;">22.7</td>
+<td style="text-align: right;">24.9</td>
+<td style="text-align: right;">15.0</td>
+<td style="text-align: right;">11.8</td>
+<td style="text-align: right;">14.0</td>
+<td style="text-align: right;">14.8</td>
+<td style="text-align: right;">12.4</td>
+<td style="text-align: right;">13.9</td>
+</tr>
+<tr>
+<td>32</td>
+<td style="text-align: right;">27.0</td>
+<td style="text-align: right;">28.1</td>
+<td style="text-align: right;">27.1</td>
+<td style="text-align: right;">18.1</td>
+<td style="text-align: right;">19.9</td>
+<td style="text-align: right;">23.1</td>
+<td style="text-align: right;">18.6</td>
+<td style="text-align: right;">18.1</td>
+<td style="text-align: right;">18.0</td>
+</tr>
+<tr>
+<td>64</td>
+<td style="text-align: right;">37.3</td>
+<td style="text-align: right;">36.4</td>
+<td style="text-align: right;">46.6</td>
+<td style="text-align: right;">28.5</td>
+<td style="text-align: right;">28.1</td>
+<td style="text-align: right;">31.9</td>
+<td style="text-align: right;">24.8</td>
+<td style="text-align: right;">28.1</td>
+<td style="text-align: right;">30.6</td>
+</tr>
+<tr>
+<td>128</td>
+<td style="text-align: right;">57.9</td>
+<td style="text-align: right;">59.4</td>
+<td style="text-align: right;">55.5</td>
+<td style="text-align: right;">47.0</td>
+<td style="text-align: right;">49.5</td>
+<td style="text-align: right;">47.5</td>
+<td style="text-align: right;">46.7</td>
+<td style="text-align: right;">44.6</td>
+<td style="text-align: right;">44.4</td>
+</tr>
+<tr>
+<td>256</td>
+<td style="text-align: right;">95.2</td>
+<td style="text-align: right;">95.4</td>
+<td style="text-align: right;">94.2</td>
+<td style="text-align: right;">87.8</td>
+<td style="text-align: right;">78.7</td>
+<td style="text-align: right;">86.3</td>
+<td style="text-align: right;">80.6</td>
+<td style="text-align: right;">81.3</td>
+<td style="text-align: right;">83.2</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>与第二轮（§9.3）一致。</strong> 各档中位数相差不超过 3.7 ms（增量 checkpoint 64 档 32.0 对 28.5 ms，restore 32 档 21.8 对 18.1 ms）；各档 RSS 仍是 11.6、24.8、36.8、60.8、108.8、204.8 MiB。gsd 换成 <code>1a0a3b67…</code> 之后，分档性能没有可分辨的变化。</li>
+<li><strong>restore 的构成。</strong> 256 档 restore 服务端 81.3 ms 里，CRIU 恢复三轮都是 67.8～68.1 ms，杀进程 9.4～12.9 ms，切层 0.2～0.5 ms；增量 checkpoint 的切层恒为 0.4～0.5 ms，全量基点的切层 1.3～1.8 ms。</li>
+<li>本轮的偏高样本：全量基点 0 档第 3 轮 22.8 ms、64 档第 3 轮 46.6 ms，增量 checkpoint 256 档第 2 轮偏低（78.7 ms）。每个都只出现一次，三轮中位数不受影响，原因没有查。</li>
+</ul>
 <hr />
 <h2 id="d22-本章要点">本章要点</h2>
 <ul>
 <li>950 上第一轮 <code>950.sh all</code> 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。</li>
 <li>同一天 <code>test950.sh standard</code> 的第二轮在独占机器上跑，验收与四组压测全部 PASS，功能计数、压测计数与第一轮相同；分档的增量 checkpoint 与 restore 中位数相差不超过 5.7 ms（§9）。</li>
 <li>分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。</li>
-<li>2026-11-18 的第三轮（gsd <code>1a0a3b67…</code>）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 <code>resource_exhausted</code> 从五十多次降到 0（§10）。</li>
+<li>2026-11-18 的第三轮（gsd <code>1a0a3b67…</code>）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 <code>resource_exhausted</code> 从五十多次降到 0（§10）；分档性能三轮中位数与第二轮相差不超过 3.7 ms（§10.5）。</li>
 <li>结果由 <code>criu-rollback/deploy/950.sh all</code> 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。</li>
 <li>表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。</li>
 <li>950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。</li>
