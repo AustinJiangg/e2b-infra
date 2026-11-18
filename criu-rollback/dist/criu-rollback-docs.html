@@ -8409,7 +8409,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 </tr>
 <tr>
 <td>L-18</td>
-<td>2026-11-18 新 920B 的 <code>test950.sh compare</code>、诊断脚本与 <code>verify_restore_incremental.py</code>；CRIU dump 日志 <code>Warn (criu/mem.c:408): Pid reuse detected</code></td>
+<td>2026-11-18 新 920B 的 <code>test950.sh compare</code>、诊断脚本与 <code>verify_restore_incremental.py</code>；CRIU dump 日志 <code>Warn (criu/mem.c:408): Pid reuse detected</code>。修复在 950 上的复核：同日验收的 <code>restore_incremental</code> 与 950 的 <code>test950.sh compare</code>（<a href="#d22">22</a> §10.4）</td>
 </tr>
 <tr>
 <td>L-19</td>
@@ -11074,7 +11074,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>未查清的记录有一处：候选内核上两次 checkpoint 返回 <code>internal</code>（U-02），之后没有再出现。</li>
 </ul><nav class="pager" data-n="21"></nav></article><article id="v22" class="doc" hidden><h1 id="d22-950-结果">950 结果</h1>
 <blockquote>
-<p><strong>状态：两轮已填（2026-11-17）。</strong> 第一轮是 <code>criu-rollback/deploy/950.sh all</code>，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 <code>analyze_stress.py</code> 相同）。第二轮是同一天 <code>test950.sh standard</code> 里的进程级验收与压测，全部 PASS（§9）。原始文件留在 950 上。这是填写 950 结果的唯一位置。</p>
+<p><strong>状态：三轮已填（2026-11-17、11-18）。</strong> 第一轮是 <code>criu-rollback/deploy/950.sh all</code>，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 <code>analyze_stress.py</code> 相同）。第二轮是同一天 <code>test950.sh standard</code> 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 <code>test950.sh</code> extended、native、compare 三档里的进程级各步，全部 PASS（§10）。原始文件留在 950 上。这是填写 950 结果的唯一位置。</p>
 </blockquote>
 <h2 id="d22-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -12242,11 +12242,210 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <p>各档 RSS 与第一轮相同，最多差 0.1 MiB（11.6、24.8、36.8、60.8、108.8、204.8 MiB）。第一轮 128 档第 2 轮偏高的现象（§6）这一轮没有出现，三个样本在 54.2～58.4 ms（全量基点）和 44.7～46.1 ms（restore）之间。这一轮 0 档第 3 轮的全量基点 36.2 ms 比另两轮高约一倍，是每档每轮新沙箱的第一次 checkpoint，增量和 restore 不受影响，原因没有查。</p>
 <p>两轮的增量 checkpoint 与 restore 中位数相差 0.1～5.7 ms，差最大的是 128 档的 restore（51.1 对 45.4 ms）；全量基点在 128 档相差 11.2 ms（67.4 对 56.2 ms）。这两处正是第一轮那个偏高样本所在的档。</p>
 <hr />
+<h2 id="d22-10-第三轮test950-extendednativecompare2026-11-18">10. 第三轮：test950 extended、native、compare（2026-11-18）</h2>
+<p>2026-11-18 用 e2b-infra <code>1dd8525</code> 重新构建 RPM 并重新部署之后，<code>test950.sh</code> 依次跑了 extended、native、compare 三档。extended 在 11:22 因宿主宕机中断（调用栈在宿主内核的 NUMA 自动均衡路径上，单独分析），宿主重启后 12:39 起从中断的步骤续跑，已通过的步骤不重跑。下面只列进程级的各步；沙箱级的结果在沙箱级手册。</p>
+<h3 id="d22-101-条件与判定">10.1 条件与判定</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库提交</td>
+<td>e2b-infra <code>1dd8525</code>（950 上的工作区有未提交改动，内容未回传）</td>
+</tr>
+<tr>
+<td>被测文件</td>
+<td>gsd <code>1a0a3b67…</code>（前两轮是 <code>421597e5…</code>），orchestrator <code>063e580e…</code>、guest 内核 <code>b81306e7…</code> 与前两轮相同</td>
+</tr>
+<tr>
+<td>结果目录</td>
+<td>extended <code>test950/results/20261118-111424-extended/</code>，native <code>…/20261118-142626-native/</code>，compare <code>…/20261118-144513-compare/</code></td>
+</tr>
+<tr>
+<td>验收 <code>criu/acceptance</code></td>
+<td>13:49:10 起，3 分 51 秒，<strong>PASS</strong>：guest-check、verify_gsd、verify_fixes、verify_multitree、clear_refs_race、restore_incremental、perf-run1..3 全部 PASS。<code>restore_incremental</code> 是本轮新加的一步，核对 <a href="#d16">16</a> 的 L-18 在 950 上已修复</td>
+</tr>
+<tr>
+<td>压测 <code>criu/stress</code></td>
+<td>2 分 54 秒，<strong>PASS</strong>：whiteout、all、noworkers、multitree、deldense</td>
+</tr>
+<tr>
+<td>扩展压测 <code>criu/stress-ext</code></td>
+<td>26 分 44 秒，<strong>PASS</strong>，第一次在 950 上跑（§10.3）</td>
+</tr>
+<tr>
+<td>原生 pause / resume <code>criu/native</code></td>
+<td>7 分 52 秒，PASS，样本 324、失败 0。数字与沙箱级那套的对照在<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md">沙箱级手册第 19 章</a></td>
+</tr>
+<tr>
+<td>同负载对比 <code>criu/compare</code></td>
+<td>3 分 16 秒，PASS，测量 460 次、失败 0。数字与分析在 <a href="#d24">24</a> §5.3、§5.4</td>
+</tr>
+<tr>
+<td>回切冒烟</td>
+<td>三档结尾的 <code>sandbox/smoke-after</code> 都是 PASS 5 / FAIL 0 / SKIP 0</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="d22-102-压测与第二轮对照">10.2 压测与第二轮对照</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>组</th>
+<th>第二轮（standard，gsd <code>421597e5…</code>）</th>
+<th>第三轮（extended，gsd <code>1a0a3b67…</code>）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>all（300 轮）</td>
+<td>create 77 / restore 153 / delete 15，p50 75.5 / 76.4 ms，<code>resource_exhausted</code> 55</td>
+<td>create 134 / restore 153 / delete 13，p50 46 / 49 ms，没有 <code>resource_exhausted</code></td>
+</tr>
+<tr>
+<td>noworkers（300 轮）</td>
+<td>create 75 / restore 155 / delete 13，p50 30.4 / 32.6 ms，<code>resource_exhausted</code> 57</td>
+<td>create 134 / restore 153 / delete 13，p50 14 / 28 ms，没有 <code>resource_exhausted</code></td>
+</tr>
+<tr>
+<td>multitree / deldense（各 200 轮）</td>
+<td>校验 192 / 0 失败</td>
+<td>相同</td>
+</tr>
+</tbody>
+</table></div>
+<p>第二轮被拒的 55、57 次 checkpoint 加上成功的 77、75 次都是 132 次，第三轮成功 134 次、一次也没有被拒，说明脚本发出的 checkpoint 次数没变，变的是快照存储不再被写满。两轮之间 gsd 加了两处修复：容量预检与根盘写满时的安全失败（<code>7cdadccf2</code>），和 restore 之后的第一次 checkpoint 改回增量（<code>daae6968f</code>，L-18）。后者让 restore 之后的那次 checkpoint 不再写出整个进程，镜像占用随之变小，与被拒次数归零、p50 下降的方向一致；本轮没有记录快照存储的占用曲线，不逐项归因。</p>
+<h3 id="d22-103-扩展压测">10.3 扩展压测</h3>
+<p>readonly、wr3、rename、append、reltouch、enospc，多种子对照和两个容量组，以前只在新 920B 上跑过（<a href="#d21">21</a> §3、<a href="#d23">23</a>）。这一轮是它们第一次在 950 上、在当前的 gsd 上跑，全部 PASS：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>组</th>
+<th style="text-align: right;">轮数</th>
+<th>checkpoint / restore / delete</th>
+<th>p50 checkpoint / restore（ms）</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>all</td>
+<td style="text-align: right;">1000</td>
+<td>452 / 477 / 71</td>
+<td>53 / 66</td>
+<td></td>
+</tr>
+<tr>
+<td>readonly</td>
+<td style="text-align: right;">1000</td>
+<td>452 / 477 / 71</td>
+<td>87 / 92</td>
+<td></td>
+</tr>
+<tr>
+<td>wr3</td>
+<td style="text-align: right;">1000</td>
+<td>452 / 477 / 71</td>
+<td>32 / 45</td>
+<td></td>
+</tr>
+<tr>
+<td>rename</td>
+<td style="text-align: right;">1000</td>
+<td>452 / 477 / 71</td>
+<td>28 / 45</td>
+<td></td>
+</tr>
+<tr>
+<td>append</td>
+<td style="text-align: right;">1000</td>
+<td>199 / 198 / 67</td>
+<td>70 / 73</td>
+<td><code>resource_exhausted</code>：checkpoint 262 次、restore 274 次</td>
+</tr>
+<tr>
+<td>reltouch</td>
+<td style="text-align: right;">1000</td>
+<td>452 / 477 / 71</td>
+<td>80 / 70</td>
+<td></td>
+</tr>
+<tr>
+<td>noworkers</td>
+<td style="text-align: right;">1000</td>
+<td>452 / 477 / 71</td>
+<td>17 / 35</td>
+<td></td>
+</tr>
+<tr>
+<td>enospc</td>
+<td style="text-align: right;">——</td>
+<td>——</td>
+<td>——</td>
+<td>写满根盘之后 restore 到 c0 成功，之后 checkpoint、restore 都正常</td>
+</tr>
+<tr>
+<td>multitree、deldense，种子 1～3</td>
+<td style="text-align: right;">各 200</td>
+<td>83～88 / 96～104 / 14～19</td>
+<td>——</td>
+<td>校验 182～187 次，0 失败</td>
+</tr>
+<tr>
+<td>multitree-capacity</td>
+<td style="text-align: right;">1000</td>
+<td>403 / 468 / 300</td>
+<td>——</td>
+<td>校验 871 次，0 失败</td>
+</tr>
+<tr>
+<td>deldense-capacity</td>
+<td style="text-align: right;">1000</td>
+<td>406 / 424 / 295</td>
+<td>——</td>
+<td>校验 830 次，0 失败</td>
+</tr>
+<tr>
+<td>all，种子 1～5</td>
+<td style="text-align: right;">各 300</td>
+<td>126～134 / 132～146 / 23～34</td>
+<td>44～58 / 47～67</td>
+<td></td>
+</tr>
+<tr>
+<td>noworkers，种子 1～5</td>
+<td style="text-align: right;">各 300</td>
+<td>126～134 / 132～146 / 23～34</td>
+<td>12～18 / 27～34</td>
+<td></td>
+</tr>
+<tr>
+<td>compat_matrix</td>
+<td style="text-align: right;">——</td>
+<td>——</td>
+<td>——</td>
+<td>PASS</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>append 的 <code>resource_exhausted</code> 是预期的保护。</strong> append 组的 worker 一直往文件末尾追加，1000 轮里根盘和快照存储都会被写满；checkpoint 和 restore 在动手之前发现空间不够就拒绝，什么都没改（<a href="#d14">14</a> 第 7、8 行，<a href="#d16">16</a> 的 L-19）。判据把它算作保护而不是失败。</li>
+<li><strong>两个容量组过了 1000 轮。</strong> 2026-11-17 在新 920B 上，修复之前 <code>multitree-capacity</code> 约第 306 轮 guest 内存耗尽、<code>deldense-capacity</code> 约第 685 轮出现 <code>data_loss</code>（<a href="#d23">23</a>）；这一轮 950 上两组都跑满 1000 轮，校验全部一致。</li>
+<li>各组的 dmesg、串口关键词、worker errno 与 <code>mnt_cache</code> 净增，这次终端回传里没有，需要时用 <code>bash test950.sh report criu/stress-ext --run 20261118-111424-extended</code> 取。</li>
+</ul>
+<h3 id="d22-104-l-18-在-950-上的复核">10.4 L-18 在 950 上的复核</h3>
+<p>两处证据：验收里的 <code>restore_incremental</code> 通过；同负载对比里，进程级"restore 后 checkpoint"一列的产物与"连续 checkpoint"一列相同（256 MiB 进程改 16 MiB 时都是 17.5～17.6 MiB），耗时也相同（25.0 对 24.4 ms，<a href="#d24">24</a> §5.3）。修复之前，这一列在新 920B 上是整个进程全量写出（260.8 MiB）。</p>
+<hr />
 <h2 id="d22-本章要点">本章要点</h2>
 <ul>
 <li>950 上第一轮 <code>950.sh all</code> 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。</li>
 <li>同一天 <code>test950.sh standard</code> 的第二轮在独占机器上跑，验收与四组压测全部 PASS，功能计数、压测计数与第一轮相同；分档的增量 checkpoint 与 restore 中位数相差不超过 5.7 ms（§9）。</li>
 <li>分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。</li>
+<li>2026-11-18 的第三轮（gsd <code>1a0a3b67…</code>）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 <code>resource_exhausted</code> 从五十多次降到 0（§10）。</li>
 <li>结果由 <code>criu-rollback/deploy/950.sh all</code> 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。</li>
 <li>表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。</li>
 <li>950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。</li>
@@ -12384,7 +12583,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 <tr>
 <td>长时间运行</td>
-<td>最长的单次压测是 300 轮，墙钟一分多钟；泄漏专项 300 轮</td>
+<td>新 920B 上最长的单次压测是 300 轮，墙钟一分多钟；泄漏专项 300 轮。950 上 2026-11-18 的扩展压测每组 1000 轮，整步 26 分 44 秒（<a href="#d22">22</a> §10.3）</td>
 <td>小时级连续运行下的行为（层与镜像的累积、journal 的增长、内核对象的缓慢变化）没有数据</td>
 </tr>
 <tr>
@@ -12395,7 +12594,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tr>
 <td>只在前一个提交号上跑过的压测组与探针</td>
 <td>readonly、wr3、rename、append、reltouch、enospc 六组，10 个种子的对照，除 <code>probe_whiteout_bug.py</code> 之外的探针，以及调试内核，都只在 <code>c0630349c</code> 上跑过（<a href="#d21">21</a> §3）</td>
-<td>Go 代码相同、内核是同一个二进制，推断结论不变；但严格说它们不是在 <code>259f1a25c</code> 的二进制上测的</td>
+<td>Go 代码相同、内核是同一个二进制，推断结论不变；但严格说它们不是在 <code>259f1a25c</code> 的二进制上测的。除探针与调试内核外，这些组 2026-11-18 已在 950 上用 gsd <code>1a0a3b67…</code> 各跑 1000 轮，全部 PASS（<a href="#d22">22</a> §10.3）</td>
 </tr>
 <tr>
 <td>V12 在 2026-11-06 复测中跳过</td>
@@ -12450,7 +12649,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <tr>
 <td>容量耗尽时的安全失败</td>
 <td>2026-11-17 新 920B 上 <code>950.sh stress-ext</code> 的两组 1000 轮（脚本删得少，checkpoint 不封顶）发现两个缺陷，当天修复（gsd <code>7cdadccf2</code>）并复验，结果见下一行和 <a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/deploy/README.md#14-更新记录与-920b-实测">部署说明第 14 节</a>。修复前：<code>multitree-capacity</code> 的 snapshot store 涨到 2 GiB tmpfs 的 89%～93%，<code>MemAvailable</code> 降到 16～24 MiB，约第 306 轮 guest OOM 杀了用户进程；<code>deldense-capacity</code> 约第 685 轮沙箱根盘写满，之后有 3～4 次 restore 返回 <code>data_loss</code>：杀掉用户进程之后，层切换 ioctl 要在内核里新建 <code>&lt;workdir&gt;/work</code>，ENOSPC</td>
-<td>修复：① checkpoint 预检要求 dump 之后 guest 至少留 MemTotal 的 1/8（不少于 64 MiB）；② gsd 在层目录常驻 4 MiB 预留文件，层切换前让给内核，预留文件补不回来时，杀进程之前按 <code>f_bavail</code> 检查剩余空间（<code>f_bfree</code> 含 ext4 留给元数据的约 16 MiB，盘满时也不为 0），不够就拒绝；③ 根盘写满时的安全失败报 <code>resource_exhausted</code>，不再是 <code>internal</code>；④ 根盘写满时 restore 仍能做（建 restore 目录遇到 ENOSPC 就先用预留空间），restore 正是丢掉多写数据的办法。只在 920B 上复验过，950 未跑</td>
+<td>修复：① checkpoint 预检要求 dump 之后 guest 至少留 MemTotal 的 1/8（不少于 64 MiB）；② gsd 在层目录常驻 4 MiB 预留文件，层切换前让给内核，预留文件补不回来时，杀进程之前按 <code>f_bavail</code> 检查剩余空间（<code>f_bfree</code> 含 ext4 留给元数据的约 16 MiB，盘满时也不为 0），不够就拒绝；③ 根盘写满时的安全失败报 <code>resource_exhausted</code>，不再是 <code>internal</code>；④ 根盘写满时 restore 仍能做（建 restore 目录遇到 ENOSPC 就先用预留空间），restore 正是丢掉多写数据的办法。2026-11-18 950 上两个容量组各跑满 1000 轮，校验全部一致，append 组的 <code>resource_exhausted</code> 都是动手之前的拒绝（<a href="#d22">22</a> §10.3）</td>
 </tr>
 <tr>
 <td>SDK <code>Sandbox.connect</code> 拿到的对象</td>
@@ -12751,6 +12950,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>说清两套的协议哪里相同、哪里不同，以及为什么两份 SDK 不能混用；</li>
 <li>说清两套的成本模型为什么形状不同；</li>
 <li>读懂 920B 同平台与 950 同机的并列数字，知道谁在哪些档更低、还剩哪些条件不可比、结论适用到哪里；</li>
+<li>用服务端分段和 CRIU 统计说清两套在 950 上各自快在哪里、慢在哪里；</li>
 <li>说清 restore 之后两套各自"会发生什么、不会发生什么"，尤其是对回滚范围之外的东西的影响；</li>
 <li>针对一个具体需求判断该用哪一套，并知道两套目前能不能在同一个沙箱上一起用。</li>
 </ul>
@@ -13670,11 +13870,11 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <li><strong>文件改动，进程级占优。</strong> 进程级的文件改动靠一次层切换完成，不搬数据，64 MiB 文件的 checkpoint 仍约 12 ms；沙箱级的文件写入先进 guest 页缓存（算作内存改动），再加上磁盘写层的封存与块登记，64 MiB 文件的 checkpoint 约 83 ms。</li>
 <li><strong>并发到 16 个沙箱时，两侧的服务端耗时都基本不变，墙钟变长来自客户端。</strong> 16 个线程共用一个 Python 进程和一个连接池，墙钟与服务端 <code>total</code> 的差从 2～3 ms 涨到约 45～50 ms。</li>
 </ol>
-<p><strong>和 §4.3～§4.5、§5 的关系。</strong> 原有分档里两侧负载不同：沙箱级的内存负载在 <code>/dev/shm</code>、文件占总改动的 1/4，进程级的进程大小随档位一起变。文件那一份正好落在进程级占优的地方，而进程大小随档位变又掩盖了进程级 restore 随进程大小增长这一点。所以"哪一侧更快"要按负载的构成判断：内存改动为主、进程大、restore 频繁时沙箱级更快；文件改动为主、进程小时进程级更快。950 上 §5 的六档都是进程级更低，950 还没有跑这组同负载对比（<code>bash test950.sh compare</code>），在那之前不把本节 920B 的结论外推到 950。</p>
+<p><strong>和 §4.3～§4.5、§5 的关系。</strong> 原有分档里两侧负载不同：沙箱级的内存负载在 <code>/dev/shm</code>、文件占总改动的 1/4，进程级的进程大小随档位一起变。文件那一份正好落在进程级占优的地方，而进程大小随档位变又掩盖了进程级 restore 随进程大小增长这一点。所以"哪一侧更快"要按负载的构成判断：内存改动为主、进程大、restore 频繁时沙箱级更快；文件改动为主、进程小时进程级更快。950 上 §5.1 的六档都是进程级更低；同一负载在 950 上的结果见 §5.3，分界与本节一致。</p>
 <p><strong>restore 之后的第一次 checkpoint。</strong> 修复之前（<code>7cdadccf2</code>），进程级这一列与进程大小成正比：256 MiB 进程约 115～125 ms、写出 260.8 MiB（<a href="#d16">16</a> 的 L-18）。上表是修复后的 <code>daae6968f</code>：两侧"restore 后"与"连续"两列都基本相同。</p>
 <hr />
 <h2 id="d24-5-950-同机对比">5. 950 同机对比</h2>
-<p>2026-11-17 的 <code>test950.sh standard</code> 在同一台 950 上先后跑了两套的分档测试：沙箱级 16:48 起，切到进程级后 17:03 起，相隔约 15 分钟，中间只有切栈。这是第一组同机、同时段的 950 数据。</p>
+<p>2026-11-17 的 <code>test950.sh standard</code> 在同一台 950 上先后跑了两套的分档测试：沙箱级 16:48 起，切到进程级后 17:03 起，相隔约 15 分钟，中间只有切栈。这是第一组同机、同时段的 950 数据（§5.1、§5.2）。两侧的负载构造不同，2026-11-18 又用 §4.8 的同负载脚本在同一台 950 上补了一组（§5.3），并用服务端分段和 CRIU 统计拆开两侧的耗时（§5.4）。<strong>判断哪一套更快，以 §5.3 为准。</strong></p>
 <h3 id="d24-51-两侧的数字">5.1 两侧的数字</h3>
 <blockquote>
 <p>平台：950（141.61.11.24，Kunpeng 950 7592C，384 CPU，2261 GB），宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code>。客户端墙钟，单位 ms。
@@ -13834,7 +14034,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <h3 id="d24-52-这组实测说明了什么">5.2 这组实测说明了什么</h3>
 <p>本节与 §4.7 一样不给净加速比，只说这组实测里谁更低、低在哪些档。</p>
 <p><strong>950 上六档全部是进程级更低，两种操作都是。</strong> restore 的差距在 32 MiB 档最小（5.6 ms），在 128 MiB 档最大（21.0 ms），256 MiB 档为 10.8 ms；checkpoint 的差距在 8.1～16.0 ms 之间。进程级两轮都在沙箱级 p50 之下。</p>
-<p>同负载下的对比（§4.8）目前只有 920B；§4.8 说明了为什么原有分档的负载构造会偏向进程级，950 上要跑 <code>bash test950.sh compare</code> 才能确认这里的差距有多少来自负载构造。</p>
+<p>这个结果来自负载构造。§5.3 在 950 上把改动量、进程大小和文件改动拆开以后，内存改动为主时每个测点都是沙箱级更低，进程级只在文件改动、第一次全量和很小的进程上占优；两者怎么对上，见 §5.3 末尾。</p>
 <p><strong>这与 920B 的分界不同。</strong> 920B 上 restore 从 64 MiB 起、checkpoint 从 32 MiB 起是沙箱级更低（§4.7）。两台机器的数字对照如下（单位 ms，256 MiB 档）：</p>
 <div class="tw"><table>
 <thead>
@@ -13865,6 +14065,333 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 </table></div>
 <p>在 256 MiB 档，沙箱级在 950 上比 920B 高，进程级在 950 上比 920B 低，分界因此消失。两台机器的 CPU、内存、盘、沙箱级的脏页后端（<code>kvm-wp</code> 与 <code>hdbss</code>）、样本量都不同，本书不把这些差值归因到某一项。</p>
 <p><strong>仍然成立的限制。</strong> §4.6 列的负载差别在 950 上同样成立：两侧的内存负载构造不同，进程级的进程大小随档位变化，样本量是 20～30 对 3，沙箱级是同一沙箱反复迭代、进程级每档每轮一个新沙箱。结论只覆盖 950、单沙箱串行、一棵用户进程树、2 vCPU / 2048 MB；§4.7 列出的不能外推的情况（大进程小改动、多棵树、多沙箱并发、语义取舍）在这里同样不能外推。</p>
+<h3 id="d24-53-同一负载下的对比2026-11-18test950sh-compare">5.3 同一负载下的对比（2026-11-18，<code>test950.sh compare</code>）</h3>
+<p>脚本、测点和每次测量的步骤与 §4.8 完全相同：一个常驻进程预分配 P MiB 并写满，每次原地改写其中 d MiB；文件负载是根盘上一个 f MiB 的文件；每次测量是"改写 → checkpoint A → 再改写 → checkpoint B → restore 回基点 → 校验整块内存 SHA256 与文件"。沙箱级 14:45 起，切到进程级后 14:48 起，前后不到 10 分钟，中间只有切栈。</p>
+<blockquote>
+<p>平台：950（同 §5.1）。结果目录 <code>test950/results/20261118-144513-compare/</code>，统计值取自 <code>bash test950.sh report</code> 的终端回传。
+沙箱级：orchestrator <code>/usr/bin/template-manager</code> sha256 <code>e54489e4…</code>（RPM <code>2026.09-3</code>，由 e2b-infra <code>1dd8525</code> 重新构建），FC 自报 <code>hdbss</code>（默认 order 1，未设 <code>FC_TRACK_DIRTY_PAGES</code>），模板 <code>base</code>。
+进程级：orchestrator <code>/fc-criu/orchestrator</code> sha256 <code>063e580e…</code>，gsd <code>1a0a3b67…</code>，FC 自报 <code>off</code>，模板 <code>base-criu</code>。
+两侧都是 2 vCPU / 2048 MB。单沙箱测点 n = 20，并发测点 n = 5N～80；客户端墙钟 p50，单位 ms。每侧 460 次测量，校验全部一致。</p>
+</blockquote>
+<p><strong>改动量变化，进程固定 256 MiB：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">改动 d MiB</th>
+<th style="text-align: right;">沙箱级 连续 checkpoint</th>
+<th style="text-align: right;">进程级 连续 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore 后 checkpoint</th>
+<th style="text-align: right;">进程级 restore 后 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">7.0</td>
+<td style="text-align: right;">19.6</td>
+<td style="text-align: right;">14.1</td>
+<td style="text-align: right;">19.1</td>
+<td style="text-align: right;">20.4</td>
+<td style="text-align: right;">94.5</td>
+</tr>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">14.9</td>
+<td style="text-align: right;">24.4</td>
+<td style="text-align: right;">16.0</td>
+<td style="text-align: right;">25.0</td>
+<td style="text-align: right;">24.2</td>
+<td style="text-align: right;">97.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">17.3</td>
+<td style="text-align: right;">30.5</td>
+<td style="text-align: right;">19.0</td>
+<td style="text-align: right;">30.7</td>
+<td style="text-align: right;">32.5</td>
+<td style="text-align: right;">98.7</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">20.2</td>
+<td style="text-align: right;">41.2</td>
+<td style="text-align: right;">22.1</td>
+<td style="text-align: right;">44.2</td>
+<td style="text-align: right;">41.3</td>
+<td style="text-align: right;">102.5</td>
+</tr>
+<tr>
+<td style="text-align: right;">128</td>
+<td style="text-align: right;">27.9</td>
+<td style="text-align: right;">57.1</td>
+<td style="text-align: right;">28.3</td>
+<td style="text-align: right;">59.1</td>
+<td style="text-align: right;">59.7</td>
+<td style="text-align: right;">95.9</td>
+</tr>
+<tr>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">41.0</td>
+<td style="text-align: right;">93.2</td>
+<td style="text-align: right;">41.7</td>
+<td style="text-align: right;">92.8</td>
+<td style="text-align: right;">89.1</td>
+<td style="text-align: right;">98.9</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>进程大小变化，改动固定 16 MiB：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">进程 P MiB</th>
+<th style="text-align: right;">沙箱级 连续 checkpoint</th>
+<th style="text-align: right;">进程级 连续 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">13.4</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">23.4</td>
+<td style="text-align: right;">22.8</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">15.0</td>
+<td style="text-align: right;">19.4</td>
+<td style="text-align: right;">27.3</td>
+<td style="text-align: right;">36.9</td>
+</tr>
+<tr>
+<td style="text-align: right;">128</td>
+<td style="text-align: right;">14.6</td>
+<td style="text-align: right;">19.1</td>
+<td style="text-align: right;">25.4</td>
+<td style="text-align: right;">60.0</td>
+</tr>
+<tr>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">15.5</td>
+<td style="text-align: right;">24.3</td>
+<td style="text-align: right;">26.7</td>
+<td style="text-align: right;">123.3</td>
+</tr>
+<tr>
+<td style="text-align: right;">384</td>
+<td style="text-align: right;">15.3</td>
+<td style="text-align: right;">26.8</td>
+<td style="text-align: right;">27.5</td>
+<td style="text-align: right;">164.0</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>只写文件（进程 16 MiB，内存不改）：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">文件 f MiB</th>
+<th style="text-align: right;">沙箱级 checkpoint</th>
+<th style="text-align: right;">进程级 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">34.2</td>
+<td style="text-align: right;">11.2</td>
+<td style="text-align: right;">31.1</td>
+<td style="text-align: right;">19.2</td>
+</tr>
+<tr>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">106.2</td>
+<td style="text-align: right;">12.2</td>
+<td style="text-align: right;">51.9</td>
+<td style="text-align: right;">22.5</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>第一次全量 checkpoint（每个测点新沙箱上的第一次，脚本的"全量基点"列）：</strong> 沙箱级 254.1～433.3 ms，与测点基本无关，因为它保存的是整台 guest 的内存；进程级在 P = 32～384 MiB 时为 35.9～205.9 ms，随进程大小增长。每个测点都是进程级更低。</p>
+<p><strong>N 个沙箱同时做（进程 64 MiB、改动 16 MiB），墙钟 / 服务端：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th style="text-align: right;">N</th>
+<th style="text-align: right;">沙箱级 checkpoint</th>
+<th style="text-align: right;">进程级 checkpoint</th>
+<th style="text-align: right;">沙箱级 restore</th>
+<th style="text-align: right;">进程级 restore</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">16.1 / 14.4</td>
+<td style="text-align: right;">19.9 / 16.6</td>
+<td style="text-align: right;">25.1 / 23.3</td>
+<td style="text-align: right;">38.6 / 35.7</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">18.0 / 14.2</td>
+<td style="text-align: right;">21.3 / 17.2</td>
+<td style="text-align: right;">28.6 / 25.3</td>
+<td style="text-align: right;">43.9 / 39.6</td>
+</tr>
+<tr>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">21.8 / 14.4</td>
+<td style="text-align: right;">26.4 / 17.7</td>
+<td style="text-align: right;">114.4 / 105.8</td>
+<td style="text-align: right;">44.8 / 36.2</td>
+</tr>
+<tr>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">77.9 / 14.6</td>
+<td style="text-align: right;">86.0 / 17.2</td>
+<td style="text-align: right;">91.6 / 27.5</td>
+<td style="text-align: right;">105.4 / 36.8</td>
+</tr>
+</tbody>
+</table></div>
+<p>从这组数可以读出五件事：</p>
+<ol>
+<li><strong>内存改动，每个测点都是沙箱级更低。</strong> 连续 checkpoint 在 d = 16～256 MiB 之间近似线性：沙箱级约 0.11 ms/MiB，进程级约 0.29 ms/MiB；一页不改时沙箱级 7.0 ms、进程级 19.6 ms。原因见 §5.4。</li>
+<li><strong>restore 由不同的量决定，与 920B 相同。</strong> 沙箱级随回滚量增长（P = 256 MiB，d 从 0 到 256 MiB：20.4 → 89.1 ms），与进程大小基本无关（d = 16 MiB，P 从 32 到 384 MiB：23.4～27.5 ms）。进程级随进程大小增长（d = 16 MiB：22.8 → 164.0 ms，约 0.40 ms/MiB），与改动量无关（P = 256 MiB 时六个改动量都在 94.5～102.5 ms）。两侧只在两种情况下接近：进程只有 32 MiB（23.4 对 22.8 ms），或者 256 MiB 的进程整个被改写（89.1 对 98.9 ms）。</li>
+<li><strong>文件改动，进程级占优。</strong> 64 MiB 文件的 checkpoint 进程级 12.2 ms、沙箱级 106.2 ms，restore 22.5 对 51.9 ms。</li>
+<li><strong>第一次全量 checkpoint，进程级占优。</strong> 进程级只保存用户进程，沙箱级要保存整台 guest。</li>
+<li><strong>并发到 16 个沙箱，两侧的服务端耗时基本不变，墙钟变长来自客户端</strong>，与 §4.8 相同。有一处异常：沙箱级 N = 8 的 restore 服务端 p50 是 105.8 ms，高于 N = 4 的 25.3 ms 和 N = 16 的 27.5 ms，新 920B 同一测点是 23.5 ms。这一轮的分段只打印了 N = 16，这个测点只跑过一次，原因没有查。</li>
+</ol>
+<p><strong>与 920B（§4.8）对照。</strong> 两台机器上的分界相同：内存改动为主、进程越大，沙箱级越占优；文件改动和第一次全量，进程级占优。数值上，沙箱级在 950 上比 920B 高（256 MiB 改动的连续 checkpoint 41.0 对 28.8 ms，restore 89.1 对 64.1 ms），进程级在 950 上略低（93.2 对 107.4 ms，256 MiB 进程的 restore 94.5～102.5 对 110.8～116.9 ms）。两台机器的 CPU、内存和沙箱级的脏页后端（<code>hdbss</code> 与 <code>kvm-wp</code>）都不同，本书不把这些差值归因到某一项。</p>
+<p><strong>与 §5.1 的分档怎么对上。</strong> §5.1 每一档有 1/4 是文件改动，而本节 64 MiB 文件一项，沙箱级的 checkpoint 就要 106.2 ms、进程级只要 12.2 ms；进程级一侧的进程大小又随档位一起变化（<a href="#d22">22</a> §9.3：256 MiB 档进程 RSS 约 205 MiB），restore 只重建这么大的进程。这两点都偏向进程级，§5.1 的"六档都是进程级更低"由它们造成。同一负载下，只要改动以内存为主，950 上是沙箱级更低。</p>
+<h3 id="d24-54-差距从哪里来服务端分段与-criu-统计">5.4 差距从哪里来：服务端分段与 CRIU 统计</h3>
+<p>§5.3 那一轮同时记下了两侧的服务端分段；进程级还在每次测量之后读了 CRIU 自己写的统计文件（<code>stats-dump</code>、<code>stats-restore</code>，读取不计入耗时）。下面的数都是 p50，单位 ms。分段之间有包含关系，不能相加。</p>
+<p><strong>checkpoint：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">沙箱级 d = 0</th>
+<th style="text-align: right;">沙箱级 d = 256</th>
+<th style="text-align: right;">进程级 d = 0</th>
+<th style="text-align: right;">进程级 d = 256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>服务端 <code>total</code></td>
+<td style="text-align: right;">6.0</td>
+<td style="text-align: right;">39.8</td>
+<td style="text-align: right;">16.5</td>
+<td style="text-align: right;">90.4</td>
+</tr>
+<tr>
+<td>保存期间停住的时长</td>
+<td style="text-align: right;"><code>frozen</code> 5.3（vCPU 暂停）</td>
+<td style="text-align: right;">39.2</td>
+<td style="text-align: right;">CRIU <code>frozen</code> 12.0（进程冻结）</td>
+<td style="text-align: right;">84.5</td>
+</tr>
+<tr>
+<td>其中写出页</td>
+<td style="text-align: right;"><code>snapshot</code> 4.7</td>
+<td style="text-align: right;">37.2</td>
+<td style="text-align: right;"><code>memwrite</code> 1.8</td>
+<td style="text-align: right;">69.2</td>
+</tr>
+<tr>
+<td>产物 MiB</td>
+<td style="text-align: right;">0.5</td>
+<td style="text-align: right;">265.7</td>
+<td style="text-align: right;">0.1</td>
+<td style="text-align: right;">257.6</td>
+</tr>
+<tr>
+<td>进程级：扫描 / 跳过 / 写出的页数</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;">70082 / 66724 / 2</td>
+<td style="text-align: right;">70082 / 832 / 65894</td>
+</tr>
+</tbody>
+</table></div>
+<p>（进程固定 256 MiB。）</p>
+<ul>
+<li><strong>固定开销。</strong> 一页不改时，沙箱级是暂停 vCPU、由 Firecracker 按 HDBSS 的脏页记录写出差分，共 6.0 ms。进程级要冻结进程、经寄生代码收集进程的各项状态，CRIU <code>frozen</code> 减去 <code>memdump</code> 在四个改动量上都是 7.2～7.9 ms；还要逐页查一遍整个进程的页表（每次扫描 70082 页，约 274 MiB，<code>memdump</code> 里除写出之外的部分在 d = 0 时为 2.3 ms），再加上 gsd 的 <code>stopped</code> 1.5 ms 和 <code>find_pids</code> 0.5 ms。</li>
+<li><strong>每 MiB 的代价。</strong> 沙箱级的 <code>snapshot</code> 从 d = 16 到 256 MiB 增长 26.1 ms，约 0.11 ms/MiB；进程级的 <code>memwrite</code> 增长 62.9 ms，约 0.26 ms/MiB。两侧写出的字节数几乎相同，差别在写的方式：沙箱级由宿主上的 Firecracker 从 guest 内存的映射直接写差分文件；进程级由 guest 里的 CRIU 把页经管道搬出、写进 guest 内的 tmpfs，只用这台虚拟机的 2 个 vCPU。</li>
+</ul>
+<p><strong>restore：</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">沙箱级 d = 0</th>
+<th style="text-align: right;">沙箱级 d = 256</th>
+<th style="text-align: right;">进程级 d = 0</th>
+<th style="text-align: right;">进程级 d = 256</th>
+<th style="text-align: right;">进程级 P = 32</th>
+<th style="text-align: right;">进程级 P = 384</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>服务端 <code>total</code></td>
+<td style="text-align: right;">19.1</td>
+<td style="text-align: right;">86.5</td>
+<td style="text-align: right;">92.3</td>
+<td style="text-align: right;">96.5</td>
+<td style="text-align: right;">20.7</td>
+<td style="text-align: right;">161.6</td>
+</tr>
+<tr>
+<td>写回或重建</td>
+<td style="text-align: right;"><code>revert_mem_write</code> 6.3、<code>fc_memory</code> 2.6</td>
+<td style="text-align: right;">43.3、31.5</td>
+<td style="text-align: right;"><code>criu_restore</code> 75.8</td>
+<td style="text-align: right;">79.7</td>
+<td style="text-align: right;">15.1</td>
+<td style="text-align: right;">130.0</td>
+</tr>
+<tr>
+<td>杀掉旧进程</td>
+<td style="text-align: right;">——</td>
+<td style="text-align: right;">——</td>
+<td style="text-align: right;"><code>kill</code> 13.8</td>
+<td style="text-align: right;">13.6</td>
+<td style="text-align: right;">3.4</td>
+<td style="text-align: right;">27.8</td>
+</tr>
+<tr>
+<td>进程级：CRIU 恢复的页数</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;">66726</td>
+<td style="text-align: right;">66726</td>
+<td style="text-align: right;">9381</td>
+<td style="text-align: right;">99493</td>
+</tr>
+</tbody>
+</table></div>
+<p>（d 列是 P = 256 MiB；P 列是 d = 16 MiB。）</p>
+<ul>
+<li><strong>沙箱级原地写回改过的页。</strong> <code>revert_mem_write</code> 是 orchestrator 沿祖先链解析回滚集里每一页的内容并写进回滚文件，<code>fc_memory</code> 是 Firecracker 把这些页写回 guest 内存（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/27-observability.md">第 27 章</a>）。两段都随回滚量增长：d 从 16 到 256 MiB，前者约 0.14 ms/MiB，后者约 0.11 ms/MiB。一页不改时剩下的约 19 ms 是暂停、取位图和网络连接跟踪清理（<code>conntrack_bg</code> 6.5 ms，与其他步骤并行）。</li>
+<li><strong>进程级杀掉进程再整个重建。</strong> CRIU 每次恢复的页数等于整个进程的页数：256 MiB 的进程不管改了 0 还是 256 MiB，都恢复 66726 页（260.6 MiB）；统计里 <code>pages_compared</code>、<code>pages_skipped_cow</code> 都是 0，没有复用任何已经在内存里的页。<code>criu_restore</code> 随进程大小约 0.33 ms/MiB，<code>kill</code> 约 0.07 ms/MiB（释放旧进程的内存）。这是 <a href="#d12">12</a> 的设计：restore 要保证进程回到 checkpoint 那一刻，CRIU 4.2.1 的 restore 不做增量。</li>
+</ul>
+<p><strong>文件。</strong> 进程级的文件改动在 checkpoint 时由一次层切换承担，<code>overlay_sink</code> 0.5 ms，文件数据不复制，镜像只有 0.1 MiB。沙箱级写文件先进 guest 的页缓存，64 MiB 文件的产物是 76.3 MiB，与 64 MiB 内存改动的 73.4 MiB 相当；封存写层（<code>seal</code>，刷块设备缓冲并换新写层）11.2 ms。但 <code>snapshot</code> 段是 90.0 ms，是同量内存改动（16.5 ms）的 5 倍多，这一轮的分段没有再往下拆，原因本书不下结论。</p>
+<p><strong>归纳。</strong> 在 950 上：</p>
+<ul>
+<li>进程级更快的地方：文件改动（层切换不搬数据）、第一次全量 checkpoint（只保存用户进程）、很小的进程（restore 要重建的量小）；</li>
+<li>沙箱级更快的地方：内存改动的 checkpoint（固定开销约为进程级的 1/3，每 MiB 代价约为进程级的 4 成，在宿主上写而不是在 guest 的 2 个 vCPU 上写）、进程较大时的 restore（只写回改过的页，进程级要重建整个进程）。</li>
+</ul>
 <hr />
 <h2 id="d24-6-restore-之后各自会发生什么">6. restore 之后：各自会发生什么</h2>
 <p>对写业务代码的人来说，比耗时更要紧的是语义上的差别。下表列出 restore 返回之后，沙箱里各样东西的状态。"回到 checkpoint"指内容恢复成 checkpoint 时刻的样子。</p>
@@ -13986,6 +14513,16 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <td>沙箱级的 restore 随回滚量走；进程级每次都要重建整个进程</td>
 </tr>
 <tr>
+<td>每步改动以内存为主，对 checkpoint 的耗时敏感</td>
+<td>沙箱级</td>
+<td>同一负载下内存改动的 checkpoint 两台机器上都是沙箱级更低（§4.8、§5.3）：固定开销小，页在宿主上写出</td>
+</tr>
+<tr>
+<td>沙箱新建之后很快就要做第一次 checkpoint，而且经常这样做</td>
+<td>进程级</td>
+<td>第一次全量只保存用户进程；沙箱级要保存整台 guest 的内存（950 上 254～433 ms，§5.3）</td>
+</tr>
+<tr>
 <td>需要连内核状态、页缓存、root 的服务一起严格回到同一瞬间</td>
 <td>沙箱级</td>
 <td>进程级不回滚这些</td>
@@ -14023,7 +14560,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 </tbody>
 </table></div>
 <p>有两点提醒。第一，这张表给的是倾向而不是规则，真正的依据是 §3 的成本模型和 §6 的语义表，应当拿自己的负载去对照。
-第二，"进程级更轻"这个印象只对了一半：它处理的数据范围更小，但恢复时要重建进程，§4 里也有不少档是沙箱级更低。</p>
+第二，"进程级更轻"这个印象只对了一半：它处理的数据范围更小，但恢复时要重建进程，checkpoint 也要在 guest 里写页；同一负载下，内存改动为主时 920B 和 950 上都是沙箱级更低（§4.8、§5.3）。</p>
 <hr />
 <h2 id="d24-8-能不能在同一个沙箱上一起用">8. 能不能在同一个沙箱上一起用</h2>
 <p><strong>目前不能。</strong> 原因在入口上，而不在原理上。</p>
@@ -14075,7 +14612,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li><strong>"restore 失败之后沙箱就废了。"</strong> 这是沙箱级"撕裂"的结局。进程级在杀进程之后失败时，虚拟机、envd 和 gsd 都还在，
     用户进程没有了；再成功 restore 一次就回到一个完整的状态（<a href="#d14">14</a>）。</li>
 <li><strong>"两套 SDK 接口同名，所以可以混着用。"</strong> 接口同名，但是两份不同的 SDK，同一字段编号在响应里类型不同（§2.1）；一台宿主上实际由谁应答取决于运行的是哪一套 orchestrator（§8）。</li>
-<li><strong>"进程级在 950 上总是更快。"</strong> 950 同机的这组实测里，六档都是进程级更低（§5），但负载构造不同、进程大小随档位变化、样本只有 3 个，不能推到大进程小改动、多棵树或并发的情况。它的代码路径也不使用 950 的硬件脏页跟踪（§9）。</li>
+<li><strong>"进程级在 950 上总是更快。"</strong> 不成立。§5.1 的分档里六档都是进程级更低，但那是负载构造造成的。同一负载下（§5.3），内存改动为主时 950 上每个测点都是沙箱级更低，进程越大差得越多（384 MiB 进程改 16 MiB，restore 27.5 对 164.0 ms）；进程级只在文件改动、第一次全量和很小的进程上占优。它的代码路径也不使用 950 的硬件脏页跟踪（§9）。</li>
 </ul>
 <hr />
 <h2 id="d24-沙箱级手册的对应章节">沙箱级手册的对应章节</h2>
@@ -14195,7 +14732,8 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li>两套的服务路径和请求相同，响应字段互不兼容，同一字段编号类型不同，所以 SDK 不能混用。</li>
 <li>新 920B 上按客户端墙钟并列：restore 在 0、16、32 MiB 档进程级更低，在 64、128、256 MiB 档沙箱级更低；checkpoint 在 0 MiB 档进程级更低，16 MiB 档两边接近，32 MiB 起沙箱级更低。</li>
 <li>这组数不给净加速比：内存与文件负载的构造、档位含义、模板、样本量（60～100 对 3）和测试时间都不同，进程级的进程大小又随档位变化。结论只适用于单沙箱、单棵树、<code>kvm-wp</code> 的 920B 条件。</li>
-<li>950 同机（2026-11-17 同一轮，相隔约 15 分钟）按客户端墙钟并列：六档 checkpoint 与 restore 都是进程级更低，与 920B 的分界不同；同样不给净加速比。</li>
+<li>950 同机分档（2026-11-17）六档都是进程级更低，但两侧负载构造不同。同一负载下（2026-11-18，§5.3）的分界与 920B 相同：内存改动的 checkpoint 和进程较大时的 restore 是沙箱级更低，文件改动、第一次全量和很小的进程是进程级更低。</li>
+<li>差距的来源（§5.4）：进程级 checkpoint 有约 8 ms 收集进程状态的固定开销，并在 guest 的 2 个 vCPU 上写页，每 MiB 约 0.26 ms，沙箱级在宿主上写，约 0.11 ms/MiB；进程级 restore 每次重建整个进程（CRIU 不复用已有的页），沙箱级只写回改过的页。</li>
 <li>语义上，沙箱级让沙箱内的一切回到同一时刻（连接作废、单调时钟倒退）；进程级保住范围外的一切（envd、日志、时钟），代价是范围外的进程可能拿着被丢弃时间线里的旧对象。</li>
 <li>失败的结局不同：沙箱级在提交点之后失败是"撕裂"，沙箱要销毁重建；进程级在杀进程之后失败，再 restore 一次即可恢复。</li>
 <li>两套目前<strong>不能在同一个沙箱上一起用</strong>：入口是同一个端口，一台宿主上只能运行其中一套的 orchestrator；合并的方案未实施。</li>

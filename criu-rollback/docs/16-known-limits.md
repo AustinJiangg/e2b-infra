@@ -130,7 +130,7 @@
 | 默认路径建模板的确认、U-01 的两次慢调用 | `gsd-release-20261008` 的 `summary.txt` 三、七，`func/verify_multitree.log`，`place-20261009/` |
 | L-16 | `gsdCheckScript`（`packages/orchestrator/internal/template/build/layer/gsd.go:22`） |
 | L-17 | 验证脚本 `verify_clear_refs_race.py` 开头的处理与注释 |
-| L-18 | 2026-11-18 新 920B 的 `test950.sh compare`、诊断脚本与 `verify_restore_incremental.py`；CRIU dump 日志 `Warn (criu/mem.c:408): Pid reuse detected` |
+| L-18 | 2026-11-18 新 920B 的 `test950.sh compare`、诊断脚本与 `verify_restore_incremental.py`；CRIU dump 日志 `Warn (criu/mem.c:408): Pid reuse detected`。修复在 950 上的复核：同日验收的 `restore_incremental` 与 950 的 `test950.sh compare`（[22](22-950-results.md) §10.4） |
 | L-19 | 2026-11-18 新 920B `test950.sh extended` 的 `criu-stress-ext/append`（`stress-summary.json`、`stress-ops.log`） |
 | L-11、T-07 | `gsd-fixes-20260930` 的 `SUMMARY.md` "逐项验证"与"未验证" |
 | L-13、U-03、K-02、K-03 | `gsd-fix5-20261008` 的 `summary.txt` 一、四、六 |

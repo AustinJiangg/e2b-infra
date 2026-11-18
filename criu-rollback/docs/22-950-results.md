@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：两轮已填（2026-11-17）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
+> **状态：三轮已填（2026-11-17、11-18）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 `test950.sh` extended、native、compare 三档里的进程级各步，全部 PASS（§10）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -331,11 +331,71 @@ all 与 noworkers 的来源是各子目录的 `stress-summary.json`，多棵树�
 
 ---
 
+## 10. 第三轮：test950 extended、native、compare（2026-11-18）
+
+2026-11-18 用 e2b-infra `1dd8525` 重新构建 RPM 并重新部署之后，`test950.sh` 依次跑了 extended、native、compare 三档。extended 在 11:22 因宿主宕机中断（调用栈在宿主内核的 NUMA 自动均衡路径上，单独分析），宿主重启后 12:39 起从中断的步骤续跑，已通过的步骤不重跑。下面只列进程级的各步；沙箱级的结果在沙箱级手册。
+
+### 10.1 条件与判定
+
+| 项 | 值 |
+|---|---|
+| 仓库提交 | e2b-infra `1dd8525`（950 上的工作区有未提交改动，内容未回传） |
+| 被测文件 | gsd `1a0a3b67…`（前两轮是 `421597e5…`），orchestrator `063e580e…`、guest 内核 `b81306e7…` 与前两轮相同 |
+| 结果目录 | extended `test950/results/20261118-111424-extended/`，native `…/20261118-142626-native/`，compare `…/20261118-144513-compare/` |
+| 验收 `criu/acceptance` | 13:49:10 起，3 分 51 秒，**PASS**：guest-check、verify_gsd、verify_fixes、verify_multitree、clear_refs_race、restore_incremental、perf-run1..3 全部 PASS。`restore_incremental` 是本轮新加的一步，核对 [16](16-known-limits.md) 的 L-18 在 950 上已修复 |
+| 压测 `criu/stress` | 2 分 54 秒，**PASS**：whiteout、all、noworkers、multitree、deldense |
+| 扩展压测 `criu/stress-ext` | 26 分 44 秒，**PASS**，第一次在 950 上跑（§10.3） |
+| 原生 pause / resume `criu/native` | 7 分 52 秒，PASS，样本 324、失败 0。数字与沙箱级那套的对照在[沙箱级手册第 19 章](../../rollback/docs/19-native-pause-resume.md) |
+| 同负载对比 `criu/compare` | 3 分 16 秒，PASS，测量 460 次、失败 0。数字与分析在 [24](24-vs-sandbox-level.md) §5.3、§5.4 |
+| 回切冒烟 | 三档结尾的 `sandbox/smoke-after` 都是 PASS 5 / FAIL 0 / SKIP 0 |
+
+### 10.2 压测与第二轮对照
+
+| 组 | 第二轮（standard，gsd `421597e5…`） | 第三轮（extended，gsd `1a0a3b67…`） |
+|---|---|---|
+| all（300 轮） | create 77 / restore 153 / delete 15，p50 75.5 / 76.4 ms，`resource_exhausted` 55 | create 134 / restore 153 / delete 13，p50 46 / 49 ms，没有 `resource_exhausted` |
+| noworkers（300 轮） | create 75 / restore 155 / delete 13，p50 30.4 / 32.6 ms，`resource_exhausted` 57 | create 134 / restore 153 / delete 13，p50 14 / 28 ms，没有 `resource_exhausted` |
+| multitree / deldense（各 200 轮） | 校验 192 / 0 失败 | 相同 |
+
+第二轮被拒的 55、57 次 checkpoint 加上成功的 77、75 次都是 132 次，第三轮成功 134 次、一次也没有被拒，说明脚本发出的 checkpoint 次数没变，变的是快照存储不再被写满。两轮之间 gsd 加了两处修复：容量预检与根盘写满时的安全失败（`7cdadccf2`），和 restore 之后的第一次 checkpoint 改回增量（`daae6968f`，L-18）。后者让 restore 之后的那次 checkpoint 不再写出整个进程，镜像占用随之变小，与被拒次数归零、p50 下降的方向一致；本轮没有记录快照存储的占用曲线，不逐项归因。
+
+### 10.3 扩展压测
+
+readonly、wr3、rename、append、reltouch、enospc，多种子对照和两个容量组，以前只在新 920B 上跑过（[21](21-920b-stress.md) §3、[23](23-gaps-and-boundaries.md)）。这一轮是它们第一次在 950 上、在当前的 gsd 上跑，全部 PASS：
+
+| 组 | 轮数 | checkpoint / restore / delete | p50 checkpoint / restore（ms） | 备注 |
+|---|---:|---|---|---|
+| all | 1000 | 452 / 477 / 71 | 53 / 66 | |
+| readonly | 1000 | 452 / 477 / 71 | 87 / 92 | |
+| wr3 | 1000 | 452 / 477 / 71 | 32 / 45 | |
+| rename | 1000 | 452 / 477 / 71 | 28 / 45 | |
+| append | 1000 | 199 / 198 / 67 | 70 / 73 | `resource_exhausted`：checkpoint 262 次、restore 274 次 |
+| reltouch | 1000 | 452 / 477 / 71 | 80 / 70 | |
+| noworkers | 1000 | 452 / 477 / 71 | 17 / 35 | |
+| enospc | —— | —— | —— | 写满根盘之后 restore 到 c0 成功，之后 checkpoint、restore 都正常 |
+| multitree、deldense，种子 1～3 | 各 200 | 83～88 / 96～104 / 14～19 | —— | 校验 182～187 次，0 失败 |
+| multitree-capacity | 1000 | 403 / 468 / 300 | —— | 校验 871 次，0 失败 |
+| deldense-capacity | 1000 | 406 / 424 / 295 | —— | 校验 830 次，0 失败 |
+| all，种子 1～5 | 各 300 | 126～134 / 132～146 / 23～34 | 44～58 / 47～67 | |
+| noworkers，种子 1～5 | 各 300 | 126～134 / 132～146 / 23～34 | 12～18 / 27～34 | |
+| compat_matrix | —— | —— | —— | PASS |
+
+- **append 的 `resource_exhausted` 是预期的保护。** append 组的 worker 一直往文件末尾追加，1000 轮里根盘和快照存储都会被写满；checkpoint 和 restore 在动手之前发现空间不够就拒绝，什么都没改（[14](14-failure-semantics.md) 第 7、8 行，[16](16-known-limits.md) 的 L-19）。判据把它算作保护而不是失败。
+- **两个容量组过了 1000 轮。** 2026-11-17 在新 920B 上，修复之前 `multitree-capacity` 约第 306 轮 guest 内存耗尽、`deldense-capacity` 约第 685 轮出现 `data_loss`（[23](23-gaps-and-boundaries.md)）；这一轮 950 上两组都跑满 1000 轮，校验全部一致。
+- 各组的 dmesg、串口关键词、worker errno 与 `mnt_cache` 净增，这次终端回传里没有，需要时用 `bash test950.sh report criu/stress-ext --run 20261118-111424-extended` 取。
+
+### 10.4 L-18 在 950 上的复核
+
+两处证据：验收里的 `restore_incremental` 通过；同负载对比里，进程级"restore 后 checkpoint"一列的产物与"连续 checkpoint"一列相同（256 MiB 进程改 16 MiB 时都是 17.5～17.6 MiB），耗时也相同（25.0 对 24.4 ms，[24](24-vs-sandbox-level.md) §5.3）。修复之前，这一列在新 920B 上是整个进程全量写出（260.8 MiB）。
+
+---
+
 ## 本章要点
 
 - 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。
 - 同一天 `test950.sh standard` 的第二轮在独占机器上跑，验收与四组压测全部 PASS，功能计数、压测计数与第一轮相同；分档的增量 checkpoint 与 restore 中位数相差不超过 5.7 ms（§9）。
 - 分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。
+- 2026-11-18 的第三轮（gsd `1a0a3b67…`）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 `resource_exhausted` 从五十多次降到 0（§10）。
 - 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。
 - 950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。
