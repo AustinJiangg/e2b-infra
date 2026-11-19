@@ -14012,7 +14012,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <p><strong>pause 的口径。</strong> 上游的 <code>Pause</code> 分两步：第一步拍快照并放进本节点的缓存目录（默认 <code>/orchestrator/build</code>），第二步把这些文件上传到模板存储；上游第一步完成就返回，第二步在后台做。两套代码都改成第二步完成才返回（openEuler 基线提交 <code>01665a0c9</code>），理由写在代码注释里：快照数据真正写进存储之前，不能把快照标成就绪。所以表里的 pause 比上游多算了第二步。第二步有多长：</p>
 <ul>
 <li>第一步已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分这些步骤，固定开销基本都在第一步。</li>
-<li>这次部署的存储是 <code>STORAGE_PROVIDER=Local</code>，第二步只是把缓存目录里的几个文件复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），不做 <code>fsync</code>。920B 上模板目录是 tmpfs，单样本跟踪里这一步约 3 ms（沙箱级手册第 19 章 §6）。950 上模板目录的介质还没有核实，第二步的耗时没有单独测量。</li>
+<li>这次部署的存储是 <code>STORAGE_PROVIDER=Local</code>，第二步只是把缓存目录里的几个文件复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），不做 <code>fsync</code>。第二步的长短取决于复制多少：920B 上模板目录是 tmpfs，精确增量构建一次导出约 16 MiB 时约 3 ms（沙箱级手册第 19 章 §6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms。本节的 pause 含第二步；进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志，把两段分开记。</li>
 <li>第一步结束时，内存差分写在缓存目录里一个 <code>mmap</code> 的文件中，没有刷盘；根盘差分写完会 <code>fsync</code>。所以上游返回时，内存差分很可能还在页缓存里。两套代码在 <code>Local</code> 存储上多等的第二步也不刷盘，它保证的是文件已经在模板存储目录里，不保证已经落盘。</li>
 </ul>
 <hr />

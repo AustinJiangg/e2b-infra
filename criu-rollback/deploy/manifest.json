@@ -2,8 +2,8 @@
   "name": "criu-rollback deploy",
   "updated_at": "2026-11-19",
   "release_commit": "9728cef733b39218473404ce42515cc3a2c30477",
-  "orchestrator_commit": "9cdd8067e",
-  "orchestrator_note": "criu-rollback-dev 9cdd8067e：259f1a25c 之上只有两处 orchestrator 改动——bc3cce9 宿主侧网卡前缀 e2bv-（与 provenance/orchestrator-e2bv-veth-prefix.patch 相同）和 9cdd806 建根盘时把 ext4 inode 表清零",
+  "orchestrator_commit": "7e0a6a462",
+  "orchestrator_note": "criu-rollback-dev 7e0a6a462：259f1a25c 之上三处 orchestrator 改动——bc3cce9 宿主侧网卡前缀 e2bv-（与 provenance/orchestrator-e2bv-veth-prefix.patch 相同）、9cdd806 建根盘时把 ext4 inode 表清零、7e0a6a462 原生 Pause 打一行分段计时日志（不改行为）",
   "sdk_commit": "daae6968f064e9ef2f71b5eeb4cf3a8b21a7b0ef",
   "strip_note": "orchestrator 与 gsd 由已验收的二进制执行 GNU strip -g（binutils 2.41）得到：只去掉 DWARF 调试段，保留符号表；.text/.rodata/.data/.noptrdata/.gopclntab/.go.buildinfo 与加载段逐字节相同，BuildID 与提交号不变",
   "artifacts": {
@@ -11,13 +11,14 @@
       "packed": "artifacts/orchestrator.xz",
       "path": "orchestrator",
       "mode": "755",
-      "size": 96010008,
-      "sha256": "daa44b22f88676f347abd26aab91dc14ffa6173095eb1a0f52dc356b513abbb0",
-      "unstripped_sha256": "bf823e9ca2e2daccf8c00b1b5e0290eb7e408d5be9dbcb983cc14b2012911423",
+      "size": 96010040,
+      "sha256": "ec5eb1ccda4fadd35d56e3a77d2f063eb6925fdaf34c4b86b5e28058ead7e10b",
+      "unstripped_sha256": "09fec2867ff52aab70df5137ccc604ae8b44088184ed67c8365a88c518676bf5",
       "replaces": [
-        "063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870"
+        "063e580e38becbbb3246e8822ccff5ac65c4f0bff266d1badefa7adff32dd870",
+        "daa44b22f88676f347abd26aab91dc14ffa6173095eb1a0f52dc356b513abbb0"
       ],
-      "commit": "9cdd8067e"
+      "commit": "7e0a6a462"
     },
     "gsd": {
       "packed": "artifacts/gsd.xz",
@@ -121,5 +122,5 @@
     "restore_path": "modified-child-to-full-baseline",
     "validation": "2026-10-16 新920B三轮六档实测PASS：18次恢复完整内存与文件校验通过，SDK/journal一致；本地11项脚本回归与6项验收判读测试通过。950尚未运行新版脚本。"
   },
-  "release_note": "2026-11-19（二）：orchestrator 换成 criu-rollback-dev 9cdd8067e，建模板时把根盘的 ext4 inode 表清零，guest 开机后不再跑 ext4lazyinit 写约 60 MiB；模板版本记录加上 orchestrator，换了 orchestrator 也重建模板。 上一版：2026-11-19：gsd 换成 criu-rollback-dev 9728cef73（dump 日志由 CRIU 直接写文件、多棵进程树并行 dump 与 restore、可选的延迟页 restore 默认关）；SDK 不变，仍是 daae6968f。 上一版：2026-11-18：gsd 与 SDK 换成 criu-rollback-dev daae6968f（restore 层切换预留空间、checkpoint 预检留内存余量、根盘写满报 resource_exhausted 且仍可 restore、Sandbox.connect 带路由头、共享连接池 keepalive 上限、restore 之后的第一次 checkpoint 保持增量）；orchestrator、内核、镜像不变，仍是 259f1a25c 那一版"
+  "release_note": "2026-11-20：orchestrator 换成 criu-rollback-dev 7e0a6a462，原生 pause 每次打一行 Pause timing 日志（拍快照一段与等上传一段各多久），只加日志、不改行为；对外分档表据此按上游口径只计第一步。 上一版：2026-11-19（二）：orchestrator 换成 criu-rollback-dev 9cdd8067e，建模板时把根盘的 ext4 inode 表清零，guest 开机后不再跑 ext4lazyinit 写约 60 MiB；模板版本记录加上 orchestrator，换了 orchestrator 也重建模板。 上一版：2026-11-19：gsd 换成 criu-rollback-dev 9728cef73（dump 日志由 CRIU 直接写文件、多棵进程树并行 dump 与 restore、可选的延迟页 restore 默认关）；SDK 不变，仍是 daae6968f。 上一版：2026-11-18：gsd 与 SDK 换成 criu-rollback-dev daae6968f（restore 层切换预留空间、checkpoint 预检留内存余量、根盘写满报 resource_exhausted 且仍可 restore、Sandbox.connect 带路由头、共享连接池 keepalive 上限、restore 之后的第一次 checkpoint 保持增量）；orchestrator、内核、镜像不变，仍是 259f1a25c 那一版"
 }

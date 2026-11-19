@@ -7958,7 +7958,7 @@ GC 的 STW 阶段要等所有处于 <code>_Prunning</code> 的 P 响应抢占。
 <ul>
 <li>不等上传也已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分。<code>sbx.Pause</code> 导出根盘差分时把 <code>s.Close</code> 作为关闭钩子传进去（<code>RootfsDiffCreator.closeHook</code>），固定开销基本都在这一段（§6 时间线 232 ms 之前）。</li>
 <li>这一段结束时，内存差分在本节点缓存目录（<code>DEFAULT_CACHE_DIR</code>，默认 <code>/orchestrator/build</code>）里一个 <code>mmap</code> 的文件中，由 <code>process_vm_readv</code> 从 Firecracker 进程读出写入（<code>block/cache.go</code>），这条路径上没有刷盘；<code>snapfile</code> 由 Firecracker 写出，也不刷盘；根盘差分写完会 <code>fsync</code>（<code>build/local_diff.go</code> 的 <code>CloseToDiff</code>）。所以上游返回时，内存差分很可能还在页缓存里。</li>
-<li>上传在 <code>STORAGE_PROVIDER=Local</code> 时只是把这几个文件用 <code>io.Copy</code> 复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），同样不 <code>fsync</code>（<code>shared/pkg/storage/storage_fs.go</code> 的 <code>StoreFile</code>）。920B 上模板目录是 tmpfs，这一段约 3 ms（§6）。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 <code>Local</code> 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。</li>
+<li>上传在 <code>STORAGE_PROVIDER=Local</code> 时只是把这几个文件用 <code>io.Copy</code> 复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），同样不 <code>fsync</code>（<code>shared/pkg/storage/storage_fs.go</code> 的 <code>StoreFile</code>）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms。进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 <code>Local</code> 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。</li>
 </ul>
 <p><code>Checkpoint</code> 拉起新沙箱时，三个 id 的变化是：</p>
 <div class="tw"><table>
@@ -14872,7 +14872,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li>950 没有逐段拆分，也没有做“不开脏页跟踪”的对照，所以不能据此给出 HDBSS 对原生路径的净影响。</li>
 <li>功能用例 T39、T41 已在同一份二进制 <code>a5d03902…</code> 上通过（2026-11-17 func，<a href="#d17-3-功能回归结果">第 17 章 §3</a>）；<code>pb2.py</code> 在 950 上待复跑（<a href="#d15-102-缺口">第 15 章 §10.2</a>）。</li>
 <li>每档 n = 15，是短时单沙箱串行测量，不表示并发或长期尾延迟。</li>
-<li>存储是 <code>Local</code>，pause 含把快照复制进模板存储这一步。上游的 <code>Pause</code> 不等这一步就返回，两套代码都等（<a href="#d13">第 13 章 §1</a>），所以 pause 列比上游多算了这一步。920B 上模板目录是 tmpfs，这一步约 3 ms（§6）；950 的模板目录介质未核实，这一步没有单独测量。换成对象存储后上传耗时要另测，resume 后的按需加载也要走网络。</li>
+<li>存储是 <code>Local</code>，pause 含把快照复制进模板存储这一步。上游的 <code>Pause</code> 不等这一步就返回，两套代码都等（<a href="#d13">第 13 章 §1</a>），所以 pause 列比上游多算了这一步。这一步的长短取决于复制多少：920B 上模板目录是 tmpfs，精确增量构建导出约 16 MiB 时约 3 ms（§6），进程级那套导出全部驻留内存时约 68～90 ms（2026-11-20 smoke）。本章各表的 pause 都含这一步；进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起把两段分开记（第 13 章 §1）。换成对象存储后上传耗时要另测，resume 后的按需加载也要走网络。</li>
 <li>950 与 920B 的脏页后端、存储和模板都不同，表中数字不互相相减，差值不能归因于 HDBSS。</li>
 <li>对照构建不是纯上游，它只说明“不含本方案时”的一份实测，不能当作上游基线。</li>
 </ul>

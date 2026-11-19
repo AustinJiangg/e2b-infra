@@ -90,24 +90,59 @@ class MixTests(unittest.TestCase):
         self.assertIn("f=0.001", csw.point_label(p))
         self.assertEqual([(q["d"], q["f"]) for q in csw.SERIES["mix"]][-1], (70, 0.001))
         self.assertTrue(all(3 * q["f"] == q["d"] for q in csw.SERIES["mix"][:-1]))
+        self.assertEqual(csw.SERIES["mix"][-1]["P"], 70)
+
+    def test_mix_points(self):
+        self.assertTrue(all(q["P"] == q["d"] for q in csw.SERIES["mix"]))
+        self.assertTrue(all(q["P"] == 256 for q in csw.SERIES["mix256"]))
+        self.assertIn("mix256", csw.ALL_SERIES)
+        self.assertNotIn("mix256", csw.DEFAULT_SERIES)
+        p = csw.norm(csw.SERIES["mix"][0])
+        self.assertEqual((p["P"], p["d"], p["f"]), (0, 0, 0))
+
+    def test_pause_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "alloc", "logs"))
+            pl = csw.PauseLog.__new__(csw.PauseLog)
+            pl.dir, pl.task = os.path.join(tmp, "alloc", "logs"), "start"
+            f0 = os.path.join(pl.dir, "start.stdout.0")
+            line = ('2026-11-19T20:00:00.000+0800  INFO  Pause timing  {"service": "x", "sandbox.id": "%s", '
+                    '"pause.snapshot_ms": 250.5, "pause.upload_ms": 3.25}\n')
+            open(f0, "w").write(line % "old")
+            mark = pl.mark()
+            self.assertIsNone(pl.take("old", mark, timeout=0))      # mark 之前的行不算
+            open(f0, "a").write("other\n" + line % "sbx1")
+            self.assertEqual(pl.take("sbx1", mark, timeout=0), {"snapshot": 250.5, "upload": 3.25})
+            mark = pl.mark()
+            open(os.path.join(pl.dir, "start.stdout.1"), "w").write(line % "sbx2")   # 日志轮转到新文件
+            self.assertEqual(pl.take("sbx2", mark, timeout=0)["upload"], 3.25)
+            self.assertIsNone(csw.PauseLog.take(pl, "none", mark, timeout=0))
 
     def test_mix_table(self):
+        pts = ({"P": 12, "d": 12, "f": 4}, {"P": 70, "d": 70, "f": 0.001})
+
         def with_native(stack, rnd):
-            rows = fake_rows(stack, "mix", {"P": 256, "d": 12, "f": 4}, rnd=rnd) + \
-                fake_rows(stack, "mix", {"P": 256, "d": 70, "f": 0.001}, rnd=rnd)
-            for pt in ({"P": 256, "d": 12, "f": 4}, {"P": 256, "d": 70, "f": 0.001}):
-                p = csw.norm(pt)
-                rows.append({"series": "mix", **p, "pass": 0, "rep": 0, "kind": "native_first", "pause_ms": 900.0,
-                             "resume_ms": 200.0, "ok": True})
-                for i in range(4):
-                    rows.append({"series": "mix", **p, "pass": 0, "rep": i + 1, "kind": "native",
-                                 "pause_ms": 300.0 + i, "resume_ms": 100.0 + i, "resume_call_ms": 90.0,
-                                 "ready_ms": 10.0 + i, "ok": True})
+            rows = []
+            for pt in pts:
+                rows += fake_rows(stack, "mix", pt, rnd=rnd)
+            rows += fake_rows(stack, "size", {"P": 32, "d": 16}, rnd=rnd) + \
+                fake_rows(stack, "size", {"P": 384, "d": 16}, rnd=rnd)
+            if stack == "criu":
+                for pt in pts:
+                    p = csw.norm(pt)
+                    rows.append({"series": "mix", **p, "pass": 0, "rep": 0, "kind": "native_first", "pause_ms": 900.0,
+                                 "pause_wall_ms": 905.0, "resume_ms": 200.0, "ok": True})
+                    for i in range(4):
+                        rows.append({"series": "mix", **p, "pass": 0, "rep": i + 1, "kind": "native",
+                                     "pause_ms": 300.0 + i, "pause_wall_ms": 304.0 + i, "pause_upload_ms": 4.0,
+                                     "resume_ms": 100.0 + i, "resume_call_ms": 90.0, "ready_ms": 10.0 + i,
+                                     "read_extra_ms": 20.0 + i, "ok": True})
             return fake_result(stack, rows)
         s, c = with_native("sandbox", 1), with_native("criu", 2)
-        e = [x for x in s["summary"] if x["d"] == 12][0]
+        e = [x for x in c["summary"] if x["series"] == "mix" and x["d"] == 12][0]
         self.assertEqual(e["native_n"], 4)
         self.assertEqual(e["native_first_pause_ms"]["p50"], 900.0)
+        self.assertEqual(e["read_extra_ms"]["p50"], 21.5)
         self.assertEqual(e["n"], 5)                 # native 行不混进 checkpoint 的样本
         for r in (s, c):
             r["_path"] = r["stack"]
@@ -115,12 +150,16 @@ class MixTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             csw.print_compare(merged, table)
-            csw.print_summary(s)
+            csw.print_summary(c)
         out = buf.getvalue()
         self.assertIn("对外分档表", out)
-        self.assertIn("16\t12\t4\t", out)
-        self.assertIn("70.001\t70\t0.001\t", out)
-        self.assertIn("E2B resume(进程级代码)", out)
+        self.assertIn("16\t12\t4\t12\t", out)
+        self.assertIn("70.001\t70\t0.001\t70\t", out)
+        self.assertIn("\t".join(csw.MIX_HEAD), out)
+        self.assertIn("301.5\t101.5\t21.5", out)     # pause（第一步）、resume、首读
+        self.assertIn("[restore 随进程大小", out)
+        self.assertIn("384\t", out)
+        self.assertIn("故意构造", out)
         self.assertIn("原生 pause / resume", out)
 
 
@@ -188,7 +227,7 @@ class GuestScriptTests(unittest.TestCase):
                     for _ in range(100):
                         out = open(os.path.join(wd, "rsp")).read()
                         if out.startswith(nonce + " "):
-                            return out.split()[1]
+                            return out.split()[1] if op != "shat" else out.split()[1:]
                         time.sleep(0.02)
                     raise AssertionError("no answer")
                 h0 = ask("n1", "sha")
@@ -197,6 +236,9 @@ class GuestScriptTests(unittest.TestCase):
                 self.assertNotEqual(h0, h1)
                 self.assertEqual(ask("n4", "dirty", "4"), "ok")
                 self.assertTrue(ask("n5", "sdirty", "8").startswith("ERR"))
+                h2, ms = ask("n6", "shat")
+                self.assertEqual(h2, ask("n7", "sha"))
+                self.assertGreaterEqual(float(ms), 0)
             finally:
                 proc.kill()
                 proc.wait()

@@ -158,7 +158,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 | 组 | 进程大小 P | 改动 d | 文件 f | 回答什么 |
 |---|---|---|---|---|
-| mix | 256 MiB | 0、12、24、48、96、192、70 MiB | 0、4、8、16、32、64、0.001 MiB | 对外展示的分档表（内存 : 文件 = 3 : 1，另加 70 MiB + 0.001 MiB 一档）；同一负载另起沙箱测 e2b 原生 pause / resume |
+| mix | 等于内存改动 | 0、12、24、48、96、192、70 MiB | 0、4、8、16、32、64、0.001 MiB | 对外展示的分档表（内存 : 文件 = 3 : 1，另加 70 MiB + 0.001 MiB 一档）；每档的进程大小等于内存改动，即每一步改写整个进程；进程级栈上同一负载另起沙箱测 e2b 原生 pause / resume |
 | dirty | 256 MiB | 0、16、32、64、128、256 MiB | 0 | 改动量变、进程大小不变时两套各自怎么变 |
 | size | 32～384 MiB | 16 MiB | 0 | 改动量不变、进程变大时两套各自怎么变 |
 | file | 16 MiB | 0 | 16、64 MiB | 只写文件 |
@@ -169,7 +169,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 默认跑前七组（不含 filewait）。`--series` 写逗号分隔的组名，`all` 是全部八组。另有 `scen` 组：用 `--scenarios 文件` 给出场景（每个场景写上面这些量的取值），格式见 `ckpt_same_workload.py --help`；场景的数值要按真实任务画像定。
 
-**mix 组与对外分档表。** mix 的每个测点先照常测 checkpoint / restore，再另起一个沙箱、同样的负载，循环“改写 → `sb.pause()` → `Sandbox.connect()` → 第一条命令 → 核对内存与文件”，测 e2b 原生 pause / resume：pause 计 `sb.pause()` 的调用耗时，resume 计 connect 返回加第一条命令完成；第一次 pause 导出的是自启动以来的全部写入，单列不进统计。两套各跑一遍，所以原生路径在沙箱级、进程级两套代码上各有一组数。最后的 `compare-table` 除了按测点并列，还打印一张对外分档表（p50、p99 各一张，制表符分隔，可直接贴进表格）：总改动、内存、文件、沙箱级 / 进程级 checkpoint、沙箱级 / 进程级 restore、两套代码上的 E2B pause / resume。checkpoint 取连续 checkpoint，restore 是回到改写之前的基点；每档 checkpoint / restore 20 个样本，pause / resume 20 个样本。
+**mix 组与对外分档表。** mix 每档用一个新沙箱，进程大小等于该档的内存改动量：这是故意构造的，让两套的 restore 都随档位增长——沙箱级 restore 随改动量增长，进程级 restore 随进程大小增长，本组里两者相等。实际进程往往大于每一步的改动，所以对外表下面附 size 组（改 16 MiB、进程 32～384 MiB）的 restore 小表。旧的“进程固定 256 MiB”那一组改名 mix256，不在默认测点里，要跑写 `--series mix256`。每个测点先照常测 checkpoint / restore；在进程级栈上再另起一个沙箱、同样的负载，循环“改写 → 读一遍内存 → `sb.pause()` → `Sandbox.connect()` → 第一条命令 → 读一遍内存 → 核对内存与文件”，测 e2b 原生 pause / resume。原生只在进程级栈上测：那套 orchestrator 的原生快照路径与上游相同。pause 与上游口径一致，只计第一步：上游拍完快照、放进本节点缓存就返回，这套代码还要等上传完成；orchestrator（`7e0a6a462` 起）每次 pause 打一行 `Pause timing` 日志，脚本从 orchestrator 的 Nomad 日志文件读出上传用时，pause = `sb.pause()` 墙钟减上传用时。resume 计 connect 返回加第一条命令完成；“resume 后首读内存”是 resume 之后第一次读完整个进程内存比 pause 之前多花的时间，即推迟到恢复之后的缺页成本。第一次 pause 导出的是自启动以来的全部写入，单列不进统计。最后的 `compare-table` 除了按测点并列，还打印对外分档表（p50、p99 各一张，制表符分隔，可直接贴进表格）：总改动、内存、文件、进程大小、沙箱级 / 进程级 checkpoint、沙箱级 / 进程级 restore、沙箱级 / 进程级首次全量、E2B pause / resume、resume 后首读内存，表后附 restore 随进程大小的小表和表的说明。每档 checkpoint / restore 20 个样本、首次全量 2 个、pause / resume 20 个。
 
 **多轮交替（`--rounds N`）。** 两套按 ABBA 顺序交替各跑 N 轮（第 1 轮沙箱级→进程级，第 2 轮进程级→沙箱级……），宿主状态随时间的变化平均分到两侧；最后一步 `compare-table` 把各轮合并，按测点并列两套的墙钟 p50 / p99。每测点样本数 = 20 × N，要 n ≥ 100 就用 `--rounds 5`。`report` 只打印并列表，各轮只列判定；单轮全文用 `bash test950.sh report criu/compare-r1` 这样的步骤名。
 

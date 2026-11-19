@@ -32,20 +32,30 @@ bytearray，且进程大小随档位一起变），并列时分不开"改动量"
     filewait 进程 16 MiB、写 64 MiB 文件，落盘 fsync / none × 写完等 0、10、40 秒
              （默认每测点 1 个沙箱 × 6 次；40 秒那几档一个测点约 8 分钟）
     scen     --scenarios 给的场景文件，每个场景一个测点（格式见 SCENARIO_HELP）
-    mix      对外展示用的分档表：进程固定 256 MiB，每档改写 d MiB 内存、写 f MiB 文件，
+    mix      对外展示用的分档表：每档改写 d MiB 内存、写 f MiB 文件，
              (d, f) = (0,0) (12,4) (24,8) (48,16) (96,32) (192,64) (70,0.001)，内存 : 文件 = 3 : 1
-             （最后一档是另加的）。每个测点另起一个沙箱，在同一负载上测 e2b 原生 pause / resume，
-             见下面"原生 pause / resume"。两套并列时 mix 另打一张对外表（p50 一张、p99 一张）。
+             （最后一档是另加的）。每档用不同大小的进程：进程大小 P = d，即每一步把整个进程改写一遍。
+             这样两套的 restore 都随档位增长：沙箱级随改动量，进程级随进程大小，本组里两者相等。
+             进程级的测点另起一个沙箱，在同一负载上测 e2b 原生 pause / resume（见下面"原生 pause /
+             resume"）。两套并列时 mix 另打一张对外表（p50 一张、p99 一张），附 size 组的 restore 小表。
+    mix256   旧的 mix：进程固定 256 MiB，档位同 mix（大进程、小改动；不进对外表，不测原生）
 
-默认跑 mix,dirty,size,file,conc,layout,trees；filewait 时间长，要显式写 --series 或用 --series all。
+默认跑 mix,dirty,size,file,conc,layout,trees；filewait、mix256 要显式写 --series 或用 --series all。
 文件大小可以是小数（MiB），不是整 MiB 时按字节数一次写入。
 
-原生 pause / resume（只在 mix 组）：同一个测点、同样起常驻进程并写满、写好文件、等 ext4 初始化，
-然后循环"改写 d MiB、写 f MiB → sb.pause() → Sandbox.connect() → 第一条命令 → 核对内存 SHA256 与
-文件"。pause 计 sb.pause() 的调用耗时；resume 计 connect 返回加第一条命令完成（与
-native_snapshot_tiers.py 同一口径）。第 0 次 pause 导出的是自启动以来的全部写入，单列不进统计。
-不与 checkpoint 混在一个沙箱里，免得两种快照互相影响。每次 pause 产出的 build 在沙箱结束后删掉
-（本地模板存储时）。在哪套栈上跑，测的就是那套代码里的原生路径。
+原生 pause / resume（只在 mix 组、只在进程级栈上：进程级那套的 orchestrator 没有改原生快照路径，
+等同于 ARM 上的 e2b 原生实现）：同一个测点、同样起常驻进程并写满、写好文件、等 ext4 初始化，然后
+循环"改写 d MiB、写 f MiB → 读一遍内存（计时）→ sb.pause() → Sandbox.connect() → 第一条命令 →
+读一遍内存（计时）→ 核对内存 SHA256 与文件"。
+  pause    与上游口径一致，只算第一步：上游 Pause 拍完快照、放进本节点缓存就返回，上传在后台做；
+           这套代码等上传完成才返回。orchestrator 每次 pause 打一行 "Pause timing"（pause.snapshot_ms、
+           pause.upload_ms），脚本从 orchestrator 的 Nomad 日志文件里读出来，pause = sb.pause() 墙钟
+           减去 upload_ms。读不到日志时这一列为空，另记含上传的墙钟 pause_wall_ms。
+  resume   connect 返回加第一条命令完成（与 native_snapshot_tiers.py 同一口径）。
+  首读     resume 之后第一次读完整个进程内存，比 pause 之前读同样的内存多花的时间（常驻进程自己计时）：
+           resume 不加载内存，页在之后按缺页读回，这一列就是推迟到恢复之后的成本。
+第 0 次 pause 导出的是自启动以来的全部写入，单列不进统计。不与 checkpoint 混在一个沙箱里，免得两种
+快照互相影响。每次 pause 产出的 build 在沙箱结束后删掉（本地模板存储时）。
 
 基点前先等 guest 的 ext4 把 inode 表后台清零做完（ext4lazyinit 线程退出）：模板快照拍在清零完成之前，
 新沙箱启动后几秒内会额外写出约 60 MiB 根盘数据；基点拍在清零之后，restore 回基点就不会再重做一遍，
@@ -88,6 +98,7 @@ import json
 import logging
 import os
 import glob
+import re
 import socket
 import statistics
 import subprocess
@@ -117,11 +128,13 @@ SERIES = {
     "layout": [{"P": 256, "d": d, "layout": "scatter"} for d in (16, 64, 256)],
     "trees": [{"P": 64, "d": 16, "trees": t} for t in (1, 4, 16)],
     "filewait": [{"P": 16, "f": 64, "sync": s, "wait": w} for s in ("fsync", "none") for w in (0, 10, 40)],
-    "mix": [{"P": 256, "d": d, "f": f} for d, f in MIX_POINTS],
+    "mix": [{"P": int(d), "d": d, "f": f} for d, f in MIX_POINTS],       # 进程大小 = 内存改动
+    "mix256": [{"P": 256, "d": d, "f": f} for d, f in MIX_POINTS],
 }
-NATIVE_SERIES = ("mix",)     # 这些组的每个测点另起沙箱测原生 pause / resume
+NATIVE_SERIES = ("mix",)     # 这些组的每个测点另起沙箱测原生 pause / resume（只在进程级栈上）
+NATIVE_STACK = "criu"
 DEFAULT_SERIES = "mix,dirty,size,file,conc,layout,trees"
-ALL_SERIES = "mix,dirty,size,file,conc,layout,trees,filewait"
+ALL_SERIES = "mix,dirty,size,file,conc,layout,trees,filewait,mix256"
 SERIES_RUNS = {"filewait": (1, 6)}     # 没显式给 --passes/--reps 时这些组用的（沙箱数, 次数）
 CONC = [1, 4, 8, 16]
 CONC_POINT = {"P": 64, "d": 16}
@@ -185,7 +198,7 @@ def point_label(e):
 # 改写用启动时分配好的 1 MiB 块，避免新建 VMA（进程级的 soft-dirty 会把新 VMA 整个报脏）。
 # 散页改动用启动时排好的页序，每页改开头 64 字节（同样不新建 VMA）。
 RESIDENT_PY = r'''
-import hashlib, os, random, signal, sys
+import hashlib, os, random, signal, sys, time
 WD = sys.argv[2]
 CMD, RSP, PID = WD + "/cmd", WD + "/rsp", WD + "/pid"
 size = int(sys.argv[1]) << 20
@@ -228,6 +241,10 @@ def handle(signum, frame):
             out = "ok"
         elif op == "sha":
             out = hashlib.sha256(buf).hexdigest()
+        elif op == "shat":
+            t = time.perf_counter()
+            out = hashlib.sha256(buf).hexdigest()
+            out += " %.3f" % ((time.perf_counter() - t) * 1000)
         elif op == "ping":
             out = "pong"
         else:
@@ -261,6 +278,63 @@ def orchestrator_proc():
             continue
         return exe, dict(kv.split("=", 1) for kv in raw.split("\0") if "=" in kv)
     return None, {}
+
+
+class PauseLog:
+    """orchestrator 的 "Pause timing" 日志行（进程级那套的 orchestrator 7e0a6a462 起才有）。
+    orchestrator 在 Nomad 下运行：工作目录是 <alloc>/<task>，标准输出写到 <alloc>/alloc/logs/<task>.stdout.N。"""
+    LINE = re.compile(r'"pause\.(snapshot|upload)_ms":\s*([0-9.]+)')
+
+    def __init__(self):
+        self.dir = self.task = None
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                exe = os.path.realpath("/proc/%s/exe" % pid)
+                cwd = os.path.realpath("/proc/%s/cwd" % pid)
+            except OSError:
+                continue
+            if os.path.basename(exe).startswith(("orchestrator", "template-manager")):
+                d = os.path.join(os.path.dirname(cwd), "alloc", "logs")
+                if os.path.isdir(d):
+                    self.dir, self.task = d, os.path.basename(cwd)
+                break
+
+    def files(self):
+        if not self.dir:
+            return []
+        fs = glob.glob(os.path.join(self.dir, "%s.stdout.*" % self.task))
+        return sorted(fs, key=lambda f: int(f.rsplit(".", 1)[1]) if f.rsplit(".", 1)[1].isdigit() else -1)
+
+    def mark(self):
+        out = {}
+        for f in self.files():
+            try:
+                out[f] = os.path.getsize(f)
+            except OSError:
+                pass
+        return out
+
+    def take(self, sid, mark, timeout=3.0):
+        """mark 之后新写的日志里找这个沙箱的 Pause timing，返回 {"snapshot": ms, "upload": ms} 或 None。"""
+        t0 = time.time()
+        while True:
+            for f in self.files():
+                try:
+                    with open(f, "rb") as fh:
+                        fh.seek(mark.get(f, 0))
+                        data = fh.read().decode("utf8", "replace")
+                except OSError:
+                    continue
+                for line in data.splitlines():
+                    if "Pause timing" in line and sid in line:
+                        got = {k: float(v) for k, v in self.LINE.findall(line)}
+                        if len(got) == 2:
+                            return got
+            if time.time() - t0 > timeout:
+                return None
+            time.sleep(0.1)
 
 
 def sha256_file(path):
@@ -375,6 +449,14 @@ class Hog:
         LOG.warning("ext4lazyinit %d 秒还没结束，继续", limit)
         return None
 
+    def mem_timed(self):
+        """读一遍全部内存：返回 (SHA256，常驻进程自己量的耗时 ms，多棵树取最大)。"""
+        got = [x.split() for x in self.ask("shat")]
+        return "|".join(g[0] for g in got), max(float(g[1]) for g in got)
+
+    def disk(self, file_mb):
+        return self.sh("sha256sum %s/file | cut -d' ' -f1" % WD) if file_mb else None
+
     def state(self, file_mb):
         mem = "|".join(self.ask("sha"))
         disk = self.sh("sha256sum %s/file | cut -d' ' -f1" % WD) if file_mb else None
@@ -388,6 +470,7 @@ class Ctx:
         self.args, self.stack, self.store = args, stack, store
         self.cache, self.storage = cache, storage     # 原生 pause：导出缓存目录、本地模板存储（删 build 用）
         self.prov = None
+        self.pause_log = None
 
     def server(self, sb, ck_id, op, sdk_timings):
         """服务端分段：进程级用 SDK 带回的 gsd 分段；沙箱级读宿主上的 timings 文件。"""
@@ -572,11 +655,14 @@ def native_sandbox(Sandbox, ctx, point, series, pass_no, reps, rows, lock):
             hog.write_file(f, point["sync"])
             if point["wait"]:
                 time.sleep(point["wait"])
-            want = hog.state(f)
+            mem_want, read_before = hog.mem_timed()
+            disk_want = hog.disk(f)
             before = list_cache(ctx.cache)
+            mark = ctx.pause_log.mark() if ctx.pause_log else {}
             t0 = time.perf_counter()
             sb.pause()
-            pause_ms = (time.perf_counter() - t0) * 1000
+            wall_ms = (time.perf_counter() - t0) * 1000
+            timing = ctx.pause_log.take(sid, mark) if ctx.pause_log else None
             mem_exp, disk_exp, build = export_sizes(ctx.cache, before)
             builds.append(build)
             t0 = time.perf_counter()
@@ -586,10 +672,16 @@ def native_sandbox(Sandbox, ctx, point, series, pass_no, reps, rows, lock):
             sb.commands.run("true", user="root", timeout=60)
             ready_ms = (time.perf_counter() - t0) * 1000
             hog.sb = sb
-            ok = hog.state(f) == want
+            mem_got, read_after = hog.mem_timed()
+            ok = mem_got == mem_want and hog.disk(f) == disk_want
             row = {"series": series, **point, "pass": pass_no, "rep": rep,
-                   "kind": "native_first" if rep == 0 else "native", "pause_ms": pause_ms,
+                   "kind": "native_first" if rep == 0 else "native", "pause_wall_ms": wall_ms,
+                   "pause_ms": wall_ms - timing["upload"] if timing else None,
+                   "pause_server_snapshot_ms": timing["snapshot"] if timing else None,
+                   "pause_upload_ms": timing["upload"] if timing else None,
                    "resume_ms": call_ms + ready_ms, "resume_call_ms": call_ms, "ready_ms": ready_ms,
+                   "read_before_ms": read_before, "read_after_ms": read_after,
+                   "read_extra_ms": read_after - read_before,
                    "export_mem_mib": mem_exp, "export_disk_mib": disk_exp, "sandbox_id": sid, "ok": ok}
             with lock:
                 rows.append(row)
@@ -728,9 +820,12 @@ def summarize(rows):
         native = [r for r in rs if r["kind"] == "native"]
         if native or any(r["kind"] == "native_first" for r in rs):
             e["native_n"] = len(native)
-            for key in ("pause_ms", "resume_ms", "resume_call_ms", "ready_ms", "export_mem_mib"):
+            for key in ("pause_ms", "pause_wall_ms", "pause_upload_ms", "pause_server_snapshot_ms", "resume_ms",
+                        "resume_call_ms", "ready_ms", "read_extra_ms", "export_mem_mib"):
                 e[key] = stat([r.get(key) for r in native])
-            e["native_first_pause_ms"] = stat([r["pause_ms"] for r in rs if r["kind"] == "native_first"])
+            first = [r for r in rs if r["kind"] == "native_first"]
+            e["native_first_pause_ms"] = stat([r["pause_ms"] if r.get("pause_ms") is not None else r.get("pause_wall_ms")
+                                               for r in first])
         out.append(e)
     return out
 
@@ -739,7 +834,8 @@ def fmt(st, key="p50"):
     return "-" if not st else "%.1f" % st[key]
 
 
-TITLES = {"dirty": "dirty：进程固定 256 MiB，连续改动量变化",
+TITLES = {"mix": "mix：对外分档表，进程大小 = 内存改动 d MiB，改写 d MiB 内存 + 写 f MiB 文件",
+          "dirty": "dirty：进程固定 256 MiB，连续改动量变化",
           "size": "size：改动固定 16 MiB，进程大小变化",
           "file": "file：只写文件（fsync 后立刻 checkpoint）",
           "conc": "conc：N 个沙箱同时做，每个进程 64 MiB、改动 16 MiB",
@@ -747,7 +843,7 @@ TITLES = {"dirty": "dirty：进程固定 256 MiB，连续改动量变化",
           "trees": "trees：合计 64 MiB、改动 16 MiB，分到几棵进程树",
           "filewait": "filewait：写 64 MiB 文件，落盘方式 × 写完等待",
           "scen": "scen：场景文件里的场景",
-          "mix": "mix：对外分档表，进程 256 MiB，改写 d MiB 内存 + 写 f MiB 文件"}
+          "mix256": "mix256：进程固定 256 MiB，改写 d MiB 内存 + 写 f MiB 文件（旧 mix）"}
 
 
 def series_order(summary):
@@ -791,14 +887,18 @@ def print_summary(result):
                 fmt(e["base_ckpt_ms"]), "  失败 %d" % e["failed"] if e["failed"] else ""))
         native = [e for e in rows if e.get("native_n") is not None]
         if native:
-            print("  原生 pause / resume（同一负载另起沙箱；resume = connect 返回 + 第一条命令；首次 pause 单列）")
-            print("  %-28s %3s | %-17s | %-17s | %-13s | %8s" % ("测点", "n", "pause p50 / p99", "resume p50 / p99",
-                                                            "connect/就绪", "首次pause"))
+            print("  原生 pause / resume（同一负载另起沙箱；pause 只算第一步 = 墙钟 - 上传，与上游口径一致；"
+                  "resume = connect 返回 + 第一条命令；首读 = resume 后第一次读完内存多花的时间；首次 pause 单列）")
+            print("  %-28s %3s | %-17s | %-13s | %-17s | %-13s | %7s | %8s" % (
+                "测点", "n", "pause p50 / p99", "墙钟/上传", "resume p50 / p99", "connect/就绪", "首读", "首次pause"))
             for e in native:
-                print("  %-28s %3d | %7s / %-7s | %7s / %-7s | %5s / %-5s | %8s" % (
-                    point_label(e), e["native_n"], fmt(e["pause_ms"]), fmt(e["pause_ms"], "p99"),
+                print("  %-28s %3d | %7s / %-7s | %5s / %-5s | %7s / %-7s | %5s / %-5s | %7s | %8s" % (
+                    point_label(e), e["native_n"], fmt(e.get("pause_ms")), fmt(e.get("pause_ms"), "p99"),
+                    fmt(e.get("pause_wall_ms")), fmt(e.get("pause_upload_ms")),
                     fmt(e["resume_ms"]), fmt(e["resume_ms"], "p99"), fmt(e["resume_call_ms"]), fmt(e["ready_ms"]),
-                    fmt(e["native_first_pause_ms"])))
+                    fmt(e.get("read_extra_ms")), fmt(e["native_first_pause_ms"])))
+            if any(e.get("native_n") and not e.get("pause_ms") for e in native):
+                print("  注意：没读到 orchestrator 的 Pause timing 日志，pause 列为空（墙钟见“墙钟”列，含上传）")
     print_stages(result)
     print("\n判定: %s（测量 %d 次，失败 %d）" % (result["verdict"], sum(1 for r in result["rows"] if r["kind"] != "base"),
                                          sum(1 for r in result["rows"] if not r["ok"])))
@@ -960,29 +1060,56 @@ def mix_rows(table):
     return sorted(rows, key=lambda t: (t["s"]["d"] + t["s"]["f"], t["s"]["d"]))
 
 
+MIX_NOTES = (
+    "每档用一个新沙箱，进程大小等于该档的内存改动量，即每一步把整个进程改写一遍；这是为了让各列都随档位"
+    "增长而故意构造的。沙箱级 restore 随改动量增长，进程级 restore 随进程大小增长，两者在本表中取值相同。"
+    "实际使用中进程往往大于每一步的改动，进程级 restore 约为固定开销加每 MiB 进程约 0.4 ms，见下面的小表。",
+    "首次全量是每个新沙箱上的第一次 checkpoint：沙箱级保存整台 guest 的内存，进程级只保存这个进程。",
+    "restore 能回到任意一个之前的 checkpoint，沙箱一直在运行，之前的 checkpoint 仍然有效；resume 只能回到"
+    "最近一次 pause，换了一代 Firecracker 进程。resume 返回时内存还没有加载，之后第一次读内存的额外耗时单列。",
+    "进程级只保存这个进程（以及文件改动），沙箱里其他进程、页缓存、tmpfs 不在它的保存范围里；沙箱级保存整台 guest。",
+    "E2B pause / resume 在进程级那套代码上测（它的原生快照路径与上游相同）；pause 只计第一步（拍快照并放进"
+    "本节点缓存），与上游返回的时机一致，不含把快照复制进模板存储。",
+)
+MIX_HEAD = ("总改动MiB", "内存MiB", "文件MiB", "进程MiB", "沙箱级checkpoint", "进程级checkpoint", "沙箱级restore",
+            "进程级restore", "沙箱级首次全量", "进程级首次全量", "E2B pause", "E2B resume", "resume后首读内存")
+
+
+def mix_cells(t, q):
+    a, b = t["s"], t["c"]
+    cells = ["%g" % (a["d"] + a["f"]), "%g" % a["d"], "%g" % a["f"], "%g" % a["P"]]
+    for side, key in ((a, "ckpt2_ms"), (b, "ckpt2_ms"), (a, "restore_ms"), (b, "restore_ms"),
+                      (a, "base_ckpt_ms"), (b, "base_ckpt_ms"), (b, "pause_ms"), (b, "resume_ms"),
+                      (b, "read_extra_ms")):
+        cells.append(fmt(side.get(key), q))
+    return cells
+
+
 def print_mix_table(merged, table):
-    """对外展示的分档表：两套 checkpoint / restore 与两套代码上的原生 pause / resume 并排。"""
+    """对外展示的分档表：两套 checkpoint / restore / 首次全量与原生 pause / resume 并排，附 size 组的 restore。"""
     rows = mix_rows(table)
     if not rows:
         return
-    head = ("总改动MiB", "内存MiB", "文件MiB", "沙箱级checkpoint", "进程级checkpoint", "沙箱级restore", "进程级restore",
-            "E2B pause(沙箱级代码)", "E2B resume(沙箱级代码)", "E2B pause(进程级代码)", "E2B resume(进程级代码)")
     print("\n---- 对外分档表（mix）----")
-    print("进程 256 MiB；checkpoint 为连续 checkpoint，restore 回到改写之前的基点；E2B pause / resume 在同一负载上另起"
-          "沙箱测，resume = connect 返回 + 第一条命令。客户端墙钟，单位 ms。")
+    print("checkpoint 为连续 checkpoint，restore 回到改写之前的基点；客户端墙钟，单位 ms。")
     for q in ("p50", "p99"):
         print("\n[%s]" % q)
-        print("\t".join(head))
+        print("\t".join(MIX_HEAD))
         for t in rows:
-            a, b = t["s"], t["c"]
-            cells = ["%g" % (a["d"] + a["f"]), "%g" % a["d"], "%g" % a["f"]]
-            for side, key in ((a, "ckpt2_ms"), (b, "ckpt2_ms"), (a, "restore_ms"), (b, "restore_ms"),
-                              (a, "pause_ms"), (a, "resume_ms"), (b, "pause_ms"), (b, "resume_ms")):
-                cells.append(fmt(side.get(key), q))
-            print("\t".join(cells))
+            print("\t".join(mix_cells(t, q)))
+    size = sorted((t for t in table if t["series"] == "size"), key=lambda t: t["s"]["P"])
+    if size:
+        print("\n[restore 随进程大小，每次改 16 MiB 内存，p50]")
+        print("\t".join(("进程MiB", "沙箱级restore", "进程级restore")))
+        for t in size:
+            print("\t".join(("%d" % t["s"]["P"], fmt(t["s"].get("restore_ms")), fmt(t["c"].get("restore_ms")))))
+    print("\n说明：")
+    for i, note in enumerate(MIX_NOTES, 1):
+        print("%d. %s" % (i, note))
     a, b = rows[0]["s"], rows[0]["c"]
-    print("\n样本数（每档）：checkpoint / restore 沙箱级 %d、进程级 %d；pause / resume 沙箱级 %s、进程级 %s"
-          % (a["n"], b["n"], a.get("native_n", "-"), b.get("native_n", "-")))
+    print("\n样本数（每档）：checkpoint / restore 沙箱级 %d、进程级 %d；首次全量 沙箱级 %s、进程级 %s；"
+          "pause / resume %s" % (a["n"], b["n"], (a.get("base_ckpt_ms") or {}).get("n", "-"),
+                                (b.get("base_ckpt_ms") or {}).get("n", "-"), b.get("native_n", "-")))
     for st in ("sandbox", "criu"):
         prov = merged[st]["provenance"]
         print("%s：orchestrator %s · 脏页后端 %s · %s" % ("沙箱级" if st == "sandbox" else "进程级",
@@ -1141,6 +1268,11 @@ def main():
         storage = env.get("LOCAL_TEMPLATE_STORAGE_BASE_PATH") or "/tmp/templates"
     ctx = Ctx(args, stack, store, cache, storage)
     ctx.prov = result["provenance"]
+    if stack == NATIVE_STACK and any(x in NATIVE_SERIES for x in series_list):
+        ctx.pause_log = PauseLog()
+        result["provenance"]["pause_log_dir"] = ctx.pause_log.dir
+        if not ctx.pause_log.dir:
+            LOG.warning("找不到 orchestrator 的 Nomad 日志目录，原生 pause 只有墙钟（含上传）")
     lock = threading.Lock()
     failure = None
     try:
@@ -1162,12 +1294,12 @@ def main():
             points = scenarios if series == "scen" else SERIES[series]
             if args.smoke:
                 # mix 取一个有内存又有文件的测点和最后那个文件不足 1 MiB 的测点
-                points = [points[1], points[-1]] if series == "mix" else points[:1]
+                points = [points[1], points[-1]] if series in ("mix", "mix256") else points[:1]
             passes, reps = series_runs(args, series)
             for point in points:
                 for pass_no in range(passes):
                     one_sandbox(Sandbox, ctx, point, series, pass_no, reps, args.warmup, result["rows"], lock)
-                    if series in NATIVE_SERIES:
+                    if series in NATIVE_SERIES and stack == NATIVE_STACK:
                         native_sandbox(Sandbox, ctx, point, series, pass_no, reps - args.warmup, result["rows"], lock)
         result["verdict"] = "PASS"
     except Exception as exc:
