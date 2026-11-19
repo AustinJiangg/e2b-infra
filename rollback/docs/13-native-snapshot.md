@@ -15,6 +15,12 @@
 区别只在之后要不要再拉起一个。两者都在函数开头 `defer s.stopSandboxAsync(...)`（:400、:469）：旧沙箱一定会被停掉。
 `Pause` 打完快照就结束，产物上传进存储，这是"沙箱离场"的语义。`Pause` 会等 `waitForUpload` 完成才返回（:411）：快照元数据不能先于数据标记为就绪。所以客户端看到的 `pause` 耗时包含停沙箱、导出和上传，不只是冻结虚机。
 
+上游 2026.09 的 `Pause` 不等上传：`snapshotAndCacheSandbox` 返回就结束（上游 `sandboxes.go:395` 的注释是 “Fire and forget - don't wait for upload to complete”），上传在后台的 goroutine 里做。等上传是 openEuler 基线提交 `01665a0c9` 改的，本方案沿用，进程级那套的 orchestrator 也一样。两种做法的差别只在最后一段：
+
+- 不等上传也已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分。`sbx.Pause` 导出根盘差分时把 `s.Close` 作为关闭钩子传进去（`RootfsDiffCreator.closeHook`），固定开销基本都在这一段（§6 时间线 232 ms 之前）。
+- 这一段结束时，内存差分在本节点缓存目录（`DEFAULT_CACHE_DIR`，默认 `/orchestrator/build`）里一个 `mmap` 的文件中，由 `process_vm_readv` 从 Firecracker 进程读出写入（`block/cache.go`），这条路径上没有刷盘；`snapfile` 由 Firecracker 写出，也不刷盘；根盘差分写完会 `fsync`（`build/local_diff.go` 的 `CloseToDiff`）。所以上游返回时，内存差分很可能还在页缓存里。
+- 上传在 `STORAGE_PROVIDER=Local` 时只是把这几个文件用 `io.Copy` 复制到 `LOCAL_TEMPLATE_STORAGE_BASE_PATH`（默认 `/tmp/templates`），同样不 `fsync`（`shared/pkg/storage/storage_fs.go` 的 `StoreFile`）。920B 上模板目录是 tmpfs，这一段约 3 ms（§6）。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 `Local` 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。
+
 `Checkpoint` 拉起新沙箱时，三个 id 的变化是：
 
 | id | 语义 | `Checkpoint` 之后 |
