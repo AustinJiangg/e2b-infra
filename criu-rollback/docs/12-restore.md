@@ -6,7 +6,7 @@
 
 - 说出 `RestoreCheckpoint` 为什么分成"杀进程之前"和"杀进程之后"两段，各段里有哪些步骤，失败分别意味着什么；
 - 解释为什么不管目标 checkpoint 有没有进程镜像，当前的用户进程都要全部杀掉，以及为什么必须杀干净；
-- 说清多棵树为什么串行恢复、某一棵失败时沙箱处于什么状态；
+- 说清多棵树怎样并行恢复、某一棵失败时沙箱处于什么状态；
 - 说明 restore 成功之后增量链怎么接续，历史为什么是一棵树而不是一条线；
 - 知道 gsd 启动时为什么要打开加急的 RCU。
 
@@ -85,7 +85,7 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 | # | 步骤 | 代码 | 失败时 |
 |---|---|---|---|
 | 10 | `CommitRestore`：restore 模式的 ioctl，`lowerdir` 是目标的完整层栈 | :539 | 见下 |
-| 11 | 对目标的每棵树，按 dump 时的顺序 | :571 起 | |
+| 11 | 对目标的每棵树，按 dump 时的顺序（根进程号升序）启动 criu restore，同时最多 `-criu-restore-parallel` 个（默认 guest 的 CPU 数）；全部结束后再按树的顺序逐棵收尾 | `RestoreCheckpoint` | §4.4 |
 | 11a | 　在单棵时限内运行 criu restore | :583-585 | `DataLoss`，文件系统状态 `target`（§5） |
 | 11b | 　读出恢复出来的根进程号，读它的启动时间，记一条新的增量父镜像 | :611-613 | 读不到启动时间（进程已经退出）就不记 |
 | 12 | 用第 11b 步攒下的各项替换 `lastTrees` | :617 | |
@@ -138,20 +138,41 @@ CRIU 恢复一棵树时要让每个进程拿回它**原来的进程号**，进�
 
 CRIU 另有一个选项可以让恢复出来的进程成为调用者的兄弟进程，这里没有用；代码里对应的注释只是把现状说清楚（`criu.go:101-102`）。
 
-criu restore 的输出同样写两处：gsd 的标准错误，以及这棵树镜像目录里的 `criu-restore.log`——后者每次 restore 覆盖。注意 restore 命令没有加 `-v4`，日志比 dump 的简短。
+criu restore 的输出写两处：gsd 的标准错误（进入 journal），以及这棵树镜像目录里的 `criu-restore.log`——后者每次 restore 覆盖。restore 命令没有加 `-v4`，日志简短，所以没有像 dump 那样改成由 CRIU 直接写文件（[11](11-checkpoint.md) §2.3）。
 
-### 4.4 为什么多棵树串行恢复
+### 4.4 多棵树并行恢复
 
-各棵树的进程号互不相同（它们来自同一时刻的同一个进程号命名空间），当前用户进程又已经杀干净，所以后恢复的树要的进程号不会被先恢复的树占着——串行在正确性上没有问题。
+各棵树的进程号互不相同（它们来自同一时刻的同一个进程号命名空间），当前用户进程又已经杀干净，所以各棵树要的进程号不会被别的树占着；各棵树互不依赖，树间共享的管道和 socket 在 checkpoint 时就已经被拒绝了。所以几个 criu restore 可以同时跑。
 
-代价是总耗时随树的数量线性增加。改成几个 criu 同时跑在原理上可行：各棵树互不依赖，树间共享的管道和 socket 在 checkpoint 时就已经被拒绝了。没有这么做的理由写在代码里（`ckpt/service.go:557-565`）：
+`daae6968f` 及以前是逐棵串行，总耗时随树的数量线性增加。`9728cef73` 起并行，做法与 dump 相同（[11](11-checkpoint.md) §2.3）：
 
-- 每个 `criu restore` 都要把恢复出来的任务迁回原来的控制组，并各自按进程号建进程；并发时对内核里相应的全局锁和进程号分配的争用**没有实测过**；
-- 一棵失败时，其余几棵的收尾更复杂。
+- 按根进程号升序启动，同时最多 `-criu-restore-parallel` 个（默认 guest 的 CPU 数）；名额在启动循环里取，并发数为 1 时就是原来的逐棵串行；
+- 有一棵失败后，还没启动的不再启动，已启动的等它结束；
+- 列出恢复出来的进程、记下停着的进程、记录下一次增量的父镜像，这些收尾在全部结束之后按树的顺序逐棵做，与串行时相同；放行仍在全部树恢复完、写完 `clear_refs` 之后（§6）。
 
-所以先串行，把失败语义保持得简单清楚（§5.1）。要改成并行时，改动点就在这个循环。
+串行时担心的内核争用（每个 criu restore 都要把任务迁回原来的控制组、按进程号建进程）在 920B 上量过：16 棵树、guest 2 个 vCPU，restore 从 137 ms 降到 96 ms，过程中没有出现失败。只有一棵树时没有变化。
 
-### 4.5 加急的 RCU
+`criu_restore_ms` 仍记各棵之和；实际经过的时间只在 gsd 日志 `all process trees restored` 那一行的 `criu_restore_wall_ms` 里。
+
+### 4.5 可选：延迟页恢复
+
+单棵树的 restore 几乎全部花在把进程的全部页从镜像复制回内存（920B，384 MiB 进程，restore 约 175 ms，其中 CRIU 的 `Preadv` 约 142 ms），与这次 checkpoint 改了多少无关。并行只能让多棵树叠在一起，不能让一棵树变快。
+
+gsd 带一个默认关闭的开关 `-criu-lazy-restore`（环境变量 `GSD_CRIU_LAZY_RESTORE=1`）。打开后每棵树的恢复变成两步：
+
+1. 在镜像目录上起 `criu lazy-pages` 守护进程（日志 `criu-lazy-pages.log`），等它建好 `lazy-pages.socket`，最多 2 秒；起不来就这棵树照常恢复，日志里有 `lazy pages unavailable`；
+2. `criu restore` 加 `--lazy-pages`：只重建进程结构，不复制页。进程访问到哪一页，守护进程经 userfaultfd 先补哪一页，其余页在后台补完，补完守护进程自己退出。
+
+920B 实测：384 MiB 进程的 restore 从 166 ms 降到 32 ms。
+
+**硬约束：页没补完不能 dump 这个进程。** 920B 上试过：补页途中 criu dump 照样返回成功，但镜像缺页，用它恢复出来的进程一读内存就崩溃。所以 gsd 在下一次 checkpoint、restore、删除 checkpoint 的开头，先等上一次 restore 起的守护进程全部退出（`finishLazyFill`，最多 30 秒），日志一行 `lazy page fill finished`，带等待时长 `lazy_wait_ms`。有守护进程失败或超时，恢复出来的进程内存不完整，gsd 进入 degraded（[14](14-failure-semantics.md)），直到下一次成功的 restore。
+
+**代价：restore 之后的第一次 checkpoint 变成全量。** gsd 在 restore 一结束就写 `clear_refs`（§6），这时页还没补完；守护进程之后用 `UFFDIO_COPY` 补进来的页都带 soft-dirty，下一次 dump 就把整个进程当成改过的页写出。920B 上 384 MiB 进程，restore 之后的第一次 checkpoint 从 22 ms 升到 142 ms，镜像从几 MiB 变成 388 MiB。
+改成补完再写 `clear_refs` 不行：补页期间用户进程真正写过的页也会被清掉，下一次增量就漏掉它们。要分清"补进来的页"和"用户写的页"，需要 userfaultfd 的写保护，guest 的 arm64 内核没有。
+
+所以这个开关只适合 restore 远多于 checkpoint 的用法，例如反复回到同一个 checkpoint 重试。打开的方法与其他 gsd 参数相同（[28](28-configuration-and-observability.md) §2.1）；部署包不打开它。
+
+### 4.6 加急的 RCU
 
 gsd 启动时向 `/sys/kernel/rcu_expedited` 写 1（`enableExpeditedRCU`，`packages/gsd/main.go:178`）。这一行与 restore 的耗时直接相关。
 
@@ -167,13 +188,15 @@ CRIU 恢复进程时要把它迁回原来所在的控制组。在 cgroup v2 上�
 
 ### 5.1 多棵树时某一棵失败
 
-假设目标有三棵树，`t0` 恢复成功，`t1` 失败。此刻（`ckpt/service.go:588-606`）：
+假设目标有三棵树，并发数为 1（逐棵），`t0` 恢复成功，`t1` 失败。此刻：
 
 - `t0` **留着不动**：它已经在目标文件系统上按 checkpoint 时的状态继续运行了；
 - `t1` 不存在；
 - `t2` 没有尝试，也不存在。
 
-gsd 不去杀 `t0`，也不继续尝试 `t2`。沙箱不是任何一个 checkpoint 的完整状态，所以返回 `DataLoss` 并进入 degraded。错误信息把三类树分开写明——
+并发数大于 1 时，同一批启动的几棵可能有的成功、有的失败；失败之后还没启动的才算"没有尝试"。归类方法不变：成功的留着，失败的和没启动的不存在。几棵同时失败时报根进程号最小的那棵，其余各有一行 `criu restore failed` 日志。
+
+gsd 不去杀已恢复的树，也不再启动没尝试的树。沙箱不是任何一个 checkpoint 的完整状态，所以返回 `DataLoss` 并进入 degraded。错误信息把三类树分开写明——
 哪几棵已经恢复并留着运行、哪一棵失败（附 `criu-restore.log` 的最后 2048 字节）、哪几棵没有尝试——调用方据此知道沙箱里现在有什么。
 
 走出这个状态的办法是**再做一次 restore**（到同一个或另一个 checkpoint）。新的 restore 第一件事就是杀掉当前全部用户进程，包括留着的 `t0`，然后从头来过。
@@ -188,6 +211,7 @@ gsd 不去杀 `t0`，也不继续尝试 `t2`。沙箱不是任何一个 checkpoi
 | 切换失败，且之前没有进程可杀 | 本来就没有 | 没变 | `ResourceExhausted` / `Internal` | 否 |
 | 切换失败，之前杀过进程 | 没有 | `old`：还是 restore 之前的 | `DataLoss` | 是 |
 | 某棵 criu restore 失败或超时 | 已恢复的几棵在跑，其余没有 | `target`：已经是目标 checkpoint 的 | `DataLoss` | 是 |
+| 延迟页恢复后补页失败或超时（在下一次请求开头才发现，§4.5） | 恢复出来的进程在跑，内存可能不完整 | `target` | 那次请求照常处理 | 是 |
 
 注意 criu restore 超时在这里也是 `DataLoss`，不是 `DeadlineExceeded`：`restoreFailed`（`service.go:635`）不区分原因，因为对调用方来说重要的是"沙箱处在中间态"，而不是 criu 为什么没做完。
 每棵树的 restore 时限默认 60 秒，全部树合计上限是它的 3 倍，到时限的处理与 dump 相同（[11](11-checkpoint.md)）。
@@ -244,7 +268,7 @@ C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，
 | 2 | 56.07 | 6.18 | 63.77 |
 | 3 | 83.53 | 10.02 | 94.79 |
 
-读法：`criu_restore` 随树数线性增加，这是串行恢复的直接结果；它也随每棵树的内存量增长（对比两张表里的单树）。切换文件系统的那一下不到 1 ms，第一段的检查与准备加起来不到 1 ms。
+读法：`criu_restore` 随树数线性增加，这是当时串行恢复的直接结果；它也随每棵树的内存量增长（对比两张表里的单树）。`9728cef73` 起多棵树并行恢复（§4.4），`criu_restore_ms` 仍是各棵之和，所以它照样随树数增长；`total_ms` 不再线性增长：920B 上 16 棵树的 restore 从 137 ms 降到 96 ms（每个测点 20 次的服务端中位数，`daae6968f` 对 `9728cef73`）。切换文件系统的那一下不到 1 ms，第一段的检查与准备加起来不到 1 ms。
 `criu_restore` 里面具体是什么、为什么是这个量级，见 [附录 D](D-restore-slowness-case.md) 和 [17](17-cost-model.md)。
 
 ---
@@ -261,7 +285,8 @@ C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，
 | criu 的命令与执行 | `ckpt/criu.go` — `buildCriuRestoreCmd`、`execCriuRestore`、`runCriuCmd`、`readPidFile`、`logTail` |
 | 重建增量父镜像 | `ckpt/pid.go` — `procStart` |
 | 加急的 RCU | `packages/gsd/main.go` — `enableExpeditedRCU` |
-| 单测 | `ckpt/restore_test.go`、`ckpt/service_failure_test.go`、`ckpt/multitree_test.go` |
+| 并行与延迟页 | `ckpt/service.go` — `RestoreCheckpoint` 里的 `restoreJob`、`finishLazyFill`；`ckpt/criu.go` — `startCriuLazyPages` |
+| 单测 | `ckpt/restore_test.go`、`ckpt/service_failure_test.go`、`ckpt/multitree_test.go`、`ckpt/lazy_restore_test.go` |
 
 ---
 
@@ -271,6 +296,7 @@ C4 的父是 C2，不是 C3。C3 所在的那一支是"被丢弃的时间线"，
 2. 不管目标有没有进程镜像，当前用户进程一律杀掉：restore 的语义是回到那一刻，那一刻之后启动的进程不能留在回滚过的文件系统上。
 3. 必须杀整棵树并等进程号释放，否则 CRIU 按原进程号重建时报 `Can't fork … File exists`；杀进程的告警不中断 restore，因为已经没有退路。
 4. 顺序是杀进程 → 切文件系统 → 逐棵 `criu restore --restore-detached`；恢复出的根被 PID 1 收养，与原来的 SDK 命令句柄不再相连。
-5. 多棵树串行恢复；某棵失败时已恢复的留着、未恢复的不存在，错误信息分三类写明，下一次 restore 先把它们全部杀掉。
-6. restore 成功后以目标 checkpoint 为下一次增量的父，用恢复出的进程的启动时间重建记录，历史因此是一棵树。
+5. 多棵树并行恢复（同时最多 guest 的 CPU 数棵）；某棵失败时已恢复的留着、失败和没启动的不存在，错误信息分三类写明，下一次 restore 先把它们全部杀掉。
+6. 延迟页恢复默认关：restore 快了，但 restore 之后的第一次 checkpoint 变成全量，下一次请求还要先等补页结束。
+7. restore 成功后以目标 checkpoint 为下一次增量的父，用恢复出的进程的启动时间重建记录，历史因此是一棵树。
 7. 耗时几乎全在 `criu_restore` 和 `kill`；gsd 启动时打开加急的 RCU，是为了消掉控制组迁移里随机的 20～50 ms 等待。

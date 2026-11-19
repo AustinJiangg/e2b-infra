@@ -143,7 +143,7 @@ criu-rollback/deploy/
 
 | 内容 | 版本 |
 |---|---|
-| gsd | criu-rollback-dev `daae6968f`（`259f1a25c` 之上修了 restore 层切换的空间预留、checkpoint 预检的内存余量、根盘写满时报 `resource_exhausted`、restore 之后的第一次 checkpoint 保持增量，见第 14 节）。经 `strip -g`，SHA256 `1a0a3b67…`（去调试段前 `8033476a…`）；之前的 `421597e5…`（950 现装）、`3f28abd0…`（`7cdadccf2`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉 |
+| gsd | criu-rollback-dev `9728cef73`（`daae6968f` 之上：dump 日志由 CRIU 直接写文件、一次 checkpoint 的多棵进程树并行 dump 和并行 restore、可选的延迟页 restore（默认关），见第 14 节；`daae6968f` 及更早修的 restore 层切换空间预留、checkpoint 预检内存余量、根盘写满报 `resource_exhausted`、restore 之后的第一次 checkpoint 保持增量都在）。经 `strip -g`，SHA256 `8bc5dc49…`（去调试段前 `63450009…`）；之前的 `1a0a3b67…`（`daae6968f`）、`421597e5…`、`3f28abd0…`（`7cdadccf2`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉 |
 | guest 内核 | 手册已验证的 `259f1a25c` 发布产物，未改，`b81306e7…` |
 | orchestrator | `259f1a25c-e2bv`：在 `259f1a25c` 上只把宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`。经 `strip -g`，SHA256 `063e580e…`（去调试段前 `151308ba…`）。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
@@ -152,7 +152,7 @@ criu-rollback/deploy/
 | Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
 | SDK wheel | `2.19.0+gsd.daae6968f`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
-gsd、SDK 是 `daae6968f`，orchestrator 与内核仍是 `259f1a25c` 那一版：这一轮只改了 guest 里的 gsd 和客户端 SDK。
+gsd 是 `9728cef73`，SDK 仍是 `daae6968f`（这一轮 SDK 没有改动，不重新打包），orchestrator 与内核仍是 `259f1a25c` 那一版：这一轮只改了 guest 里的 gsd。
 
 `overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。
 
@@ -363,6 +363,26 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-19：checkpoint 和多棵进程树的 restore 变快（gsd 换版本，`9728cef73`）
+
+- **改了什么。**
+  - ① dump 日志改由 CRIU 自己写进镜像目录的 `criu-dump.log`，不再经 gsd 的管道转写到 journal。256 MiB 进程，checkpoint 的固定开销里这部分原来占 7～9 ms。dump 失败时，gsd 把这份日志留在 `last-failed-criu-dump.log`，供排查。
+  - ② 一次 checkpoint 里的多棵进程树并行 dump，restore 时也并行恢复。并发数默认等于 guest 的 CPU 数，可用 `-criu-dump-parallel`、`-criu-restore-parallel` 调整。按根进程 pid 从小到大依次启动；某棵树失败后，后面的不再启动，已经 dump 完的树照常恢复运行，报错里写明。SDK 返回的 CRIU 用时仍是各棵树之和，与以前的数据可以直接比较；并行阶段的实际用时只写在 gsd 日志里（`criu_dump_wall_ms`、`criu_restore_wall_ms`）。
+  - ③ 新增可选的延迟页 restore（`-criu-lazy-restore`，部署包不打开）。restore 时只恢复进程结构，内存页由 CRIU 的 lazy-pages 守护进程在后台补齐。代价是 restore 之后的第一次 checkpoint 变成全量：补进来的页都带 soft-dirty 标记，而 arm64 的 guest 内核不支持 userfaultfd 写保护，无法区分哪些页是用户在补页期间改过的。打开后，下一次 checkpoint、restore 或删除快照之前，gsd 会先等后台补页结束。见进程级手册 dump/restore 流程和已知限制两章。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`：换掉 gsd，模板按 gsd 版本重建。SDK、orchestrator、内核、镜像都不变。
+- **920B 实测**（进程级，每个测点 20 次，服务端中位数，`ckpt_same_workload.py --compare`）：
+
+| 场景 | `daae6968f` | `9728cef73` |
+|---|---|---|
+| 256 MiB 进程，一页不改，checkpoint | 18.3 ms | 12.3 ms |
+| 256 MiB 进程，改 16 MiB，checkpoint | 26.6 ms | 19.1 ms |
+| 16 棵进程树，checkpoint | 238 ms（进程冻结 222 ms） | 65 ms（进程冻结 53 ms） |
+| 16 棵进程树，restore | 137 ms | 96 ms |
+| 单棵进程树的 restore | 不变 | 不变 |
+
+  单棵进程树的 restore 仍随进程大小增长：CRIU 要把全部页从镜像复制回进程。打开延迟页后，384 MiB 进程的 restore 从 166 ms 降到 32 ms，但 restore 之后的第一次 checkpoint 从 22 ms 升到 142 ms，产物从几 MiB 变成 388 MiB。因此只在 restore 远多于 checkpoint 的用法里才值得打开。
+- **验收。** 换上这一版并重建模板后，`950.sh acceptance` 9 步全部 PASS。gsd 新增的单测覆盖并行 dump、并行 restore 和延迟页的各条分支。
 
 ### 2026-11-18：restore 之后的第一次 checkpoint 保持增量（gsd 换版本，`daae6968f`）
 

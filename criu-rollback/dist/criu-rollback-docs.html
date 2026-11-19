@@ -1653,7 +1653,7 @@ root 的服务和 envd 的文件接口可能正在读目录、写文件、重命
 因此 restore 的耗时主要随进程的内存大小增长，而不随"这一步的改动量"增长（代价模型见 <a href="#d17">17</a>）。</p>
 <h3 id="d03-14-gsd-传给-criu-的选项">1.4 gsd 传给 CRIU 的选项</h3>
 <p>dump 的命令行由 <code>buildCriuDumpCmd</code>（<code>ckpt/criu.go:51</code>）拼出：</p>
-<div class="hl"><pre><span></span><code>/usr/sbin/criu dump --tree &lt;根 pid&gt; -D &lt;镜像目录&gt; --shell-job --leave-stopped -v4 --track-mem [--prev-images-dir &lt;父镜像目录&gt;]
+<div class="hl"><pre><span></span><code>/usr/sbin/criu dump --tree &lt;根 pid&gt; -D &lt;镜像目录&gt; --shell-job --leave-stopped -v4 -o criu-dump.log --track-mem [--prev-images-dir &lt;父镜像目录&gt;]
 </code></pre></div>
 
 <p>restore 的命令行由 <code>buildCriuRestoreCmd</code>（<code>ckpt/criu.go:100</code>）拼出：</p>
@@ -1693,6 +1693,11 @@ root 的服务和 envd 的文件接口可能正在读目录、写文件、重命
 <td><code>-v4</code></td>
 <td>最详细的日志</td>
 <td>失败时把日志尾部带进错误信息（<a href="#d14">14</a>）。只在 dump 时加</td>
+</tr>
+<tr>
+<td><code>-o criu-dump.log</code></td>
+<td>日志由 CRIU 自己写进镜像目录里的这个文件</td>
+<td>不经 gsd 转写进 journal，省下每棵树 7～9 ms（<a href="#d11">11</a> §2.3）</td>
 </tr>
 <tr>
 <td><code>--track-mem</code></td>
@@ -2966,8 +2971,8 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 <tr>
 <td><code>…/t&lt;i&gt;/criu-dump.log</code></td>
 <td>这棵树 dump 的完整输出</td>
-<td>gsd 转存</td>
-<td>随上一行；dump 失败时目录被删，尾部已带进错误信息</td>
+<td>CRIU 自己写（<code>-o</code>）</td>
+<td>随上一行；dump 失败时目录被删，尾部已带进错误信息，完整一份留在 <code>&lt;snapshot store&gt;/last-failed-criu-dump.log</code></td>
 </tr>
 <tr>
 <td><code>…/t&lt;i&gt;/criu-restore.log</code>、<code>restored.pid</code></td>
@@ -3209,7 +3214,7 @@ restore 时把层栈换回去（<a href="#d07">07</a>）。</p>
 而在原始内核补丁上这会导致内核崩溃。这类崩溃的根因后来在内核里修掉了（<a href="#d08">08</a> 的"切换与所有 overlay 入口的互斥"一节），
 现在即使有 root 服务在 overlay 上读写，切换也是安全的。但这三处 bind 保留了下来，它们同时起到另一个作用：日志、systemd 的持久状态和时钟漂移数据本来就不该被回滚到过去。</p>
 <p>对使用者的含义是：restore 之后这三个目录里是 restore 那一刻的内容，不是 checkpoint 时的内容（<a href="#d26">26</a>）。
-另外，gsd 把 CRIU 的详细日志打进 journal，而 journal 就在根盘的 <code>/var/log</code> 里，会一直涨到 journald 自己的上限（<a href="#d16">16</a>）。</p>
+另外，<code>9728cef73</code> 以前 gsd 把 CRIU dump 的详细日志打进 journal，而 journal 就在根盘的 <code>/var/log</code> 里，会一直涨到 journald 自己的上限（<a href="#d16">16</a> 的 L-13）。现在 dump 日志只写在镜像目录里，journal 里剩下 gsd 自己的日志和 restore 时 CRIU 的简短输出。</p>
 <h3 id="d06-23-步骤-6透明大页必须在任何用户进程出现之前关掉">2.3 步骤 6：透明大页必须在任何用户进程出现之前关掉</h3>
 <p>arm64 guest 的内核配置默认把透明大页设为 <code>always</code>。大页存在时 soft-dirty 按 2 MiB 的页中间目录项记录，零散的 4 KiB 写入会让每次增量 dump 膨胀成接近全量
 （原理与实测数字见 <a href="#d03">03</a>）。所以 <code>never</code> 是设计约束，不是调优选项。</p>
@@ -5240,7 +5245,7 @@ gsd 通常不是被杀进程的父进程——envd 拉起的由 envd 回收，re
 <p>读完本章，你应当能够：</p>
 <ul>
 <li>按顺序说出 <code>CreateCheckpoint</code> 的每一步，在哪一步之前失败"什么都没动"，每一步失败后 gsd 做哪些收尾；</li>
-<li>解释多棵树逐棵 dump 为什么仍然得到一个自洽的状态，以及它在哪一点上不是原子的；</li>
+<li>解释多棵树各自 dump（并行，同时最多 guest 的 CPU 数棵）为什么仍然得到一个自洽的状态，以及它在哪一点上不是原子的；</li>
 <li>说清三个容易被改坏的设计决定：为什么用 <code>--leave-stopped</code>、为什么下沉之后要再写一次 <code>clear_refs</code>、为什么不能在 dump 之前自己发 <code>SIGSTOP</code>；</li>
 <li>说明按树增量的父镜像怎么选、什么时候被清空、失败后为什么必须全量；</li>
 <li>说出没有用户进程、或者 upper 为空时 checkpoint 做了什么。</li>
@@ -5337,7 +5342,7 @@ gsd 通常不是被杀进程的父进程——envd 拉起的由 envd 回收，re
 </table></div>
 <p>第 5～7 步的耗时记为 <code>find_pids_ms</code>，第 8～9 步记为 <code>precheck_ms</code>。<strong>到第 9 步为止，沙箱没有被改动过任何东西</strong>：没有进程被停过，没有目录被建过。
 第 8、9 步的拒绝因此是最干净的一类失败——调用方按错误信息处理后重试即可。没有用户进程时第 7～9 步整个跳过。</p>
-<h3 id="d11-23-逐棵-dump">2.3 逐棵 dump</h3>
+<h3 id="d11-23-各棵树-dump并行">2.3 各棵树 dump（并行）</h3>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -5362,38 +5367,44 @@ gsd 通常不是被杀进程的父进程——envd 拉起的由 envd 回收，re
 </tr>
 <tr>
 <td>12</td>
-<td>对每个根，按进程号升序</td>
-<td>:242 起</td>
-<td></td>
+<td>对每个根，按进程号升序准备好 dump 参数</td>
+<td>:297 起</td>
+<td>只准备，不运行</td>
 </tr>
 <tr>
 <td>12a</td>
 <td>　选增量父镜像 <code>incrementalParent</code></td>
-<td>:253</td>
+<td>:313</td>
 <td>找到则加 <code>--prev-images-dir</code>，并记下父 checkpoint 的 id（§4）</td>
 </tr>
 <tr>
 <td>12b</td>
-<td>　建子目录 <code>t&lt;i&gt;</code>，在单棵时限内运行 criu</td>
-<td>:260-264</td>
-<td></td>
+<td>　按根进程号升序启动，同时最多 <code>-criu-dump-parallel</code> 个（默认 guest 的 CPU 数）；每个在单棵时限内建子目录 <code>t&lt;i&gt;</code>、运行 criu</td>
+<td>:320 起</td>
+<td>名额在启动循环里取，所以启动顺序固定；并发数为 1 时就是逐棵串行</td>
 </tr>
 <tr>
 <td>12c</td>
-<td>　失败 → 收尾并返回（§6）</td>
-<td>:268-284</td>
-<td></td>
+<td>　有一棵失败后，还没启动的不再启动；等已启动的全部结束</td>
+<td>同上</td>
+<td>已在跑的 criu 不打断，结束后按失败统一收尾</td>
 </tr>
 <tr>
 <td>12d</td>
-<td>　成功；第一棵成功时记下时刻 <code>tFirstStopped</code></td>
-<td>:285-287</td>
+<td>　有失败 → 收尾并返回（§6）</td>
+<td>:356 起</td>
+<td>报根进程号最小的那棵失败的树</td>
+</tr>
+<tr>
+<td>12e</td>
+<td>　全部成功；取最早 dump 完的那棵的时刻为 <code>tFirstStopped</code></td>
+<td>:390-395</td>
 <td>这是冻结窗口的起点</td>
 </tr>
 </tbody>
 </table></div>
 <p>每棵树的命令由 <code>buildCriuDumpCmd</code>（<code>ckpt/criu.go:51</code>）拼出：</p>
-<div class="hl"><pre><span></span><code>/usr/sbin/criu dump --tree &lt;根进程号&gt; -D &lt;镜像目录&gt;/t&lt;i&gt; --shell-job --leave-stopped -v4 --track-mem [--prev-images-dir &lt;父镜像目录&gt;]
+<div class="hl"><pre><span></span><code>/usr/sbin/criu dump --tree &lt;根进程号&gt; -D &lt;镜像目录&gt;/t&lt;i&gt; --shell-job --leave-stopped -v4 -o criu-dump.log --track-mem [--prev-images-dir &lt;父镜像目录&gt;]
 </code></pre></div>
 
 <div class="tw"><table>
@@ -5432,10 +5443,16 @@ gsd 通常不是被杀进程的父进程——envd 拉起的由 envd 回收，re
 <td><code>-v4</code></td>
 <td>最详细的日志</td>
 </tr>
+<tr>
+<td><code>-o criu-dump.log</code></td>
+<td>日志由 CRIU 自己写进镜像目录里的这个文件（路径相对 <code>-D</code>）</td>
+</tr>
 </tbody>
 </table></div>
-<p>criu 的标准输出和标准错误被同时写到两处（<code>execCriuDump</code>，<code>criu.go:73</code>）：gsd 自己的标准错误（进入 journal），以及镜像目录里的 <code>criu-dump.log</code>。</p>
-<p>所有树 dump 完之后，<code>criu_dump_ms</code> 记的是<strong>各棵之和</strong>，<code>process_trees</code> 记棵数。</p>
+<p>日志由 CRIU 自己写文件（<code>criuDumpLogName</code>，<code>criu.go:80</code>）。<code>9728cef73</code> 以前，CRIU 的 <code>-v4</code> 输出走标准错误，经管道交给 gsd，gsd 再同时写进 <code>criu-dump.log</code> 和自己的标准错误（进入 journal）。
+在 920B 上量过，这一段转写在 256 MiB 进程的 checkpoint 里占 7～9 ms，而且发生在进程冻结期间；改成 CRIU 直接写文件后，256 MiB 进程一页不改的 checkpoint 从 18.3 ms 降到 12.3 ms。
+现在 criu 的标准输出和标准错误里只剩它打开日志文件之前的输出（参数错误之类），仍接到 gsd 的标准错误（<code>execCriuDump</code>，<code>criu.go:82</code>）。</p>
+<p>所有树 dump 完之后，<code>criu_dump_ms</code> 记的是<strong>各棵之和</strong>，与逐棵串行时含义相同，可以和以前的数据直接比较；并行时它大于这一段实际经过的时间，实际经过的时间只记在 gsd 日志 <code>all process trees dumped</code> 那一行的 <code>criu_dump_wall_ms</code> 里，同一行还有 <code>parallel</code>（实际并发数）。<code>process_trees</code> 记棵数。</p>
 <h3 id="d11-24-冻结窗口内">2.4 冻结窗口内</h3>
 <p>此刻每棵树都停着。</p>
 <div class="tw"><table>
@@ -5526,15 +5543,15 @@ gsd 通常不是被杀进程的父进程——envd 拉起的由 envd 回收，re
 <hr />
 <h2 id="d11-3-三个设计决定">3. 三个设计决定</h2>
 <h3 id="d11-31-多棵树的一致性">3.1 多棵树的一致性</h3>
-<p>CRIU 一次只能 dump 一棵树，N 棵树就是 N 次先后进行的 dump。它们凭什么算"同一时刻"的状态？</p>
-<p>论证只有三句（<code>CreateCheckpoint</code> 的头注释，<code>ckpt/service.go:147-155</code>）：</p>
+<p>CRIU 一次只能 dump 一棵树，N 棵树就是 N 次 criu dump。它们有的同时进行，有的先后进行（并发数小于树数时），凭什么算"同一时刻"的状态？</p>
+<p>论证只有三句（<code>CreateCheckpoint</code> 的头注释），并行与否都成立：</p>
 <ol>
 <li>每棵树的镜像是它<strong>自己被冻住那一刻</strong>的状态；</li>
-<li>因为 <code>--leave-stopped</code>，一棵树 dump 完之后不再运行——在等后面的树 dump 时，它不改内存，也不写文件；</li>
+<li>因为 <code>--leave-stopped</code>，一棵树 dump 完之后不再运行——在等其他树 dump 时，它不改内存，也不写文件；</li>
 <li>所以到最后一棵 dump 完时，全部镜像加上接下来下沉的文件系统，等价于"<strong>最后一棵被冻住那一刻</strong>"的状态。</li>
 </ol>
 <p>文件系统的下沉发生在所有树都停住之后，所以层里的文件内容与每棵树的内存是对得上的：没有哪棵树在自己的镜像生成之后又写过文件。</p>
-<p><strong>不是原子的地方</strong>在树与树之间：排在后面的树，在前面的树已经冻住之后还多跑了一段——长度是前面各棵树的 dump 时间之和。
+<p><strong>不是原子的地方</strong>在树与树之间：晚冻住的树，在早冻住的树停下之后还多跑了一段。逐棵串行时这一段是前面各棵树的 dump 时间之和；并行时同一批启动的树几乎同时冻住，差距只剩排在后面几批的等待时间。并发数不小于树数时，差距只有启动各个 criu 之间的那一点时间。
 互不通信的后台命令对此无感。通过文件、网络相互协作的两棵树，restore 之后看到的对方状态可能比自己"旧"这么一小段。
 需要严格一致的进程应当用同一条命令启动成一棵树（<a href="#d26">26</a>）。</p>
 <h3 id="d11-32-为什么---leave-stopped">3.2 为什么 <code>--leave-stopped</code></h3>
@@ -5632,7 +5649,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 <hr />
 <h2 id="d11-5-时限">5. 时限</h2>
 <p>每棵树的 dump 有一个时限，默认 60 秒（<code>defaultCriuDumpTimeout</code>，<code>ckpt/service.go:25</code>；参数 <code>-criu-dump-timeout</code>）。一次 checkpoint 里全部树合计另有一个上限，是它的 3 倍
-（<code>criuTotalTimeoutFactor</code>，<code>service.go:33</code>）。合计上限存在的理由是：先 dump 完的树在后面的树 dump 期间一直停着，树多的时候不能让"每一棵都差一点超时"把停顿累加到 N 倍。
+（<code>criuTotalTimeoutFactor</code>，<code>service.go:33</code>）。合计上限存在的理由是：先 dump 完的树在其余的树 dump 期间一直停着，树多、并发数又小的时候不能让"每一棵都差一点超时"把停顿累加到 N 倍。
 只有一棵树时合计上限不起作用，单棵时限先到。</p>
 <p>到时限时 <code>runCriuCmd</code>（<code>ckpt/criu.go:28</code>）先发 <code>SIGTERM</code>，让 criu 走它自己的清理路径——dump 出错时它会把被它接管的进程恢复运行；
 2 秒之后（<code>criuTermGrace</code>，<code>criu.go:23</code>）还没退出就 <code>SIGKILL</code>。超时返回的错误里带着上下文的超时错误，<code>criuErrorCode</code>（<code>service.go:865</code>）据此把它映射成 <code>DeadlineExceeded</code>，
@@ -5643,12 +5660,12 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 <h3 id="d11-61-某棵树-dump-失败">6.1 某棵树 dump 失败</h3>
 <p>按顺序做四件事（<code>ckpt/service.go:268-284</code>）：</p>
 <ol>
-<li><strong>保住诊断信息</strong>：镜像目录马上要删，先把 <code>criu-dump.log</code> 的最后 2048 字节（从完整的一行开始）接到错误信息后面。完整的 <code>-v4</code> 输出仍在 gsd 的 journal 里。</li>
+<li><strong>保住诊断信息</strong>：镜像目录马上要删，先把失败那棵树的整份 <code>criu-dump.log</code> 拷到 <code>&lt;snapshot store&gt;/last-failed-criu-dump.log</code>（<code>keepFailedDumpLog</code>，只留最近一次失败的），再把它的最后 2048 字节（从完整的一行开始）接到错误信息后面，错误信息里写明完整日志留在哪。</li>
 <li><strong>放开进程</strong> <code>resumeAfterFailedDump</code>（:840）：重新扫描全部树，对"现在是停止状态、而 dump 前不是"的进程发 <code>SIGCONT</code>。这覆盖两类进程：
-    失败的那棵之前已经 dump 完、被 <code>--leave-stopped</code> 留着的树；以及失败的这棵自己——criu 走正常错误路径时会自己放开它，但被超时杀掉、崩溃、被内存不足杀手杀掉时可能把它留在停止状态。
-    dump 前就停着的不碰；还没轮到的树本来就在跑。</li>
+    其他已经 dump 完、被 <code>--leave-stopped</code> 留着的树；以及失败的这棵自己——criu 走正常错误路径时会自己放开它，但被超时杀掉、崩溃、被内存不足杀手杀掉时可能把它留在停止状态。
+    dump 前就停着的不碰；因为前面有树失败而没有启动的树本来就在跑。</li>
 <li><strong>丢弃镜像</strong> <code>discardFailedCheckpoint</code>（:825）：删掉整个 <code>&lt;id&gt;_mem</code>，包括已经 dump 成功的那几棵；清空 <code>lastTrees</code>。</li>
-<li><strong>返回错误</strong>：<code>DeadlineExceeded</code> 或 <code>Internal</code>。多棵树时错误信息写明是哪棵树失败、它之前有几棵已经被放开并丢弃了镜像。</li>
+<li><strong>返回错误</strong>：<code>DeadlineExceeded</code> 或 <code>Internal</code>。多棵树时错误信息写明是哪棵树失败（有几棵同时失败时报根进程号最小的那棵，其余在日志里各有一行 <code>criu dump failed</code>）、其余有几棵 dump 成功后已被放开并丢弃了镜像。</li>
 </ol>
 <h3 id="d11-62-下沉失败">6.2 下沉失败</h3>
 <p>这时所有树都已经 dump 成功并停着。<code>SinkUpper</code> 自己负责文件系统一侧的回退（把改了名的 upper 改回原名、删掉新建的目录，见 <a href="#d07">07</a>）；
@@ -5814,7 +5831,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 <ul>
 <li>说出 <code>RestoreCheckpoint</code> 为什么分成"杀进程之前"和"杀进程之后"两段，各段里有哪些步骤，失败分别意味着什么；</li>
 <li>解释为什么不管目标 checkpoint 有没有进程镜像，当前的用户进程都要全部杀掉，以及为什么必须杀干净；</li>
-<li>说清多棵树为什么串行恢复、某一棵失败时沙箱处于什么状态；</li>
+<li>说清多棵树怎样并行恢复、某一棵失败时沙箱处于什么状态；</li>
 <li>说明 restore 成功之后增量链怎么接续，历史为什么是一棵树而不是一条线；</li>
 <li>知道 gsd 启动时为什么要打开加急的 RCU。</li>
 </ul>
@@ -5951,9 +5968,9 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 </tr>
 <tr>
 <td>11</td>
-<td>对目标的每棵树，按 dump 时的顺序</td>
-<td>:571 起</td>
-<td></td>
+<td>对目标的每棵树，按 dump 时的顺序（根进程号升序）启动 criu restore，同时最多 <code>-criu-restore-parallel</code> 个（默认 guest 的 CPU 数）；全部结束后再按树的顺序逐棵收尾</td>
+<td><code>RestoreCheckpoint</code></td>
+<td>§4.4</td>
 </tr>
 <tr>
 <td>11a</td>
@@ -6038,16 +6055,30 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 <p>恢复出来的根进程是 criu 的子进程；criu 一退出，它就被 PID 1 收养。所以 <strong>restore 之后每棵树的根的父进程都是 PID 1</strong>，而不是 envd，也不是 gsd。
 这带来一个使用上的后果：恢复出来的进程与当初启动它的那次 SDK 调用之间的连接（通向 envd 的标准输出管道）不会被接回去，SDK 那一端原来的命令句柄不再收到它的输出（<a href="#d26">26</a>）。</p>
 <p>CRIU 另有一个选项可以让恢复出来的进程成为调用者的兄弟进程，这里没有用；代码里对应的注释只是把现状说清楚（<code>criu.go:101-102</code>）。</p>
-<p>criu restore 的输出同样写两处：gsd 的标准错误，以及这棵树镜像目录里的 <code>criu-restore.log</code>——后者每次 restore 覆盖。注意 restore 命令没有加 <code>-v4</code>，日志比 dump 的简短。</p>
-<h3 id="d12-44-为什么多棵树串行恢复">4.4 为什么多棵树串行恢复</h3>
-<p>各棵树的进程号互不相同（它们来自同一时刻的同一个进程号命名空间），当前用户进程又已经杀干净，所以后恢复的树要的进程号不会被先恢复的树占着——串行在正确性上没有问题。</p>
-<p>代价是总耗时随树的数量线性增加。改成几个 criu 同时跑在原理上可行：各棵树互不依赖，树间共享的管道和 socket 在 checkpoint 时就已经被拒绝了。没有这么做的理由写在代码里（<code>ckpt/service.go:557-565</code>）：</p>
+<p>criu restore 的输出写两处：gsd 的标准错误（进入 journal），以及这棵树镜像目录里的 <code>criu-restore.log</code>——后者每次 restore 覆盖。restore 命令没有加 <code>-v4</code>，日志简短，所以没有像 dump 那样改成由 CRIU 直接写文件（<a href="#d11">11</a> §2.3）。</p>
+<h3 id="d12-44-多棵树并行恢复">4.4 多棵树并行恢复</h3>
+<p>各棵树的进程号互不相同（它们来自同一时刻的同一个进程号命名空间），当前用户进程又已经杀干净，所以各棵树要的进程号不会被别的树占着；各棵树互不依赖，树间共享的管道和 socket 在 checkpoint 时就已经被拒绝了。所以几个 criu restore 可以同时跑。</p>
+<p><code>daae6968f</code> 及以前是逐棵串行，总耗时随树的数量线性增加。<code>9728cef73</code> 起并行，做法与 dump 相同（<a href="#d11">11</a> §2.3）：</p>
 <ul>
-<li>每个 <code>criu restore</code> 都要把恢复出来的任务迁回原来的控制组，并各自按进程号建进程；并发时对内核里相应的全局锁和进程号分配的争用<strong>没有实测过</strong>；</li>
-<li>一棵失败时，其余几棵的收尾更复杂。</li>
+<li>按根进程号升序启动，同时最多 <code>-criu-restore-parallel</code> 个（默认 guest 的 CPU 数）；名额在启动循环里取，并发数为 1 时就是原来的逐棵串行；</li>
+<li>有一棵失败后，还没启动的不再启动，已启动的等它结束；</li>
+<li>列出恢复出来的进程、记下停着的进程、记录下一次增量的父镜像，这些收尾在全部结束之后按树的顺序逐棵做，与串行时相同；放行仍在全部树恢复完、写完 <code>clear_refs</code> 之后（§6）。</li>
 </ul>
-<p>所以先串行，把失败语义保持得简单清楚（§5.1）。要改成并行时，改动点就在这个循环。</p>
-<h3 id="d12-45-加急的-rcu">4.5 加急的 RCU</h3>
+<p>串行时担心的内核争用（每个 criu restore 都要把任务迁回原来的控制组、按进程号建进程）在 920B 上量过：16 棵树、guest 2 个 vCPU，restore 从 137 ms 降到 96 ms，过程中没有出现失败。只有一棵树时没有变化。</p>
+<p><code>criu_restore_ms</code> 仍记各棵之和；实际经过的时间只在 gsd 日志 <code>all process trees restored</code> 那一行的 <code>criu_restore_wall_ms</code> 里。</p>
+<h3 id="d12-45-可选延迟页恢复">4.5 可选：延迟页恢复</h3>
+<p>单棵树的 restore 几乎全部花在把进程的全部页从镜像复制回内存（920B，384 MiB 进程，restore 约 175 ms，其中 CRIU 的 <code>Preadv</code> 约 142 ms），与这次 checkpoint 改了多少无关。并行只能让多棵树叠在一起，不能让一棵树变快。</p>
+<p>gsd 带一个默认关闭的开关 <code>-criu-lazy-restore</code>（环境变量 <code>GSD_CRIU_LAZY_RESTORE=1</code>）。打开后每棵树的恢复变成两步：</p>
+<ol>
+<li>在镜像目录上起 <code>criu lazy-pages</code> 守护进程（日志 <code>criu-lazy-pages.log</code>），等它建好 <code>lazy-pages.socket</code>，最多 2 秒；起不来就这棵树照常恢复，日志里有 <code>lazy pages unavailable</code>；</li>
+<li><code>criu restore</code> 加 <code>--lazy-pages</code>：只重建进程结构，不复制页。进程访问到哪一页，守护进程经 userfaultfd 先补哪一页，其余页在后台补完，补完守护进程自己退出。</li>
+</ol>
+<p>920B 实测：384 MiB 进程的 restore 从 166 ms 降到 32 ms。</p>
+<p><strong>硬约束：页没补完不能 dump 这个进程。</strong> 920B 上试过：补页途中 criu dump 照样返回成功，但镜像缺页，用它恢复出来的进程一读内存就崩溃。所以 gsd 在下一次 checkpoint、restore、删除 checkpoint 的开头，先等上一次 restore 起的守护进程全部退出（<code>finishLazyFill</code>，最多 30 秒），日志一行 <code>lazy page fill finished</code>，带等待时长 <code>lazy_wait_ms</code>。有守护进程失败或超时，恢复出来的进程内存不完整，gsd 进入 degraded（<a href="#d14">14</a>），直到下一次成功的 restore。</p>
+<p><strong>代价：restore 之后的第一次 checkpoint 变成全量。</strong> gsd 在 restore 一结束就写 <code>clear_refs</code>（§6），这时页还没补完；守护进程之后用 <code>UFFDIO_COPY</code> 补进来的页都带 soft-dirty，下一次 dump 就把整个进程当成改过的页写出。920B 上 384 MiB 进程，restore 之后的第一次 checkpoint 从 22 ms 升到 142 ms，镜像从几 MiB 变成 388 MiB。
+改成补完再写 <code>clear_refs</code> 不行：补页期间用户进程真正写过的页也会被清掉，下一次增量就漏掉它们。要分清"补进来的页"和"用户写的页"，需要 userfaultfd 的写保护，guest 的 arm64 内核没有。</p>
+<p>所以这个开关只适合 restore 远多于 checkpoint 的用法，例如反复回到同一个 checkpoint 重试。打开的方法与其他 gsd 参数相同（<a href="#d28">28</a> §2.1）；部署包不打开它。</p>
+<h3 id="d12-46-加急的-rcu">4.6 加急的 RCU</h3>
 <p>gsd 启动时向 <code>/sys/kernel/rcu_expedited</code> 写 1（<code>enableExpeditedRCU</code>，<code>packages/gsd/main.go:178</code>）。这一行与 restore 的耗时直接相关。</p>
 <p>CRIU 恢复进程时要把它迁回原来所在的控制组。在 cgroup v2 上，迁移一个任务要取一把全局的读写锁的写端，它的慢路径要等一个 RCU 宽限期。
 在只有 2 个虚拟 CPU 的沙箱里，系统空闲一会儿之后，每次这样的等待要 20～50 ms，而且完全随机——这是初始实现里 <code>criu_restore_ms</code> 大幅抖动的主因之一。
@@ -6056,13 +6087,14 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 <hr />
 <h2 id="d12-5-第二段的失败">5. 第二段的失败</h2>
 <h3 id="d12-51-多棵树时某一棵失败">5.1 多棵树时某一棵失败</h3>
-<p>假设目标有三棵树，<code>t0</code> 恢复成功，<code>t1</code> 失败。此刻（<code>ckpt/service.go:588-606</code>）：</p>
+<p>假设目标有三棵树，并发数为 1（逐棵），<code>t0</code> 恢复成功，<code>t1</code> 失败。此刻：</p>
 <ul>
 <li><code>t0</code> <strong>留着不动</strong>：它已经在目标文件系统上按 checkpoint 时的状态继续运行了；</li>
 <li><code>t1</code> 不存在；</li>
 <li><code>t2</code> 没有尝试，也不存在。</li>
 </ul>
-<p>gsd 不去杀 <code>t0</code>，也不继续尝试 <code>t2</code>。沙箱不是任何一个 checkpoint 的完整状态，所以返回 <code>DataLoss</code> 并进入 degraded。错误信息把三类树分开写明——
+<p>并发数大于 1 时，同一批启动的几棵可能有的成功、有的失败；失败之后还没启动的才算"没有尝试"。归类方法不变：成功的留着，失败的和没启动的不存在。几棵同时失败时报根进程号最小的那棵，其余各有一行 <code>criu restore failed</code> 日志。</p>
+<p>gsd 不去杀已恢复的树，也不再启动没尝试的树。沙箱不是任何一个 checkpoint 的完整状态，所以返回 <code>DataLoss</code> 并进入 degraded。错误信息把三类树分开写明——
 哪几棵已经恢复并留着运行、哪一棵失败（附 <code>criu-restore.log</code> 的最后 2048 字节）、哪几棵没有尝试——调用方据此知道沙箱里现在有什么。</p>
 <p>走出这个状态的办法是<strong>再做一次 restore</strong>（到同一个或另一个 checkpoint）。新的 restore 第一件事就是杀掉当前全部用户进程，包括留着的 <code>t0</code>，然后从头来过。</p>
 <p>只有一棵树时没有这些分类，错误信息就是 <code>criu restore failed</code> 加日志尾部。</p>
@@ -6104,6 +6136,13 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 <td>已恢复的几棵在跑，其余没有</td>
 <td><code>target</code>：已经是目标 checkpoint 的</td>
 <td><code>DataLoss</code></td>
+<td>是</td>
+</tr>
+<tr>
+<td>延迟页恢复后补页失败或超时（在下一次请求开头才发现，§4.5）</td>
+<td>恢复出来的进程在跑，内存可能不完整</td>
+<td><code>target</code></td>
+<td>那次请求照常处理</td>
 <td>是</td>
 </tr>
 </tbody>
@@ -6189,7 +6228,7 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 </tr>
 </tbody>
 </table></div>
-<p>读法：<code>criu_restore</code> 随树数线性增加，这是串行恢复的直接结果；它也随每棵树的内存量增长（对比两张表里的单树）。切换文件系统的那一下不到 1 ms，第一段的检查与准备加起来不到 1 ms。
+<p>读法：<code>criu_restore</code> 随树数线性增加，这是当时串行恢复的直接结果；它也随每棵树的内存量增长（对比两张表里的单树）。<code>9728cef73</code> 起多棵树并行恢复（§4.4），<code>criu_restore_ms</code> 仍是各棵之和，所以它照样随树数增长；<code>total_ms</code> 不再线性增长：920B 上 16 棵树的 restore 从 137 ms 降到 96 ms（每个测点 20 次的服务端中位数，<code>daae6968f</code> 对 <code>9728cef73</code>）。切换文件系统的那一下不到 1 ms，第一段的检查与准备加起来不到 1 ms。
 <code>criu_restore</code> 里面具体是什么、为什么是这个量级，见 <a href="#dD">附录 D</a> 和 <a href="#d17">17</a>。</p>
 <hr />
 <h2 id="d12-代码位置">代码位置</h2>
@@ -6234,8 +6273,12 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 <td><code>packages/gsd/main.go</code> — <code>enableExpeditedRCU</code></td>
 </tr>
 <tr>
+<td>并行与延迟页</td>
+<td><code>ckpt/service.go</code> — <code>RestoreCheckpoint</code> 里的 <code>restoreJob</code>、<code>finishLazyFill</code>；<code>ckpt/criu.go</code> — <code>startCriuLazyPages</code></td>
+</tr>
+<tr>
 <td>单测</td>
-<td><code>ckpt/restore_test.go</code>、<code>ckpt/service_failure_test.go</code>、<code>ckpt/multitree_test.go</code></td>
+<td><code>ckpt/restore_test.go</code>、<code>ckpt/service_failure_test.go</code>、<code>ckpt/multitree_test.go</code>、<code>ckpt/lazy_restore_test.go</code></td>
 </tr>
 </tbody>
 </table></div>
@@ -6246,7 +6289,8 @@ gsd 同时进入"restore 半途失败"的 degraded：checkpoint 被拒绝，rest
 <li>不管目标有没有进程镜像，当前用户进程一律杀掉：restore 的语义是回到那一刻，那一刻之后启动的进程不能留在回滚过的文件系统上。</li>
 <li>必须杀整棵树并等进程号释放，否则 CRIU 按原进程号重建时报 <code>Can't fork … File exists</code>；杀进程的告警不中断 restore，因为已经没有退路。</li>
 <li>顺序是杀进程 → 切文件系统 → 逐棵 <code>criu restore --restore-detached</code>；恢复出的根被 PID 1 收养，与原来的 SDK 命令句柄不再相连。</li>
-<li>多棵树串行恢复；某棵失败时已恢复的留着、未恢复的不存在，错误信息分三类写明，下一次 restore 先把它们全部杀掉。</li>
+<li>多棵树并行恢复（同时最多 guest 的 CPU 数棵）；某棵失败时已恢复的留着、失败和没启动的不存在，错误信息分三类写明，下一次 restore 先把它们全部杀掉。</li>
+<li>延迟页恢复默认关：restore 快了，但 restore 之后的第一次 checkpoint 变成全量，下一次请求还要先等补页结束。</li>
 <li>restore 成功后以目标 checkpoint 为下一次增量的父，用恢复出的进程的启动时间重建记录，历史因此是一棵树。</li>
 <li>耗时几乎全在 <code>criu_restore</code> 和 <code>kill</code>；gsd 启动时打开加急的 RCU，是为了消掉控制组迁移里随机的 20～50 ms 等待。</li>
 </ol><nav class="pager" data-n="12"></nav></article><article id="v13" class="doc" hidden><h1 id="d13-端到端走查">端到端走查</h1>
@@ -6979,7 +7023,7 @@ SDK 把它转成字典，放在 <code>create()</code> 返回值的 <code>timings
 <hr />
 <h2 id="d14-2-提交点把失败切成两半">2. 提交点：把失败切成两半</h2>
 <h3 id="d14-21-checkpoint-没有不可逆步骤">2.1 checkpoint 没有不可逆步骤</h3>
-<p>一次 checkpoint 依次做：扫描进程、预检、逐棵树 <code>criu dump</code>、沉下 upper、清 soft-dirty、放开进程、入池（<a href="#d11">11</a>）。
+<p>一次 checkpoint 依次做：扫描进程、预检、各棵树 <code>criu dump</code>（并行）、沉下 upper、清 soft-dirty、放开进程、入池（<a href="#d11">11</a>）。
 这些步骤里没有一步是做了之后回不去的：dump 只读进程状态并把它留在停止状态，放开即可；沉下 upper 是一次改名加一次 ioctl，ioctl 失败时把名字改回去。
 所以 checkpoint 的每一种失败都以"沙箱照常运行、checkpoint 列表里没有多出东西"收场。下表按失败位置列出 gsd 的收尾动作（行号见 <code>CreateCheckpoint</code>，<code>ckpt/service.go:163</code>）。</p>
 <div class="tw"><table>
@@ -7110,9 +7154,9 @@ SDK 把它转成字典，放在 <code>create()</code> 返回值的 <code>timings
 <td><code>ckpt/service.go:594</code></td>
 </tr>
 <tr>
-<td>多树：第 i 棵 <code>criu restore</code> 报错或超时</td>
+<td>多树：某棵 <code>criu restore</code> 报错或超时</td>
 <td><code>target</code></td>
-<td>前 i 棵已恢复并继续运行，第 i 棵失败，其余没有尝试；错误信息里逐棵列出</td>
+<td>已恢复的几棵继续运行，失败的不存在，因失败而没有启动的也不存在；错误信息里逐棵列出</td>
 <td><code>ckpt/service.go:603</code></td>
 </tr>
 </tbody>
@@ -7229,7 +7273,7 @@ SDK 把它转成字典，放在 <code>create()</code> 返回值的 <code>timings
 <td><code>internal</code>（同上，经 <code>:280</code>、<code>:282</code>）</td>
 <td><code>SandboxException</code></td>
 <td>同 9</td>
-<td>错误信息末尾带 <code>criu-dump.log</code> 的最后 2048 字节，按它判断；完整日志在 gsd 的 journal 里</td>
+<td>错误信息末尾带 <code>criu-dump.log</code> 的最后 2048 字节，按它判断；完整日志留在 <code>&lt;snapshot store&gt;/last-failed-criu-dump.log</code>（只留最近一次）</td>
 </tr>
 <tr>
 <td>11</td>
@@ -8015,7 +8059,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <hr />
 <h2 id="d16-结论先行">结论先行</h2>
 <ul>
-<li><strong>设计如此的 12 项</strong>（§1）：其中对使用方影响最大的是三条——树与树之间不能共用管道或 socket；多棵树的耗时随树数线性增长且树间不是原子的；
+<li><strong>设计如此的 12 项</strong>（§1）：其中对使用方影响最大的是三条——树与树之间不能共用管道或 socket；多棵树的耗时随树数增长且树间不是原子的（<code>9728cef73</code> 起多棵树并行，增长慢了很多）；
     只支持 arm64 guest。</li>
 <li><strong>见过但没查清的 3 项</strong>（§2）：新沙箱首个请求偶发约 5 秒、一组压测里 checkpoint 返回过 2 次 <code>internal</code>（同一个沙箱的第 174、177 轮）、极低概率的单发 <code>ENOTEMPTY</code>。
     三项都不损坏数据，都没有稳定的复现办法。</li>
@@ -8023,7 +8067,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li><strong>内核里记录在案的 4 项</strong>（§4）：<code>/proc/mounts</code> 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留，以及一条已在最后一轮处理、为对照旧结果而保留的记录。</li>
 <li>950：只跑了首轮验收和四组压测（全部 PASS，<a href="#d22">22</a>）。本章的实测都在新 920B 上完成。</li>
 </ul>
-<p>表里"状态"一列的取值：<strong>设计如此</strong>（是取舍的结果，不计划改）、<strong>未查</strong>（见过现象，原因不明）、<strong>未测</strong>（有代码、有单测，没有新 920B 上的结果）、<strong>未处理</strong>（知道问题在哪，没有改）。</p>
+<p>表里"状态"一列的取值：<strong>设计如此</strong>（是取舍的结果，不计划改）、<strong>未查</strong>（见过现象，原因不明）、<strong>未测</strong>（有代码、有单测，没有新 920B 上的结果）、<strong>未处理</strong>（知道问题在哪，没有改）、<strong>已修</strong>（这一版起不再出现）、<strong>已减轻</strong>（主要来源已去掉，仍可能遇到）。</p>
 <hr />
 <h2 id="d16-1-设计如此的限制">1. 设计如此的限制</h2>
 <div class="tw"><table>
@@ -8056,11 +8100,11 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 </tr>
 <tr>
 <td>L-03</td>
-<td>多棵树时 checkpoint 和 restore 的耗时随树的数量线性增长；树之间不是原子的</td>
-<td>树多时冻结窗口变长：最先 dump 的那棵要一直停到最后一棵 dump 完。后 dump 的树比先 dump 的多跑了一小段（一棵树的 dump 时间），通过文件或网络协作的两棵树恢复后看到的对方状态可能略旧</td>
-<td>每棵树各做一次 CRIU dump 和 restore，串行执行（<a href="#d04">04</a> 的取舍二）</td>
-<td>需要严格一致的进程放进同一棵树；控制同时存在的后台命令数量。量级见 <a href="#d17">17</a>，判定值见 <a href="#d20">20</a></td>
-<td>设计如此</td>
+<td>多棵树时 checkpoint 和 restore 的耗时随树的数量增长；树之间不是原子的</td>
+<td>树多时冻结窗口变长：最先冻住的那棵要一直停到最后一棵 dump 完。晚冻住的树比早冻住的多跑了一小段，通过文件或网络协作的两棵树恢复后看到的对方状态可能略旧</td>
+<td>每棵树各做一次 CRIU dump 和 restore。<code>9728cef73</code> 起并行，同时最多 guest 的 CPU 数棵（模板 2 个 vCPU）；树数超过并发数时仍按批增长。920B，16 棵树：checkpoint 238 → 65 ms、冻结窗口 222 → 53 ms、restore 137 → 96 ms（<a href="#d11">11</a> §2.3、<a href="#d12">12</a> §4.4）</td>
+<td>需要严格一致的进程放进同一棵树；控制同时存在的后台命令数量；树多的模板可多给 vCPU。量级见 <a href="#d17">17</a>，判定值见 <a href="#d20">20</a></td>
+<td>设计如此，<code>9728cef73</code> 起减轻</td>
 </tr>
 <tr>
 <td>L-04</td>
@@ -8151,11 +8195,11 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <tbody>
 <tr>
 <td>L-13</td>
-<td>gsd 把 CRIU dump 和 restore 的详细输出打进 journal，<code>/var/log</code> 在根盘上持续增长，直到 journald 自己的上限</td>
+<td><code>9728cef73</code> 以前：gsd 把 CRIU dump 的详细输出打进 journal，<code>/var/log</code> 在根盘上持续增长，直到 journald 自己的上限</td>
 <td>根盘占用随 checkpoint 次数上涨一段后稳定。实测量级（新 920B，2026-10-08，回收修复当轮，checkpoint→restore→delete 循环口径）每轮约 0.1 到 0.7 MB，8 到 10 MiB 一跳。journal 增量的确认读数见 <a href="#d19">19</a> 的 G-11 项。它<strong>不是</strong>层泄漏，但早期曾被误认成层泄漏</td>
 <td>CRIU 以最详细的日志级别运行，完整输出经 gsd 的标准错误进 journal；<code>/var/log</code> 从 ext4 bind 进来，不随 restore 回滚</td>
-<td>调小 guest 里 journald 的容量上限；评估根盘占用时把 <code>/var/log</code> 单独扣除</td>
-<td>设计如此</td>
+<td><code>9728cef73</code> 起 dump 日志由 CRIU 直接写进镜像目录（在 2 GiB 的内存盘上，随 checkpoint 删除），journal 里只剩 gsd 自己的日志和 restore 时的简短输出。旧版本：调小 guest 里 journald 的容量上限；评估根盘占用时把 <code>/var/log</code> 单独扣除</td>
+<td>已修（<code>9728cef73</code>）</td>
 </tr>
 <tr>
 <td>L-14</td>
@@ -8183,11 +8227,11 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 </tr>
 <tr>
 <td>L-17</td>
-<td>journald 默认按服务单元限流；CRIU 的详细输出把额度用完后，gsd 自己的 JSON 日志会被一起丢掉</td>
+<td>journald 默认按服务单元限流；<code>9728cef73</code> 以前 CRIU dump 的详细输出把额度用完后，gsd 自己的 JSON 日志会被一起丢掉</td>
 <td>连续做十来次 checkpoint 之后 gsd 日志可能残缺，排障和验收时缺行</td>
 <td>CRIU 的输出经 gsd 的标准错误进同一个单元的 journal，与 gsd 的日志共用限流额度。依据是验证脚本 <code>verify_clear_refs_race.py</code> 的处理（它在开头给 <code>gsd.service</code> 关掉限流，脚本注释记录默认额度下约第 10 轮起丢日志）；没有专门的结果文件</td>
-<td>需要完整日志时先给 <code>gsd.service</code> 加关闭限流的 drop-in（<a href="#d28">28</a>）</td>
-<td>设计如此</td>
+<td><code>9728cef73</code> 起 dump 日志不再进 journal，主要来源已去掉；高频压测时仍建议加关闭限流的 drop-in（<a href="#d28">28</a>）</td>
+<td>已减轻（<code>9728cef73</code>）</td>
 </tr>
 <tr>
 <td>L-18</td>
@@ -8203,6 +8247,14 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <td>这期间 checkpoint 和 restore 都做不了，沙箱停在当前状态，直到有人腾出空间</td>
 <td>restore 杀掉用户进程之后要做一次层切换，内核要在新的 work 目录下建子目录；盘满时这一步会失败，而那时用户进程已经杀了，只能报 <code>data_loss</code>。gsd 常驻 4 MiB 预留文件给这一步用；预留文件被用掉又补不回来时（范围外进程马上把空出来的空间写满），gsd 在杀进程之前按 <code>f_bavail</code> 检查，不够就拒绝，宁可不做也不做一半。restore 本身腾不出空间：旧的可写层要等切换之后才在后台回收。只有用户进程写满根盘时，restore 仍能借预留文件完成（<a href="#d23">23</a> 的容量耗尽一行）</td>
 <td>停掉写盘的范围外进程或删掉文件，或删掉不用的 checkpoint（层随之回收），之后重试。实测：新 920B 2026-11-18 <code>stress-ext</code> 的 <code>append</code> 组（6 个 root worker 一直追加），1000 轮里 268 次 checkpoint、272 次 restore 被安全拒绝，<code>data_loss</code> 0，校验无失败；这一组改按容量耗尽判</td>
+<td>设计如此</td>
+</tr>
+<tr>
+<td>L-20</td>
+<td>延迟页恢复（<code>-criu-lazy-restore</code>，默认关）打开后，restore 之后的第一次 checkpoint 是全量；下一次请求开头要先等补页结束</td>
+<td>920B，384 MiB 进程：restore 166 → 32 ms，但 restore 之后的第一次 checkpoint 22 → 142 ms、镜像几 MiB → 388 MiB</td>
+<td>补进来的页带 soft-dirty，而 gsd 在 restore 一结束（页还没补完）就清 soft-dirty；补完再清会把用户在补页期间写的页也清掉。要分开两者需要 userfaultfd 写保护，guest 的 arm64 内核没有。页没补完时 dump 出的镜像缺页，所以必须先等（<a href="#d12">12</a> §4.5）</td>
+<td>只在 restore 远多于 checkpoint 的用法里打开；默认不打开</td>
 <td>设计如此</td>
 </tr>
 </tbody>
@@ -8416,6 +8468,10 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <td>2026-11-18 新 920B <code>test950.sh extended</code> 的 <code>criu-stress-ext/append</code>（<code>stress-summary.json</code>、<code>stress-ops.log</code>）</td>
 </tr>
 <tr>
+<td>L-20</td>
+<td>2026-11-19 新 920B 的手工实验（<code>criu lazy-pages</code> 直接在 guest 里跑）与 gsd <code>-criu-lazy-restore</code> 实测，结果存 <code>rollback-reports/920b-o4-lazy-20261119/</code></td>
+</tr>
+<tr>
 <td>L-11、T-07</td>
 <td><code>gsd-fixes-20260930</code> 的 <code>SUMMARY.md</code> "逐项验证"与"未验证"</td>
 </tr>
@@ -8562,15 +8618,44 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <p>checkpoint 的 <code>total_ms</code> 约等于 <code>criu_dump_ms</code> 加 1～2 ms。<code>criu_dump_ms</code> 随<strong>本次要写出的页数</strong>增长：全量时是进程的全部匿名内存，增量时只是上次以来的脏页。</p>
 <p>同一口径下的三种情形（新 920B，2026-10-08，一棵 64 MiB 的树，8 轮的 p50）：不改内存的增量 dump 约 10 ms，全部改写后的增量 dump 约 43 ms，全量 dump 约 50 ms。
 第一种情形是 dump 的固定开销（冻结进程、遍历页表、写元数据）。后两种差别不大，说明页面写出的速度是主要因素。</p>
+<p><code>9728cef73</code> 把 dump 日志改成 CRIU 直接写文件后，固定开销少了 6～7 ms：920B 上 256 MiB 进程一页不改的 checkpoint 18.3 → 12.3 ms，改 16 MiB 时 26.6 → 19.1 ms（每个测点 20 次的服务端中位数）。原来这一段花在 <code>-v4</code> 日志经管道转写进 journal，发生在进程冻结期间。</p>
 <p><code>stopped_ms</code>（进程被停住的时长）在单树时只有 0.7～2.4 ms：它从 dump 结束算起，只包含沉下 upper 和清 soft-dirty。dump 本身期间进程也是冻结的，那段时间计在 <code>criu_dump_ms</code> 里。</p>
 <hr />
-<h2 id="d17-3-多棵树线性增长">3. 多棵树：线性增长</h2>
-<p>每棵树各做一次 dump 和一次 restore，串行执行，所以各项随树的数量线性增长。一、二、三棵树的完整分段见 <a href="#d20">20</a> §3。</p>
+<h2 id="d17-3-多棵树">3. 多棵树</h2>
+<p>每棵树各做一次 dump 和一次 restore。本节下面的数据是 <code>daae6968f</code> 及以前逐棵串行时量的，各项随树的数量线性增长。一、二、三棵树的完整分段见 <a href="#d20">20</a> §3。</p>
 <p>每多一棵 64 MiB 的树的边际代价（新 920B，2026-10-08，<code>gsd-final-20261008</code> 那一轮，8 轮的 p50，与第 20 章的确认验证不是同一轮）：restore 约 +28 ms，增量 dump 约 +11 ms，全量 dump 约 +45 ms。</p>
 <p>多树时要特别留意 <code>stopped_ms</code>。它从<strong>第一棵</strong>树 dump 完算起，而先 dump 完的树要一直停到最后一棵 dump 完，所以它约等于"其余各棵的 dump 时间之和"：
 同一口径下，三棵树全量时最先 dump 的那棵要多停约 92 ms，而单树时只有 2.4 ms。对停顿敏感的负载，应当尽量让需要一起保存的进程成为一棵树（<a href="#d26">26</a>）。</p>
 <p>多树独有的预检（查树间共享的管道和 socket）开销很小：<code>precheck_ms</code> 从单树的 0.04 涨到三棵树的 0.13。</p>
-<p>串行是有意的选择，理由和并行化时要注意的问题在 <a href="#d12">12</a>。这条线性关系的依据只到三棵树（<a href="#d23">23</a>）。</p>
+<p>这条线性关系的依据只到三棵树（<a href="#d23">23</a>）。</p>
+<p><code>9728cef73</code> 起 dump 和 restore 都并行（<a href="#d11">11</a> §2.3、<a href="#d12">12</a> §4.4），同时最多 guest 的 CPU 数棵，同时每棵树的 dump 省掉了日志转写的 7～9 ms。920B 上 16 棵树、guest 2 个 vCPU（每个测点 20 次的服务端中位数，<code>daae6968f</code> 对 <code>9728cef73</code>）：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>项</th>
+<th><code>daae6968f</code></th>
+<th><code>9728cef73</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>checkpoint <code>total_ms</code></td>
+<td>238 ms</td>
+<td>65 ms</td>
+</tr>
+<tr>
+<td><code>stopped_ms</code></td>
+<td>222 ms</td>
+<td>53 ms</td>
+</tr>
+<tr>
+<td>restore <code>total_ms</code></td>
+<td>137 ms</td>
+<td>96 ms</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>criu_dump_ms</code>、<code>criu_restore_ms</code> 仍是各棵之和，所以它们照样随树数增长；要看实际经过的时间，看 <code>total_ms</code>，或 gsd 日志里的 <code>criu_dump_wall_ms</code>、<code>criu_restore_wall_ms</code>。</p>
 <hr />
 <h2 id="d17-4-可写打开的文件沉下-upper-时的拷贝">4. 可写打开的文件：沉下 upper 时的拷贝</h2>
 <p>一般情况下沉下 upper 很快（约 0.5 ms，一次改名加一次 ioctl）。例外是 checkpoint 时有文件正以写方式打开着，或被共享可写映射着：
@@ -8671,7 +8756,7 @@ THP 开着时零散的写入会让每次增量都退化成全量。原理和实�
 <li>单树 restore 约等于 <code>criu_restore</code> 加 <code>kill</code> 加不到 1 ms。两大项都随进程内存总量增长，与这一代改了多少几乎无关。</li>
 <li>单树 checkpoint 约等于 <code>criu_dump</code> 加 1～2 ms，<code>criu_dump</code> 随本次要写出的页数增长；不改内存时只剩固定开销。</li>
 <li>restore 的下限由页面拷贝和杀进程两项真实工作量构成，再加 THP 关闭带来的缺页。再往下压要么打开 THP，要么改变设计，都不是修缺陷的范畴。</li>
-<li>多棵树串行处理，每多一棵 64 MiB 的树，restore 约 +28 ms、增量 dump 约 +11 ms、全量 dump 约 +45 ms；先 dump 的树要多停"其余各棵的 dump 时间之和"。依据只到三棵树。</li>
+<li>逐棵串行时，每多一棵 64 MiB 的树，restore 约 +28 ms、增量 dump 约 +11 ms、全量 dump 约 +45 ms；先 dump 的树要多停"其余各棵的 dump 时间之和"。依据只到三棵树。<code>9728cef73</code> 起并行，16 棵树的 checkpoint 238 → 65 ms、restore 137 → 96 ms。</li>
 <li>另有三项按量或按次的代价：可写打开的文件在 checkpoint 时每 MiB 约 0.8 ms；鉴权每个请求约 0.6 ms；回收逻辑让 restore 的 ioctl 多 0.04～0.06 ms。</li>
 <li>THP 为 never 的代价不可免除，因为打开它会让增量 checkpoint 退化成全量。</li>
 <li>差 3 ms 以内的读数不解释；压测墙钟和调试内核上的耗时都不能当性能依据。</li>
@@ -9388,7 +9473,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li><strong>凭据。</strong> 所有脚本通过同目录或上一级目录的 <code>e2b_env.py</code> 读取客户端凭据（API 地址、key、token）；建模板用 <code>build_template.py</code>。</li>
 <li><strong>guest 内直连 gsd 要带 token。</strong> 几个脚本为了绕开宿主代理，在 guest 里用 curl 直接调 <code>127.0.0.1:49984</code>。secure 沙箱里除 <code>/health</code> 外每个请求都要带 <code>X-Access-Token</code>（<a href="#d05">05</a>），
     脚本从 SDK 的沙箱对象上取到这个 token 并加进请求头。自己手工在 guest 里 curl 时同样要带，否则得到 401。</li>
-<li><strong>长测时的 journal。</strong> gsd 把 criu 的详细输出打进 journal，量不小。它带来两个要处理的地方：一是 journald 默认按单元限流，短时间内条数太多会连 gsd 自己的 JSON 日志一起丢掉，而好几个脚本是从日志里取分段耗时和 dump 的根 pid 的——
+<li><strong>长测时的 journal。</strong> <code>9728cef73</code> 以前 gsd 把 criu dump 的详细输出打进 journal，量不小（现在 dump 日志只写在镜像目录里，下面两点对新版本影响小得多，但脚本保留了这些处理）。它带来两个要处理的地方：一是 journald 默认按单元限流，短时间内条数太多会连 gsd 自己的 JSON 日志一起丢掉，而好几个脚本是从日志里取分段耗时和 dump 的根 pid 的——
     <code>verify_clear_refs_race.py</code> 因此在开头给 gsd 取消限流、把 journald 改成易失存储并限定上限；二是 journal 所在的 <code>/var/log</code> 与层目录在同一个根盘上，会让"根盘有没有增长"这类判据失真——
     <code>verify_fixes.py</code> 的 G-11 与 <code>probe_leak.py</code> 都在计算时把 <code>/var/log</code> 的增长单独扣掉。写新的长时间测试时两点都要考虑。</li>
 <li><strong>机器是共用的。</strong> 压测一组要起沙箱跑几百轮，并行跑几组时会明显抬高机器负载；压测脚本记录的客户端墙钟耗时因此只反映当时的并发程度，不作判据，也不能当作 gsd 的耗时引用。</li>
@@ -16154,6 +16239,27 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <td>一棵进程树的 CRIU 恢复时限，规则同上。恢复超时发生在进程已被杀之后，返回的是 <code>data_loss</code> 而不是 <code>deadline_exceeded</code>（<a href="#d14">14</a>）</td>
 </tr>
 <tr>
+<td><code>-criu-dump-parallel</code></td>
+<td><code>GSD_CRIU_DUMP_PARALLEL</code></td>
+<td><code>0</code>，即 guest 的 CPU 数</td>
+<td>不传，用默认</td>
+<td>一次 checkpoint 里最多同时跑几个 criu dump（每棵树一个）。<code>1</code> 等于逐棵串行（<a href="#d11">11</a> §2.3）</td>
+</tr>
+<tr>
+<td><code>-criu-restore-parallel</code></td>
+<td><code>GSD_CRIU_RESTORE_PARALLEL</code></td>
+<td><code>0</code>，即 guest 的 CPU 数</td>
+<td>不传，用默认</td>
+<td>一次 restore 里最多同时跑几个 criu restore（<a href="#d12">12</a> §4.4）</td>
+</tr>
+<tr>
+<td><code>-criu-lazy-restore</code></td>
+<td><code>GSD_CRIU_LAZY_RESTORE</code>（值为 <code>1</code> 时打开）</td>
+<td>关</td>
+<td>不传，关</td>
+<td>延迟页恢复。restore 变快，但 restore 之后的第一次 checkpoint 变成全量，下一次请求开头要等补页结束（<a href="#d12">12</a> §4.5、<a href="#d16">16</a> L-20）</td>
+</tr>
+<tr>
 <td><code>-version</code></td>
 <td>无</td>
 <td>—</td>
@@ -16356,7 +16462,7 @@ tr<span class="w"> </span><span class="s1">&#39;\0&#39;</span><span class="w"> <
 </tr>
 <tr>
 <td>CRIU 保存的日志级别</td>
-<td><code>-v4</code>（恢复用默认级别）</td>
+<td><code>-v4</code>，由 CRIU 用 <code>-o criu-dump.log</code> 直接写进镜像目录（恢复用默认级别，输出经 gsd 进 journal）</td>
 <td><code>buildCriuDumpCmd</code>（<code>ckpt/criu.go:51</code>）</td>
 </tr>
 <tr>
@@ -16502,13 +16608,14 @@ SDK 把 checkpoint 的结果放进 <code>CheckpointInfo.timings</code>，把最�
 <li><strong>没发生的阶段不出现。</strong> 值为 0 的字段不会被发送，SDK 的字典里就没有这个键。例如没有用户进程时的 checkpoint 没有 <code>criu_dump_ms</code>、<code>precheck_ms</code>、<code>stopped_ms</code>；目标只有文件系统的 restore 没有 <code>criu_restore_ms</code>。读的时候用 <code>.get()</code>。</li>
 <li><strong><code>Timings</code> 里还有一个 <code>process_trees</code></strong>，是这次保存或恢复的树的数量，不是耗时。SDK 不把它放进 <code>timings</code> 字典（字典里只有以 <code>_ms</code> 结尾的键），而是放在 <code>CheckpointInfo.process_trees</code>。</li>
 <li><strong>各项加起来不等于 <code>total_ms</code>。</strong> 总时间里还有建目录、量镜像大小、写状态文件之前的收尾等没有单独计的部分；<code>stopped_ms</code> 与 <code>overlay_sink_ms</code> 在时间上是重叠的（切层发生在停止窗口里）。</li>
-<li><strong><code>stopped_ms</code> 是用户进程感受到的停顿的下界</strong>，不是全部：每棵树在自己被保存期间也是冻住的，那一段算在 <code>criu_dump_ms</code> 里。一棵树时，进程实际不运行的时间大致是 <code>criu_dump_ms + stopped_ms</code>；多棵树时第一棵停得最久，<code>stopped_ms</code> 约等于其余各棵的保存时间之和再加切层的时间。</li>
-<li><strong>多棵树的耗时线性增长。</strong> 保存与恢复都是逐棵串行的。</li>
+<li><strong><code>stopped_ms</code> 是用户进程感受到的停顿的下界</strong>，不是全部：每棵树在自己被保存期间也是冻住的，那一段算在 <code>criu_dump_ms</code> 里。一棵树时，进程实际不运行的时间大致是 <code>criu_dump_ms + stopped_ms</code>；多棵树时最早 dump 完的那棵停得最久，<code>stopped_ms</code> 约等于从它 dump 完到最后一棵 dump 完的时间再加切层的时间。</li>
+<li><strong>多棵树。</strong> <code>9728cef73</code> 起保存与恢复都并行，同时最多 guest 的 CPU 数棵。<code>criu_dump_ms</code>、<code>criu_restore_ms</code> 仍是各棵之和（与以前含义相同，随树数增长）；实际经过的时间看 <code>total_ms</code>，或日志里的 <code>criu_dump_wall_ms</code>、<code>criu_restore_wall_ms</code>（§3.2）。</li>
 </ul>
 <p>每个键在一次请求的时间线上落在哪里，见 <a href="#d13">13</a>；各项的实测值与量级见 <a href="#d20">20</a>。</p>
 <h3 id="d28-32-日志里多出来的细分">3.2 日志里多出来的细分</h3>
 <p>同样的数字也打在 gsd 的日志里，字段名与计时键相同（<code>precheck_ms</code> 除外，它只在响应里）。日志里另有响应中没有的细分：</p>
 <p><strong>每棵树各自的耗时。</strong> 响应里的 <code>criu_dump_ms</code>、<code>criu_restore_ms</code> 是合计；日志里每棵树一行：<code>criu dump succeeded</code> 和 <code>user process tree restored</code>，各带字段 <code>tree</code>（形如 <code>t1 (root pid 1203, 2 of 3)</code>）和这棵树自己的 <code>criu_dump_ms</code> 或 <code>criu_restore_ms</code>。
+并行时另有一行 <code>all process trees dumped</code>（restore 时是 <code>all process trees restored</code>），带 <code>process_trees</code>、<code>parallel</code>（实际并发数）和这一段实际经过的时间 <code>criu_dump_wall_ms</code>（<code>criu_restore_wall_ms</code>）。打开延迟页恢复时，<code>user process tree restored</code> 带 <code>lazy_pages</code>，下一次请求开头有一行 <code>lazy page fill finished</code>，带 <code>lazy_wait_ms</code>（这次请求为等补页多花的时间）和 <code>failed</code>。
 哪棵树是增量也只在日志里：增量的树在保存前有一行 <code>using incremental CRIU dump</code>，带 <code>prev_mem</code>（父镜像目录）和 <code>parent_id</code>。每棵树镜像的大小和父节点则在 <code>state.json</code> 里（§6）。</p>
 <p><strong>杀进程的细分。</strong> restore 的 <code>user processes killed</code> 一行，除了 <code>kill_ms</code> 还有：</p>
 <div class="tw"><table>
@@ -16555,7 +16662,7 @@ journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> 
 journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> </span>--no-pager<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;&quot;level&quot;:&quot;(warn|error)&quot;&#39;</span>
 </code></pre></div>
 
-<p><code>grep '^{'</code> 是为了滤掉混在同一个 journal 里的 CRIU 输出（§4.2）。从宿主上取，就通过 SDK 以 root 身份在沙箱里跑这些命令（<a href="#d29">29</a> 开头有现成的写法）。</p>
+<p><code>grep '^{'</code> 是为了滤掉混在同一个 journal 里的 CRIU restore 输出（§4.2）。从宿主上取，就通过 SDK 以 root 身份在沙箱里跑这些命令（<a href="#d29">29</a> 开头有现成的写法）。</p>
 <p>下面是值得认识的消息。左列是 <code>message</code> 的原文，可以直接拿去 grep。</p>
 <p><strong>启动</strong></p>
 <div class="tw"><table>
@@ -16826,17 +16933,17 @@ journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> 
 </tbody>
 </table></div>
 <h3 id="d28-42-criu-的日志">4.2 CRIU 的日志</h3>
-<p>CRIU 的输出有两个去处，内容相同。</p>
 <p><strong>镜像目录里的日志文件。</strong> 每棵树的镜像目录是 <code>&lt;snapshot-store&gt;/&lt;checkpoint ID&gt;_mem/t&lt;序号&gt;/</code>，其中：</p>
 <ul>
-<li><code>criu-dump.log</code>：这棵树保存时的输出，<code>-v4</code> 级别，很详细。保存成功时它留在镜像目录里，占内存盘的空间，随 checkpoint 一起删除。<strong>保存失败时整个镜像目录连同它立即被删</strong>，所以失败之后到这里找不到它——它的最后 2048 字节被带进了返回给调用方的错误信息里，完整内容在 journal 里。</li>
+<li><code>criu-dump.log</code>：这棵树保存时的输出，<code>-v4</code> 级别，很详细，由 CRIU 自己写（<code>-o</code>）。保存成功时它留在镜像目录里，占内存盘的空间，随 checkpoint 一起删除。<strong>保存失败时整个镜像目录连同它立即被删</strong>；删之前 gsd 把失败那棵树的整份日志拷到 <code>&lt;snapshot-store&gt;/last-failed-criu-dump.log</code>（只留最近一次失败的），最后 2048 字节同时带进返回给调用方的错误信息。</li>
 <li><code>criu-restore.log</code>：这棵树最近一次恢复时的输出，每次恢复覆盖。恢复失败时文件留着，尾部同样带进错误信息；路径在 <code>criu restore failed</code> 那行日志的 <code>log</code> 字段里。</li>
+<li><code>criu-lazy-pages.log</code>：打开延迟页恢复时，补页守护进程的输出（<code>-v2</code>）。</li>
 </ul>
-<p><strong>gsd 的 journal。</strong> CRIU 的标准输出与标准错误同时接在 gsd 的标准错误上，所以全部内容也进了 <code>journalctl -u gsd</code>，是不带 JSON 外壳的原始文本行。看一次失败的完整 CRIU 输出：</p>
-<div class="hl"><pre><span></span><code>journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> </span>--no-pager<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-v<span class="w"> </span><span class="s1">&#39;^{&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-n<span class="w"> </span>-i<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;error|warn|fail&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">40</span>
+<p>看最近一次保存失败的完整 CRIU 输出：</p>
+<div class="hl"><pre><span></span><code>grep<span class="w"> </span>-n<span class="w"> </span>-i<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;error|warn|fail&#39;</span><span class="w"> </span>/var/lib/gsd/snapshots/last-failed-criu-dump.log<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">40</span>
 </code></pre></div>
 
-<p>这带来两个副作用，都在 §4.4 里说。</p>
+<p><strong>gsd 的 journal。</strong> restore 时 CRIU 的标准输出与标准错误同时接在 gsd 的标准错误上，所以也进了 <code>journalctl -u gsd</code>，是不带 JSON 外壳的原始文本行，量很小。<code>9728cef73</code> 以前 dump 的 <code>-v4</code> 输出也走这条路，带来 §4.4 里的两个副作用。</p>
 <h3 id="d28-43-内核的输出">4.3 内核的输出</h3>
 <p>guest 内核的输出用 <code>dmesg</code> 看。与 gsd 有关的有三类。</p>
 <p><strong>启动脚本的输出。</strong> <code>overlay-init</code> 把自己的输出写进内核日志，每行以 <code>[overlay-init]</code> 开头，记录了开机时每一步挂载的结果；沙箱是从快照恢复的，这些行是建模板那次开机留下的。正常时能看到 <code>overlay mounted at /mnt/newroot, / is 755 root:root</code>、<code>transparent_hugepage=never</code>、<code>/tmp on overlay: 1777 root:root, tmp.mount -&gt; /dev/null</code>，不应该有以 <code>WARNING:</code> 开头的行。</p>
@@ -16865,9 +16972,9 @@ journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> 
 <h3 id="d28-44-取日志时要知道的三件事">4.4 取日志时要知道的三件事</h3>
 <p><strong>journal 不随 restore 回滚。</strong> journal 文件在 <code>/var/log</code> 下，而启动脚本把 <code>/var/log</code> 从底层磁盘单独挂出来，不在 overlay 上（<code>overlay-init.sh.tpl</code> 的 Step 4）。所以 restore 之后 journal 是完整的，能看到 restore 之前、包括被丢弃的那段时间里的全部日志。
 2026-10-09 在新 920B 上做过确认：guest 里 <code>/var/log</code> 是来自 <code>/dev/root</code> 的独立 ext4 挂载，journald 的存储在 <code>/var/log/journal</code>；checkpoint 之后写入的 journal 条目和在 <code>/var/log</code> 下新建的文件，restore 之后都还在，而同时在 <code>/home/user</code> 下新建的对照文件被回滚掉了。那次用的是没有用户进程的 checkpoint，带进程镜像的 restore 没有单独测（<code>/var/log</code> 是独立挂载，按理不受影响）。随手册附带的 <code>verify_clear_refs_race</code> 脚本在开头把 journald 改成了只写内存（<code>Storage=volatile</code>），目的是不让长时间的测试把根盘写满，不要据此认为 journal 会回滚。</p>
-<p><strong>journal 会持续增长。</strong> 每次 checkpoint 都把 <code>-v4</code> 级别的 CRIU 输出写进 journal。新 920B 上 2026-10-08 的循环测试里，journal 每轮增长约 0.1 到 0.7 MB，直到 journald 自己的容量上限为止；<code>/var/log</code> 与文件系统的各层在同一块根盘上，所以这部分增长会体现在根盘占用里，容易被误认为是层没有回收。
+<p><strong>journal 会持续增长（<code>9728cef73</code> 以前）。</strong> 旧版本每次 checkpoint 都把 <code>-v4</code> 级别的 CRIU 输出写进 journal；新版本 dump 日志不进 journal，这一条基本消失。旧版本在新 920B 上 2026-10-08 的循环测试里，journal 每轮增长约 0.1 到 0.7 MB，直到 journald 自己的容量上限为止；<code>/var/log</code> 与文件系统的各层在同一块根盘上，所以这部分增长会体现在根盘占用里，容易被误认为是层没有回收。
 长时间高频做 checkpoint 的沙箱要么给 journald 设一个明确的上限，要么定期清理（<a href="#d29">29</a>）。</p>
-<p><strong>journald 的限流会丢 gsd 的日志。</strong> journald 默认对每个服务按时间窗口限流。CRIU 的 <code>-v4</code> 输出量很大，连续做十来次 checkpoint 就可能触发限流，这时被丢掉的不只是 CRIU 的行，gsd 自己的 JSON 日志也会一起丢。
+<p><strong>journald 的限流会丢 gsd 的日志。</strong> journald 默认对每个服务按时间窗口限流。<code>9728cef73</code> 以前 CRIU dump 的 <code>-v4</code> 输出也进 journal，量很大，连续做十来次 checkpoint 就可能触发限流（新版本主要来源已去掉，但高频压测时仍建议照下面关掉限流），这时被丢掉的不只是 CRIU 的行，gsd 自己的 JSON 日志也会一起丢。
 症状是 gsd 的日志在某个时刻之后变得残缺，同时 <code>journalctl -u systemd-journald</code> 里有 <code>Suppressed</code> 字样的行。需要完整日志时（验收、排障、压测），先给 gsd 关掉按单元的限流再开始：</p>
 <div class="hl"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>/etc/systemd/system/gsd.service.d
 <span class="nb">printf</span><span class="w"> </span><span class="s1">&#39;[Service]\nLogRateLimitIntervalSec=0\n&#39;</span><span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/gsd.service.d/norl.conf
@@ -17099,7 +17206,7 @@ systemctl<span class="w"> </span>daemon-reload<span class="w"> </span><span clas
 <li><code>HOST_GSD_PATH</code> 默认 <code>/fc-gsd/gsd</code>、默认注入；只有小写 <code>off</code> 才关闭注入；开着而文件读不到时建模板失败。</li>
 <li><code>overlay.ckpt_move_open</code> 默认 2：checkpoint 时为以写方式打开的文件留拷贝，保证之后的写入不改到 checkpoint；可在沙箱里写 sysfs 调低，以正确性换时间。</li>
 <li>计时键都是 gsd 自己计的毫秒数：<code>total_ms</code> 不含排队与网络；<code>criu_dump_ms</code>、<code>criu_restore_ms</code> 是各棵树之和；<code>stopped_ms</code> 从第一棵树保存完算起；没发生的阶段不出现。每棵树的明细和杀进程的细分只在日志里。</li>
-<li>gsd 的 JSON 日志与 CRIU 的原始输出都在 <code>journalctl -u gsd</code> 里；保存失败时镜像目录里的 <code>criu-dump.log</code> 已被删除，看错误信息里的尾部或 journal。</li>
+<li>gsd 的 JSON 日志与 CRIU restore 的原始输出在 <code>journalctl -u gsd</code> 里；保存失败时镜像目录里的 <code>criu-dump.log</code> 已被删除，完整一份在 <code>&lt;snapshot-store&gt;/last-failed-criu-dump.log</code>。</li>
 <li>journal 在单独挂出的 <code>/var/log</code> 上，不随 restore 回滚（2026-10-09 在新 920B 上确认）；它会因 CRIU 的详细输出持续增长，journald 的限流还可能丢掉 gsd 的日志，需要完整日志时先关限流。</li>
 <li><code>/health</code> 始终是 HTTP 200，是否降级、哪一类降级看响应体的 <code>reason</code>；<code>state.json</code> 是排障的第一手状态，能看到层栈、每棵树的增量关系和被隐藏的 checkpoint，不要手工改它。</li>
 </ul><nav class="pager" data-n="28"></nav></article><article id="v29" class="doc" hidden><h1 id="d29-排障">排障</h1>
@@ -17185,13 +17292,13 @@ journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> 
 <h2 id="d29-3-checkpoint-失败internal">3. checkpoint 失败：<code>internal</code></h2>
 <p><strong>症状</strong>：<code>create()</code> 抛 <code>SandboxException</code>，信息以 <code>Code.internal:</code> 开头（SDK 把没有专门映射的错误码原样拼在信息前面）。沙箱没有被改动：已经被冻住的进程被放开，这次写出的镜像全部丢弃。但有一个后果——<strong>下一次 checkpoint 对所有进程树存全量</strong>，这是有意的（<a href="#d11">11</a>）。</p>
 <p>最常见的是 CRIU 保存失败：</p>
-<div class="hl"><pre><span></span><code>Code.internal: criu dump failed: exit status 1; tail of criu-dump.log (removed with the failed images; full log in the gsd journal):
+<div class="hl"><pre><span></span><code>Code.internal: criu dump failed, nothing was changed: exit status 1; tail of criu-dump.log (removed with the failed images; full log kept at /var/lib/gsd/snapshots/last-failed-criu-dump.log):
 …CRIU 日志的最后 2048 字节…
 </code></pre></div>
 
-<p>多棵树时开头是 <code>criu dump failed for process tree t1 (root pid …, 2 of 3); the 1 tree(s) dumped before it were resumed and their images discarded:</code>。</p>
-<p>看哪里：先读错误信息里的那段日志尾部，通常最后几行 <code>Error</code> 就是原因。不够时看 journal 里完整的 CRIU 输出（失败的镜像目录已经被删，<code>criu-dump.log</code> 文件不在了）：</p>
-<div class="hl"><pre><span></span><code>journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> </span>--no-pager<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-v<span class="w"> </span><span class="s1">&#39;^{&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-n<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;Error|Warn&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">30</span>
+<p>多棵树时开头是 <code>criu dump failed for process tree t1 (root pid …, 2 of 3), nothing was changed; the 2 other tree(s) dumped successfully were resumed and their images discarded:</code>。</p>
+<p>看哪里：先读错误信息里的那段日志尾部，通常最后几行 <code>Error</code> 就是原因。不够时看留下的完整日志（失败的镜像目录已经被删，<code>criu-dump.log</code> 不在了；<code>9728cef73</code> 以前的版本没有这份文件，完整输出在 journal 里，用 <code>journalctl -u gsd --no-pager -o cat | grep -v '^{'</code> 看）：</p>
+<div class="hl"><pre><span></span><code>grep<span class="w"> </span>-n<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;Error|Warn&#39;</span><span class="w"> </span>/var/lib/gsd/snapshots/last-failed-criu-dump.log<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">30</span>
 journalctl<span class="w"> </span>-u<span class="w"> </span>gsd<span class="w"> </span>--no-pager<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">&#39;^{&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-F<span class="w"> </span><span class="s1">&#39;criu dump failed&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">3</span>
 </code></pre></div>
 
@@ -17599,7 +17706,7 @@ python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;
 <tbody>
 <tr>
 <td><code>/var/log</code>（journal）</td>
-<td>gsd 把 CRIU 的详细输出写进 journal，每次 checkpoint 都增长，一直涨到 journald 的上限。<code>/var/log</code> 不在 overlay 上，restore 不会把它退回去</td>
+<td><code>9728cef73</code> 以前 gsd 把 CRIU dump 的详细输出写进 journal，每次 checkpoint 都增长，一直涨到 journald 的上限（新版本不再如此）。<code>/var/log</code> 不在 overlay 上，restore 不会把它退回去</td>
 <td>已知项（<a href="#d16">16</a> 的 L-13）。<code>journalctl --vacuum-size=64M</code> 立即清理；长跑的沙箱在模板里给 journald 设 <code>SystemMaxUse</code></td>
 </tr>
 <tr>
@@ -17707,7 +17814,7 @@ grep<span class="w"> </span>-n<span class="w"> </span>-E<span class="w"> </span>
 <ul>
 <li>先取三样第一手信息：<code>/health</code> 的响应体、<code>journalctl -u gsd</code> 里的告警与错误、<code>state.json</code>。以 root 在 guest 里取证不会干扰用户进程，也不会被 restore 杀掉。</li>
 <li>checkpoint 的拒绝（<code>failed_precondition</code>、<code>resource_exhausted</code>）和失败（<code>internal</code>、<code>deadline_exceeded</code>）都保证沙箱没被改动；失败之后的下一次 checkpoint 存全量。树间管道就合并成一棵树，放不下就删 checkpoint（从新往旧），层栈太深只能靠 restore 到较早的点来变浅。</li>
-<li>CRIU 保存失败先读错误信息里的日志尾部；失败的镜像目录已被删，完整输出在 journal 里。</li>
+<li>CRIU 保存失败先读错误信息里的日志尾部；失败的镜像目录已被删，完整输出在 <code>/var/lib/gsd/snapshots/last-failed-criu-dump.log</code>。</li>
 <li><code>data_loss</code> 之后唯一的出路是再 restore 一次；同一个 checkpoint 反复失败就换一个，任何一次成功的 restore 都解除降级。</li>
 <li>降级分三类：restore 半途失败（再 restore）、状态文件写不进（腾内存盘空间）、致命（状态与磁盘对不上，保留状态文件和日志后重建沙箱）。<code>/health</code> 永远是 200，要读响应体。</li>
 <li>"换了文件却没生效"和各种"本应修掉的现象"，根因几乎总是模板没有重建；建模板的自检不验证内核是否带补丁，要到 guest 里核对版本串。</li>
@@ -18926,7 +19033,15 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 </tr>
 <tr>
 <td><code>&lt;ckpt&gt;_mem/t&lt;i&gt;/criu-dump.log</code></td>
-<td>dump 的详细日志。dump 失败时随镜像目录删除，尾部进错误信息</td>
+<td>dump 的详细日志，CRIU 自己写。dump 失败时随镜像目录删除，尾部进错误信息，完整一份拷到 <code>last-failed-criu-dump.log</code></td>
+</tr>
+<tr>
+<td><code>last-failed-criu-dump.log</code></td>
+<td>在 snapshot store 根下，最近一次失败的 dump 的完整日志</td>
+</tr>
+<tr>
+<td><code>&lt;ckpt&gt;_mem/t&lt;i&gt;/criu-lazy-pages.log</code>、<code>lazy-pages.socket</code></td>
+<td>延迟页恢复时补页守护进程的日志和它的 socket（默认关，<a href="#d12">12</a> §4.5）</td>
 </tr>
 <tr>
 <td><code>&lt;ckpt&gt;_mem/t&lt;i&gt;/criu-restore.log</code></td>

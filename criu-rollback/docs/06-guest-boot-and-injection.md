@@ -77,7 +77,7 @@ overlay 根目录（也就是 chroot 之后 guest 的 `/`）的属主与权限**
 现在即使有 root 服务在 overlay 上读写，切换也是安全的。但这三处 bind 保留了下来，它们同时起到另一个作用：日志、systemd 的持久状态和时钟漂移数据本来就不该被回滚到过去。
 
 对使用者的含义是：restore 之后这三个目录里是 restore 那一刻的内容，不是 checkpoint 时的内容（[26](26-semantics-and-limits.md)）。
-另外，gsd 把 CRIU 的详细日志打进 journal，而 journal 就在根盘的 `/var/log` 里，会一直涨到 journald 自己的上限（[16](16-known-limits.md)）。
+另外，`9728cef73` 以前 gsd 把 CRIU dump 的详细日志打进 journal，而 journal 就在根盘的 `/var/log` 里，会一直涨到 journald 自己的上限（[16](16-known-limits.md) 的 L-13）。现在 dump 日志只写在镜像目录里，journal 里剩下 gsd 自己的日志和 restore 时 CRIU 的简短输出。
 
 ### 2.3 步骤 6：透明大页必须在任何用户进程出现之前关掉
 

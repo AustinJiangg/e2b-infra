@@ -5,7 +5,7 @@
 读完本章，你应当能够：
 
 - 按顺序说出 `CreateCheckpoint` 的每一步，在哪一步之前失败"什么都没动"，每一步失败后 gsd 做哪些收尾；
-- 解释多棵树逐棵 dump 为什么仍然得到一个自洽的状态，以及它在哪一点上不是原子的；
+- 解释多棵树各自 dump（并行，同时最多 guest 的 CPU 数棵）为什么仍然得到一个自洽的状态，以及它在哪一点上不是原子的；
 - 说清三个容易被改坏的设计决定：为什么用 `--leave-stopped`、为什么下沉之后要再写一次 `clear_refs`、为什么不能在 dump 之前自己发 `SIGSTOP`；
 - 说明按树增量的父镜像怎么选、什么时候被清空、失败后为什么必须全量；
 - 说出没有用户进程、或者 upper 为空时 checkpoint 做了什么。
@@ -49,22 +49,23 @@ checkpoint 没有不可逆的步骤：任何一步失败，收尾之后沙箱都
 第 5～7 步的耗时记为 `find_pids_ms`，第 8～9 步记为 `precheck_ms`。**到第 9 步为止，沙箱没有被改动过任何东西**：没有进程被停过，没有目录被建过。
 第 8、9 步的拒绝因此是最干净的一类失败——调用方按错误信息处理后重试即可。没有用户进程时第 7～9 步整个跳过。
 
-### 2.3 逐棵 dump
+### 2.3 各棵树 dump（并行）
 
 | # | 步骤 | 代码 | 说明 |
 |---|---|---|---|
 | 10 | 建镜像目录 `<snapshot store>/<id>_mem` | :224-227 | 没有用户进程时也建，是个空目录 |
 | 11 | 建一个带总时限的上下文 | :237 | `context.WithoutCancel`：与请求脱钩，客户端断开不会让 criu 半途被杀；总时限是单棵时限的 3 倍（§5） |
-| 12 | 对每个根，按进程号升序 | :242 起 | |
-| 12a | 　选增量父镜像 `incrementalParent` | :253 | 找到则加 `--prev-images-dir`，并记下父 checkpoint 的 id（§4） |
-| 12b | 　建子目录 `t<i>`，在单棵时限内运行 criu | :260-264 | |
-| 12c | 　失败 → 收尾并返回（§6） | :268-284 | |
-| 12d | 　成功；第一棵成功时记下时刻 `tFirstStopped` | :285-287 | 这是冻结窗口的起点 |
+| 12 | 对每个根，按进程号升序准备好 dump 参数 | :297 起 | 只准备，不运行 |
+| 12a | 　选增量父镜像 `incrementalParent` | :313 | 找到则加 `--prev-images-dir`，并记下父 checkpoint 的 id（§4） |
+| 12b | 　按根进程号升序启动，同时最多 `-criu-dump-parallel` 个（默认 guest 的 CPU 数）；每个在单棵时限内建子目录 `t<i>`、运行 criu | :320 起 | 名额在启动循环里取，所以启动顺序固定；并发数为 1 时就是逐棵串行 |
+| 12c | 　有一棵失败后，还没启动的不再启动；等已启动的全部结束 | 同上 | 已在跑的 criu 不打断，结束后按失败统一收尾 |
+| 12d | 　有失败 → 收尾并返回（§6） | :356 起 | 报根进程号最小的那棵失败的树 |
+| 12e | 　全部成功；取最早 dump 完的那棵的时刻为 `tFirstStopped` | :390-395 | 这是冻结窗口的起点 |
 
 每棵树的命令由 `buildCriuDumpCmd`（`ckpt/criu.go:51`）拼出：
 
 ```
-/usr/sbin/criu dump --tree <根进程号> -D <镜像目录>/t<i> --shell-job --leave-stopped -v4 --track-mem [--prev-images-dir <父镜像目录>]
+/usr/sbin/criu dump --tree <根进程号> -D <镜像目录>/t<i> --shell-job --leave-stopped -v4 -o criu-dump.log --track-mem [--prev-images-dir <父镜像目录>]
 ```
 
 | 参数 | 作用 |
@@ -76,10 +77,13 @@ checkpoint 没有不可逆的步骤：任何一步失败，收尾之后沙箱都
 | `--track-mem` | dump 时把这棵树的 soft-dirty 位清零，为下一次增量建立基线 |
 | `--prev-images-dir` | 只写相对父镜像改过的页；CRIU 会在本目录里留一个指向父目录的 `parent` 符号链接 |
 | `-v4` | 最详细的日志 |
+| `-o criu-dump.log` | 日志由 CRIU 自己写进镜像目录里的这个文件（路径相对 `-D`） |
 
-criu 的标准输出和标准错误被同时写到两处（`execCriuDump`，`criu.go:73`）：gsd 自己的标准错误（进入 journal），以及镜像目录里的 `criu-dump.log`。
+日志由 CRIU 自己写文件（`criuDumpLogName`，`criu.go:80`）。`9728cef73` 以前，CRIU 的 `-v4` 输出走标准错误，经管道交给 gsd，gsd 再同时写进 `criu-dump.log` 和自己的标准错误（进入 journal）。
+在 920B 上量过，这一段转写在 256 MiB 进程的 checkpoint 里占 7～9 ms，而且发生在进程冻结期间；改成 CRIU 直接写文件后，256 MiB 进程一页不改的 checkpoint 从 18.3 ms 降到 12.3 ms。
+现在 criu 的标准输出和标准错误里只剩它打开日志文件之前的输出（参数错误之类），仍接到 gsd 的标准错误（`execCriuDump`，`criu.go:82`）。
 
-所有树 dump 完之后，`criu_dump_ms` 记的是**各棵之和**，`process_trees` 记棵数。
+所有树 dump 完之后，`criu_dump_ms` 记的是**各棵之和**，与逐棵串行时含义相同，可以和以前的数据直接比较；并行时它大于这一段实际经过的时间，实际经过的时间只记在 gsd 日志 `all process trees dumped` 那一行的 `criu_dump_wall_ms` 里，同一行还有 `parallel`（实际并发数）。`process_trees` 记棵数。
 
 ### 2.4 冻结窗口内
 
@@ -109,17 +113,17 @@ criu 的标准输出和标准错误被同时写到两处（`execCriuDump`，`cri
 
 ### 3.1 多棵树的一致性
 
-CRIU 一次只能 dump 一棵树，N 棵树就是 N 次先后进行的 dump。它们凭什么算"同一时刻"的状态？
+CRIU 一次只能 dump 一棵树，N 棵树就是 N 次 criu dump。它们有的同时进行，有的先后进行（并发数小于树数时），凭什么算"同一时刻"的状态？
 
-论证只有三句（`CreateCheckpoint` 的头注释，`ckpt/service.go:147-155`）：
+论证只有三句（`CreateCheckpoint` 的头注释），并行与否都成立：
 
 1. 每棵树的镜像是它**自己被冻住那一刻**的状态；
-2. 因为 `--leave-stopped`，一棵树 dump 完之后不再运行——在等后面的树 dump 时，它不改内存，也不写文件；
+2. 因为 `--leave-stopped`，一棵树 dump 完之后不再运行——在等其他树 dump 时，它不改内存，也不写文件；
 3. 所以到最后一棵 dump 完时，全部镜像加上接下来下沉的文件系统，等价于"**最后一棵被冻住那一刻**"的状态。
 
 文件系统的下沉发生在所有树都停住之后，所以层里的文件内容与每棵树的内存是对得上的：没有哪棵树在自己的镜像生成之后又写过文件。
 
-**不是原子的地方**在树与树之间：排在后面的树，在前面的树已经冻住之后还多跑了一段——长度是前面各棵树的 dump 时间之和。
+**不是原子的地方**在树与树之间：晚冻住的树，在早冻住的树停下之后还多跑了一段。逐棵串行时这一段是前面各棵树的 dump 时间之和；并行时同一批启动的树几乎同时冻住，差距只剩排在后面几批的等待时间。并发数不小于树数时，差距只有启动各个 criu 之间的那一点时间。
 互不通信的后台命令对此无感。通过文件、网络相互协作的两棵树，restore 之后看到的对方状态可能比自己"旧"这么一小段。
 需要严格一致的进程应当用同一条命令启动成一棵树（[26](26-semantics-and-limits.md)）。
 
@@ -196,7 +200,7 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 ## 5. 时限
 
 每棵树的 dump 有一个时限，默认 60 秒（`defaultCriuDumpTimeout`，`ckpt/service.go:25`；参数 `-criu-dump-timeout`）。一次 checkpoint 里全部树合计另有一个上限，是它的 3 倍
-（`criuTotalTimeoutFactor`，`service.go:33`）。合计上限存在的理由是：先 dump 完的树在后面的树 dump 期间一直停着，树多的时候不能让"每一棵都差一点超时"把停顿累加到 N 倍。
+（`criuTotalTimeoutFactor`，`service.go:33`）。合计上限存在的理由是：先 dump 完的树在其余的树 dump 期间一直停着，树多、并发数又小的时候不能让"每一棵都差一点超时"把停顿累加到 N 倍。
 只有一棵树时合计上限不起作用，单棵时限先到。
 
 到时限时 `runCriuCmd`（`ckpt/criu.go:28`）先发 `SIGTERM`，让 criu 走它自己的清理路径——dump 出错时它会把被它接管的进程恢复运行；
@@ -213,12 +217,12 @@ gsd 如果自己把所有进程停住再 dump，那么每一次 restore 恢复�
 
 按顺序做四件事（`ckpt/service.go:268-284`）：
 
-1. **保住诊断信息**：镜像目录马上要删，先把 `criu-dump.log` 的最后 2048 字节（从完整的一行开始）接到错误信息后面。完整的 `-v4` 输出仍在 gsd 的 journal 里。
+1. **保住诊断信息**：镜像目录马上要删，先把失败那棵树的整份 `criu-dump.log` 拷到 `<snapshot store>/last-failed-criu-dump.log`（`keepFailedDumpLog`，只留最近一次失败的），再把它的最后 2048 字节（从完整的一行开始）接到错误信息后面，错误信息里写明完整日志留在哪。
 2. **放开进程** `resumeAfterFailedDump`（:840）：重新扫描全部树，对"现在是停止状态、而 dump 前不是"的进程发 `SIGCONT`。这覆盖两类进程：
-   失败的那棵之前已经 dump 完、被 `--leave-stopped` 留着的树；以及失败的这棵自己——criu 走正常错误路径时会自己放开它，但被超时杀掉、崩溃、被内存不足杀手杀掉时可能把它留在停止状态。
-   dump 前就停着的不碰；还没轮到的树本来就在跑。
+   其他已经 dump 完、被 `--leave-stopped` 留着的树；以及失败的这棵自己——criu 走正常错误路径时会自己放开它，但被超时杀掉、崩溃、被内存不足杀手杀掉时可能把它留在停止状态。
+   dump 前就停着的不碰；因为前面有树失败而没有启动的树本来就在跑。
 3. **丢弃镜像** `discardFailedCheckpoint`（:825）：删掉整个 `<id>_mem`，包括已经 dump 成功的那几棵；清空 `lastTrees`。
-4. **返回错误**：`DeadlineExceeded` 或 `Internal`。多棵树时错误信息写明是哪棵树失败、它之前有几棵已经被放开并丢弃了镜像。
+4. **返回错误**：`DeadlineExceeded` 或 `Internal`。多棵树时错误信息写明是哪棵树失败（有几棵同时失败时报根进程号最小的那棵，其余在日志里各有一行 `criu dump failed`）、其余有几棵 dump 成功后已被放开并丢弃了镜像。
 
 ### 6.2 下沉失败
 

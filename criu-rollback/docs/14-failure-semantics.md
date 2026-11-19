@@ -38,7 +38,7 @@ gsd 操作的是一个正在运行的沙箱里的用户进程和根文件系统�
 
 ### 2.1 checkpoint 没有不可逆步骤
 
-一次 checkpoint 依次做：扫描进程、预检、逐棵树 `criu dump`、沉下 upper、清 soft-dirty、放开进程、入池（[11](11-checkpoint.md)）。
+一次 checkpoint 依次做：扫描进程、预检、各棵树 `criu dump`（并行）、沉下 upper、清 soft-dirty、放开进程、入池（[11](11-checkpoint.md)）。
 这些步骤里没有一步是做了之后回不去的：dump 只读进程状态并把它留在停止状态，放开即可；沉下 upper 是一次改名加一次 ioctl，ioctl 失败时把名字改回去。
 所以 checkpoint 的每一种失败都以"沙箱照常运行、checkpoint 列表里没有多出东西"收场。下表按失败位置列出 gsd 的收尾动作（行号见 `CreateCheckpoint`，`ckpt/service.go:163`）。
 
@@ -96,7 +96,7 @@ restore of <id> failed after user processes were killed; filesystem at <old|targ
 |---|---|---|---|
 | 切换层栈的 ioctl 失败 | `old` | 全部被杀 | `ckpt/service.go:545` |
 | 单树：`criu restore` 报错或超时 | `target` | 全部被杀，没有恢复出任何进程 | `ckpt/service.go:594` |
-| 多树：第 i 棵 `criu restore` 报错或超时 | `target` | 前 i 棵已恢复并继续运行，第 i 棵失败，其余没有尝试；错误信息里逐棵列出 | `ckpt/service.go:603` |
+| 多树：某棵 `criu restore` 报错或超时 | `target` | 已恢复的几棵继续运行，失败的不存在，因失败而没有启动的也不存在；错误信息里逐棵列出 | `ckpt/service.go:603` |
 
 第二段里有一个例外分支：切换层栈失败、而此前没有杀掉任何进程（沙箱里本来就没有用户进程）时，沙箱确实还是原样，
 这时不算数据丢失，按普通错误返回并写明 `nothing was changed`（`ckpt/service.go:541-544`）。
@@ -139,7 +139,7 @@ criu 运行时用的是脱离了请求的超时上下文（`context.WithoutCance
 | 7 | checkpoint：估算的镜像放不进 snapshot store，或超过 guest 的 `MemAvailable` | `resource_exhausted`（`ckpt/service.go:216`） | `NotEnoughSpaceException` | 什么都没动 | 删掉一些 checkpoint，或释放沙箱里的内存后重试；错误信息里有估算值与两个剩余量 |
 | 8 | checkpoint：层栈太深，切换 ioctl 的选项串会超过内核上限；或者这个 checkpoint 建出来之后将来无法 restore | `resource_exhausted`（`overlayErrorCode`，`ckpt/service.go:874`，经 `:326`） | `NotEnoughSpaceException` | 文件系统与 checkpoint 列表没动；dump 已做过并被丢弃，下一次 checkpoint 全量（见 §2.1） | restore 到一个层数少的 checkpoint 之后再继续，或删掉不用的 checkpoint；上限见 [15](15-state-concurrency-capacity.md) |
 | 9 | checkpoint：某棵树的 `criu dump` 超过时限（单棵默认 60 s，一次 checkpoint 合计上限为其 3 倍） | `deadline_exceeded`（`criuErrorCode`，`ckpt/service.go:865`，经 `:280`、`:282`） | `TimeoutException` | 进程已放开、照常运行；镜像已丢弃；下一次 checkpoint 全量 | 这不是 SDK 的 `request_timeout`，调大它没有用；查进程为什么 dump 不完（[29](29-troubleshooting.md)），必要时调 `-criu-dump-timeout`（[28](28-configuration-and-observability.md)） |
-| 10 | checkpoint：`criu dump` 自己报错（例如进程用了 CRIU 不支持的特性、连着树外的 unix socket） | `internal`（同上，经 `:280`、`:282`） | `SandboxException` | 同 9 | 错误信息末尾带 `criu-dump.log` 的最后 2048 字节，按它判断；完整日志在 gsd 的 journal 里 |
+| 10 | checkpoint：`criu dump` 自己报错（例如进程用了 CRIU 不支持的特性、连着树外的 unix socket） | `internal`（同上，经 `:280`、`:282`） | `SandboxException` | 同 9 | 错误信息末尾带 `criu-dump.log` 的最后 2048 字节，按它判断；完整日志留在 `<snapshot store>/last-failed-criu-dump.log`（只留最近一次） |
 | 11 | checkpoint：扫描 `/proc` 失败、读不到容量数字、建镜像目录失败 | `internal`（`ckpt/service.go:183`、`:212`、`:226`） | `SandboxException` | 什么都没动 | 属于环境异常，按 [29](29-troubleshooting.md) 排查 |
 | 12 | checkpoint：沉下 upper 失败（建目录、改名或 ioctl 失败，层栈太深以外的原因） | `internal`（`ckpt/service.go:326`） | `SandboxException` | 文件系统没动（改名已撤回）；下一次 checkpoint 全量 | 最常见的是根盘写满，错误信息里有 `no space left on device`；腾出空间后重试 |
 | 13 | restore：杀进程之前的准备失败（建目录失败、层目录缺失、扫描失败），或切换失败而此前没有杀任何进程 | `internal`，层栈太深时为 `resource_exhausted`（`ckpt/service.go:498`、`:511`、`:543`） | `SandboxException` / `NotEnoughSpaceException` | 什么都没动，错误信息含 `nothing was changed` | 可以直接重试，或换一个目标 |

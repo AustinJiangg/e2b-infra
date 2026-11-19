@@ -496,7 +496,7 @@ lockdep 有一个特性：它一旦报告过一次问题，就把自己关掉，
 - **凭据。** 所有脚本通过同目录或上一级目录的 `e2b_env.py` 读取客户端凭据（API 地址、key、token）；建模板用 `build_template.py`。
 - **guest 内直连 gsd 要带 token。** 几个脚本为了绕开宿主代理，在 guest 里用 curl 直接调 `127.0.0.1:49984`。secure 沙箱里除 `/health` 外每个请求都要带 `X-Access-Token`（[05](05-architecture.md)），
   脚本从 SDK 的沙箱对象上取到这个 token 并加进请求头。自己手工在 guest 里 curl 时同样要带，否则得到 401。
-- **长测时的 journal。** gsd 把 criu 的详细输出打进 journal，量不小。它带来两个要处理的地方：一是 journald 默认按单元限流，短时间内条数太多会连 gsd 自己的 JSON 日志一起丢掉，而好几个脚本是从日志里取分段耗时和 dump 的根 pid 的——
+- **长测时的 journal。** `9728cef73` 以前 gsd 把 criu dump 的详细输出打进 journal，量不小（现在 dump 日志只写在镜像目录里，下面两点对新版本影响小得多，但脚本保留了这些处理）。它带来两个要处理的地方：一是 journald 默认按单元限流，短时间内条数太多会连 gsd 自己的 JSON 日志一起丢掉，而好几个脚本是从日志里取分段耗时和 dump 的根 pid 的——
   `verify_clear_refs_race.py` 因此在开头给 gsd 取消限流、把 journald 改成易失存储并限定上限；二是 journal 所在的 `/var/log` 与层目录在同一个根盘上，会让"根盘有没有增长"这类判据失真——
   `verify_fixes.py` 的 G-11 与 `probe_leak.py` 都在计算时把 `/var/log` 的增长单独扣掉。写新的长时间测试时两点都要考虑。
 - **机器是共用的。** 压测一组要起沙箱跑几百轮，并行跑几组时会明显抬高机器负载；压测脚本记录的客户端墙钟耗时因此只反映当时的并发程度，不作判据，也不能当作 gsd 的耗时引用。

@@ -290,7 +290,7 @@ gsd 被 systemd 重启后从这里加载。snapshot store 是 tmpfs，与内核�
 | `…/<ckpt>_mem/` | 一个 checkpoint 的镜像目录（`snapshotMemDir`，`ckpt/criu.go:331`）；没有用户进程时是空目录 | gsd | checkpoint 被物理删除时；checkpoint 失败时立刻删 |
 | `…/<ckpt>_mem/t<i>/` | 第 `i` 棵用户进程树的 CRIU 镜像，按根进程号升序编号（`treeSubdir`，`ckpt/service.go:384`） | CRIU | 随上一行 |
 | `…/t<i>/parent` | 增量镜像指向父镜像目录的符号链接 | CRIU | 随上一行 |
-| `…/t<i>/criu-dump.log` | 这棵树 dump 的完整输出 | gsd 转存 | 随上一行；dump 失败时目录被删，尾部已带进错误信息 |
+| `…/t<i>/criu-dump.log` | 这棵树 dump 的完整输出 | CRIU 自己写（`-o`） | 随上一行；dump 失败时目录被删，尾部已带进错误信息，完整一份留在 `<snapshot store>/last-failed-criu-dump.log` |
 | `…/t<i>/criu-restore.log`、`restored.pid` | 最近一次 restore 这棵树的输出与恢复出的根进程号 | gsd 转存、CRIU | 每次 restore 覆盖 |
 | `…/state.json` | gsd 的持久化状态 | gsd | 随 tmpfs |
 | `…/.trash/` | 镜像目录的回收站 | 回收逻辑 | 内容在后台被删空 |

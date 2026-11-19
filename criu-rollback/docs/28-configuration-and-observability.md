@@ -49,6 +49,9 @@ gsd 的参数在 `parseFlags`（`packages/gsd/main.go:55`）里定义。除 `-po
 | `-snapshot-store` | `GSD_SNAPSHOT_STORE` | `/var/lib/gsd/snapshots` | `/var/lib/gsd/snapshots` | 进程镜像和状态文件 `state.json` 的目录；模板里它是一个 2 GiB 的内存盘 |
 | `-criu-dump-timeout` | `GSD_CRIU_DUMP_TIMEOUT` | `60s` | 不传，用默认 | **一棵**进程树的 CRIU 保存时限。到期先发 SIGTERM，2 秒后 SIGKILL。一次 checkpoint 里全部树合计另有 3 倍于它的上限 |
 | `-criu-restore-timeout` | `GSD_CRIU_RESTORE_TIMEOUT` | `60s` | 不传，用默认 | 一棵进程树的 CRIU 恢复时限，规则同上。恢复超时发生在进程已被杀之后，返回的是 `data_loss` 而不是 `deadline_exceeded`（[14](14-failure-semantics.md)） |
+| `-criu-dump-parallel` | `GSD_CRIU_DUMP_PARALLEL` | `0`，即 guest 的 CPU 数 | 不传，用默认 | 一次 checkpoint 里最多同时跑几个 criu dump（每棵树一个）。`1` 等于逐棵串行（[11](11-checkpoint.md) §2.3） |
+| `-criu-restore-parallel` | `GSD_CRIU_RESTORE_PARALLEL` | `0`，即 guest 的 CPU 数 | 不传，用默认 | 一次 restore 里最多同时跑几个 criu restore（[12](12-restore.md) §4.4） |
+| `-criu-lazy-restore` | `GSD_CRIU_LAZY_RESTORE`（值为 `1` 时打开） | 关 | 不传，关 | 延迟页恢复。restore 变快，但 restore 之后的第一次 checkpoint 变成全量，下一次请求开头要等补页结束（[12](12-restore.md) §4.5、[16](16-known-limits.md) L-20） |
 | `-version` | 无 | — | — | 打印版本号（当前 `0.1.0`）后退出 |
 | `-commit` | 无 | — | — | 打印构建时嵌入的提交号后退出 |
 
@@ -141,7 +144,7 @@ SDK 一侧与 gsd 有关的配置都在 `py-sdk/e2b/connection_config.py`。每�
 | 项 | 值 | 位置 |
 |---|---|---|
 | CRIU 的路径 | `/usr/sbin/criu` | `ckpt/criu.go:20` |
-| CRIU 保存的日志级别 | `-v4`（恢复用默认级别） | `buildCriuDumpCmd`（`ckpt/criu.go:51`） |
+| CRIU 保存的日志级别 | `-v4`，由 CRIU 用 `-o criu-dump.log` 直接写进镜像目录（恢复用默认级别，输出经 gsd 进 journal） | `buildCriuDumpCmd`（`ckpt/criu.go:51`） |
 | "用户进程"的 uid | 1000 | `ckpt/pid.go:17` |
 | 一次操作里全部树的 CRIU 合计时限 | 单棵时限的 3 倍 | `ckpt/service.go:33` |
 | CRIU 超时后从 SIGTERM 到 SIGKILL 的宽限 | 2 秒 | `ckpt/criu.go:23` |
@@ -182,8 +185,8 @@ SDK 把 checkpoint 的结果放进 `CheckpointInfo.timings`，把最近一次成
 - **没发生的阶段不出现。** 值为 0 的字段不会被发送，SDK 的字典里就没有这个键。例如没有用户进程时的 checkpoint 没有 `criu_dump_ms`、`precheck_ms`、`stopped_ms`；目标只有文件系统的 restore 没有 `criu_restore_ms`。读的时候用 `.get()`。
 - **`Timings` 里还有一个 `process_trees`**，是这次保存或恢复的树的数量，不是耗时。SDK 不把它放进 `timings` 字典（字典里只有以 `_ms` 结尾的键），而是放在 `CheckpointInfo.process_trees`。
 - **各项加起来不等于 `total_ms`。** 总时间里还有建目录、量镜像大小、写状态文件之前的收尾等没有单独计的部分；`stopped_ms` 与 `overlay_sink_ms` 在时间上是重叠的（切层发生在停止窗口里）。
-- **`stopped_ms` 是用户进程感受到的停顿的下界**，不是全部：每棵树在自己被保存期间也是冻住的，那一段算在 `criu_dump_ms` 里。一棵树时，进程实际不运行的时间大致是 `criu_dump_ms + stopped_ms`；多棵树时第一棵停得最久，`stopped_ms` 约等于其余各棵的保存时间之和再加切层的时间。
-- **多棵树的耗时线性增长。** 保存与恢复都是逐棵串行的。
+- **`stopped_ms` 是用户进程感受到的停顿的下界**，不是全部：每棵树在自己被保存期间也是冻住的，那一段算在 `criu_dump_ms` 里。一棵树时，进程实际不运行的时间大致是 `criu_dump_ms + stopped_ms`；多棵树时最早 dump 完的那棵停得最久，`stopped_ms` 约等于从它 dump 完到最后一棵 dump 完的时间再加切层的时间。
+- **多棵树。** `9728cef73` 起保存与恢复都并行，同时最多 guest 的 CPU 数棵。`criu_dump_ms`、`criu_restore_ms` 仍是各棵之和（与以前含义相同，随树数增长）；实际经过的时间看 `total_ms`，或日志里的 `criu_dump_wall_ms`、`criu_restore_wall_ms`（§3.2）。
 
 每个键在一次请求的时间线上落在哪里，见 [13](13-end-to-end.md)；各项的实测值与量级见 [20](20-920b-performance.md)。
 
@@ -192,6 +195,7 @@ SDK 把 checkpoint 的结果放进 `CheckpointInfo.timings`，把最近一次成
 同样的数字也打在 gsd 的日志里，字段名与计时键相同（`precheck_ms` 除外，它只在响应里）。日志里另有响应中没有的细分：
 
 **每棵树各自的耗时。** 响应里的 `criu_dump_ms`、`criu_restore_ms` 是合计；日志里每棵树一行：`criu dump succeeded` 和 `user process tree restored`，各带字段 `tree`（形如 `t1 (root pid 1203, 2 of 3)`）和这棵树自己的 `criu_dump_ms` 或 `criu_restore_ms`。
+并行时另有一行 `all process trees dumped`（restore 时是 `all process trees restored`），带 `process_trees`、`parallel`（实际并发数）和这一段实际经过的时间 `criu_dump_wall_ms`（`criu_restore_wall_ms`）。打开延迟页恢复时，`user process tree restored` 带 `lazy_pages`，下一次请求开头有一行 `lazy page fill finished`，带 `lazy_wait_ms`（这次请求为等补页多花的时间）和 `failed`。
 哪棵树是增量也只在日志里：增量的树在保存前有一行 `using incremental CRIU dump`，带 `prev_mem`（父镜像目录）和 `parent_id`。每棵树镜像的大小和父节点则在 `state.json` 里（§6）。
 
 **杀进程的细分。** restore 的 `user processes killed` 一行，除了 `kill_ms` 还有：
@@ -221,7 +225,7 @@ journalctl -u gsd --no-pager -o cat | grep -F '"checkpoint_id":"ckpt_17599280001
 journalctl -u gsd --no-pager -o cat | grep -E '"level":"(warn|error)"'
 ```
 
-`grep '^{'` 是为了滤掉混在同一个 journal 里的 CRIU 输出（§4.2）。从宿主上取，就通过 SDK 以 root 身份在沙箱里跑这些命令（[29](29-troubleshooting.md) 开头有现成的写法）。
+`grep '^{'` 是为了滤掉混在同一个 journal 里的 CRIU restore 输出（§4.2）。从宿主上取，就通过 SDK 以 root 身份在沙箱里跑这些命令（[29](29-troubleshooting.md) 开头有现成的写法）。
 
 下面是值得认识的消息。左列是 `message` 的原文，可以直接拿去 grep。
 
@@ -291,20 +295,19 @@ journalctl -u gsd --no-pager -o cat | grep -E '"level":"(warn|error)"'
 
 ### 4.2 CRIU 的日志
 
-CRIU 的输出有两个去处，内容相同。
-
 **镜像目录里的日志文件。** 每棵树的镜像目录是 `<snapshot-store>/<checkpoint ID>_mem/t<序号>/`，其中：
 
-- `criu-dump.log`：这棵树保存时的输出，`-v4` 级别，很详细。保存成功时它留在镜像目录里，占内存盘的空间，随 checkpoint 一起删除。**保存失败时整个镜像目录连同它立即被删**，所以失败之后到这里找不到它——它的最后 2048 字节被带进了返回给调用方的错误信息里，完整内容在 journal 里。
+- `criu-dump.log`：这棵树保存时的输出，`-v4` 级别，很详细，由 CRIU 自己写（`-o`）。保存成功时它留在镜像目录里，占内存盘的空间，随 checkpoint 一起删除。**保存失败时整个镜像目录连同它立即被删**；删之前 gsd 把失败那棵树的整份日志拷到 `<snapshot-store>/last-failed-criu-dump.log`（只留最近一次失败的），最后 2048 字节同时带进返回给调用方的错误信息。
 - `criu-restore.log`：这棵树最近一次恢复时的输出，每次恢复覆盖。恢复失败时文件留着，尾部同样带进错误信息；路径在 `criu restore failed` 那行日志的 `log` 字段里。
+- `criu-lazy-pages.log`：打开延迟页恢复时，补页守护进程的输出（`-v2`）。
 
-**gsd 的 journal。** CRIU 的标准输出与标准错误同时接在 gsd 的标准错误上，所以全部内容也进了 `journalctl -u gsd`，是不带 JSON 外壳的原始文本行。看一次失败的完整 CRIU 输出：
+看最近一次保存失败的完整 CRIU 输出：
 
 ```bash
-journalctl -u gsd --no-pager -o cat | grep -v '^{' | grep -n -i -E 'error|warn|fail' | tail -n 40
+grep -n -i -E 'error|warn|fail' /var/lib/gsd/snapshots/last-failed-criu-dump.log | tail -n 40
 ```
 
-这带来两个副作用，都在 §4.4 里说。
+**gsd 的 journal。** restore 时 CRIU 的标准输出与标准错误同时接在 gsd 的标准错误上，所以也进了 `journalctl -u gsd`，是不带 JSON 外壳的原始文本行，量很小。`9728cef73` 以前 dump 的 `-v4` 输出也走这条路，带来 §4.4 里的两个副作用。
 
 ### 4.3 内核的输出
 
@@ -330,10 +333,10 @@ guest 内核的输出用 `dmesg` 看。与 gsd 有关的有三类。
 **journal 不随 restore 回滚。** journal 文件在 `/var/log` 下，而启动脚本把 `/var/log` 从底层磁盘单独挂出来，不在 overlay 上（`overlay-init.sh.tpl` 的 Step 4）。所以 restore 之后 journal 是完整的，能看到 restore 之前、包括被丢弃的那段时间里的全部日志。
 2026-10-09 在新 920B 上做过确认：guest 里 `/var/log` 是来自 `/dev/root` 的独立 ext4 挂载，journald 的存储在 `/var/log/journal`；checkpoint 之后写入的 journal 条目和在 `/var/log` 下新建的文件，restore 之后都还在，而同时在 `/home/user` 下新建的对照文件被回滚掉了。那次用的是没有用户进程的 checkpoint，带进程镜像的 restore 没有单独测（`/var/log` 是独立挂载，按理不受影响）。随手册附带的 `verify_clear_refs_race` 脚本在开头把 journald 改成了只写内存（`Storage=volatile`），目的是不让长时间的测试把根盘写满，不要据此认为 journal 会回滚。
 
-**journal 会持续增长。** 每次 checkpoint 都把 `-v4` 级别的 CRIU 输出写进 journal。新 920B 上 2026-10-08 的循环测试里，journal 每轮增长约 0.1 到 0.7 MB，直到 journald 自己的容量上限为止；`/var/log` 与文件系统的各层在同一块根盘上，所以这部分增长会体现在根盘占用里，容易被误认为是层没有回收。
+**journal 会持续增长（`9728cef73` 以前）。** 旧版本每次 checkpoint 都把 `-v4` 级别的 CRIU 输出写进 journal；新版本 dump 日志不进 journal，这一条基本消失。旧版本在新 920B 上 2026-10-08 的循环测试里，journal 每轮增长约 0.1 到 0.7 MB，直到 journald 自己的容量上限为止；`/var/log` 与文件系统的各层在同一块根盘上，所以这部分增长会体现在根盘占用里，容易被误认为是层没有回收。
 长时间高频做 checkpoint 的沙箱要么给 journald 设一个明确的上限，要么定期清理（[29](29-troubleshooting.md)）。
 
-**journald 的限流会丢 gsd 的日志。** journald 默认对每个服务按时间窗口限流。CRIU 的 `-v4` 输出量很大，连续做十来次 checkpoint 就可能触发限流，这时被丢掉的不只是 CRIU 的行，gsd 自己的 JSON 日志也会一起丢。
+**journald 的限流会丢 gsd 的日志。** journald 默认对每个服务按时间窗口限流。`9728cef73` 以前 CRIU dump 的 `-v4` 输出也进 journal，量很大，连续做十来次 checkpoint 就可能触发限流（新版本主要来源已去掉，但高频压测时仍建议照下面关掉限流），这时被丢掉的不只是 CRIU 的行，gsd 自己的 JSON 日志也会一起丢。
 症状是 gsd 的日志在某个时刻之后变得残缺，同时 `journalctl -u systemd-journald` 里有 `Suppressed` 字样的行。需要完整日志时（验收、排障、压测），先给 gsd 关掉按单元的限流再开始：
 
 ```bash
@@ -466,6 +469,6 @@ python3 -m json.tool < /var/lib/gsd/snapshots/state.json | head -n 60
 - `HOST_GSD_PATH` 默认 `/fc-gsd/gsd`、默认注入；只有小写 `off` 才关闭注入；开着而文件读不到时建模板失败。
 - `overlay.ckpt_move_open` 默认 2：checkpoint 时为以写方式打开的文件留拷贝，保证之后的写入不改到 checkpoint；可在沙箱里写 sysfs 调低，以正确性换时间。
 - 计时键都是 gsd 自己计的毫秒数：`total_ms` 不含排队与网络；`criu_dump_ms`、`criu_restore_ms` 是各棵树之和；`stopped_ms` 从第一棵树保存完算起；没发生的阶段不出现。每棵树的明细和杀进程的细分只在日志里。
-- gsd 的 JSON 日志与 CRIU 的原始输出都在 `journalctl -u gsd` 里；保存失败时镜像目录里的 `criu-dump.log` 已被删除，看错误信息里的尾部或 journal。
+- gsd 的 JSON 日志与 CRIU restore 的原始输出在 `journalctl -u gsd` 里；保存失败时镜像目录里的 `criu-dump.log` 已被删除，完整一份在 `<snapshot-store>/last-failed-criu-dump.log`。
 - journal 在单独挂出的 `/var/log` 上，不随 restore 回滚（2026-10-09 在新 920B 上确认）；它会因 CRIU 的详细输出持续增长，journald 的限流还可能丢掉 gsd 的日志，需要完整日志时先关限流。
 - `/health` 始终是 HTTP 200，是否降级、哪一类降级看响应体的 `reason`；`state.json` 是排障的第一手状态，能看到层栈、每棵树的增量关系和被隐藏的 checkpoint，不要手工改它。

@@ -208,7 +208,9 @@ gsd 的启动参数取值在 `template/build/core/rootfs/templates.go:57-61`。
 | `<ckpt>_mem/t<i>/` | 第 `i` 棵用户进程树的 CRIU 镜像（按根 pid 升序编号，一棵树时是 `t0`） |
 | `<ckpt>_mem/t<i>/inventory.img`、`pstree.img`、`pages-*.img`、`pagemap-*.img` 等 | CRIU 的镜像文件。restore 前检查 `inventory.img` 可读 |
 | `<ckpt>_mem/t<i>/parent` | 增量镜像里 CRIU 留下的符号链接，指向父镜像目录（上一个 checkpoint 里同一棵树的目录）。restore 沿它读父镜像 |
-| `<ckpt>_mem/t<i>/criu-dump.log` | dump 的详细日志。dump 失败时随镜像目录删除，尾部进错误信息 |
+| `<ckpt>_mem/t<i>/criu-dump.log` | dump 的详细日志，CRIU 自己写。dump 失败时随镜像目录删除，尾部进错误信息，完整一份拷到 `last-failed-criu-dump.log` |
+| `last-failed-criu-dump.log` | 在 snapshot store 根下，最近一次失败的 dump 的完整日志 |
+| `<ckpt>_mem/t<i>/criu-lazy-pages.log`、`lazy-pages.socket` | 延迟页恢复时补页守护进程的日志和它的 socket（默认关，[12](12-restore.md) §4.5） |
 | `<ckpt>_mem/t<i>/criu-restore.log` | 最近一次 restore 的日志（每次覆盖），失败时尾部进错误信息 |
 | `state.json` | gsd 的持久化状态，见 §3.4 |
 | `.trash/` | 回收站 |

@@ -86,7 +86,7 @@ gsd 用的是 `--leave-stopped`，原因见 §6。
 dump 的命令行由 `buildCriuDumpCmd`（`ckpt/criu.go:51`）拼出：
 
 ```
-/usr/sbin/criu dump --tree <根 pid> -D <镜像目录> --shell-job --leave-stopped -v4 --track-mem [--prev-images-dir <父镜像目录>]
+/usr/sbin/criu dump --tree <根 pid> -D <镜像目录> --shell-job --leave-stopped -v4 -o criu-dump.log --track-mem [--prev-images-dir <父镜像目录>]
 ```
 
 restore 的命令行由 `buildCriuRestoreCmd`（`ckpt/criu.go:100`）拼出：
@@ -102,6 +102,7 @@ restore 的命令行由 `buildCriuRestoreCmd`（`ckpt/criu.go:100`）拼出：
 | `--shell-job` | 允许保存"会话和终端属于树外某个进程"的任务 | 用户命令是 envd 启动的，它们所在的会话不是由树里的进程建立的。按 CRIU 的规则，这类任务不加这个选项不能保存 |
 | `--leave-stopped` | dump 完让任务停在原地 | 见 §6：从 dump 结束到 soft-dirty 清零之间，进程不能再写内存 |
 | `-v4` | 最详细的日志 | 失败时把日志尾部带进错误信息（[14](14-failure-semantics.md)）。只在 dump 时加 |
+| `-o criu-dump.log` | 日志由 CRIU 自己写进镜像目录里的这个文件 | 不经 gsd 转写进 journal，省下每棵树 7～9 ms（[11](11-checkpoint.md) §2.3） |
 | `--track-mem` | 打开内存改动跟踪 | 让这次 dump 结束后内核开始记"之后哪些页被写过"，为下一次增量做准备。每次 dump 都加 |
 | `--prev-images-dir` | 指定父镜像目录，本次只写相对它改过的页 | 只在能做增量时加（§2） |
 | `--restore-detached` | 恢复完成后 CRIU 自己退出，不等被恢复的进程 | 被恢复的根进程原本是 CRIU 的子进程，CRIU 一退出它就被 PID 1 收养，从此与 gsd 没有父子关系 |

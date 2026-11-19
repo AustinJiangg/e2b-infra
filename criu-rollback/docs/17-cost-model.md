@@ -58,13 +58,15 @@ checkpoint 的 `total_ms` 约等于 `criu_dump_ms` 加 1～2 ms。`criu_dump_ms`
 同一口径下的三种情形（新 920B，2026-10-08，一棵 64 MiB 的树，8 轮的 p50）：不改内存的增量 dump 约 10 ms，全部改写后的增量 dump 约 43 ms，全量 dump 约 50 ms。
 第一种情形是 dump 的固定开销（冻结进程、遍历页表、写元数据）。后两种差别不大，说明页面写出的速度是主要因素。
 
+`9728cef73` 把 dump 日志改成 CRIU 直接写文件后，固定开销少了 6～7 ms：920B 上 256 MiB 进程一页不改的 checkpoint 18.3 → 12.3 ms，改 16 MiB 时 26.6 → 19.1 ms（每个测点 20 次的服务端中位数）。原来这一段花在 `-v4` 日志经管道转写进 journal，发生在进程冻结期间。
+
 `stopped_ms`（进程被停住的时长）在单树时只有 0.7～2.4 ms：它从 dump 结束算起，只包含沉下 upper 和清 soft-dirty。dump 本身期间进程也是冻结的，那段时间计在 `criu_dump_ms` 里。
 
 ---
 
-## 3. 多棵树：线性增长
+## 3. 多棵树
 
-每棵树各做一次 dump 和一次 restore，串行执行，所以各项随树的数量线性增长。一、二、三棵树的完整分段见 [20](20-920b-performance.md) §3。
+每棵树各做一次 dump 和一次 restore。本节下面的数据是 `daae6968f` 及以前逐棵串行时量的，各项随树的数量线性增长。一、二、三棵树的完整分段见 [20](20-920b-performance.md) §3。
 
 每多一棵 64 MiB 的树的边际代价（新 920B，2026-10-08，`gsd-final-20261008` 那一轮，8 轮的 p50，与第 20 章的确认验证不是同一轮）：restore 约 +28 ms，增量 dump 约 +11 ms，全量 dump 约 +45 ms。
 
@@ -73,7 +75,17 @@ checkpoint 的 `total_ms` 约等于 `criu_dump_ms` 加 1～2 ms。`criu_dump_ms`
 
 多树独有的预检（查树间共享的管道和 socket）开销很小：`precheck_ms` 从单树的 0.04 涨到三棵树的 0.13。
 
-串行是有意的选择，理由和并行化时要注意的问题在 [12](12-restore.md)。这条线性关系的依据只到三棵树（[23](23-gaps-and-boundaries.md)）。
+这条线性关系的依据只到三棵树（[23](23-gaps-and-boundaries.md)）。
+
+`9728cef73` 起 dump 和 restore 都并行（[11](11-checkpoint.md) §2.3、[12](12-restore.md) §4.4），同时最多 guest 的 CPU 数棵，同时每棵树的 dump 省掉了日志转写的 7～9 ms。920B 上 16 棵树、guest 2 个 vCPU（每个测点 20 次的服务端中位数，`daae6968f` 对 `9728cef73`）：
+
+| 项 | `daae6968f` | `9728cef73` |
+|---|---|---|
+| checkpoint `total_ms` | 238 ms | 65 ms |
+| `stopped_ms` | 222 ms | 53 ms |
+| restore `total_ms` | 137 ms | 96 ms |
+
+`criu_dump_ms`、`criu_restore_ms` 仍是各棵之和，所以它们照样随树数增长；要看实际经过的时间，看 `total_ms`，或 gsd 日志里的 `criu_dump_wall_ms`、`criu_restore_wall_ms`。
 
 ---
 
@@ -147,7 +159,7 @@ THP 开着时零散的写入会让每次增量都退化成全量。原理和实�
 1. 单树 restore 约等于 `criu_restore` 加 `kill` 加不到 1 ms。两大项都随进程内存总量增长，与这一代改了多少几乎无关。
 2. 单树 checkpoint 约等于 `criu_dump` 加 1～2 ms，`criu_dump` 随本次要写出的页数增长；不改内存时只剩固定开销。
 3. restore 的下限由页面拷贝和杀进程两项真实工作量构成，再加 THP 关闭带来的缺页。再往下压要么打开 THP，要么改变设计，都不是修缺陷的范畴。
-4. 多棵树串行处理，每多一棵 64 MiB 的树，restore 约 +28 ms、增量 dump 约 +11 ms、全量 dump 约 +45 ms；先 dump 的树要多停"其余各棵的 dump 时间之和"。依据只到三棵树。
+4. 逐棵串行时，每多一棵 64 MiB 的树，restore 约 +28 ms、增量 dump 约 +11 ms、全量 dump 约 +45 ms；先 dump 的树要多停"其余各棵的 dump 时间之和"。依据只到三棵树。`9728cef73` 起并行，16 棵树的 checkpoint 238 → 65 ms、restore 137 → 96 ms。
 5. 另有三项按量或按次的代价：可写打开的文件在 checkpoint 时每 MiB 约 0.8 ms；鉴权每个请求约 0.6 ms；回收逻辑让 restore 的 ioctl 多 0.04～0.06 ms。
 6. THP 为 never 的代价不可免除，因为打开它会让增量 checkpoint 退化成全量。
 7. 差 3 ms 以内的读数不解释；压测墙钟和调试内核上的耗时都不能当性能依据。

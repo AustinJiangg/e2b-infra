@@ -125,16 +125,16 @@ journalctl -u gsd --no-pager -o cat | grep -F 'not enough room' | tail -n 3   # 
 最常见的是 CRIU 保存失败：
 
 ```
-Code.internal: criu dump failed: exit status 1; tail of criu-dump.log (removed with the failed images; full log in the gsd journal):
+Code.internal: criu dump failed, nothing was changed: exit status 1; tail of criu-dump.log (removed with the failed images; full log kept at /var/lib/gsd/snapshots/last-failed-criu-dump.log):
 …CRIU 日志的最后 2048 字节…
 ```
 
-多棵树时开头是 `criu dump failed for process tree t1 (root pid …, 2 of 3); the 1 tree(s) dumped before it were resumed and their images discarded:`。
+多棵树时开头是 `criu dump failed for process tree t1 (root pid …, 2 of 3), nothing was changed; the 2 other tree(s) dumped successfully were resumed and their images discarded:`。
 
-看哪里：先读错误信息里的那段日志尾部，通常最后几行 `Error` 就是原因。不够时看 journal 里完整的 CRIU 输出（失败的镜像目录已经被删，`criu-dump.log` 文件不在了）：
+看哪里：先读错误信息里的那段日志尾部，通常最后几行 `Error` 就是原因。不够时看留下的完整日志（失败的镜像目录已经被删，`criu-dump.log` 不在了；`9728cef73` 以前的版本没有这份文件，完整输出在 journal 里，用 `journalctl -u gsd --no-pager -o cat | grep -v '^{'` 看）：
 
 ```bash
-journalctl -u gsd --no-pager -o cat | grep -v '^{' | grep -n -E 'Error|Warn' | tail -n 30
+grep -n -E 'Error|Warn' /var/lib/gsd/snapshots/last-failed-criu-dump.log | tail -n 30
 journalctl -u gsd --no-pager -o cat | grep '^{' | grep -F 'criu dump failed' | tail -n 3
 ```
 
@@ -430,7 +430,7 @@ print('当前层栈', len(s['overlay']['layers']), '层；checkpoint', len(s['ch
 
 | 谁在涨 | 原因 | 处置 |
 |---|---|---|
-| `/var/log`（journal） | gsd 把 CRIU 的详细输出写进 journal，每次 checkpoint 都增长，一直涨到 journald 的上限。`/var/log` 不在 overlay 上，restore 不会把它退回去 | 已知项（[16](16-known-limits.md) 的 L-13）。`journalctl --vacuum-size=64M` 立即清理；长跑的沙箱在模板里给 journald 设 `SystemMaxUse` |
+| `/var/log`（journal） | `9728cef73` 以前 gsd 把 CRIU dump 的详细输出写进 journal，每次 checkpoint 都增长，一直涨到 journald 的上限（新版本不再如此）。`/var/log` 不在 overlay 上，restore 不会把它退回去 | 已知项（[16](16-known-limits.md) 的 L-13）。`journalctl --vacuum-size=64M` 立即清理；长跑的沙箱在模板里给 journald 设 `SystemMaxUse` |
 | `/overlay/layers/L<n>` | 每个 checkpoint 之间写过的文件构成一层，层要留到引用它的 checkpoint（包括隐藏的）都删掉 | 删不需要的 checkpoint。对照 `state.json`：`L<n>` 只要还出现在 `overlay.layers` 或任一 checkpoint 的 `layers` 里就不会被回收 |
 | `/overlay/layers/restore_*_upper`、`upper_*_next` | 当前的可写层，以及刚被切走、等待后台回收的旧可写层 | 正常只有当前那一对加少量待回收的；成批堆积且不减少时取 gsd 日志里 `cannot move orphan dir to trash`、`failed to remove reclaimed dir` 上报 |
 | `/tmp` | `/tmp` 是根文件系统的一部分，占根盘而不是内存 | 清理 `/tmp`；注意它会随 restore 回到 checkpoint 时的内容 |
@@ -506,7 +506,7 @@ grep -n -E 'BUG|Oops|KASAN|panic|lockup|Call trace|overlayfs:|Unable to handle' 
 
 - 先取三样第一手信息：`/health` 的响应体、`journalctl -u gsd` 里的告警与错误、`state.json`。以 root 在 guest 里取证不会干扰用户进程，也不会被 restore 杀掉。
 - checkpoint 的拒绝（`failed_precondition`、`resource_exhausted`）和失败（`internal`、`deadline_exceeded`）都保证沙箱没被改动；失败之后的下一次 checkpoint 存全量。树间管道就合并成一棵树，放不下就删 checkpoint（从新往旧），层栈太深只能靠 restore 到较早的点来变浅。
-- CRIU 保存失败先读错误信息里的日志尾部；失败的镜像目录已被删，完整输出在 journal 里。
+- CRIU 保存失败先读错误信息里的日志尾部；失败的镜像目录已被删，完整输出在 `/var/lib/gsd/snapshots/last-failed-criu-dump.log`。
 - `data_loss` 之后唯一的出路是再 restore 一次；同一个 checkpoint 反复失败就换一个，任何一次成功的 restore 都解除降级。
 - 降级分三类：restore 半途失败（再 restore）、状态文件写不进（腾内存盘空间）、致命（状态与磁盘对不上，保留状态文件和日志后重建沙箱）。`/health` 永远是 200，要读响应体。
 - "换了文件却没生效"和各种"本应修掉的现象"，根因几乎总是模板没有重建；建模板的自检不验证内核是否带补丁，要到 guest 里核对版本串。

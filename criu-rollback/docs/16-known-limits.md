@@ -21,7 +21,7 @@
 
 ## 结论先行
 
-- **设计如此的 12 项**（§1）：其中对使用方影响最大的是三条——树与树之间不能共用管道或 socket；多棵树的耗时随树数线性增长且树间不是原子的；
+- **设计如此的 12 项**（§1）：其中对使用方影响最大的是三条——树与树之间不能共用管道或 socket；多棵树的耗时随树数增长且树间不是原子的（`9728cef73` 起多棵树并行，增长慢了很多）；
   只支持 arm64 guest。
 - **见过但没查清的 3 项**（§2）：新沙箱首个请求偶发约 5 秒、一组压测里 checkpoint 返回过 2 次 `internal`（同一个沙箱的第 174、177 轮）、极低概率的单发 `ENOTEMPTY`。
   三项都不损坏数据，都没有稳定的复现办法。
@@ -29,7 +29,7 @@
 - **内核里记录在案的 4 项**（§4）：`/proc/mounts` 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留，以及一条已在最后一轮处理、为对照旧结果而保留的记录。
 - 950：只跑了首轮验收和四组压测（全部 PASS，[22](22-950-results.md)）。本章的实测都在新 920B 上完成。
 
-表里"状态"一列的取值：**设计如此**（是取舍的结果，不计划改）、**未查**（见过现象，原因不明）、**未测**（有代码、有单测，没有新 920B 上的结果）、**未处理**（知道问题在哪，没有改）。
+表里"状态"一列的取值：**设计如此**（是取舍的结果，不计划改）、**未查**（见过现象，原因不明）、**未测**（有代码、有单测，没有新 920B 上的结果）、**未处理**（知道问题在哪，没有改）、**已修**（这一版起不再出现）、**已减轻**（主要来源已去掉，仍可能遇到）。
 
 ---
 
@@ -39,7 +39,7 @@
 |---|---|---|---|---|---|
 | L-01 | 两棵用户进程树之间共用一条管道（读端和写端分在两棵树里）或持有同一个 socket 时，checkpoint 返回 `failed_precondition`，什么都没动。连接两棵树的 unix socket（两端是不同的 inode）由 CRIU 在 dump 时报 external socket，checkpoint 返回 `internal` 并带日志尾部 | 这样的进程组合做不了 checkpoint | 每棵树单独 dump、单独 restore，跨树的连接接不回去。实测过"只有一端在树里的匿名管道"：dump 和 restore 都成功，但恢复后管道静默断开（读端读到 EOF），所以必须在 dump 前拒绝。gsd 不给 CRIU 加放宽外部资源的选项 | 需要互相通信的进程由同一个命令起成一棵树。只是共同继承、另一端在树外的管道（例如几个后台命令共用的通向 envd 的标准输出）不受影响 | 设计如此 |
 | L-02 | 两棵树之间共享的匿名共享内存（只可能来自共同祖先）检查不出来；restore 之后各是各的一份 | 依赖这块共享内存通信的两棵树，恢复后互相看不到对方的写入 | 预检只看 `/proc/<pid>/fd`，匿名共享映射不在其中 | 同上：放进同一棵树 | 设计如此 |
-| L-03 | 多棵树时 checkpoint 和 restore 的耗时随树的数量线性增长；树之间不是原子的 | 树多时冻结窗口变长：最先 dump 的那棵要一直停到最后一棵 dump 完。后 dump 的树比先 dump 的多跑了一小段（一棵树的 dump 时间），通过文件或网络协作的两棵树恢复后看到的对方状态可能略旧 | 每棵树各做一次 CRIU dump 和 restore，串行执行（[04](04-goals-and-tradeoffs.md) 的取舍二） | 需要严格一致的进程放进同一棵树；控制同时存在的后台命令数量。量级见 [17](17-cost-model.md)，判定值见 [20](20-920b-performance.md) | 设计如此 |
+| L-03 | 多棵树时 checkpoint 和 restore 的耗时随树的数量增长；树之间不是原子的 | 树多时冻结窗口变长：最先冻住的那棵要一直停到最后一棵 dump 完。晚冻住的树比早冻住的多跑了一小段，通过文件或网络协作的两棵树恢复后看到的对方状态可能略旧 | 每棵树各做一次 CRIU dump 和 restore。`9728cef73` 起并行，同时最多 guest 的 CPU 数棵（模板 2 个 vCPU）；树数超过并发数时仍按批增长。920B，16 棵树：checkpoint 238 → 65 ms、冻结窗口 222 → 53 ms、restore 137 → 96 ms（[11](11-checkpoint.md) §2.3、[12](12-restore.md) §4.4） | 需要严格一致的进程放进同一棵树；控制同时存在的后台命令数量；树多的模板可多给 vCPU。量级见 [17](17-cost-model.md)，判定值见 [20](20-920b-performance.md) | 设计如此，`9728cef73` 起减轻 |
 | L-04 | checkpoint 时，每个"以写方式打开着"的 upper 文件要被整份拷贝一次，约每 MiB 0.8 ms，拷贝期间整个 overlay 上的文件操作都被挡住 | 开着大文件（例如数据库文件）做 checkpoint 会拉长 checkpoint，并让沙箱里所有文件操作停顿相应的时间 | 这类文件在 checkpoint 之后的写不能落进 checkpoint 层，所以要把原文件留在 upper、层里放拷贝；拷贝在切换的排它锁内做（[08](08-overlay-switch-consistency.md) "打开的文件跨切换的语义"一节） | 内核模块参数 `overlay.ckpt_move_open`：设为 `1` 只搬被映射的文件，设为 `0` 不搬（此时被映射文件的写会进入 checkpoint，不随 restore 回滚）。checkpoint 前关闭不需要的大文件 | 设计如此 |
 | L-05 | 硬链接数大于 1 的文件如果以写方式打开着，checkpoint 时不搬；之后经原 fd 或映射的写会进入 checkpoint，restore 回滚不掉。内核打一行限速告警 `checkpoint: could not move open file ...` | 该文件在这个 checkpoint 里的内容会被后续写入改掉 | 它的另一个名字仍然把 inode 留在沉下去的层里，搬走一个名字没有意义 | 避免对"多硬链接且长期开着写"的文件依赖回滚；dmesg 里有告警可查 | 设计如此 |
 | L-06 | restore 之后，不被 gsd 杀掉的进程（root 服务、envd 代为执行的操作）如果 cwd 停在一个在目标 checkpoint 里不存在的目录，从这个 cwd 出发的写、创建、rename、删除返回 `ESTALE`。cwd 停在目标里存在的目录时，持有者看到的是目标时间线的内容；持有**文件**的进程继续看到旧时间线的内容 | 范围外进程在 restore 之后可能遇到 `ESTALE`，或者手里的 fd 与按路径重新打开看到的内容不同 | 被丢弃时间线上的对象只读保留，不允许把它们 copy-up 回当前 upper，否则被回滚的内容又被写回来（[09](09-overlay-cache-and-reclaim.md) "修复之后，范围外的进程会看到什么"一节） | 长期运行的 root 服务不要把 cwd 留在会被回滚的目录里；遇到 `ESTALE` 重新 `chdir` 到绝对路径、重新打开文件 | 设计如此 |
@@ -54,13 +54,14 @@
 
 | 编号 | 现象 | 影响 | 原因 | 规避办法 | 状态 |
 |---|---|---|---|---|---|
-| L-13 | gsd 把 CRIU dump 和 restore 的详细输出打进 journal，`/var/log` 在根盘上持续增长，直到 journald 自己的上限 | 根盘占用随 checkpoint 次数上涨一段后稳定。实测量级（新 920B，2026-10-08，回收修复当轮，checkpoint→restore→delete 循环口径）每轮约 0.1 到 0.7 MB，8 到 10 MiB 一跳。journal 增量的确认读数见 [19](19-920b-functional.md) 的 G-11 项。它**不是**层泄漏，但早期曾被误认成层泄漏 | CRIU 以最详细的日志级别运行，完整输出经 gsd 的标准错误进 journal；`/var/log` 从 ext4 bind 进来，不随 restore 回滚 | 调小 guest 里 journald 的容量上限；评估根盘占用时把 `/var/log` 单独扣除 | 设计如此 |
+| L-13 | `9728cef73` 以前：gsd 把 CRIU dump 的详细输出打进 journal，`/var/log` 在根盘上持续增长，直到 journald 自己的上限 | 根盘占用随 checkpoint 次数上涨一段后稳定。实测量级（新 920B，2026-10-08，回收修复当轮，checkpoint→restore→delete 循环口径）每轮约 0.1 到 0.7 MB，8 到 10 MiB 一跳。journal 增量的确认读数见 [19](19-920b-functional.md) 的 G-11 项。它**不是**层泄漏，但早期曾被误认成层泄漏 | CRIU 以最详细的日志级别运行，完整输出经 gsd 的标准错误进 journal；`/var/log` 从 ext4 bind 进来，不随 restore 回滚 | `9728cef73` 起 dump 日志由 CRIU 直接写进镜像目录（在 2 GiB 的内存盘上，随 checkpoint 删除），journal 里只剩 gsd 自己的日志和 restore 时的简短输出。旧版本：调小 guest 里 journald 的容量上限；评估根盘占用时把 `/var/log` 单独扣除 | 已修（`9728cef73`） |
 | L-14 | 没有自动清理：checkpoint 的镜像（占 guest 内存，上限 2 GiB 的 tmpfs）和层（占根盘）要调用方自己删。有增量子节点的 checkpoint 被删时只是隐藏，空间要等子节点全部删掉才释放 | 长期不删会先撞上容量预检（`resource_exhausted`） | 没有做保留策略；增量镜像依赖父镜像，父镜像必须活得比子久 | 调用方定期 delete；用 list 返回的镜像大小做预算 | 设计如此 |
 | L-15 | 在"带 gsd"模式下建的模板与"不带 gsd"模式下建的模板之间互相派生（以一种模式建的模板为基础、在另一种模式下继续构建）没有处理 | 行为未定义 | 开关只保证两种模式的 base 层缓存不互相复用（缓存键里多一个 `"gsd"`）；跨模式派生涉及 init 和根文件系统布局的切换，没有做。本条没有对着模板派生的代码逐步核实，属未验证 | 同一台 orchestrator 上不要混用两种模式建有派生关系的模板 | 未处理、未验证 |
 | L-16 | 建模板时的自检不验证 guest 内核是否带补丁：它只看 `gsd.service` 是否 active、`/health` 是否为 `ok`、`/usr/sbin/criu` 是否 4.x | `HOST_KERNELS_DIR` 指向没打补丁的内核时模板照样建成功，要到第一次 checkpoint 才失败 | 自检脚本（`gsdCheckScript`）不做 checkpoint，也不读内核版本串；gsd 的 `/health` 不探测切层 ioctl 是否存在 | 建完模板按 [27](27-deployment.md) 的"部署后自检"到 guest 里核对内核版本串，再跑 [30](30-acceptance-runbook.md) 的第一个验收脚本；症状与处置见 [29](29-troubleshooting.md) | 未处理 |
-| L-17 | journald 默认按服务单元限流；CRIU 的详细输出把额度用完后，gsd 自己的 JSON 日志会被一起丢掉 | 连续做十来次 checkpoint 之后 gsd 日志可能残缺，排障和验收时缺行 | CRIU 的输出经 gsd 的标准错误进同一个单元的 journal，与 gsd 的日志共用限流额度。依据是验证脚本 `verify_clear_refs_race.py` 的处理（它在开头给 `gsd.service` 关掉限流，脚本注释记录默认额度下约第 10 轮起丢日志）；没有专门的结果文件 | 需要完整日志时先给 `gsd.service` 加关闭限流的 drop-in（[28](28-configuration-and-observability.md)） | 设计如此 |
+| L-17 | journald 默认按服务单元限流；`9728cef73` 以前 CRIU dump 的详细输出把额度用完后，gsd 自己的 JSON 日志会被一起丢掉 | 连续做十来次 checkpoint 之后 gsd 日志可能残缺，排障和验收时缺行 | CRIU 的输出经 gsd 的标准错误进同一个单元的 journal，与 gsd 的日志共用限流额度。依据是验证脚本 `verify_clear_refs_race.py` 的处理（它在开头给 `gsd.service` 关掉限流，脚本注释记录默认额度下约第 10 轮起丢日志）；没有专门的结果文件 | `9728cef73` 起 dump 日志不再进 journal，主要来源已去掉；高频压测时仍建议加关闭限流的 drop-in（[28](28-configuration-and-observability.md)） | 已减轻（`9728cef73`） |
 | L-18 | `7cdadccf2` 及以前：restore 之后的第一次 checkpoint 总是全量，每棵树的整个进程内存重新写出一遍，再下一次才恢复增量 | 交替做 restore 和 checkpoint 的用法里，这一次的耗时和镜像大小随进程大小增长，而不是随改动量。新 920B 2026-11-18：256 MiB 的进程一页不改，restore 之前的增量 checkpoint 写出 0.1 MiB、约 16 ms；restore 之后的第一次写出 260.8 MiB、约 115～125 ms | CRIU 4.2.1 的 PID 复用检测（`criu/mem.c` 的 `detect_pid_reuse`，dump 日志 `Pid reuse detected for pid N`）：进程的启动时间不早于父镜像 inventory 里的 dump 时刻，就不用父镜像。restore 出来的进程 PID 不变、启动时间是新的，必然命中 | `daae6968f` 修复：restore 时 `--leave-stopped`，全部树恢复完先写 `clear_refs` 再放行；为下一次 dump 建替身父目录（镜像文件的符号链接，加一份 dump 时刻改到恢复之后一个时钟节拍的 inventory），见 [12](12-restore.md) §6。修复后 restore 之后的第一次也是 0.1 MiB；`verify_restore_incremental.py` 每轮 restore 到这份增量核对整块内存 | 已修（`daae6968f`） |
 | L-19 | 范围外的进程（root 服务、envd 代为执行的操作）持续把根盘写满时，restore 也被拒绝：`resource_exhausted`，`no space left for the restore layer switch`，什么都没动 | 这期间 checkpoint 和 restore 都做不了，沙箱停在当前状态，直到有人腾出空间 | restore 杀掉用户进程之后要做一次层切换，内核要在新的 work 目录下建子目录；盘满时这一步会失败，而那时用户进程已经杀了，只能报 `data_loss`。gsd 常驻 4 MiB 预留文件给这一步用；预留文件被用掉又补不回来时（范围外进程马上把空出来的空间写满），gsd 在杀进程之前按 `f_bavail` 检查，不够就拒绝，宁可不做也不做一半。restore 本身腾不出空间：旧的可写层要等切换之后才在后台回收。只有用户进程写满根盘时，restore 仍能借预留文件完成（[23](23-gaps-and-boundaries.md) 的容量耗尽一行）| 停掉写盘的范围外进程或删掉文件，或删掉不用的 checkpoint（层随之回收），之后重试。实测：新 920B 2026-11-18 `stress-ext` 的 `append` 组（6 个 root worker 一直追加），1000 轮里 268 次 checkpoint、272 次 restore 被安全拒绝，`data_loss` 0，校验无失败；这一组改按容量耗尽判 | 设计如此 |
+| L-20 | 延迟页恢复（`-criu-lazy-restore`，默认关）打开后，restore 之后的第一次 checkpoint 是全量；下一次请求开头要先等补页结束 | 920B，384 MiB 进程：restore 166 → 32 ms，但 restore 之后的第一次 checkpoint 22 → 142 ms、镜像几 MiB → 388 MiB | 补进来的页带 soft-dirty，而 gsd 在 restore 一结束（页还没补完）就清 soft-dirty；补完再清会把用户在补页期间写的页也清掉。要分开两者需要 userfaultfd 写保护，guest 的 arm64 内核没有。页没补完时 dump 出的镜像缺页，所以必须先等（[12](12-restore.md) §4.5） | 只在 restore 远多于 checkpoint 的用法里打开；默认不打开 | 设计如此 |
 
 ---
 
@@ -132,6 +133,7 @@
 | L-17 | 验证脚本 `verify_clear_refs_race.py` 开头的处理与注释 |
 | L-18 | 2026-11-18 新 920B 的 `test950.sh compare`、诊断脚本与 `verify_restore_incremental.py`；CRIU dump 日志 `Warn (criu/mem.c:408): Pid reuse detected`。修复在 950 上的复核：同日验收的 `restore_incremental` 与 950 的 `test950.sh compare`（[22](22-950-results.md) §10.4） |
 | L-19 | 2026-11-18 新 920B `test950.sh extended` 的 `criu-stress-ext/append`（`stress-summary.json`、`stress-ops.log`） |
+| L-20 | 2026-11-19 新 920B 的手工实验（`criu lazy-pages` 直接在 guest 里跑）与 gsd `-criu-lazy-restore` 实测，结果存 `rollback-reports/920b-o4-lazy-20261119/` |
 | L-11、T-07 | `gsd-fixes-20260930` 的 `SUMMARY.md` "逐项验证"与"未验证" |
 | L-13、U-03、K-02、K-03 | `gsd-fix5-20261008` 的 `summary.txt` 一、四、六 |
 | L-08 | `fc-kernels/configs/x86_64/6.1.158.config`；`0002-overlayfs-hot-switch-checkpoint.patch` 的 arm64 部分 |

@@ -1,7 +1,7 @@
 {
   "name": "criu-rollback deploy",
-  "updated_at": "2026-11-17",
-  "release_commit": "daae6968f064e9ef2f71b5eeb4cf3a8b21a7b0ef",
+  "updated_at": "2026-11-19",
+  "release_commit": "9728cef733b39218473404ce42515cc3a2c30477",
   "orchestrator_commit": "259f1a25c-e2bv",
   "orchestrator_note": "criu-rollback-dev 259f1a25c 加 bc3cce913 的 slot.go 改动（宿主侧网卡前缀 e2bv-），补丁见 provenance/orchestrator-e2bv-veth-prefix.patch",
   "sdk_commit": "daae6968f064e9ef2f71b5eeb4cf3a8b21a7b0ef",
@@ -19,15 +19,16 @@
       "packed": "artifacts/gsd.xz",
       "path": "gsd",
       "mode": "755",
-      "size": 9546328,
-      "sha256": "1a0a3b674a19c77fd924fff7175c7e0c030089551d7e6e1be16475f00cd30aa3",
-      "unstripped_sha256": "8033476a28c2c254467b3f352819c0e6ca71fbec073e11abd4dffa2c52ef93da",
+      "size": 9548760,
+      "sha256": "8bc5dc497e67e154bb7435d3edadaafdd0778b7e80b257ebf871635c6ec7c24a",
+      "unstripped_sha256": "6345000976dd5d989fc5c447ef47c5c09a52bb5ea6f681da7d7cf734acb2f4fc",
       "replaces": [
         "421597e59cdc89f6538fa5b6ee8238903269f2de230f401e2ee72f82e5c7c0fe",
         "3f28abd051a85a3df4ac72a8204cdb969f1f6311eb6eb516b3e7cb4acf0d07b4",
-        "97427b726626564399d703871b98ac3eb8ef07ab87b9f7b43d7f5ac5fa10fad1"
+        "97427b726626564399d703871b98ac3eb8ef07ab87b9f7b43d7f5ac5fa10fad1",
+        "1a0a3b674a19c77fd924fff7175c7e0c030089551d7e6e1be16475f00cd30aa3"
       ],
-      "commit": "daae6968f"
+      "commit": "9728cef73"
     },
     "kernel": {
       "packed": "artifacts/vmlinux.bin.xz",
@@ -116,5 +117,5 @@
     "restore_path": "modified-child-to-full-baseline",
     "validation": "2026-10-16 新920B三轮六档实测PASS：18次恢复完整内存与文件校验通过，SDK/journal一致；本地11项脚本回归与6项验收判读测试通过。950尚未运行新版脚本。"
   },
-  "release_note": "2026-11-18：gsd 与 SDK 换成 criu-rollback-dev daae6968f（restore 层切换预留空间、checkpoint 预检留内存余量、根盘写满报 resource_exhausted 且仍可 restore、Sandbox.connect 带路由头、共享连接池 keepalive 上限、restore 之后的第一次 checkpoint 保持增量）；orchestrator、内核、镜像不变，仍是 259f1a25c 那一版"
+  "release_note": "2026-11-19：gsd 换成 criu-rollback-dev 9728cef73（dump 日志由 CRIU 直接写文件、多棵进程树并行 dump 与 restore、可选的延迟页 restore 默认关）；SDK 不变，仍是 daae6968f。 上一版：2026-11-18：gsd 与 SDK 换成 criu-rollback-dev daae6968f（restore 层切换预留空间、checkpoint 预检留内存余量、根盘写满报 resource_exhausted 且仍可 restore、Sandbox.connect 带路由头、共享连接池 keepalive 上限、restore 之后的第一次 checkpoint 保持增量）；orchestrator、内核、镜像不变，仍是 259f1a25c 那一版"
 }
