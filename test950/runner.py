@@ -85,20 +85,41 @@ CRIU_STEPS = {
 }
 
 
-def plan(level, stacks, hours):
+COMPARE_SERIES = "dirty,size,file,conc,layout,trees"   # ckpt_same_workload.py 的默认测点组
+
+
+def compare_steps(stacks, rounds, series):
+    """compare：两套各跑 rounds 轮，按 ABBA 交替（相邻两轮首尾同栈，少切一次）；最后把各轮合并、两套并列。"""
+    series = series or COMPARE_SERIES
+    est = 7 + (22 if "filewait" in series or series == "all" else 0) + (6 if "scen" in series else 0)
+    steps = []
+    for r in range(1, rounds + 1):
+        order = stacks if r % 2 else list(reversed(stacks))
+        for st in order:
+            args = ["benchmark/ckpt_same_workload.py", "--stack", st, "--template", TEMPLATES[st], "--series", series]
+            if st == "criu":
+                args.append("--criu-logs")
+            sid = "%s/compare" % st if rounds == 1 else "%s/compare-r%d" % (st, r)
+            steps.append({"id": sid, "stack": st, "kind": "py", "args": args, "est_min": est, "status": "待跑"})
+    if len(stacks) == 2:
+        steps.append({"id": "%s/compare-table" % steps[-1]["stack"], "stack": steps[-1]["stack"], "kind": "py",
+                      "args": ["benchmark/ckpt_same_workload.py", "--compare-siblings"], "est_min": 1,
+                      "status": "待跑"})
+    return steps
+
+
+def plan(level, stacks, hours, rounds=1, series=None):
     """按档展开步骤。quick ⊂ standard ⊂ extended；long 单独，只含长跑；native、compare 各自单独。"""
     if level in EXTRA:
-        steps = []
-        for st in stacks:
-            if level == "native":
+        if level == "compare":
+            steps = compare_steps(stacks, rounds, series)
+        else:
+            steps = []
+            for st in stacks:
                 args = ["benchmark/native_snapshot_tiers.py", "--mode", "both", "--passes", "3", "--iters", "8",
                         "--template", TEMPLATES[st]]
-                est = 8      # 920B 实测每套 7.5 分钟
-            else:
-                args = ["benchmark/ckpt_same_workload.py", "--stack", st, "--template", TEMPLATES[st]]
-                est = 4      # 920B 实测每套 2.5～3 分钟
-            steps.append({"id": "%s/%s" % (st, level), "stack": st, "kind": "py", "args": args,
-                          "est_min": est, "status": "待跑"})
+                steps.append({"id": "%s/%s" % (st, level), "stack": st, "kind": "py", "args": args,
+                              "est_min": 8, "status": "待跑"})     # 920B 实测每套 7.5 分钟
         if "criu" in stacks:
             steps.append({"id": "sandbox/smoke-after", "stack": "sandbox", "kind": "run",
                           "args": ["smoke"], "est_min": 1, "status": "待跑"})
@@ -371,7 +392,9 @@ def execute(args):
     stacks = list(STACKS) if args.stack == "both" else [args.stack]
     prev = json.loads(progress_file().read_text()) if progress_file().is_file() else None
     redo = prev and any(s["status"] != "PASS" for s in prev["steps"])
-    if prev and redo and prev["level"] == args.level and prev["stacks"] == stacks and not args.new:
+    opts = {"rounds": args.rounds, "series": args.series}
+    if prev and redo and prev["level"] == args.level and prev["stacks"] == stacks \
+            and prev.get("opts", {"rounds": 1, "series": None}) == opts and not args.new:
         # 上一轮没跑完，或跑完了但有没通过的步骤：只重跑没通过的，已 PASS 的保留
         data = prev
         data.pop("finished", None)
@@ -381,9 +404,9 @@ def execute(args):
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         run_dir = RESULTS / ("%s-%s" % (stamp, args.level))
         run_dir.mkdir(parents=True)
-        data = {"level": args.level, "stacks": stacks, "hours": args.hours, "run_dir": str(run_dir),
+        data = {"level": args.level, "stacks": stacks, "hours": args.hours, "run_dir": str(run_dir), "opts": opts,
                 "started": datetime.now().isoformat(), "pid": os.getpid(),
-                "steps": plan(args.level, stacks, args.hours), "identity": {}, "resources": {}}
+                "steps": plan(args.level, stacks, args.hours, args.rounds, args.series), "identity": {}, "resources": {}}
     data["pid"] = os.getpid()
     data["log"] = stdout_target()
     run_dir = Path(data["run_dir"])
@@ -504,11 +527,17 @@ def print_overview(run):
     for r in data.get("recycles", []):
         print("  自动清理 netns %s：%s → %s（%s）%s" % (r["time"][11:19], r["before"], r["after"], dur(r["seconds"]),
                                                   "" if r["ok"] else " 失败"))
+    has_table = any(s["id"].endswith("/compare-table") and (run / s["id"].replace("/", "-")).is_dir()
+                    for s in data["steps"])
     for s in data["steps"]:
         out = run / s["id"].replace("/", "-")
         if not out.is_dir():
             continue
         print("-- %s" % s["id"])
+        if has_table and "/compare-r" in s["id"]:
+            # 多轮 compare：各轮只列判定，表看最后的 compare-table；单轮全文用 report 步骤名
+            print("    %s %s（全文：bash test950.sh report %s）" % (s["status"], s.get("detail", ""), s["id"]))
+            continue
         if s["kind"] == "run":
             report.print_run_sh(out)
         elif s["kind"] == "py":
@@ -528,7 +557,7 @@ def print_perf(run, step, indent=""):
         print(indent + "（没有日志）")
         return
     text = logf.read_text(errors="replace").splitlines()
-    start = next((i for i, l in enumerate(text) if l.startswith("---- 汇总 ----")), None)
+    start = next((i for i, l in enumerate(text) if l.startswith(("---- 汇总 ----", "---- 两套并列"))), None)
     if start is None:
         print(indent + "（没有汇总，日志末尾如下）")
         for line in text[-15:]:
@@ -608,6 +637,9 @@ def main():
     ap.add_argument("--lines", type=int, default=40, help="report：每个文件打印的行数，0 为全部")
     ap.add_argument("--stack", choices=("both",) + STACKS, default="both", help="测哪套，默认两套都测")
     ap.add_argument("--hours", type=float, default=4.0, help="long 档每套的长跑时长（小时），默认 4；两套都测约 9 小时")
+    ap.add_argument("--rounds", type=int, default=1,
+                    help="compare：两套交替跑几轮（ABBA），最后合并各轮、两套并列；默认 1")
+    ap.add_argument("--series", help="compare：测点组，逗号分隔或 all（默认 %s）" % COMPARE_SERIES)
     ap.add_argument("--new", action="store_true", help="不续跑上一轮，重新开始")
     ap.add_argument("--fg", action="store_true", help="在前台跑（默认转到后台，断开 ssh 也不停）")
     args = ap.parse_args()

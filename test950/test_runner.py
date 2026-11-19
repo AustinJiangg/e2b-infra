@@ -36,6 +36,18 @@ class RunnerTests(unittest.TestCase):
         self.assertIn(runner.TEMPLATES["criu"], steps[0]["args"])
         self.assertNotIn("criu/native", self.ids("extended", ["sandbox", "criu"]))
 
+    def test_compare_rounds_alternate(self):
+        ids = [s["id"] for s in runner.plan("compare", ["sandbox", "criu"], 4, rounds=3)]
+        self.assertEqual(ids, ["sandbox/compare-r1", "criu/compare-r1", "criu/compare-r2", "sandbox/compare-r2",
+                               "sandbox/compare-r3", "criu/compare-r3", "criu/compare-table", "sandbox/smoke-after"])
+        steps = runner.plan("compare", ["sandbox", "criu"], 4, rounds=1, series="dirty,filewait")
+        self.assertIn("dirty,filewait", steps[0]["args"])
+        self.assertIn("--criu-logs", steps[1]["args"])
+        self.assertGreater(steps[0]["est_min"], 20)
+        _, switches = runner.estimate(runner.plan("compare", ["sandbox", "criu"], 4, rounds=3))
+        self.assertEqual(switches, 4)   # s→c、c→s、s→c，回沙箱级冒烟再 1 次；并列步骤跟在最后一个栈上不切
+        self.assertEqual(self.ids("compare", ["criu"]), ["criu/compare", "sandbox/smoke-after"])
+
     def test_secret_filter(self):
         for name in ("job-before.json", ".job-cur.json", "job-restore.json", "x.env", "acl.token",
                      "baseline.json", "baseline.sha256"):

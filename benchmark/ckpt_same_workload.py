@@ -9,12 +9,35 @@ bytearray，且进程大小随档位一起变），并列时分不开"改动量"
     常驻进程   预分配 P MiB 的 bytearray 并写满；收到命令时原地覆写前 d MiB
     文件       根盘上的 /tmp/swl/file，f MiB，dd 覆写后 fsync
 
-三组测点（每个测点新建沙箱，--passes 个沙箱 × --reps 次，前 --warmup 次不计入统计）：
+一个测点由下面几个量决定（没写的取默认值）：
 
-    dirty   进程固定 256 MiB，改动 d = 0、16、32、64、128、256 MiB，不写文件
-    size    改动固定 16 MiB，进程 P = 32、64、128、256、384 MiB，不写文件
-    file    进程 16 MiB、不改内存，只写文件 f = 16、64 MiB
-    conc    N 个沙箱同时做（N = 1、4、8、16），每个沙箱进程 64 MiB、改动 16 MiB
+    P       常驻进程合计多大（MiB）
+    d       每次改动多少内存（MiB）
+    layout  改动的页分布：seq = 从头连续改 d MiB（默认）；scatter = 在整个进程里按固定的随机顺序
+            挑 d MiB 对应的页数，每页改开头 64 字节
+    trees   几棵进程树（默认 1）：起 trees 个互不相干的常驻进程，P 和 d 平分到每一棵
+    f       每次写多少文件（MiB），覆写根盘上的 /tmp/swl/file
+    sync    写完文件怎样落盘：fsync = dd 带 fsync 再 sync（默认，数据进到宿主）；none = 只 write，
+            数据留在 guest 页缓存
+    wait    改完、写完之后等几秒再 checkpoint（默认 0）
+
+测点组（每个测点新建沙箱，--passes 个沙箱 × --reps 次，前 --warmup 次不计入统计）：
+
+    dirty    进程固定 256 MiB，改动 d = 0、16、32、64、128、256 MiB，不写文件
+    size     改动固定 16 MiB，进程 P = 32、64、128、256、384 MiB，不写文件
+    file     进程 16 MiB、不改内存，只写文件 f = 16、64 MiB
+    conc     N 个沙箱同时做（N = 1、4、8、16），每个沙箱进程 64 MiB、改动 16 MiB
+    layout   进程 256 MiB，散页改动 d = 16、64、256 MiB（与 dirty 的连续改动对照）
+    trees    合计进程 64 MiB、改动 16 MiB，分到 1、4、16 棵进程树
+    filewait 进程 16 MiB、写 64 MiB 文件，落盘 fsync / none × 写完等 0、10、40 秒
+             （默认每测点 1 个沙箱 × 6 次；40 秒那几档一个测点约 8 分钟）
+    scen     --scenarios 给的场景文件，每个场景一个测点（格式见 SCENARIO_HELP）
+
+默认跑 dirty,size,file,conc,layout,trees；filewait 时间长，要显式写 --series 或用 --series all。
+
+基点前先等 guest 的 ext4 把 inode 表后台清零做完（ext4lazyinit 线程退出）：模板快照拍在清零完成之前，
+新沙箱启动后几秒内会额外写出约 60 MiB 根盘数据；基点拍在清零之后，restore 回基点就不会再重做一遍，
+写完等待那一组的数据才只含文件本身。等了多久记在基点那一行的 lazyinit_wait_s。
 
 一次测量：改写 → checkpoint A（计时）→ 再改写 → checkpoint B（计时）→ restore 回基点（计时）→
 校验内存 SHA256 与文件 → 删掉 A、B。A 紧跟在上一次 restore 之后，是"restore 之后的 checkpoint"；
@@ -30,14 +53,20 @@ B 紧跟在 A 之后，是"连续的 checkpoint"。两者分开列：进程级 r
 进程级另外读 CRIU 自己的统计（guest 里镜像目录下的 stats-dump / stats-restore：冻结、扫页、写页、
 fork、恢复各段耗时与页数），把 criu_dump / criu_restore 再拆开；读在每轮核对之后，不在计时区间内。
 
+每次运行开头记录宿主条件（NUMA 节点与大小、kernel.numa_balancing、宿主 THP、内核命令行），
+两轮结果对不上时先看这里。
+
 在部署宿主上运行，用当前栈对应的 SDK 环境：
     python3 ckpt_same_workload.py --out result.json
-    --series dirty,size,file,conc   选测点组（默认全部）
-    --passes 2 --reps 11 --warmup 1 每个测点几个沙箱、每个沙箱几次、前几次不计
-    --smoke                         每组只跑一个测点、1 个沙箱 3 次，约 2 分钟
+    --series dirty,size,...|all     选测点组（默认见上）
+    --scenarios scen.json           场景文件；给了它而 --series 没写 scen 时自动加上
+    --passes 2 --reps 11 --warmup 1 每个测点几个沙箱、每个沙箱几次、前几次不计（filewait 另有默认）
+    --smoke                         每组只跑一个测点、1 个沙箱 3 次
     --stack sandbox|criu            默认按正在运行的 orchestrator 判断
     --template                      默认沙箱级 base、进程级 base-criu
-    --print result.json             不跑测试，只把已有结果的汇总重新打印一遍
+    --print a.json [b.json ...]     不跑测试，把已有结果（同一套的多轮可合并）的汇总重新打印一遍
+    --compare a.json b.json ...     不跑测试，把两套的结果（每套可多轮）按测点并列，出代价分解表
+    --compare-siblings              与 --out 合用：取 --out 所在目录的上一级里其他各步的 result.json 做 --compare
 结果写 JSON，stdout 打印汇总表；校验失败退出码非零。
 """
 import argparse
@@ -46,8 +75,10 @@ import hashlib
 import json
 import logging
 import os
+import glob
 import socket
 import statistics
+import subprocess
 import sys
 import threading
 import time
@@ -63,18 +94,80 @@ from native_snapshot_tiers import fc_info  # noqa: E402  向 Firecracker API 问
 MIB = 1 << 20
 WD = "/tmp/swl"
 SBX_TIMEOUT = 3600
+# 测点的各个量与默认值；测点字典里没写的量取这里的值
+DEFAULTS = {"P": 16, "d": 0, "f": 0, "layout": "seq", "trees": 1, "sync": "fsync", "wait": 0}
+DIMS = ("P", "d", "f", "layout", "trees", "sync", "wait")
 SERIES = {
-    "dirty": [{"P": 256, "d": d, "f": 0} for d in (0, 16, 32, 64, 128, 256)],
-    "size": [{"P": p, "d": 16, "f": 0} for p in (32, 64, 128, 256, 384)],
-    "file": [{"P": 16, "d": 0, "f": f} for f in (16, 64)],
+    "dirty": [{"P": 256, "d": d} for d in (0, 16, 32, 64, 128, 256)],
+    "size": [{"P": p, "d": 16} for p in (32, 64, 128, 256, 384)],
+    "file": [{"P": 16, "f": f} for f in (16, 64)],
+    "layout": [{"P": 256, "d": d, "layout": "scatter"} for d in (16, 64, 256)],
+    "trees": [{"P": 64, "d": 16, "trees": t} for t in (1, 4, 16)],
+    "filewait": [{"P": 16, "f": 64, "sync": s, "wait": w} for s in ("fsync", "none") for w in (0, 10, 40)],
 }
+DEFAULT_SERIES = "dirty,size,file,conc,layout,trees"
+ALL_SERIES = "dirty,size,file,conc,layout,trees,filewait"
+SERIES_RUNS = {"filewait": (1, 6)}     # 没显式给 --passes/--reps 时这些组用的（沙箱数, 次数）
 CONC = [1, 4, 8, 16]
-CONC_POINT = {"P": 64, "d": 16, "f": 0}
+CONC_POINT = {"P": 64, "d": 16}
+SCENARIO_HELP = """场景文件（JSON）：
+{"scenarios": [
+  {"name": "交互式小步", "P": 128, "d": 8, "layout": "scatter", "f": 4, "sync": "none", "wait": 5},
+  {"name": "装依赖", "P": 64, "d": 32, "f": 128, "sync": "fsync", "wait": 0, "trees": 4}
+]}
+name 必填；其他量没写的取默认值 %s。P、d 要能被 trees 整除。""" % json.dumps(DEFAULTS, ensure_ascii=False)
+
+
+def norm(point):
+    """补全测点的各个量。"""
+    p = dict(DEFAULTS)
+    p.update(point)
+    for k in ("P", "d", "f", "trees", "wait"):
+        p[k] = int(p[k])
+    if p["layout"] not in ("seq", "scatter") or p["sync"] not in ("fsync", "none"):
+        raise ValueError("测点 %s：layout 只能是 seq/scatter，sync 只能是 fsync/none" % point)
+    if p["trees"] < 1 or p["P"] % p["trees"] or p["d"] % p["trees"] or p["d"] > p["P"]:
+        raise ValueError("测点 %s：P、d 要能被 trees 整除，且 d 不大于 P" % point)
+    return p
+
+
+def load_scenarios(path):
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    out = []
+    for s in data.get("scenarios", []):
+        if not s.get("name"):
+            raise ValueError("场景缺 name：%s\n%s" % (s, SCENARIO_HELP))
+        out.append(norm(s))
+    if not out:
+        raise ValueError("场景文件里没有场景\n" + SCENARIO_HELP)
+    return out
+
+
+def point_key(r):
+    """一行结果所属测点的键；老结果没有新加的量，按默认值补。"""
+    return (r["series"], r.get("N", 1), r.get("name")) + tuple(r.get(k, DEFAULTS[k]) for k in DIMS)
+
+
+def point_label(e):
+    """测点的简短写法，只写与默认值不同的量（P、d 总写）。"""
+    parts = []
+    if e.get("name"):
+        parts.append(e["name"])
+    if e.get("N", 1) != 1:
+        parts.append("N=%d" % e["N"])
+    parts += ["P=%d" % e["P"], "d=%d" % e["d"]]
+    for k, fmt_ in (("layout", "%s"), ("trees", "trees=%d"), ("f", "f=%d"), ("sync", "sync=%s"), ("wait", "wait=%ds")):
+        if e.get(k, DEFAULTS[k]) != DEFAULTS[k] or (k == "sync" and e.get("f")):
+            parts.append(fmt_ % e[k])
+    return " ".join(parts)
+
 
 # 常驻进程：命令经预先打开的文件传入，SIGUSR1 触发；handler 不分配大块内存、不 open()，
 # 改写用启动时分配好的 1 MiB 块，避免新建 VMA（进程级的 soft-dirty 会把新 VMA 整个报脏）。
+# 散页改动用启动时排好的页序，每页改开头 64 字节（同样不新建 VMA）。
 RESIDENT_PY = r'''
-import hashlib, os, signal, sys
+import hashlib, os, random, signal, sys
 WD = sys.argv[2]
 CMD, RSP, PID = WD + "/cmd", WD + "/rsp", WD + "/pid"
 size = int(sys.argv[1]) << 20
@@ -82,6 +175,9 @@ buf = bytearray(size)
 for i in range(0, size, 4096):
     buf[i] = 1
 chunk = bytearray(min(max(size, 1), 1 << 20))
+perm = list(range(size >> 12))
+random.Random(7).shuffle(perm)
+small = bytearray(64)
 for f in (CMD, RSP):
     open(f, "w").close()
 cmd_fd = os.open(CMD, os.O_RDWR)
@@ -102,6 +198,15 @@ def handle(signum, frame):
                     chunk[j << 16:(j + 1) << 16] = blk
             for i in range(n):
                 buf[i << 20:(i + 1) << 20] = chunk
+            out = "ok"
+        elif op == "sdirty":
+            n = int(arg)
+            if (n << 20) > size:
+                raise ValueError("dirty exceeds payload")
+            small[:] = hashlib.md5(nonce.encode()).digest() * 4
+            for p in perm[:n << 8]:
+                o = p << 12
+                buf[o:o + 64] = small
             out = "ok"
         elif op == "sha":
             out = hashlib.sha256(buf).hexdigest()
@@ -179,49 +284,73 @@ def dir_bytes(path):
 # ------------------------------------------------------------ 沙箱内
 
 class Hog:
-    def __init__(self, sb):
+    """trees 个互不相干的常驻进程（每个是一棵进程树），各在 WD/h<i> 下收命令；命令一次发给全部。"""
+
+    def __init__(self, sb, trees=1):
         self.sb = sb
+        self.dirs = ["%s/h%d" % (WD, i) for i in range(trees)]
         self.nonce = 0
-        self.pid = None
+        self.pids = []
 
     def sh(self, cmd, timeout=120):
         return self.sb.commands.run(cmd, user="root", timeout=timeout).stdout.strip()
 
     def ask(self, op, arg=""):
+        """发给全部常驻进程，等全部应答；返回各自的应答（按进程顺序）。"""
         self.nonce += 1
         n = "n%d" % self.nonce
-        self.sh('echo -n "%s %s %s" > %s/cmd; kill -USR1 %s' % (n, op, arg, WD, self.pid), timeout=10)
+        send = "; ".join('echo -n "%s %s %s" > %s/cmd' % (n, op, arg, d) for d in self.dirs)
+        self.sh("%s; kill -USR1 %s" % (send, " ".join(self.pids)), timeout=10)
+        files = " ".join("%s/rsp" % d for d in self.dirs)
         for _ in range(600):
-            out = self.sh("cat %s/rsp 2>/dev/null; true" % WD, timeout=10)
-            if out.startswith(n + " "):
-                return out[len(n) + 1:]
+            lines = self.sh("cat %s 2>/dev/null; true" % files, timeout=10).splitlines()
+            if len(lines) == len(self.dirs) and all(l.startswith(n + " ") for l in lines):
+                return [l[len(n) + 1:] for l in lines]
             time.sleep(0.05)
-        raise RuntimeError("常驻进程没有应答 %s %s" % (op, arg))
+        raise RuntimeError("常驻进程没有全部应答 %s %s" % (op, arg))
 
     def start(self, payload_mb):
-        self.sh("rm -rf %s; mkdir -p %s; chmod 777 %s" % (WD, WD, WD))
+        per = payload_mb // len(self.dirs)
+        self.sh("rm -rf %s; mkdir -p %s; chmod 777 %s" % (WD, " ".join([WD] + self.dirs), " ".join([WD] + self.dirs)))
         self.sb.files.write(WD + "/hog.py", RESIDENT_PY)
-        # 默认用户启动：进程级只保存 uid 1000 的进程树
-        self.sb.commands.run("python3 %s/hog.py %d %s" % (WD, payload_mb, WD), background=True)
-        for _ in range(100):
-            pid = self.sh("cat %s/pid 2>/dev/null; true" % WD, timeout=10)
-            if pid:
-                self.pid = pid
+        # 默认用户启动：进程级只保存 uid 1000 的进程树。每个后台命令是 envd 下单独的一棵树
+        for d in self.dirs:
+            self.sb.commands.run("python3 %s/hog.py %d %s" % (WD, per, d), background=True)
+        files = " ".join("%s/pid" % d for d in self.dirs)
+        for _ in range(300):
+            # pid 文件末尾没有换行，逐个读、各补一个换行，免得几个 pid 连成一个数
+            pids = self.sh("for f in %s; do cat $f 2>/dev/null; echo; done" % files, timeout=10).split()
+            if len(pids) == len(self.dirs):
+                self.pids = pids
                 break
             time.sleep(0.2)
-        if not self.pid or self.ask("ping") != "pong":
-            raise RuntimeError("常驻进程没有起来")
+        if len(self.pids) != len(self.dirs) or set(self.ask("ping")) != {"pong"}:
+            raise RuntimeError("常驻进程没有全部起来")
 
-    def dirty(self, mb, tag):
-        if mb and self.ask("dirty", "%d" % mb) != "ok":
+    def dirty(self, mb, layout="seq"):
+        if mb and set(self.ask("sdirty" if layout == "scatter" else "dirty", "%d" % (mb // len(self.dirs)))) != {"ok"}:
             raise RuntimeError("改写失败")
 
-    def write_file(self, mb):
-        if mb:
-            self.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=notrunc,fsync 2>/dev/null" % (WD, mb))
+    def write_file(self, mb, sync="fsync"):
+        if not mb:
+            return
+        if sync == "fsync":
+            self.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=notrunc,fsync 2>/dev/null; sync" % (WD, mb))
+        else:
+            self.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=notrunc 2>/dev/null" % (WD, mb))
+
+    def wait_lazyinit(self, limit=60):
+        """等 guest 的 ext4 inode 表后台清零做完（ext4lazyinit 内核线程退出），返回等了几秒。"""
+        t0 = time.time()
+        while time.time() - t0 < limit:
+            if not self.sh("pgrep -x ext4lazyinit; true", timeout=10):
+                return round(time.time() - t0, 1)
+            time.sleep(0.5)
+        LOG.warning("ext4lazyinit %d 秒还没结束，继续", limit)
+        return None
 
     def state(self, file_mb):
-        mem = self.ask("sha")
+        mem = "|".join(self.ask("sha"))
         disk = self.sh("sha256sum %s/file | cut -d' ' -f1" % WD) if file_mb else None
         return mem, disk
 
@@ -304,6 +433,64 @@ print(json.dumps(res))
 CRIU_TIME_FIELDS = ("freezing", "frozen", "memdump", "memwrite", "irmap_resolve", "forking", "restore")
 
 
+# 进程级归因（--criu-logs）：CRIU 每行日志带 "(秒.微秒)" 时间戳。相邻两行的间隔记到前一行的
+# 消息上（数字换成 #），按消息合计，取最大的几项。dump 日志是 gsd 写死的 -v4；restore 默认级别
+# 几乎没有日志，要配 --criu-verbosity 4 才有内容。
+CRIU_LOG_PY = r"""
+import glob, json, os, re, sys
+TS = re.compile(r"^\((\d+)\.(\d+)\)\s*(.*)$")
+NUM = re.compile(r"0x[0-9a-fA-F]+|\d+")
+def one(path):
+    rows = []
+    for line in open(path, errors="replace"):
+        m = TS.match(line)
+        if m:
+            rows.append((int(m.group(1)) + int(m.group(2)) / 1e6, NUM.sub("#", m.group(3).strip())[:90]))
+    acc = {}
+    for (t, msg), (t2, _) in zip(rows, rows[1:]):
+        acc[msg] = acc.get(msg, 0.0) + (t2 - t) * 1000
+    span = (rows[-1][0] - rows[0][0]) * 1000 if rows else 0.0
+    return span, len(rows), acc
+res = {}
+for key, ck, name in zip(sys.argv[1::3], sys.argv[2::3], sys.argv[3::3]):
+    tot_span, tot_lines, acc = 0.0, 0, {}
+    for path in glob.glob(os.path.join(%r, ck + "_mem", "t*", name)):
+        span, n, a = one(path)
+        tot_span += span; tot_lines += n
+        for k, v in a.items():
+            acc[k] = acc.get(k, 0.0) + v
+    top = sorted(acc.items(), key=lambda kv: -kv[1])[:12]
+    res[key] = {"span_ms": round(tot_span, 3), "lines": tot_lines, "top": [[k, round(v, 3)] for k, v in top]}
+print(json.dumps(res))
+""" % GUEST_STORE
+
+# --criu-verbosity N：在 guest 里把 /usr/sbin/criu 换成一个包装脚本，dump 与 restore 都用 -vN
+# （去掉原有的 -v 参数）。只用于测量日志级别本身的代价，包装脚本本身多一次 exec。
+CRIU_WRAP = r"""#!/bin/bash
+a=()
+for x in "$@"; do
+  case "$x" in -v|-v[0-9]) ;; *) a+=("$x") ;; esac
+done
+exec /usr/sbin/criu.real "${a[@]}" -v%d
+"""
+
+
+def install_criu_wrapper(hog, level):
+    hog.sh("test -e /usr/sbin/criu.real || mv /usr/sbin/criu /usr/sbin/criu.real")
+    hog.sb.files.write("/tmp/criu-wrap", CRIU_WRAP % level)
+    hog.sh("install -m 755 /tmp/criu-wrap /usr/sbin/criu && /usr/sbin/criu --version | head -1")
+
+
+def criu_logs(hog, wanted):
+    """wanted: [(行里的键, checkpoint_id, 日志文件名)]。返回 {键: {span_ms, lines, top}}。"""
+    args = " ".join("%s %s %s" % w for w in wanted)
+    try:
+        return json.loads(hog.sh("python3 %s/criu_log.py %s" % (WD, args), timeout=60) or "{}")
+    except Exception as exc:
+        LOG.warning("读 CRIU 日志失败：%s", exc)
+        return {}
+
+
 def criu_stats(hog, wanted):
     """wanted: [(行里的键, checkpoint_id, "dump"|"restore")]。返回 {键: {字段: 值}}，时间换成 ms。"""
     args = " ".join("%s %s %s" % w for w in wanted)
@@ -320,6 +507,7 @@ def criu_stats(hog, wanted):
 
 
 def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
+    point = norm(point)
     P, d, f = point["P"], point["d"], point["f"]
     sb = Sandbox.create(template=ctx.args.template, timeout=SBX_TIMEOUT)
     try:
@@ -330,13 +518,18 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
                 ctx.prov.setdefault("firecracker_version", info.get("vmm_version") if info else None)
         if ctx.stack == "criu":
             sb.commands.run("echo never > /sys/kernel/mm/transparent_hugepage/enabled", user="root")
-        hog = Hog(sb)
+        hog = Hog(sb, point["trees"])
+        if ctx.stack == "criu" and ctx.args.criu_verbosity is not None:
+            install_criu_wrapper(hog, ctx.args.criu_verbosity)
         hog.start(P)
         if ctx.stack == "criu":
             sb.files.write(WD + "/criu_stats.py", CRIU_STATS_PY)
-        hog.dirty(P, "base")
+            sb.files.write(WD + "/criu_log.py", CRIU_LOG_PY)
+        hog.dirty(P)
         if f:
             hog.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=fsync 2>/dev/null" % (WD, f))
+        hog.sh("sync")
+        lazy_s = hog.wait_lazyinit()
         hog.sh("sync")
         want = hog.state(f)
         t0 = time.perf_counter()
@@ -346,12 +539,14 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
             rows.append({"series": series, **point, "pass": pass_no, "rep": -1, "kind": "base",
                          "ckpt_ms": base_ms, "ckpt_server": ctx.server(sb, base.checkpoint_id, "create",
                                                                         getattr(base, "timings", None)),
-                         "artifact": ctx.artifact(sb, base), "sandbox_id": sb.sandbox_id, "ok": True})
+                         "artifact": ctx.artifact(sb, base), "sandbox_id": sb.sandbox_id, "ok": True,
+                         "lazyinit_wait_s": lazy_s})
+
         def change_and_checkpoint(name):
-            hog.dirty(d, name)
-            hog.write_file(f)
-            if f:
-                hog.sh("sync")
+            hog.dirty(d, point["layout"])
+            hog.write_file(f, point["sync"])
+            if point["wait"]:
+                time.sleep(point["wait"])
             t0 = time.perf_counter()
             cp = sb.checkpoint.create(name=name)
             ms = (time.perf_counter() - t0) * 1000
@@ -368,6 +563,9 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
             ok = got == want
             stats = criu_stats(hog, [("ckpt_criu", cp.checkpoint_id, "dump"), ("ckpt2_criu", cp2.checkpoint_id, "dump"),
                                      ("restore_criu", base.checkpoint_id, "restore")]) if ctx.stack == "criu" else {}
+            if ctx.stack == "criu" and ctx.args.criu_logs:
+                stats.update(criu_logs(hog, [("ckpt2_criulog", cp2.checkpoint_id, "criu-dump.log"),
+                                             ("restore_criulog", base.checkpoint_id, "criu-restore.log")]))
             for c in (cp2, cp):   # 先删子节点
                 try:
                     sb.checkpoint.delete(c.checkpoint_id)
@@ -381,8 +579,8 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
             with lock:
                 rows.append(row)
             if not ok:
-                raise RuntimeError("restore 后内容不一致：%s P=%d d=%d f=%d rep %d" % (series, P, d, f, rep))
-        LOG.info("%-5s P=%3d d=%3d f=%2d pass %d：%d 次完成", series, P, d, f, pass_no, reps)
+                raise RuntimeError("restore 后内容不一致：%s %s rep %d" % (series, point_label(point), rep))
+        LOG.info("%-8s %s pass %d：%d 次完成", series, point_label(point), pass_no, reps)
     finally:
         try:
             sb.kill()
@@ -413,61 +611,93 @@ def artifact_mib(row, key="artifact"):
     return None if v is None else v / MIB
 
 
+STAT_KEYS = (("ckpt_ms", lambda r: r["ckpt_ms"]),
+             ("ckpt2_ms", lambda r: r["ckpt2_ms"]),
+             ("ckpt2_server_ms", lambda r: server_total(r, "ckpt2_server")),
+             ("artifact2_mib", lambda r: artifact_mib(r, "artifact2")),
+             ("restore_ms", lambda r: r["restore_ms"]),
+             ("ckpt_server_ms", lambda r: server_total(r, "ckpt_server")),
+             ("restore_server_ms", lambda r: server_total(r, "restore_server")),
+             ("artifact_mib", lambda r: artifact_mib(r)))
+
+
+def stat(vals):
+    vals = [v for v in vals if v is not None]
+    if not vals:
+        return None
+    return {"p50": statistics.median(vals), "p90": pct(vals, 90), "p99": pct(vals, 99), "max": max(vals), "n": len(vals)}
+
+
 def summarize(rows):
     out = []
     keys = []
     for r in rows:
-        k = (r["series"], r.get("N", 1), r["P"], r["d"], r["f"])
+        k = point_key(r)
         if k not in keys:
             keys.append(k)
-    for series, n_conc, P, d, f in keys:
-        rs = [r for r in rows if (r["series"], r.get("N", 1), r["P"], r["d"], r["f"]) == (series, n_conc, P, d, f)]
+    for k in keys:
+        rs = [r for r in rows if point_key(r) == k]
         samples = [r for r in rs if r["kind"] == "sample"]
         base = [r for r in rs if r["kind"] == "base"]
-        e = {"series": series, "N": n_conc, "P": P, "d": d, "f": f, "n": len(samples),
+        e = {"series": k[0], "N": k[1], "name": k[2], **dict(zip(DIMS, k[3:])), "n": len(samples),
              "failed": sum(1 for r in rs if not r["ok"])}
-        for key, vals in (("ckpt_ms", [r["ckpt_ms"] for r in samples]),
-                          ("ckpt2_ms", [r["ckpt2_ms"] for r in samples]),
-                          ("ckpt2_server_ms", [server_total(r, "ckpt2_server") for r in samples]),
-                          ("artifact2_mib", [artifact_mib(r, "artifact2") for r in samples]),
-                          ("restore_ms", [r["restore_ms"] for r in samples]),
-                          ("ckpt_server_ms", [server_total(r, "ckpt_server") for r in samples]),
-                          ("restore_server_ms", [server_total(r, "restore_server") for r in samples]),
-                          ("artifact_mib", [artifact_mib(r) for r in samples]),
-                          ("base_ckpt_ms", [r["ckpt_ms"] for r in base]),
-                          ("base_artifact_mib", [artifact_mib(r) for r in base])):
-            vals = [v for v in vals if v is not None]
-            e[key] = {"p50": statistics.median(vals), "p90": pct(vals, 90), "max": max(vals)} if vals else None
+        for key, get in STAT_KEYS:
+            e[key] = stat([get(r) for r in samples])
+        e["base_ckpt_ms"] = stat([r["ckpt_ms"] for r in base])
+        e["base_artifact_mib"] = stat([artifact_mib(r) for r in base])
         out.append(e)
     return out
 
 
-def fmt(stat, key="p50"):
-    return "-" if not stat else "%.1f" % stat[key]
+def fmt(st, key="p50"):
+    return "-" if not st else "%.1f" % st[key]
+
+
+TITLES = {"dirty": "dirty：进程固定 256 MiB，连续改动量变化",
+          "size": "size：改动固定 16 MiB，进程大小变化",
+          "file": "file：只写文件（fsync 后立刻 checkpoint）",
+          "conc": "conc：N 个沙箱同时做，每个进程 64 MiB、改动 16 MiB",
+          "layout": "layout：进程 256 MiB，散页改动（对照 dirty 的连续改动）",
+          "trees": "trees：合计 64 MiB、改动 16 MiB，分到几棵进程树",
+          "filewait": "filewait：写 64 MiB 文件，落盘方式 × 写完等待",
+          "scen": "scen：场景文件里的场景"}
+
+
+def series_order(summary):
+    seen = [e["series"] for e in summary]
+    return [s for s in TITLES if s in seen] + [s for s in dict.fromkeys(seen) if s not in TITLES]
+
+
+def print_host(prov, indent=""):
+    h = prov.get("host_conditions") or {}
+    if not h:
+        return
+    print("%s宿主条件：NUMA %s · numa_balancing=%s · 宿主 THP=%s" % (
+        indent, h.get("numa_summary") or "?", h.get("numa_balancing"), h.get("thp")))
 
 
 def print_summary(result):
     prov = result["provenance"]
     print("\n---- 汇总 ----")
-    print("栈 %s · 宿主 %s · 内核 %s · orchestrator %s %s · 模板 %s" % (
+    print("栈 %s · 宿主 %s · 内核 %s · orchestrator %s %s · 模板 %s%s" % (
         result["stack"], prov["hostname"], prov["kernel"], prov["orchestrator_exe"],
-        (prov["orchestrator_sha256"] or "?")[:16], result["template"]))
+        (prov["orchestrator_sha256"] or "?")[:16], result["template"],
+        " · 合并 %d 轮" % result["rounds"] if result.get("rounds", 1) > 1 else ""))
     print("脏页后端 %s（Firecracker 自报；hdbss=硬件标脏，kvm-wp=KVM 写保护，off=没开）· FC_TRACK_DIRTY_PAGES=%s · FC %s"
           % (prov.get("dirty_tracking") or "?", prov.get("FC_TRACK_DIRTY_PAGES") or "未设",
              prov.get("firecracker_version") or "?"))
-    titles = {"dirty": "dirty：进程固定 256 MiB，改动量变化", "size": "size：改动固定 16 MiB，进程大小变化",
-              "file": "file：只写文件", "conc": "conc：N 个沙箱同时做，每个进程 64 MiB、改动 16 MiB"}
-    for series, title in titles.items():
+    print_host(prov)
+    if (prov.get("args") or {}).get("criu_verbosity") is not None:
+        print("注意：本轮 guest 里的 criu 换成了包装脚本，日志级别 -v%s（默认 gsd 写死 -v4）" % prov["args"]["criu_verbosity"])
+    for series in series_order(result["summary"]):
         rows = [e for e in result["summary"] if e["series"] == series]
-        if not rows:
-            continue
-        print("\n%s（单位 ms，产物 MiB；墙钟 p50/p90，服务端 total 只列 p50）" % title)
-        print("%3s %4s %4s %3s %3s | %-30s | %-30s | %-23s | %7s" % (
-            "N", "P", "d", "f", "n", "连续 ckpt：墙钟 / 服务端 / 产物", "restore 后 ckpt：墙钟 / 服务端 / 产物",
+        print("\n%s（单位 ms，产物 MiB；墙钟 p50/p90，服务端 total 只列 p50）" % TITLES.get(series, series))
+        print("%-30s %3s | %-30s | %-30s | %-23s | %7s" % (
+            "测点", "n", "连续 ckpt：墙钟 / 服务端 / 产物", "restore 后 ckpt：墙钟 / 服务端 / 产物",
             "restore：墙钟 / 服务端", "全量基点"))
         for e in rows:
-            print("%3d %4d %4d %3d %3d | %6s / %6s %7s %7s | %6s / %6s %7s %7s | %6s / %6s %7s | %7s%s" % (
-                e["N"], e["P"], e["d"], e["f"], e["n"],
+            print("%-30s %3d | %6s / %6s %7s %7s | %6s / %6s %7s %7s | %6s / %6s %7s | %7s%s" % (
+                point_label(e), e["n"],
                 fmt(e["ckpt2_ms"]), fmt(e["ckpt2_ms"], "p90"), fmt(e["ckpt2_server_ms"]), fmt(e["artifact2_mib"]),
                 fmt(e["ckpt_ms"]), fmt(e["ckpt_ms"], "p90"), fmt(e["ckpt_server_ms"]), fmt(e["artifact_mib"]),
                 fmt(e["restore_ms"]), fmt(e["restore_ms"], "p90"), fmt(e["restore_server_ms"]),
@@ -477,12 +707,22 @@ def print_summary(result):
                                          sum(1 for r in result["rows"] if not r["ok"])))
 
 
-# 分段表只取几个代表测点，篇幅控制在便于复制的长度。
-STAGE_POINTS = [("dirty", 1, 256, 0, 0), ("dirty", 1, 256, 16, 0), ("dirty", 1, 256, 64, 0), ("dirty", 1, 256, 256, 0),
-                ("size", 1, 32, 16, 0), ("size", 1, 384, 16, 0), ("file", 1, 16, 0, 64), ("conc", 16, 64, 16, 0)]
+# 分段表只取几个代表测点，篇幅控制在便于复制的长度。(组, 要匹配的量)
+STAGE_POINTS = [("dirty", {"P": 256, "d": 0}), ("dirty", {"P": 256, "d": 16}), ("dirty", {"P": 256, "d": 64}),
+                ("dirty", {"P": 256, "d": 256}), ("size", {"P": 32}), ("size", {"P": 384}), ("file", {"f": 64}),
+                ("layout", {"d": 256}), ("trees", {"trees": 16}), ("filewait", {"sync": "fsync", "wait": 0}),
+                ("filewait", {"sync": "fsync", "wait": 40}), ("filewait", {"sync": "none", "wait": 0}),
+                ("conc", {"N": 16})]
 STAGE_OPS = (("ckpt2_server", "连续 ckpt"), ("ckpt_server", "restore 后 ckpt"), ("restore_server", "restore"))
 STAGE_TOP = 9      # 每行最多列几段（按 p50 从大到小）
 STAGE_MIN_MS = 0.3
+LOG_TOP = 6        # CRIU 日志每行列几项
+
+
+def match(r, series, want):
+    if r["series"] != series:
+        return False
+    return all(r.get(k, DEFAULTS.get(k, 1)) == v for k, v in want.items())
 
 
 def stage_p50(rows, key):
@@ -518,6 +758,21 @@ def criu_p50(rows, key):
     return "  ".join(out)
 
 
+def criulog_p50(rows, key):
+    """CRIU 日志：日志首尾跨度与耗时最多的几项（各消息在样本里的 p50；只列至少一半样本里出现的）。"""
+    logs = [r.get(key) for r in rows if r.get(key) and r[key].get("lines")]
+    if not logs:
+        return ""
+    acc = {}
+    for lg in logs:
+        for msg, ms in lg["top"]:
+            acc.setdefault(msg, []).append(ms)
+    items = sorted(((statistics.median(v), m) for m, v in acc.items() if len(v) * 2 >= len(logs)), reverse=True)
+    return "跨度 %.1f · %d 行 | %s" % (statistics.median([lg["span_ms"] for lg in logs]),
+                                     statistics.median([lg["lines"] for lg in logs]),
+                                     "  ".join("[%s] %.1f" % (m, v) for v, m in items[:LOG_TOP]))
+
+
 def print_stages(result):
     rows = [r for r in result["rows"] if r["kind"] == "sample"]
     if not rows:
@@ -527,11 +782,14 @@ def print_stages(result):
     if result["stack"] == "criu":
         print("  CRIU 统计：时间单位 ms，页数按 4 KiB 页；frozen 是进程被冻住的总时长，含 memdump；"
               "memwrite 是把页写进镜像文件")
-    for series, n_conc, P, d, f in STAGE_POINTS:
-        rs = [r for r in rows if (r["series"], r.get("N", 1), r["P"], r["d"], r["f"]) == (series, n_conc, P, d, f)]
+        if any(r.get("ckpt2_criulog") for r in rows):
+            print("  CRIU 日志：相邻两行日志的间隔记到前一行的消息上（数字写成 #），列耗时最多的 %d 项" % LOG_TOP)
+    for series, want in STAGE_POINTS:
+        rs = [r for r in rows if match(r, series, want)]
         if not rs:
             continue
-        print("  %s N=%d P=%d d=%d f=%d（%d 次）" % (series, n_conc, P, d, f, len(rs)))
+        print("  %s %s（%d 次）" % (series, point_label({**norm({k: v for k, v in rs[0].items() if k in DIMS}),
+                                                         "N": rs[0].get("N", 1)}), len(rs)))
         for key, label in STAGE_OPS:
             st = stage_p50(rs, key)
             tot = [server_total(r, key) for r in rs]
@@ -542,47 +800,214 @@ def print_stages(result):
             crit = criu_p50(rs, key.replace("_server", "_criu"))
             if crit:
                 print("    %-14s CRIU 统计 | %s" % ("", crit))
+            lg = criulog_p50(rs, key.replace("_server", "_criulog"))
+            if lg:
+                print("    %-14s CRIU 日志 | %s" % ("", lg))
+
+
+# ------------------------------------------------------------ 多轮合并与两套并列
+
+def load_results(paths):
+    out = []
+    for p in paths:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("rows") is None or not data.get("stack"):
+            continue           # 不是测量结果（例如并列步骤自己的输出）
+        data["_path"] = p
+        out.append(data)
+    return out
+
+
+def merge(results):
+    """同一套的多轮合并成一份：行拼起来（每行记 round），身份取第一轮，判定全部 PASS 才 PASS。"""
+    first = results[0]
+    rows = []
+    for i, res in enumerate(results):
+        for r in res["rows"]:
+            rows.append(dict(r, round=i))
+    shas = sorted({(r["provenance"].get("orchestrator_sha256") or "?")[:16] for r in results})
+    merged = {"schema_version": first.get("schema_version", 1), "stack": first["stack"], "template": first["template"],
+              "provenance": dict(first["provenance"]), "rows": rows, "rounds": len(results),
+              "verdict": "PASS" if all(r.get("verdict") == "PASS" for r in results) else "FAIL",
+              "sources": [r["_path"] for r in results]}
+    if len(shas) > 1:
+        merged["provenance"]["orchestrator_sha256"] = "多个:" + ",".join(shas)
+    merged["summary"] = summarize(rows)
+    return merged
+
+
+def compare_table(results):
+    """两套并列：按测点对齐，列客户端墙钟 p50 / p99（最近秩）。返回 (按套合并后的结果, 表行)。"""
+    by_stack = {}
+    for r in results:
+        by_stack.setdefault(r["stack"], []).append(r)
+    merged = {st: merge(rs) for st, rs in by_stack.items()}
+    s, c = merged.get("sandbox"), merged.get("criu")
+    if not s or not c:
+        raise SystemExit("--compare 要两套的结果都有（现在只有 %s）" % ",".join(merged))
+    index = {}
+    for side, res in (("s", s), ("c", c)):
+        for e in res["summary"]:
+            k = (e["series"], e["N"], e["name"]) + tuple(e[d] for d in DIMS)
+            index.setdefault(k, {})[side] = e
+    table = []
+    for k, sides in index.items():
+        if "s" in sides and "c" in sides:
+            table.append({"series": k[0], "label": point_label(sides["s"]), "s": sides["s"], "c": sides["c"]})
+    return merged, table
+
+
+def print_compare(merged, table):
+    print("\n---- 两套并列（代价分解表）----")
+    for st in ("sandbox", "criu"):
+        res = merged[st]
+        prov = res["provenance"]
+        print("%-7s %d 轮 · 宿主 %s · orchestrator %s · 模板 %s · 脏页后端 %s" % (
+            st, res["rounds"], prov.get("hostname"), (prov.get("orchestrator_sha256") or "?")[:16], res["template"],
+            prov.get("dirty_tracking") or "?"))
+        print_host(prov, "        ")
+    print("单位 ms，客户端墙钟；p99 按最近秩取（n 小于 100 时接近最大值）；* 标出 p50 更低的一侧；"
+          "S = 沙箱级，C = 进程级")
+    order = series_order([{"series": t["series"]} for t in table])
+    for series in order:
+        rows = [t for t in table if t["series"] == series]
+        print("\n%s" % TITLES.get(series, series))
+        print("%-30s %7s | %-27s | %-27s | %-27s | %-15s" % (
+            "测点", "n S/C", "连续 ckpt p50 S/C（p99 S/C）", "restore 后 ckpt p50 S/C", "restore p50 S/C（p99 S/C）",
+            "全量基点 S/C"))
+        for t in rows:
+            a, b = t["s"], t["c"]
+
+            def pair(key, q="p50"):
+                x, y = a.get(key), b.get(key)
+                if not x or not y:
+                    return "%6s / %-6s" % (fmt(x, q), fmt(y, q))
+                star = ("*", " ") if x[q] < y[q] else (" ", "*") if y[q] < x[q] else (" ", " ")
+                return "%6.1f%s/ %6.1f%s" % (x[q], star[0], y[q], star[1])
+            print("%-30s %3d/%-3d | %s (%5s/%-5s) | %s       | %s (%5s/%-5s) | %s" % (
+                t["label"], a["n"], b["n"],
+                pair("ckpt2_ms"), fmt(a.get("ckpt2_ms"), "p99"), fmt(b.get("ckpt2_ms"), "p99"),
+                pair("ckpt_ms"),
+                pair("restore_ms"), fmt(a.get("restore_ms"), "p99"), fmt(b.get("restore_ms"), "p99"),
+                pair("base_ckpt_ms")))
+
+
+# ------------------------------------------------------------ 主流程
+
+def host_conditions():
+    """宿主条件：NUMA 节点与大小、numa_balancing、THP、内核命令行。读不到的项为 None。"""
+    def rd(path):
+        try:
+            with open(path) as f:
+                return f.read().strip()
+        except OSError:
+            return None
+    numa = None
+    try:
+        numa = subprocess.run(["numactl", "-H"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        pass
+    nodes = []
+    for line in (numa or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[0] == "node" and parts[2] == "size:":
+            nodes.append("%s:%s" % (parts[1], parts[3]))
+    if not nodes:      # 没装 numactl：从 sysfs 读各节点的 MemTotal
+        for p in sorted(glob.glob("/sys/devices/system/node/node[0-9]*"), key=lambda x: int(x.rsplit("node", 1)[1])):
+            size = None
+            for line in (rd(os.path.join(p, "meminfo")) or "").splitlines():
+                if "MemTotal:" in line:
+                    size = int(line.split()[-2]) // 1024
+            nodes.append("%s:%s" % (p.rsplit("node", 1)[1], size if size is not None else "?"))
+    thp = rd("/sys/kernel/mm/transparent_hugepage/enabled")
+    return {"numa_balancing": rd("/proc/sys/kernel/numa_balancing"),
+            "thp": thp.split("[")[1].split("]")[0] if thp and "[" in thp else thp,
+            "numa_summary": "%d 个节点（MiB：%s）" % (len(nodes), " ".join(nodes)) if nodes else None,
+            "numactl": numa, "cmdline": rd("/proc/cmdline")}
+
+
+def series_runs(args, series):
+    passes, reps = SERIES_RUNS.get(series, (2, 11))
+    if args.smoke:
+        return 1, 3
+    return (args.passes if args.passes is not None else passes), (args.reps if args.reps is not None else reps)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--series", default="dirty,size,file,conc")
-    ap.add_argument("--passes", type=int, default=2)
-    ap.add_argument("--reps", type=int, default=11)
+    ap.add_argument("--series", default=DEFAULT_SERIES, help="逗号分隔；all = %s" % ALL_SERIES)
+    ap.add_argument("--scenarios", help="场景文件（JSON），见下面的格式说明")
+    ap.add_argument("--passes", type=int, help="每个测点几个沙箱（默认 2；filewait 默认 1）")
+    ap.add_argument("--reps", type=int, help="每个沙箱几次（默认 11；filewait 默认 6）")
     ap.add_argument("--warmup", type=int, default=1)
     ap.add_argument("--conc", default=",".join(map(str, CONC)), help="conc 组的 N 列表")
     ap.add_argument("--conc-reps", type=int, default=6)
     ap.add_argument("--stack", choices=("sandbox", "criu"))
     ap.add_argument("--template")
+    ap.add_argument("--criu-logs", action="store_true", help="进程级：每次测量后读 CRIU 的 dump/restore 日志做归因")
+    ap.add_argument("--criu-verbosity", type=int, choices=range(0, 5),
+                    help="进程级：guest 里给 criu 套包装脚本，dump/restore 都改用 -vN（测日志级别本身的代价）")
     ap.add_argument("--out", default="same-workload-%s.json" % time.strftime("%Y%m%d-%H%M%S"))
     ap.add_argument("--smoke", action="store_true")
-    ap.add_argument("--print", dest="reprint", metavar="RESULT_JSON", help="只重新打印已有结果的汇总")
+    ap.add_argument("--print", dest="reprint", nargs="+", metavar="RESULT_JSON",
+                    help="只重新打印已有结果的汇总；同一套的多个文件合并成一份")
+    ap.add_argument("--compare", nargs="+", metavar="RESULT_JSON", help="两套的结果按测点并列（每套可多轮）")
+    ap.add_argument("--compare-siblings", action="store_true",
+                    help="与 --out 合用：并列 --out 所在目录上一级里其他各步的 result.json")
+    ap.epilog = SCENARIO_HELP
     args = ap.parse_args()
     if args.reprint:
-        with open(args.reprint, encoding="utf-8") as f:
-            print_summary(json.load(f))
+        results = load_results(args.reprint)
+        if len({r["stack"] for r in results}) != 1:
+            raise SystemExit("--print 的文件要是同一套的结果；两套并列用 --compare")
+        print_summary(merge(results) if len(results) > 1 else results[0])
         return 0
+    if args.compare or args.compare_siblings:
+        paths = args.compare or []
+        if args.compare_siblings:
+            mine = os.path.abspath(args.out)
+            parent = os.path.dirname(os.path.dirname(mine))
+            paths += sorted(p for p in glob.glob(os.path.join(parent, "*", "result.json"))
+                            if os.path.abspath(p) != mine and "-old-" not in p)
+        merged, table = compare_table(load_results(paths))
+        print_compare(merged, table)
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump({"verdict": "PASS", "sources": paths, "compare": table}, f, ensure_ascii=False, indent=1)
+        print("\n结果文件: %s" % os.path.abspath(args.out))
+        return 0
+    series_list = ALL_SERIES.split(",") if args.series == "all" else [s for s in args.series.split(",") if s]
+    scenarios = load_scenarios(args.scenarios) if args.scenarios else []
+    if scenarios and "scen" not in series_list:
+        series_list.append("scen")
+    if "scen" in series_list and not scenarios:
+        raise SystemExit("--series 含 scen 但没给 --scenarios\n" + SCENARIO_HELP)
+    unknown = [s for s in series_list if s not in SERIES and s not in ("conc", "scen")]
+    if unknown:
+        raise SystemExit("不认识的测点组：%s（可选 %s,scen）" % (",".join(unknown), ALL_SERIES))
     exe, env = orchestrator_proc()
     stack = args.stack or detect_stack(exe)
     args.template = args.template or ("base-criu" if stack == "criu" else "base")
     if args.smoke:
-        args.passes, args.reps, args.warmup, args.conc, args.conc_reps = 1, 3, 1, "1,2", 3
+        args.warmup, args.conc, args.conc_reps = 1, "1,2", 3
     store = os.path.join(env.get("ORCHESTRATOR_BASE_PATH", "/orchestrator"), "build", "checkpoints") if env else None
     from e2b import Sandbox
 
-    result = {"schema_version": 1, "stack": stack, "template": args.template,
+    result = {"schema_version": 2, "stack": stack, "template": args.template,
               "provenance": {"hostname": socket.gethostname(), "kernel": os.uname().release,
                              "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                              "script_sha256": sha256_file(os.path.abspath(__file__)),
                              "orchestrator_exe": exe, "orchestrator_sha256": sha256_file(exe) if exe else None,
-                             "FC_TRACK_DIRTY_PAGES": env.get("FC_TRACK_DIRTY_PAGES"), "args": vars(args)},
+                             "FC_TRACK_DIRTY_PAGES": env.get("FC_TRACK_DIRTY_PAGES"), "args": vars(args),
+                             "host_conditions": host_conditions(), "scenarios": scenarios},
               "rows": [], "summary": [], "verdict": "FAIL"}
+    print_host(result["provenance"])
     ctx = Ctx(args, stack, store)
     ctx.prov = result["provenance"]
     lock = threading.Lock()
     failure = None
     try:
-        for series in args.series.split(","):
+        for series in series_list:
             if series == "conc":
                 for n in [int(x) for x in args.conc.split(",")]:
                     rows = []
@@ -597,10 +1022,13 @@ def main():
                         raise RuntimeError("conc N=%d：%s" % (n, errs[0]))
                     LOG.info("conc N=%d 完成", n)
                 continue
-            points = SERIES[series][:1] if args.smoke else SERIES[series]
+            points = scenarios if series == "scen" else SERIES[series]
+            if args.smoke:
+                points = points[:1]
+            passes, reps = series_runs(args, series)
             for point in points:
-                for pass_no in range(args.passes):
-                    one_sandbox(Sandbox, ctx, point, series, pass_no, args.reps, args.warmup, result["rows"], lock)
+                for pass_no in range(passes):
+                    one_sandbox(Sandbox, ctx, point, series, pass_no, reps, args.warmup, result["rows"], lock)
         result["verdict"] = "PASS"
     except Exception as exc:
         failure = str(exc)

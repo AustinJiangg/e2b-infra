@@ -150,11 +150,11 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 | 命令 | 测什么 | 脚本 | 每套样本 |
 |---|---|---|---|
 | `bash test950.sh native` | e2b 原生 pause / resume，以及 `create_snapshot` → 从快照新建沙箱（snapshot 模式）。在沙箱级、进程级两套代码上各跑一遍 | `benchmark/native_snapshot_tiers.py --mode both --passes 3 --iters 8` | 六档（0～256 MiB，内存:文件 = 3:1），每档每种模式 24 个增量样本 + 3 个首次样本 |
-| `bash test950.sh compare` | 同一种负载下的 checkpoint / restore：两套用同一个常驻进程（P MiB 的内存，改写其中 d MiB）和同一个文件负载 | `benchmark/ckpt_same_workload.py` | 四组测点，每点 20 个样本（见下） |
+| `bash test950.sh compare [--rounds N] [--series 组]` | 同一种负载下的 checkpoint / restore：两套用同一个常驻进程（P MiB 的内存，改写其中 d MiB）和同一个文件负载 | `benchmark/ckpt_same_workload.py` | 默认六组测点，每点每轮 20 个样本（见下） |
 
 **为什么原生 pause / resume 要在两套代码上各跑一遍。** 沙箱级为了 checkpoint / restore 改过原生路径（4 KiB 写跟踪的精确增量差分，以及脏页跟踪本身）；进程级的 orchestrator 不含这些改动，但也不是纯上游：它来自 KASandbox 一脉，pause 要等快照上传完才返回（上游不等），模板注入了 gsd、guest 内核打了补丁。两套各跑一遍，差值就是"我们的改动对原生路径的影响"，对外引用原生数字时要写明是哪一套上测的。与 checkpoint / restore 语义对应的是 snapshot 模式（可以对同一个点反复恢复）；pause 模式只能回到最近一次 pause。
 
-**`compare` 的四组测点。** 两套原来的分档负载不同（沙箱级改写 `/dev/shm`，进程级改写常驻进程，且进程大小随档位变），并列时分不开"改动量"和"进程大小"。这里两套用同一个负载：
+**`compare` 的测点组。** 两套原来的分档负载不同（沙箱级改写 `/dev/shm`，进程级改写常驻进程，且进程大小随档位变），并列时分不开"改动量"和"进程大小"。这里两套用同一个负载：
 
 | 组 | 进程大小 P | 改动 d | 文件 f | 回答什么 |
 |---|---|---|---|---|
@@ -162,16 +162,26 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 | size | 32～384 MiB | 16 MiB | 0 | 改动量不变、进程变大时两套各自怎么变 |
 | file | 16 MiB | 0 | 16、64 MiB | 只写文件 |
 | conc | 64 MiB | 16 MiB | 0 | 1、4、8、16 个沙箱同时做 |
+| layout | 256 MiB | 16、64、256 MiB，散页 | 0 | 改动分散在整个进程里（与 dirty 的连续改动对照） |
+| trees | 合计 64 MiB | 合计 16 MiB | 0 | 平分到 1、4、16 棵进程树 |
+| filewait | 16 MiB | 0 | 64 MiB | 落盘方式（fsync / 只 write）× 写完等 0、10、40 秒；每套约 22 分钟，不在默认组里，要 `--series` 显式写 |
+
+默认跑前六组（不含 filewait）。`--series` 写逗号分隔的组名，`all` 是全部七组。另有 `scen` 组：用 `--scenarios 文件` 给出场景（每个场景写上面这些量的取值），格式见 `ckpt_same_workload.py --help`；场景的数值要按真实任务画像定。
+
+**多轮交替（`--rounds N`）。** 两套按 ABBA 顺序交替各跑 N 轮（第 1 轮沙箱级→进程级，第 2 轮进程级→沙箱级……），宿主状态随时间的变化平均分到两侧；最后一步 `compare-table` 把各轮合并，按测点并列两套的墙钟 p50 / p99。每测点样本数 = 20 × N，要 n ≥ 100 就用 `--rounds 5`。`report` 只打印并列表，各轮只列判定；单轮全文用 `bash test950.sh report criu/compare-r1` 这样的步骤名。
+
+**基点前等 ext4 初始化。** 模板快照拍在 guest 的 ext4 把 inode 表后台清零完成之前，新沙箱启动后几秒内会额外往根盘写约 60 MiB。脚本在拍基点前等这个后台线程（`ext4lazyinit`）退出，等了几秒记在基点那一行；这样 restore 回基点不会重做清零，filewait 组测到的只是文件本身。每轮开头还记录宿主条件：NUMA 节点与大小、`kernel.numa_balancing`、宿主 THP、内核命令行。
 
 一次测量是：改写 → checkpoint A → 再改写 → checkpoint B → restore 回基点 → 校验内存 SHA256 与文件 → 删掉 A、B。A 紧跟在上一次 restore 之后，B 紧跟在 A 之后，汇总表分两列给出：进程级 restore 之后的第一次 checkpoint 曾经总是全量（CRIU 的 PID 复用检测，进程级手册第 16 章 L-18，gsd `daae6968f` 起已修复为增量），分两列可以核对修复是否生效；沙箱级两者都是增量。每个沙箱的第一次不计入统计（首次 restore 偏慢），基点全量单列。每次都记客户端墙钟、服务端 `total`（进程级取 gsd 分段，沙箱级读宿主上的 `timings.json`）和产物字节。
 
 汇总里另有三样用来分析"快在哪一段"的内容：
 
 - **脏页后端**：表头下一行，Firecracker 自报的 `dirty_tracking`。`hdbss` 是硬件标脏（950 应是它），`kvm-wp` 是 KVM 写保护（软件，920B 是它），`off` 是没开。沙箱级的增量靠它；进程级用 guest 内核的 soft-dirty，不用它（进程级报 `off` 是正常的）。`native` 的汇总表头同样打印这一项。
-- **服务端分段表**：总耗时表之后，选 8 个代表测点（dirty 的 d=0/16/64/256、size 的 P=32/384、file 的 f=64、conc 的 N=16），列连续 checkpoint、restore 后 checkpoint、restore 三种操作各分段的 p50（每行按耗时从大到小）。分段之间有包含关系，不能相加。
+- **服务端分段表**：总耗时表之后，选几个代表测点（dirty 的 d=0/16/64/256、size 的 P=32/384、file 的 f=64、layout 的 d=256、trees 的 16 棵、filewait 的三种、conc 的 N=16，没跑的组不列），列连续 checkpoint、restore 后 checkpoint、restore 三种操作各分段的 p50（每行按耗时从大到小）。分段之间有包含关系，不能相加。
 - **CRIU 统计**（只有进程级）：每轮核对之后（不在计时区间内）读 guest 里镜像目录下的 `stats-dump` / `stats-restore`，把 `criu_dump` / `criu_restore` 再拆成冻结、扫页（memdump）、写页（memwrite）、恢复的耗时，以及扫描、跳过（父镜像已有）、写出、恢复的页数。
+- **CRIU 日志**（只有进程级，compare 默认带 `--criu-logs`）：同样在计时区间外读 dump / restore 日志，把相邻两行日志的时间间隔记到前一行的消息上，列耗时最多的几项。dump 日志是 gsd 写死的 `-v4`；restore 默认级别几乎没有日志。
 
-已有的结果可以不重跑、只重新打印汇总：例如重打最近一次 compare 的沙箱级结果：`python3 benchmark/ckpt_same_workload.py --print test950/results/$(ls test950/results | grep compare | tail -1)/sandbox-compare/result.json`（旧结果没有脏页后端和 CRIU 统计，这两项显示为 `?` 或不打印）。
+已有的结果可以不重跑、只重新打印汇总：例如重打最近一次 compare 的沙箱级结果：`python3 benchmark/ckpt_same_workload.py --print test950/results/$(ls test950/results | grep compare | tail -1)/sandbox-compare/result.json`（旧结果没有脏页后端和 CRIU 统计，这两项显示为 `?` 或不打印；`--print` 可以给同一套的多个结果文件，合并后打印）。两套并列：`python3 benchmark/ckpt_same_workload.py --compare 沙箱级结果.json 进程级结果.json …`，每套可以给多轮。
 
 结果同样用 `bash test950.sh report` 打印，逐步打印的是脚本自己的汇总表；`bash test950.sh report sandbox/native` 等打印单步的汇总和日志末尾。
 

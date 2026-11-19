@@ -11,6 +11,8 @@
     TEMPLATE   模板名，默认 base-criu
     THP        guest 的透明大页设置，默认 never（gsd 的真实条件）；always 只用于诊断
     OUT_JSON   设了就把结果另存成这个 JSON 文件
+    FILE_SYNC  改动之后是否 sync：sync（默认，与原测法相同）或 none（文件数据留在 guest 页缓存）
+    FILE_WAIT  改动之后等几秒再 checkpoint，默认 0
 输出分档表、实际 RSS、客户端墙钟和服务端分段。每档单样本，建议连跑三次。
 JSON schema_version=2，measurement_mode=per-tier-size；与手册 20 章的历史固定
 192 MiB、连续建链测试不是同一口径。失败返回非零，部分结果仍写入 OUT_JSON。
@@ -45,6 +47,8 @@ EXPERIMENTS = [
 
 TEMPLATE = os.environ.get("TEMPLATE", "base-criu")   # 模板名；手册统一用 base-criu
 THP = os.environ.get("THP", "never")   # 见 main() 里的说明；只在诊断时改成 always
+FILE_SYNC = os.environ.get("FILE_SYNC", "sync")     # 改动之后是否 sync（基点之前总是 sync）
+FILE_WAIT = float(os.environ.get("FILE_WAIT", "0"))  # 改动之后等几秒再 checkpoint
 
 # 常驻 Python 进程：
 # - 预分配本档大小的 bytearray，0 档不强制分配 1 MiB
@@ -285,7 +289,10 @@ def run_tier(factory, index, exp, result):
         require(hog.dirty(exp["mem_mb"]) == f"ok:{exp['mem_mb']}", f"{name}: 改写内存失败")
         require(hog.marker(name + "-changed") == "ok", f"{name}: 改写标记失败")
         sb.files.write(NOTE, "y" * (exp["file_kb"] * 1024))
-        sb.commands.run("sync", user="root", timeout=60)
+        if FILE_SYNC == "sync":
+            sb.commands.run("sync", user="root", timeout=60)
+        if FILE_WAIT > 0:
+            time.sleep(FILE_WAIT)
         changed = hog.state()
         require(changed["payload_bytes"] == expected["payload_bytes"], f"{name}: 改写改变了负载大小")
         if exp["mem_mb"]:
@@ -375,10 +382,12 @@ def main():
     result = {"schema_version": 2, "measurement_mode": "per-tier-size",
               "template": TEMPLATE, "thp": THP,
               "restore_path": "modified-child-to-full-baseline",
-              "samples_per_tier": 1, "baseline": [], "create": [], "restore": [],
+              "samples_per_tier": 1, "file_sync": FILE_SYNC, "file_wait_s": FILE_WAIT,
+              "baseline": [], "create": [], "restore": [],
               "verdict": "FAIL"}
     try:
         require(THP in ("never", "always", "madvise"), "THP 必须为 never、always 或 madvise")
+        require(FILE_SYNC in ("sync", "none"), "FILE_SYNC 必须为 sync 或 none")
         for index, exp in enumerate(EXPERIMENTS, 1):
             run_tier(Sandbox.create, index, exp, result)
         check_timings(result)

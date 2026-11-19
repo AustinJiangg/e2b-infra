@@ -156,8 +156,8 @@ def _copy_chunk(dst, mb):
     return "\n".join(cmds)
 
 
-def make_dirty(box, gen, mem_mb, file_mb, read_mb):
-    """造改动。返回 guest 侧耗时（秒）。"""
+def make_dirty(box, gen, mem_mb, file_mb, read_mb, file_sync="sync"):
+    """造改动。返回 guest 侧耗时（秒）。file_sync=none 时不 sync，文件数据留在 guest 页缓存。"""
     parts = []
     if mem_mb > 0:
         parts.append(_copy_chunk(SWEEP, mem_mb))
@@ -166,7 +166,8 @@ def make_dirty(box, gen, mem_mb, file_mb, read_mb):
     if read_mb > 0:
         parts.append("dd if=%s of=/dev/null bs=1M count=%d 2>/dev/null" % (SWEEP, read_mb))
     parts.append("echo %s > %s" % (gen, MEM_GEN))
-    parts.append("sync")
+    if file_sync == "sync":
+        parts.append("sync")
     t0 = time.monotonic()
     rc, out = box.sh("\n".join(parts), timeout=1800)
     dt = time.monotonic() - t0
@@ -184,9 +185,12 @@ def one_iter(ctx, box, base_id, tier, idx, gen, jsonl):
     rec = {"kind": "iter", "pass": ctx._pass, "tier": name, "idx": idx,
            "mem_mb": mem_mb, "file_mb": file_mb, "read_mb": read_mb,
            "total_mb": mem_mb + file_mb,
-           "sandbox": box.id, "base": base_id, "t": time.time()}
+           "sandbox": box.id, "base": base_id, "t": time.time(),
+           "file_sync": ctx.args.file_sync, "file_wait_s": ctx.args.file_wait}
 
-    rec["dirty_s"] = make_dirty(box, gen, mem_mb, file_mb, read_mb)
+    rec["dirty_s"] = make_dirty(box, gen, mem_mb, file_mb, read_mb, ctx.args.file_sync)
+    if ctx.args.file_wait > 0:
+        time.sleep(ctx.args.file_wait)     # 写完等一会儿再 checkpoint（模拟写完之后隔一段时间才 checkpoint）
 
     before_layers = layers_of(store, box.id)
     m0 = ctx.meter.snapshot()
@@ -330,6 +334,11 @@ def main():
     ap.add_argument("--scale", type=float, default=1.0, help="按比例缩放档位表的样本数")
     ap.add_argument("--passes", type=int, default=3, help="整套跑几遍（每遍一个新沙箱）")
     ap.add_argument("--deadline-min", type=float, default=75.0, help="总时限（分钟）")
+    ap.add_argument("--file-sync", choices=("sync", "none"), default="sync",
+                    help="改完之后是否 sync：sync（默认，文件数据进到宿主，checkpoint 要把它推进写层，最坏情况）"
+                         "；none = 不 sync，文件数据留在 guest 页缓存")
+    ap.add_argument("--file-wait", type=float, default=0.0,
+                    help="改完之后等几秒再 checkpoint（默认 0，最坏情况）；等得够久时宿主已自行写回")
     args = ap.parse_args()
     global OUTDIR
     if args.outdir:
