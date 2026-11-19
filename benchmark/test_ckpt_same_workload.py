@@ -80,6 +80,50 @@ class PointTests(unittest.TestCase):
             os.unlink(f.name)
 
 
+class MixTests(unittest.TestCase):
+    def test_fractional_file(self):
+        p = csw.norm({"P": 256, "d": 70, "f": 0.001})
+        self.assertEqual(p["f"], 0.001)
+        self.assertIsInstance(csw.norm({"P": 256, "d": 12, "f": 4.0})["f"], int)
+        self.assertEqual(csw.dd_size(4), "bs=1M count=4")
+        self.assertEqual(csw.dd_size(0.001), "bs=1049 count=1 iflag=fullblock")
+        self.assertIn("f=0.001", csw.point_label(p))
+        self.assertEqual([(q["d"], q["f"]) for q in csw.SERIES["mix"]][-1], (70, 0.001))
+        self.assertTrue(all(3 * q["f"] == q["d"] for q in csw.SERIES["mix"][:-1]))
+
+    def test_mix_table(self):
+        def with_native(stack, rnd):
+            rows = fake_rows(stack, "mix", {"P": 256, "d": 12, "f": 4}, rnd=rnd) + \
+                fake_rows(stack, "mix", {"P": 256, "d": 70, "f": 0.001}, rnd=rnd)
+            for pt in ({"P": 256, "d": 12, "f": 4}, {"P": 256, "d": 70, "f": 0.001}):
+                p = csw.norm(pt)
+                rows.append({"series": "mix", **p, "pass": 0, "rep": 0, "kind": "native_first", "pause_ms": 900.0,
+                             "resume_ms": 200.0, "ok": True})
+                for i in range(4):
+                    rows.append({"series": "mix", **p, "pass": 0, "rep": i + 1, "kind": "native",
+                                 "pause_ms": 300.0 + i, "resume_ms": 100.0 + i, "resume_call_ms": 90.0,
+                                 "ready_ms": 10.0 + i, "ok": True})
+            return fake_result(stack, rows)
+        s, c = with_native("sandbox", 1), with_native("criu", 2)
+        e = [x for x in s["summary"] if x["d"] == 12][0]
+        self.assertEqual(e["native_n"], 4)
+        self.assertEqual(e["native_first_pause_ms"]["p50"], 900.0)
+        self.assertEqual(e["n"], 5)                 # native 行不混进 checkpoint 的样本
+        for r in (s, c):
+            r["_path"] = r["stack"]
+        merged, table = csw.compare_table([s, c])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_compare(merged, table)
+            csw.print_summary(s)
+        out = buf.getvalue()
+        self.assertIn("对外分档表", out)
+        self.assertIn("16\t12\t4\t", out)
+        self.assertIn("70.001\t70\t0.001\t", out)
+        self.assertIn("E2B resume(进程级代码)", out)
+        self.assertIn("原生 pause / resume", out)
+
+
 class SummaryTests(unittest.TestCase):
     def test_summary_print_and_merge(self):
         rows = fake_rows("criu", "dirty", {"P": 256, "d": 16}) + \

@@ -158,6 +158,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 | 组 | 进程大小 P | 改动 d | 文件 f | 回答什么 |
 |---|---|---|---|---|
+| mix | 256 MiB | 0、12、24、48、96、192、70 MiB | 0、4、8、16、32、64、0.001 MiB | 对外展示的分档表（内存 : 文件 = 3 : 1，另加 70 MiB + 0.001 MiB 一档）；同一负载另起沙箱测 e2b 原生 pause / resume |
 | dirty | 256 MiB | 0、16、32、64、128、256 MiB | 0 | 改动量变、进程大小不变时两套各自怎么变 |
 | size | 32～384 MiB | 16 MiB | 0 | 改动量不变、进程变大时两套各自怎么变 |
 | file | 16 MiB | 0 | 16、64 MiB | 只写文件 |
@@ -166,7 +167,9 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 | trees | 合计 64 MiB | 合计 16 MiB | 0 | 平分到 1、4、16 棵进程树 |
 | filewait | 16 MiB | 0 | 64 MiB | 落盘方式（fsync / 只 write）× 写完等 0、10、40 秒；每套约 22 分钟，不在默认组里，要 `--series` 显式写 |
 
-默认跑前六组（不含 filewait）。`--series` 写逗号分隔的组名，`all` 是全部七组。另有 `scen` 组：用 `--scenarios 文件` 给出场景（每个场景写上面这些量的取值），格式见 `ckpt_same_workload.py --help`；场景的数值要按真实任务画像定。
+默认跑前七组（不含 filewait）。`--series` 写逗号分隔的组名，`all` 是全部八组。另有 `scen` 组：用 `--scenarios 文件` 给出场景（每个场景写上面这些量的取值），格式见 `ckpt_same_workload.py --help`；场景的数值要按真实任务画像定。
+
+**mix 组与对外分档表。** mix 的每个测点先照常测 checkpoint / restore，再另起一个沙箱、同样的负载，循环“改写 → `sb.pause()` → `Sandbox.connect()` → 第一条命令 → 核对内存与文件”，测 e2b 原生 pause / resume：pause 计 `sb.pause()` 的调用耗时，resume 计 connect 返回加第一条命令完成；第一次 pause 导出的是自启动以来的全部写入，单列不进统计。两套各跑一遍，所以原生路径在沙箱级、进程级两套代码上各有一组数。最后的 `compare-table` 除了按测点并列，还打印一张对外分档表（p50、p99 各一张，制表符分隔，可直接贴进表格）：总改动、内存、文件、沙箱级 / 进程级 checkpoint、沙箱级 / 进程级 restore、两套代码上的 E2B pause / resume。checkpoint 取连续 checkpoint，restore 是回到改写之前的基点；每档 checkpoint / restore 20 个样本，pause / resume 20 个样本。
 
 **多轮交替（`--rounds N`）。** 两套按 ABBA 顺序交替各跑 N 轮（第 1 轮沙箱级→进程级，第 2 轮进程级→沙箱级……），宿主状态随时间的变化平均分到两侧；最后一步 `compare-table` 把各轮合并，按测点并列两套的墙钟 p50 / p99。每测点样本数 = 20 × N，要 n ≥ 100 就用 `--rounds 5`。`report` 只打印并列表，各轮只列判定；单轮全文用 `bash test950.sh report criu/compare-r1` 这样的步骤名。
 

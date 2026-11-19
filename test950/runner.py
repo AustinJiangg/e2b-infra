@@ -85,13 +85,14 @@ CRIU_STEPS = {
 }
 
 
-COMPARE_SERIES = "dirty,size,file,conc,layout,trees"   # ckpt_same_workload.py 的默认测点组
+COMPARE_SERIES = "mix,dirty,size,file,conc,layout,trees"   # ckpt_same_workload.py 的默认测点组
 
 
 def compare_steps(stacks, rounds, series):
     """compare：两套各跑 rounds 轮，按 ABBA 交替（相邻两轮首尾同栈，少切一次）；最后把各轮合并、两套并列。"""
     series = series or COMPARE_SERIES
-    est = 7 + (22 if "filewait" in series or series == "all" else 0) + (6 if "scen" in series else 0)
+    est = (7 + (22 if "filewait" in series or series == "all" else 0) + (6 if "scen" in series else 0)
+           + (15 if "mix" in series or series == "all" else 0))
     steps = []
     for r in range(1, rounds + 1):
         order = stacks if r % 2 else list(reversed(stacks))

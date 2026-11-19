@@ -32,8 +32,20 @@ bytearray，且进程大小随档位一起变），并列时分不开"改动量"
     filewait 进程 16 MiB、写 64 MiB 文件，落盘 fsync / none × 写完等 0、10、40 秒
              （默认每测点 1 个沙箱 × 6 次；40 秒那几档一个测点约 8 分钟）
     scen     --scenarios 给的场景文件，每个场景一个测点（格式见 SCENARIO_HELP）
+    mix      对外展示用的分档表：进程固定 256 MiB，每档改写 d MiB 内存、写 f MiB 文件，
+             (d, f) = (0,0) (12,4) (24,8) (48,16) (96,32) (192,64) (70,0.001)，内存 : 文件 = 3 : 1
+             （最后一档是另加的）。每个测点另起一个沙箱，在同一负载上测 e2b 原生 pause / resume，
+             见下面"原生 pause / resume"。两套并列时 mix 另打一张对外表（p50 一张、p99 一张）。
 
-默认跑 dirty,size,file,conc,layout,trees；filewait 时间长，要显式写 --series 或用 --series all。
+默认跑 mix,dirty,size,file,conc,layout,trees；filewait 时间长，要显式写 --series 或用 --series all。
+文件大小可以是小数（MiB），不是整 MiB 时按字节数一次写入。
+
+原生 pause / resume（只在 mix 组）：同一个测点、同样起常驻进程并写满、写好文件、等 ext4 初始化，
+然后循环"改写 d MiB、写 f MiB → sb.pause() → Sandbox.connect() → 第一条命令 → 核对内存 SHA256 与
+文件"。pause 计 sb.pause() 的调用耗时；resume 计 connect 返回加第一条命令完成（与
+native_snapshot_tiers.py 同一口径）。第 0 次 pause 导出的是自启动以来的全部写入，单列不进统计。
+不与 checkpoint 混在一个沙箱里，免得两种快照互相影响。每次 pause 产出的 build 在沙箱结束后删掉
+（本地模板存储时）。在哪套栈上跑，测的就是那套代码里的原生路径。
 
 基点前先等 guest 的 ext4 把 inode 表后台清零做完（ext4lazyinit 线程退出）：模板快照拍在清零完成之前，
 新沙箱启动后几秒内会额外写出约 60 MiB 根盘数据；基点拍在清零之后，restore 回基点就不会再重做一遍，
@@ -89,13 +101,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 LOG = logging.getLogger("same")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from native_snapshot_tiers import fc_info  # noqa: E402  向 Firecracker API 问脏页后端
+from native_snapshot_tiers import fc_info, list_cache, export_sizes, remove_builds  # noqa: E402
 
 MIB = 1 << 20
 WD = "/tmp/swl"
 SBX_TIMEOUT = 3600
 # 测点的各个量与默认值；测点字典里没写的量取这里的值
 DEFAULTS = {"P": 16, "d": 0, "f": 0, "layout": "seq", "trees": 1, "sync": "fsync", "wait": 0}
+MIX_POINTS = ((0, 0), (12, 4), (24, 8), (48, 16), (96, 32), (192, 64), (70, 0.001))
 DIMS = ("P", "d", "f", "layout", "trees", "sync", "wait")
 SERIES = {
     "dirty": [{"P": 256, "d": d} for d in (0, 16, 32, 64, 128, 256)],
@@ -104,9 +117,11 @@ SERIES = {
     "layout": [{"P": 256, "d": d, "layout": "scatter"} for d in (16, 64, 256)],
     "trees": [{"P": 64, "d": 16, "trees": t} for t in (1, 4, 16)],
     "filewait": [{"P": 16, "f": 64, "sync": s, "wait": w} for s in ("fsync", "none") for w in (0, 10, 40)],
+    "mix": [{"P": 256, "d": d, "f": f} for d, f in MIX_POINTS],
 }
-DEFAULT_SERIES = "dirty,size,file,conc,layout,trees"
-ALL_SERIES = "dirty,size,file,conc,layout,trees,filewait"
+NATIVE_SERIES = ("mix",)     # 这些组的每个测点另起沙箱测原生 pause / resume
+DEFAULT_SERIES = "mix,dirty,size,file,conc,layout,trees"
+ALL_SERIES = "mix,dirty,size,file,conc,layout,trees,filewait"
 SERIES_RUNS = {"filewait": (1, 6)}     # 没显式给 --passes/--reps 时这些组用的（沙箱数, 次数）
 CONC = [1, 4, 8, 16]
 CONC_POINT = {"P": 64, "d": 16}
@@ -122,8 +137,11 @@ def norm(point):
     """补全测点的各个量。"""
     p = dict(DEFAULTS)
     p.update(point)
-    for k in ("P", "d", "f", "trees", "wait"):
+    for k in ("P", "d", "trees", "wait"):
         p[k] = int(p[k])
+    p["f"] = float(p["f"])          # 文件可以不是整 MiB；整数时保持 int，测点的键与旧结果一致
+    if p["f"].is_integer():
+        p["f"] = int(p["f"])
     if p["layout"] not in ("seq", "scatter") or p["sync"] not in ("fsync", "none"):
         raise ValueError("测点 %s：layout 只能是 seq/scatter，sync 只能是 fsync/none" % point)
     if p["trees"] < 1 or p["P"] % p["trees"] or p["d"] % p["trees"] or p["d"] > p["P"]:
@@ -157,7 +175,7 @@ def point_label(e):
     if e.get("N", 1) != 1:
         parts.append("N=%d" % e["N"])
     parts += ["P=%d" % e["P"], "d=%d" % e["d"]]
-    for k, fmt_ in (("layout", "%s"), ("trees", "trees=%d"), ("f", "f=%d"), ("sync", "sync=%s"), ("wait", "wait=%ds")):
+    for k, fmt_ in (("layout", "%s"), ("trees", "trees=%d"), ("f", "f=%g"), ("sync", "sync=%s"), ("wait", "wait=%ds")):
         if e.get(k, DEFAULTS[k]) != DEFAULTS[k] or (k == "sync" and e.get("f")):
             parts.append(fmt_ % e[k])
     return " ".join(parts)
@@ -283,6 +301,14 @@ def dir_bytes(path):
 
 # ------------------------------------------------------------ 沙箱内
 
+def dd_size(mib):
+    """dd 的块大小参数：整 MiB 用 bs=1M count=N，否则按字节数一次写入。"""
+    n = int(round(mib * MIB))
+    if n % MIB == 0:
+        return "bs=1M count=%d" % (n // MIB)
+    return "bs=%d count=1 iflag=fullblock" % n
+
+
 class Hog:
     """trees 个互不相干的常驻进程（每个是一棵进程树），各在 WD/h<i> 下收命令；命令一次发给全部。"""
 
@@ -335,9 +361,9 @@ class Hog:
         if not mb:
             return
         if sync == "fsync":
-            self.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=notrunc,fsync 2>/dev/null; sync" % (WD, mb))
+            self.sh("dd if=/dev/urandom of=%s/file %s conv=notrunc,fsync 2>/dev/null; sync" % (WD, dd_size(mb)))
         else:
-            self.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=notrunc 2>/dev/null" % (WD, mb))
+            self.sh("dd if=/dev/urandom of=%s/file %s conv=notrunc 2>/dev/null" % (WD, dd_size(mb)))
 
     def wait_lazyinit(self, limit=60):
         """等 guest 的 ext4 inode 表后台清零做完（ext4lazyinit 内核线程退出），返回等了几秒。"""
@@ -358,8 +384,9 @@ class Hog:
 # ------------------------------------------------------------ 测量
 
 class Ctx:
-    def __init__(self, args, stack, store):
+    def __init__(self, args, stack, store, cache=None, storage=None):
         self.args, self.stack, self.store = args, stack, store
+        self.cache, self.storage = cache, storage     # 原生 pause：导出缓存目录、本地模板存储（删 build 用）
         self.prov = None
 
     def server(self, sb, ck_id, op, sdk_timings):
@@ -506,31 +533,84 @@ def criu_stats(hog, wanted):
     return out
 
 
+def prepare_sandbox(sb, ctx, point, lock):
+    """起常驻进程并写满、写好文件、等 ext4 初始化。返回 (hog, 等 ext4 初始化的秒数)。"""
+    if ctx.prov is not None and "dirty_tracking" not in ctx.prov:
+        info = fc_info(sb.sandbox_id)
+        with lock:
+            ctx.prov.setdefault("dirty_tracking", info.get("dirty_tracking") if info else None)
+            ctx.prov.setdefault("firecracker_version", info.get("vmm_version") if info else None)
+    if ctx.stack == "criu":
+        sb.commands.run("echo never > /sys/kernel/mm/transparent_hugepage/enabled", user="root")
+    hog = Hog(sb, point["trees"])
+    if ctx.stack == "criu" and ctx.args.criu_verbosity is not None:
+        install_criu_wrapper(hog, ctx.args.criu_verbosity)
+    hog.start(point["P"])
+    if ctx.stack == "criu":
+        sb.files.write(WD + "/criu_stats.py", CRIU_STATS_PY)
+        sb.files.write(WD + "/criu_log.py", CRIU_LOG_PY)
+    hog.dirty(point["P"])
+    if point["f"]:
+        hog.sh("dd if=/dev/urandom of=%s/file %s conv=fsync 2>/dev/null" % (WD, dd_size(point["f"])))
+    hog.sh("sync")
+    lazy_s = hog.wait_lazyinit()
+    hog.sh("sync")
+    return hog, lazy_s
+
+
+def native_sandbox(Sandbox, ctx, point, series, pass_no, reps, rows, lock):
+    """同一负载上的 e2b 原生 pause / resume（见文件头）。rep 0 是首次 pause，单列。"""
+    point = norm(point)
+    d, f = point["d"], point["f"]
+    sb = Sandbox.create(template=ctx.args.template, timeout=SBX_TIMEOUT)
+    sid = sb.sandbox_id
+    builds = []
+    try:
+        hog, _ = prepare_sandbox(sb, ctx, point, lock)
+        for rep in range(reps + 1):
+            hog.dirty(d, point["layout"])
+            hog.write_file(f, point["sync"])
+            if point["wait"]:
+                time.sleep(point["wait"])
+            want = hog.state(f)
+            before = list_cache(ctx.cache)
+            t0 = time.perf_counter()
+            sb.pause()
+            pause_ms = (time.perf_counter() - t0) * 1000
+            mem_exp, disk_exp, build = export_sizes(ctx.cache, before)
+            builds.append(build)
+            t0 = time.perf_counter()
+            sb = Sandbox.connect(sid, timeout=SBX_TIMEOUT)
+            call_ms = (time.perf_counter() - t0) * 1000
+            t0 = time.perf_counter()
+            sb.commands.run("true", user="root", timeout=60)
+            ready_ms = (time.perf_counter() - t0) * 1000
+            hog.sb = sb
+            ok = hog.state(f) == want
+            row = {"series": series, **point, "pass": pass_no, "rep": rep,
+                   "kind": "native_first" if rep == 0 else "native", "pause_ms": pause_ms,
+                   "resume_ms": call_ms + ready_ms, "resume_call_ms": call_ms, "ready_ms": ready_ms,
+                   "export_mem_mib": mem_exp, "export_disk_mib": disk_exp, "sandbox_id": sid, "ok": ok}
+            with lock:
+                rows.append(row)
+            if not ok:
+                raise RuntimeError("resume 后内容不一致：%s %s rep %d" % (series, point_label(point), rep))
+        LOG.info("%-8s %s pass %d：原生 pause / resume %d 次完成", series, point_label(point), pass_no, reps + 1)
+    finally:
+        try:
+            sb.kill()
+        except Exception as exc:
+            LOG.warning("kill %s：%s", sid, exc)
+        if ctx.storage:
+            remove_builds(ctx.storage, builds)
+
+
 def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
     point = norm(point)
-    P, d, f = point["P"], point["d"], point["f"]
+    d, f = point["d"], point["f"]
     sb = Sandbox.create(template=ctx.args.template, timeout=SBX_TIMEOUT)
     try:
-        if ctx.prov is not None and "dirty_tracking" not in ctx.prov:
-            info = fc_info(sb.sandbox_id)
-            with lock:
-                ctx.prov.setdefault("dirty_tracking", info.get("dirty_tracking") if info else None)
-                ctx.prov.setdefault("firecracker_version", info.get("vmm_version") if info else None)
-        if ctx.stack == "criu":
-            sb.commands.run("echo never > /sys/kernel/mm/transparent_hugepage/enabled", user="root")
-        hog = Hog(sb, point["trees"])
-        if ctx.stack == "criu" and ctx.args.criu_verbosity is not None:
-            install_criu_wrapper(hog, ctx.args.criu_verbosity)
-        hog.start(P)
-        if ctx.stack == "criu":
-            sb.files.write(WD + "/criu_stats.py", CRIU_STATS_PY)
-            sb.files.write(WD + "/criu_log.py", CRIU_LOG_PY)
-        hog.dirty(P)
-        if f:
-            hog.sh("dd if=/dev/urandom of=%s/file bs=1M count=%d conv=fsync 2>/dev/null" % (WD, f))
-        hog.sh("sync")
-        lazy_s = hog.wait_lazyinit()
-        hog.sh("sync")
+        hog, lazy_s = prepare_sandbox(sb, ctx, point, lock)
         want = hog.state(f)
         t0 = time.perf_counter()
         base = sb.checkpoint.create(name="base")
@@ -645,6 +725,12 @@ def summarize(rows):
             e[key] = stat([get(r) for r in samples])
         e["base_ckpt_ms"] = stat([r["ckpt_ms"] for r in base])
         e["base_artifact_mib"] = stat([artifact_mib(r) for r in base])
+        native = [r for r in rs if r["kind"] == "native"]
+        if native or any(r["kind"] == "native_first" for r in rs):
+            e["native_n"] = len(native)
+            for key in ("pause_ms", "resume_ms", "resume_call_ms", "ready_ms", "export_mem_mib"):
+                e[key] = stat([r.get(key) for r in native])
+            e["native_first_pause_ms"] = stat([r["pause_ms"] for r in rs if r["kind"] == "native_first"])
         out.append(e)
     return out
 
@@ -660,7 +746,8 @@ TITLES = {"dirty": "dirty：进程固定 256 MiB，连续改动量变化",
           "layout": "layout：进程 256 MiB，散页改动（对照 dirty 的连续改动）",
           "trees": "trees：合计 64 MiB、改动 16 MiB，分到几棵进程树",
           "filewait": "filewait：写 64 MiB 文件，落盘方式 × 写完等待",
-          "scen": "scen：场景文件里的场景"}
+          "scen": "scen：场景文件里的场景",
+          "mix": "mix：对外分档表，进程 256 MiB，改写 d MiB 内存 + 写 f MiB 文件"}
 
 
 def series_order(summary):
@@ -702,6 +789,16 @@ def print_summary(result):
                 fmt(e["ckpt_ms"]), fmt(e["ckpt_ms"], "p90"), fmt(e["ckpt_server_ms"]), fmt(e["artifact_mib"]),
                 fmt(e["restore_ms"]), fmt(e["restore_ms"], "p90"), fmt(e["restore_server_ms"]),
                 fmt(e["base_ckpt_ms"]), "  失败 %d" % e["failed"] if e["failed"] else ""))
+        native = [e for e in rows if e.get("native_n") is not None]
+        if native:
+            print("  原生 pause / resume（同一负载另起沙箱；resume = connect 返回 + 第一条命令；首次 pause 单列）")
+            print("  %-28s %3s | %-17s | %-17s | %-13s | %8s" % ("测点", "n", "pause p50 / p99", "resume p50 / p99",
+                                                            "connect/就绪", "首次pause"))
+            for e in native:
+                print("  %-28s %3d | %7s / %-7s | %7s / %-7s | %5s / %-5s | %8s" % (
+                    point_label(e), e["native_n"], fmt(e["pause_ms"]), fmt(e["pause_ms"], "p99"),
+                    fmt(e["resume_ms"]), fmt(e["resume_ms"], "p99"), fmt(e["resume_call_ms"]), fmt(e["ready_ms"]),
+                    fmt(e["native_first_pause_ms"])))
     print_stages(result)
     print("\n判定: %s（测量 %d 次，失败 %d）" % (result["verdict"], sum(1 for r in result["rows"] if r["kind"] != "base"),
                                          sum(1 for r in result["rows"] if not r["ok"])))
@@ -858,6 +955,41 @@ def compare_table(results):
     return merged, table
 
 
+def mix_rows(table):
+    rows = [t for t in table if t["series"] == "mix"]
+    return sorted(rows, key=lambda t: (t["s"]["d"] + t["s"]["f"], t["s"]["d"]))
+
+
+def print_mix_table(merged, table):
+    """对外展示的分档表：两套 checkpoint / restore 与两套代码上的原生 pause / resume 并排。"""
+    rows = mix_rows(table)
+    if not rows:
+        return
+    head = ("总改动MiB", "内存MiB", "文件MiB", "沙箱级checkpoint", "进程级checkpoint", "沙箱级restore", "进程级restore",
+            "E2B pause(沙箱级代码)", "E2B resume(沙箱级代码)", "E2B pause(进程级代码)", "E2B resume(进程级代码)")
+    print("\n---- 对外分档表（mix）----")
+    print("进程 256 MiB；checkpoint 为连续 checkpoint，restore 回到改写之前的基点；E2B pause / resume 在同一负载上另起"
+          "沙箱测，resume = connect 返回 + 第一条命令。客户端墙钟，单位 ms。")
+    for q in ("p50", "p99"):
+        print("\n[%s]" % q)
+        print("\t".join(head))
+        for t in rows:
+            a, b = t["s"], t["c"]
+            cells = ["%g" % (a["d"] + a["f"]), "%g" % a["d"], "%g" % a["f"]]
+            for side, key in ((a, "ckpt2_ms"), (b, "ckpt2_ms"), (a, "restore_ms"), (b, "restore_ms"),
+                              (a, "pause_ms"), (a, "resume_ms"), (b, "pause_ms"), (b, "resume_ms")):
+                cells.append(fmt(side.get(key), q))
+            print("\t".join(cells))
+    a, b = rows[0]["s"], rows[0]["c"]
+    print("\n样本数（每档）：checkpoint / restore 沙箱级 %d、进程级 %d；pause / resume 沙箱级 %s、进程级 %s"
+          % (a["n"], b["n"], a.get("native_n", "-"), b.get("native_n", "-")))
+    for st in ("sandbox", "criu"):
+        prov = merged[st]["provenance"]
+        print("%s：orchestrator %s · 脏页后端 %s · %s" % ("沙箱级" if st == "sandbox" else "进程级",
+                                                    (prov.get("orchestrator_sha256") or "?")[:16],
+                                                    prov.get("dirty_tracking") or "?", prov.get("hostname")))
+
+
 def print_compare(merged, table):
     print("\n---- 两套并列（代价分解表）----")
     for st in ("sandbox", "criu"):
@@ -891,6 +1023,7 @@ def print_compare(merged, table):
                 pair("ckpt_ms"),
                 pair("restore_ms"), fmt(a.get("restore_ms"), "p99"), fmt(b.get("restore_ms"), "p99"),
                 pair("base_ckpt_ms")))
+    print_mix_table(merged, table)
 
 
 # ------------------------------------------------------------ 主流程
@@ -1002,7 +1135,11 @@ def main():
                              "host_conditions": host_conditions(), "scenarios": scenarios},
               "rows": [], "summary": [], "verdict": "FAIL"}
     print_host(result["provenance"])
-    ctx = Ctx(args, stack, store)
+    cache = os.path.join(env.get("ORCHESTRATOR_BASE_PATH", "/orchestrator"), "build") if env else None
+    storage = None
+    if env and env.get("STORAGE_PROVIDER", "Local") == "Local":
+        storage = env.get("LOCAL_TEMPLATE_STORAGE_BASE_PATH") or "/tmp/templates"
+    ctx = Ctx(args, stack, store, cache, storage)
     ctx.prov = result["provenance"]
     lock = threading.Lock()
     failure = None
@@ -1024,11 +1161,14 @@ def main():
                 continue
             points = scenarios if series == "scen" else SERIES[series]
             if args.smoke:
-                points = points[:1]
+                # mix 取一个有内存又有文件的测点和最后那个文件不足 1 MiB 的测点
+                points = [points[1], points[-1]] if series == "mix" else points[:1]
             passes, reps = series_runs(args, series)
             for point in points:
                 for pass_no in range(passes):
                     one_sandbox(Sandbox, ctx, point, series, pass_no, reps, args.warmup, result["rows"], lock)
+                    if series in NATIVE_SERIES:
+                        native_sandbox(Sandbox, ctx, point, series, pass_no, reps - args.warmup, result["rows"], lock)
         result["verdict"] = "PASS"
     except Exception as exc:
         failure = str(exc)
