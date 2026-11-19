@@ -145,14 +145,14 @@ criu-rollback/deploy/
 |---|---|
 | gsd | criu-rollback-dev `9728cef73`（`daae6968f` 之上：dump 日志由 CRIU 直接写文件、一次 checkpoint 的多棵进程树并行 dump 和并行 restore、可选的延迟页 restore（默认关），见第 14 节；`daae6968f` 及更早修的 restore 层切换空间预留、checkpoint 预检内存余量、根盘写满报 `resource_exhausted`、restore 之后的第一次 checkpoint 保持增量都在）。经 `strip -g`，SHA256 `8bc5dc49…`（去调试段前 `63450009…`）；之前的 `1a0a3b67…`（`daae6968f`）、`421597e5…`、`3f28abd0…`（`7cdadccf2`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉 |
 | guest 内核 | 手册已验证的 `259f1a25c` 发布产物，未改，`b81306e7…` |
-| orchestrator | `259f1a25c-e2bv`：在 `259f1a25c` 上只把宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`。经 `strip -g`，SHA256 `063e580e…`（去调试段前 `151308ba…`）。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
+| orchestrator | criu-rollback-dev `9cdd8067e`：`259f1a25c` 之上只有两处 orchestrator 改动——宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`（`bc3cce9`），建根盘时把 ext4 的 inode 表清零（`9cdd806`，见第 14 节）。经 `strip -g`，SHA256 `daa44b22…`（去调试段前 `bf823e9c…`）；上一版 `063e580e…`（`259f1a25c-e2bv`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
 | SDK | criu-rollback-dev `daae6968f` 的 `py-sdk/e2b`、`py-sdk/e2b_connect` 逐文件打包；含流量 token、`Sandbox.connect` 路由头、共享连接池 keepalive 上限三处修复 |
 | 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1。镜像配置摘要 `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab`（docker 传统存储显示的 image ID），OCI 清单摘要 `b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165`（containerd 镜像存储显示的 image ID） |
 | Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
 | SDK wheel | `2.19.0+gsd.daae6968f`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
-gsd 是 `9728cef73`，SDK 仍是 `daae6968f`（这一轮 SDK 没有改动，不重新打包），orchestrator 与内核仍是 `259f1a25c` 那一版：这一轮只改了 guest 里的 gsd。
+gsd 是 `9728cef73`，orchestrator 是 `9cdd8067e`，SDK 仍是 `daae6968f`（这两轮 SDK 没有改动，不重新打包），内核仍是 `259f1a25c` 那一版。
 
 `overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。
 
@@ -363,6 +363,21 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-19（二）：建模板时把根盘的 ext4 inode 表清零（orchestrator 换版本，`9cdd8067e`）
+
+- **修了什么。** 模板快照拍下时，guest 的 ext4 还没做完 inode 表的后台清零（lazy itable init，根盘的块组都没有 `ITABLE_ZEROED`）。所以每个从模板新建的沙箱，开机约 4 秒后 `ext4lazyinit` 都会往根盘写约 60 MiB；restore 到这之前拍的 checkpoint，也会再写一遍。现在 orchestrator 建根盘时直接把 inode 表清零，改了两处，缺一不可：
+  - `mkfs.ext4` 加 `-E lazy_itable_init=0,lazy_journal_init=0`；
+  - 根盘建好后先缩小、再扩大，扩大时给 `resize2fs` 设 `RESIZE2FS_FORCE_ITABLE_INIT=1`。不设的话，只要宿主内核支持 lazy init，新增块组的 inode 表就不清零，与 mkfs 的参数无关。
+
+  920B 用 2 GiB 镜像缩小后扩到 3000 MiB 验证：两处都改，24 个块组全部 `ITABLE_ZEROED`；不改 `resize2fs`，只有 6 个；`e2fsck` 无误。
+- **代价。** 建模板时多写一次 inode 表：扩大一步多 2 ms 左右；镜像文件里这部分从空洞变成实际写入的 0。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`：
+  - orchestrator 是上一版（`063e580e…`）时直接换掉；
+  - job 里的 `CRIU_ORCH_SHA256` 跟着变，服务会重启；
+  - 模板版本记录现在同时记 gsd 和 orchestrator，以前只记 gsd 的旧记录算没记 orchestrator，模板会重建一次。
+
+  gsd、SDK、内核、镜像都不变。沙箱级的同一改动在 `0001` 补丁里，随 RPM 发布。
 
 ### 2026-11-19：checkpoint 和多棵进程树的 restore 变快（gsd 换版本，`9728cef73`）
 

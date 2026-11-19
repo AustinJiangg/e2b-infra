@@ -249,7 +249,7 @@ restore 侧文件的代价主要是 guest 页缓存里那些页按内存回滚�
 
 单位 ms，p50；客户端墙钟与服务端分段。原始输出归档在工作区 `rollback-reports/920b-odirect-probe-20261118/`。
 
-\* D 组多出的 60.5 MiB 不是这个文件。逐项查过：用 ftrace 的 `writeback_dirty_folio` 看到这些页都是 Firecracker 写进根盘块设备的，落在设备开头约 60 MiB 的区域；guest 里 restore 回基点约 4 s 后，在没有任何用户操作时写出了 15480 次、60.5 MiB，随后 `ext4lazyinit` 线程消失；根盘 8 个块组都没有 `ITABLE_ZEROED` 标记，inode 表共 261248 × 256 B ≈ 64 MiB。也就是说，实验的基点是在 guest 的 ext4 后台清零 inode 表（lazy itable init）完成之前拍的，每次 restore 回基点，guest 都会重做这次清零。等待 ≥ 10 s 的 D～G 组都带着这 60.5 MiB：D 组在 checkpoint 时一起推送，E～G 组在 checkpoint 之前已经写回，但盘层多了这么多，`seal` 因此约 19 ms（B、C 组只有文件的 64 MiB，`seal` 约 9 ms）。950 的 perf-full 不受影响：它的基点在预热 512 MiB 内存和 192 MiB 文件之后才拍，各档盘层与名义文件量一致（[§5.2](#52-产物)）。同样的事也会发生在真实使用里：从模板新建的沙箱，以及 restore 到 lazy init 完成之前拍的 checkpoint，都会在几秒后多写约 60 MiB，算进下一次 checkpoint；在模板构建时等 lazy init 完成再拍模板快照即可避免，这一点尚未修改。
+\* D 组多出的 60.5 MiB 不是这个文件。逐项查过：用 ftrace 的 `writeback_dirty_folio` 看到这些页都是 Firecracker 写进根盘块设备的，落在设备开头约 60 MiB 的区域；guest 里 restore 回基点约 4 s 后，在没有任何用户操作时写出了 15480 次、60.5 MiB，随后 `ext4lazyinit` 线程消失；根盘 8 个块组都没有 `ITABLE_ZEROED` 标记，inode 表共 261248 × 256 B ≈ 64 MiB。也就是说，实验的基点是在 guest 的 ext4 后台清零 inode 表（lazy itable init）完成之前拍的，每次 restore 回基点，guest 都会重做这次清零。等待 ≥ 10 s 的 D～G 组都带着这 60.5 MiB：D 组在 checkpoint 时一起推送，E～G 组在 checkpoint 之前已经写回，但盘层多了这么多，`seal` 因此约 19 ms（B、C 组只有文件的 64 MiB，`seal` 约 9 ms）。950 的 perf-full 不受影响：它的基点在预热 512 MiB 内存和 192 MiB 文件之后才拍，各档盘层与名义文件量一致（[§5.2](#52-产物)）。同样的事也会发生在真实使用里：从模板新建的沙箱，以及 restore 到 lazy init 完成之前拍的 checkpoint，都会在几秒后多写约 60 MiB，算进下一次 checkpoint；2026-11-19 起 orchestrator 建根盘时直接把 inode 表清零（`mkfs.ext4 -E lazy_itable_init=0,lazy_journal_init=0`，扩大根盘时给 `resize2fs` 设 `RESIZE2FS_FORCE_ITABLE_INIT=1`，两处缺一不可），用新 orchestrator 建的模板不再有这个问题：920B 上新沙箱根盘 8 个块组全部带 `ITABLE_ZEROED`，开机后 12 秒内根盘写入 0 MiB，没有 `ext4lazyinit` 线程。之前建的模板要重建才会生效。
 
 怎么读：
 
@@ -529,7 +529,7 @@ n = 3 的中位数，单位 ms，差分为 MiB；o1 / o9 是 order 1 / order 9�
 - 2026-11-18（没有配置 UB）perf-full 十八档：混合负载下 checkpoint、restore 的 p50 与 p99 全部达标的最高已测档是 128 MiB；192 MiB 档 restore 60 个样本里只有 1 个超线（109.0 ms）；256 MiB 档 restore p50 99.8 ms，正好在线上，p99 123.2 ms；512 MiB 档两项超线。这是已测档位的结论，不是连续区间的保证；p99 的取法不同，线附近的判定会变（§3）。
 - checkpoint 随改动量的增长主要来自文件改动：每 MiB 内存 0.087 ms、每 MiB 文件 1.29 ms，混合档的增长有 83% 来自那 1/4 的文件。多出来的时间在 `snapshot` 段里把宿主块设备页缓存中还没写回的根盘数据经 NBD 推进写层（§5.4）。
 - 写文件的代价落在 checkpoint 里还是之前，取决于 checkpoint 时数据处在 guest 页缓存、宿主页缓存还是写层；分档测试“写完 `sync` 立刻 checkpoint”测到的是最贵的情况（§5.4）。920B 上同一个 64 MiB 文件：不 `sync` 立刻 checkpoint 墙钟 15.4 ms，`sync` 后立刻 72.8 ms，`sync` 后等 40 s 为 49.6 ms 且不再推送。
-- 同一实验发现：模板 guest 的 ext4 lazy itable init 没有在模板快照前完成，新沙箱和 restore 到它之前的 checkpoint 都会在几秒后多写约 60 MiB 根盘数据（§5.4）。
+- 同一实验发现：模板 guest 的 ext4 lazy itable init 没有在模板快照前完成，新沙箱和 restore 到它之前的 checkpoint 都会在几秒后多写约 60 MiB 根盘数据（§5.4）。2026-11-19 已在 orchestrator 里修复，重建模板后生效。
 - 拟合直线描述平均趋势，交点 466.2 / 260.1 MiB 不是实测上限；混合档的斜率取决于内存与文件的比例。
 - 同一 checkpoint 串行 restore 100 次的墙钟 p50 / p99 / max 为 9.62 / 16.2 / 17.6 ms（perf），这个负载不含新改动，不能代替分档回滚成本。
 - 默认 order 1 的 HDBSS 启用已有能力、自报、启用日志、数据面和内容一致性证据。order 9 把每页 KVM 退出降到 order 1 的 0.35～0.74 倍，checkpoint、restore 耗时与差分体积没有可分辨的变化，默认保持 order 1。

@@ -166,6 +166,12 @@ chmod -R a+rX %{buildroot}/opt/e2b-infra/helm
 /opt/e2b-infra/dep/.env
 
 %changelog
+* Thu Nov 19 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
+- orchestrator: zero the ext4 inode tables when building a template rootfs
+  (mkfs.ext4 -E lazy_itable_init=0,lazy_journal_init=0, and
+  RESIZE2FS_FORCE_ITABLE_INIT=1 when growing it); the guest no longer runs
+  ext4lazyinit after every boot and writes ~60 MiB to the root disk
+
 * Tue Nov 17 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
 - orchestrator: end leftover firecracker processes at startup (nomad job restart
   SIGKILLs the orchestrator after the kill timeout; its VMs, in their own process

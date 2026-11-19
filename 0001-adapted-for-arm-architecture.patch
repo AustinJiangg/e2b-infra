@@ -22038,6 +22038,34 @@ index abc880569..fb3cc5b39 100644
  	}
  
  	// Remove password
+diff --git a/packages/orchestrator/internal/template/build/core/filesystem/ext4.go b/packages/orchestrator/internal/template/build/core/filesystem/ext4.go
+index d691c90..b8f9862 100644
+--- a/packages/orchestrator/internal/template/build/core/filesystem/ext4.go
++++ b/packages/orchestrator/internal/template/build/core/filesystem/ext4.go
+@@ -47,6 +47,12 @@ func Make(ctx context.Context, rootfsPath string, sizeMb int64, blockSize int64)
+ 		"-b", strconv.FormatInt(blockSize, 10),
+ 		"-m", strconv.FormatInt(reservedBlocksPercentage, 10),
+ 		"-i", strconv.FormatInt(inodesRatio, 10),
++		// Zero the inode tables and the journal now instead of leaving it to the guest kernel. With
++		// the default lazy init, ext4lazyinit in the guest zeroes the inode tables in the background
++		// a few seconds after boot; the template snapshot is taken before that finishes, so every
++		// sandbox started from the template writes them again (~60 MiB on the root disk), and a
++		// checkpoint taken before it finishes carries that write into its disk layer.
++		"-E", "lazy_itable_init=0,lazy_journal_init=0",
+ 		rootfsPath,
+ 		strconv.FormatInt(sizeMb, 10)+"M",
+ 	)
+@@ -129,6 +135,10 @@ func Resize(ctx context.Context, rootfsPath string, targetSize int64) (int64, er
+ 	// Resize the ext4 filesystem
+ 	// The underlying file must be synced to the filesystem
+ 	cmd := exec.CommandContext(ctx, "resize2fs", rootfsPath, strconv.FormatInt(targetSize>>ToMBShift, 10)+"M")
++	// Growing adds block groups. resize2fs leaves their inode tables to lazy init whenever the host
++	// kernel supports it (/sys/fs/ext4/features/lazy_itable_init), regardless of how mkfs was run,
++	// so the guest would zero them after boot; see Make.
++	cmd.Env = append(os.Environ(), "RESIZE2FS_FORCE_ITABLE_INIT=1")
+ 	resizeStdoutWriter := telemetry.NewEventWriter(ctx, "stdout")
+ 	cmd.Stdout = resizeStdoutWriter
+ 	resizeStderrWriter := telemetry.NewEventWriter(ctx, "stderr")
 diff --git a/packages/orchestrator/internal/template/build/core/oci/oci.go b/packages/orchestrator/internal/template/build/core/oci/oci.go
 index 5855b523c..e574d6c67 100644
 --- a/packages/orchestrator/internal/template/build/core/oci/oci.go

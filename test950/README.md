@@ -170,7 +170,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 **多轮交替（`--rounds N`）。** 两套按 ABBA 顺序交替各跑 N 轮（第 1 轮沙箱级→进程级，第 2 轮进程级→沙箱级……），宿主状态随时间的变化平均分到两侧；最后一步 `compare-table` 把各轮合并，按测点并列两套的墙钟 p50 / p99。每测点样本数 = 20 × N，要 n ≥ 100 就用 `--rounds 5`。`report` 只打印并列表，各轮只列判定；单轮全文用 `bash test950.sh report criu/compare-r1` 这样的步骤名。
 
-**基点前等 ext4 初始化。** 模板快照拍在 guest 的 ext4 把 inode 表后台清零完成之前，新沙箱启动后几秒内会额外往根盘写约 60 MiB。脚本在拍基点前等这个后台线程（`ext4lazyinit`）退出，等了几秒记在基点那一行；这样 restore 回基点不会重做清零，filewait 组测到的只是文件本身。每轮开头还记录宿主条件：NUMA 节点与大小、`kernel.numa_balancing`、宿主 THP、内核命令行。
+**基点前等 ext4 初始化。** 模板快照拍在 guest 的 ext4 把 inode 表后台清零完成之前，新沙箱启动后几秒内会额外往根盘写约 60 MiB。脚本在拍基点前等这个后台线程（`ext4lazyinit`）退出，等了几秒记在基点那一行；这样 restore 回基点不会重做清零，filewait 组测到的只是文件本身。2026-11-19 起 orchestrator 建模板时已把 inode 表清零，用新版建的模板没有这个线程，等待时间为 0；脚本仍保留这一步，兼容旧模板。每轮开头还记录宿主条件：NUMA 节点与大小、`kernel.numa_balancing`、宿主 THP、内核命令行。
 
 一次测量是：改写 → checkpoint A → 再改写 → checkpoint B → restore 回基点 → 校验内存 SHA256 与文件 → 删掉 A、B。A 紧跟在上一次 restore 之后，B 紧跟在 A 之后，汇总表分两列给出：进程级 restore 之后的第一次 checkpoint 曾经总是全量（CRIU 的 PID 复用检测，进程级手册第 16 章 L-18，gsd `daae6968f` 起已修复为增量），分两列可以核对修复是否生效；沙箱级两者都是增量。每个沙箱的第一次不计入统计（首次 restore 偏慢），基点全量单列。每次都记客户端墙钟、服务端 `total`（进程级取 gsd 分段，沙箱级读宿主上的 `timings.json`）和产物字节。
 
