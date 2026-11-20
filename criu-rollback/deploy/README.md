@@ -145,14 +145,14 @@ criu-rollback/deploy/
 |---|---|
 | gsd | criu-rollback-dev `9728cef73`（`daae6968f` 之上：dump 日志由 CRIU 直接写文件、一次 checkpoint 的多棵进程树并行 dump 和并行 restore、可选的延迟页 restore（默认关），见第 14 节；`daae6968f` 及更早修的 restore 层切换空间预留、checkpoint 预检内存余量、根盘写满报 `resource_exhausted`、restore 之后的第一次 checkpoint 保持增量都在）。经 `strip -g`，SHA256 `8bc5dc49…`（去调试段前 `63450009…`）；之前的 `1a0a3b67…`（`daae6968f`）、`421597e5…`、`3f28abd0…`（`7cdadccf2`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉 |
 | guest 内核 | 手册已验证的 `259f1a25c` 发布产物，未改，`b81306e7…` |
-| orchestrator | criu-rollback-dev `7e0a6a462`：`259f1a25c` 之上三处 orchestrator 改动——宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`（`bc3cce9`），建根盘时把 ext4 的 inode 表清零（`9cdd806`），原生 pause 打一行分段计时日志（`7e0a6a462`，不改行为，见第 14 节）。经 `strip -g`，SHA256 `ec5eb1cc…`（去调试段前 `09fec286…`）；之前的 `daa44b22…`（`9cdd8067e`）、`063e580e…`（`259f1a25c-e2bv`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
+| orchestrator | criu-rollback-dev `6a60dec6f`：`259f1a25c` 之上四处 orchestrator 改动——宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`（`bc3cce9`），建根盘时把 ext4 的 inode 表清零（`9cdd806`），原生 pause 打一行分段计时日志（`7e0a6a462`），原生 pause / resume 记下各步完成的时刻（`6a60dec6f`）；后两处只加日志、不改行为，见第 14 节。经 `strip -g`，SHA256 `54e53ef3…`（去调试段前 `9cf4cded…`）；之前的 `ec5eb1cc…`（`7e0a6a462`）、`daa44b22…`（`9cdd8067e`）、`063e580e…`（`259f1a25c-e2bv`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
 | SDK | criu-rollback-dev `daae6968f` 的 `py-sdk/e2b`、`py-sdk/e2b_connect` 逐文件打包；含流量 token、`Sandbox.connect` 路由头、共享连接池 keepalive 上限三处修复 |
 | 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1。镜像配置摘要 `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab`（docker 传统存储显示的 image ID），OCI 清单摘要 `b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165`（containerd 镜像存储显示的 image ID） |
 | Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
 | SDK wheel | `2.19.0+gsd.daae6968f`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
-gsd 是 `9728cef73`，orchestrator 是 `7e0a6a462`，SDK 仍是 `daae6968f`（这两轮 SDK 没有改动，不重新打包），内核仍是 `259f1a25c` 那一版。
+gsd 是 `9728cef73`，orchestrator 是 `6a60dec6f`，SDK 仍是 `daae6968f`（这两轮 SDK 没有改动，不重新打包），内核仍是 `259f1a25c` 那一版。
 
 `overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。
 
@@ -363,6 +363,13 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-20（二）：原生 pause / resume 记下各步完成的时刻（orchestrator 换版本，`6a60dec6f`）
+
+- **为什么。** 同一份 orchestrator、同一个脚本，原生 resume 在 920B 上约 56～59 ms，在 950 上约 86～99 ms，多出的时间在 `Sandbox.connect()` 里，但原来只有总数，看不出是 API、起 Firecracker、加载 snapfile 还是等 envd；原生 pause 也只知道拍快照和等上传两段。
+- **改了什么。** 新增 `internal/phasetimer`：请求开始时放一个计时器进 context，各步完成时记下时刻，context 里没有计时器时什么也不做。`Pause timing` 日志多一个字段 `pause.phases`（取沙箱、暂停 vCPU、写 snapfile、取脏页集合、导出内存、停 Firecracker 到进程退出、断开 NBD、导出根盘差分、进缓存、上传，另有 `memfile_mib`）；`Create`（resume 走的就是它）返回前打一行 `Resume phases`，字段 `resume.phases`（排队、取模板、网络槽位、NBD、uffd、起 Firecracker 到 API socket 可用、加载 snapfile、恢复 vCPU、写 MMDS、等 envd、返回）。都是从收到请求开始计的毫秒数。只加日志，行为和返回时机都不变。
+- **谁用它。** `benchmark/ckpt_same_workload.py` 的 mix 组：读出这两行，每档按 p50 打一块“原生分段”，并用客户端墙钟减 orchestrator 合计得出 API 与网络的时间；运行开头另记 netns 个数、iptables / nft 规则行数、运行中的 Firecracker 个数、loadavg，方便两台机器对照。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`：orchestrator 是上一版（`ec5eb1cc…`）时直接换掉，服务会重启，`base-criu` 会重建一次。gsd、SDK、内核、镜像都不变。沙箱级的 RPM 不受影响。
 
 ### 2026-11-20：原生 pause 打分段计时日志（orchestrator 换版本，`7e0a6a462`）
 

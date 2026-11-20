@@ -54,6 +54,10 @@ bytearray，且进程大小随档位一起变），并列时分不开"改动量"
   resume   connect 返回加第一条命令完成（与 native_snapshot_tiers.py 同一口径）。
   首读     resume 之后第一次读完整个进程内存，比 pause 之前读同样的内存多花的时间（常驻进程自己计时）：
            resume 不加载内存，页在之后按缺页读回，这一列就是推迟到恢复之后的成本。
+  分段     orchestrator 6a60dec6f 起，Pause timing 里另有 pause.phases，connect 另打一行 Resume phases，
+           都是各步完成的时刻（从收到请求计）。脚本换算成相邻两步之间的耗时（PAUSE_SEGMENTS、
+           RESUME_SEGMENTS），每档按 p50 打一块“原生分段”；客户端墙钟减 orchestrator 合计记为
+           “API 与网络”。只读日志，不影响计时。
 第 0 次 pause 导出的是自启动以来的全部写入，单列不进统计。不与 checkpoint 混在一个沙箱里，免得两种
 快照互相影响。每次 pause 产出的 build 在沙箱结束后删掉（本地模板存储时）。
 
@@ -75,8 +79,9 @@ B 紧跟在 A 之后，是"连续的 checkpoint"。两者分开列：进程级 r
 进程级另外读 CRIU 自己的统计（guest 里镜像目录下的 stats-dump / stats-restore：冻结、扫页、写页、
 fork、恢复各段耗时与页数），把 criu_dump / criu_restore 再拆开；读在每轮核对之后，不在计时区间内。
 
-每次运行开头记录宿主条件（NUMA 节点与大小、kernel.numa_balancing、宿主 THP、内核命令行），
-两轮结果对不上时先看这里。
+每次运行开头记录宿主条件（NUMA 节点与大小、kernel.numa_balancing、宿主 THP、内核命令行，
+以及 netns 个数、iptables / nft 规则行数、运行中的 firecracker 个数、loadavg、CPU 型号与调频），
+两轮结果或两台机器对不上时先看这里。
 
 在部署宿主上运行，用当前栈对应的 SDK 环境：
     python3 ckpt_same_workload.py --out result.json
@@ -280,10 +285,51 @@ def orchestrator_proc():
     return None, {}
 
 
+def parse_phases(text):
+    """"name=ms name=ms ..." → {name: ms}（orchestrator 6a60dec6f 起的 pause.phases / resume.phases）。"""
+    out = {}
+    for part in (text or "").split():
+        k, _, v = part.partition("=")
+        try:
+            out[k] = float(v)
+        except ValueError:
+            pass
+    return out
+
+
+# 原生分段：orchestrator 记的是各步完成的时刻（从请求开始计，ms），这里换算成相邻两步之间的耗时。
+# 每段 = 列出的时刻里最晚的一个 - 上一段的终点；列出几个时刻的段是并行做的几件事，取最后完成的。
+PAUSE_SEGMENTS = (("取沙箱", ("acquired",)), ("暂停 vCPU", ("vm_paused",)), ("写 snapfile", ("snapfile",)),
+                  ("取脏页集合", ("dirty_map",)), ("导出内存", ("memfile",)),
+                  ("停 FC 到进程退出", ("fc_exited",)), ("断开 NBD", ("nbd_released",)),
+                  ("导出根盘差分", ("rootfs_synced",)), ("写元数据、进缓存", ("snapshot_done",)),
+                  ("上传", ("uploaded",)))
+RESUME_SEGMENTS = (("排队、取模板", ("acquired", "template")),
+                   ("网络槽位、NBD、uffd", ("slot", "rootfs_ready", "memory_ready")),
+                   ("起 FC 进程到 API 可用", ("fc_cmd", "fc_started", "fc_api_ready", "uffd_socket", "rootfs_linked")),
+                   ("加载 snapfile", ("snapshot_loaded",)), ("恢复 vCPU、写 MMDS", ("vm_resumed", "mmds")),
+                   ("等 envd 就绪", ("envd_ready",)), ("收尾返回", ("created",)))
+
+
+def phase_segments(phases, spec):
+    """按 spec 把时刻换算成各段耗时 {段名: ms}；某段的时刻一个都没有时这段不出现。"""
+    out, edge = {}, 0.0
+    for name, marks in spec:
+        ts = [phases[m] for m in marks if m in phases]
+        if not ts:
+            continue
+        end = max(ts)
+        out[name] = max(0.0, end - edge)
+        edge = max(edge, end)
+    return out
+
+
 class PauseLog:
-    """orchestrator 的 "Pause timing" 日志行（进程级那套的 orchestrator 7e0a6a462 起才有）。
+    """orchestrator 的 "Pause timing" / "Resume phases" 日志行（进程级那套的 orchestrator：Pause timing
+    7e0a6a462 起才有，其中的 pause.phases 与 Resume phases 6a60dec6f 起才有）。
     orchestrator 在 Nomad 下运行：工作目录是 <alloc>/<task>，标准输出写到 <alloc>/alloc/logs/<task>.stdout.N。"""
     LINE = re.compile(r'"pause\.(snapshot|upload)_ms":\s*([0-9.]+)')
+    PHASES = re.compile(r'"(pause|resume)\.phases":\s*"([^"]*)"')
 
     def __init__(self):
         self.dir = self.task = None
@@ -316,8 +362,7 @@ class PauseLog:
                 pass
         return out
 
-    def take(self, sid, mark, timeout=3.0):
-        """mark 之后新写的日志里找这个沙箱的 Pause timing，返回 {"snapshot": ms, "upload": ms} 或 None。"""
+    def _find(self, sid, mark, tag, timeout):
         t0 = time.time()
         while True:
             for f in self.files():
@@ -328,13 +373,33 @@ class PauseLog:
                 except OSError:
                     continue
                 for line in data.splitlines():
-                    if "Pause timing" in line and sid in line:
-                        got = {k: float(v) for k, v in self.LINE.findall(line)}
-                        if len(got) == 2:
-                            return got
+                    if tag in line and sid in line:
+                        return line
             if time.time() - t0 > timeout:
                 return None
             time.sleep(0.1)
+
+    def take(self, sid, mark, timeout=3.0):
+        """mark 之后新写的日志里找这个沙箱的 Pause timing，返回 {"snapshot": ms, "upload": ms} 或 None；
+        orchestrator 打了分段时另有 "phases": {步骤: 完成时刻 ms}。"""
+        line = self._find(sid, mark, "Pause timing", timeout)
+        if line is None:
+            return None
+        got = {k: float(v) for k, v in self.LINE.findall(line)}
+        if len(got) != 2:
+            return None
+        ph = dict(self.PHASES.findall(line)).get("pause")
+        if ph is not None:
+            got["phases"] = parse_phases(ph)
+        return got
+
+    def take_resume(self, sid, mark, timeout=3.0):
+        """mark 之后这个沙箱的 Resume phases → {步骤: 完成时刻 ms}；没有这行（旧 orchestrator）时 None。"""
+        line = self._find(sid, mark, "Resume phases", timeout)
+        if line is None:
+            return None
+        ph = dict(self.PHASES.findall(line)).get("resume")
+        return parse_phases(ph) if ph is not None else None
 
 
 def sha256_file(path):
@@ -665,12 +730,16 @@ def native_sandbox(Sandbox, ctx, point, series, pass_no, reps, rows, lock):
             timing = ctx.pause_log.take(sid, mark) if ctx.pause_log else None
             mem_exp, disk_exp, build = export_sizes(ctx.cache, before)
             builds.append(build)
+            mark = ctx.pause_log.mark() if ctx.pause_log else {}
             t0 = time.perf_counter()
             sb = Sandbox.connect(sid, timeout=SBX_TIMEOUT)
             call_ms = (time.perf_counter() - t0) * 1000
             t0 = time.perf_counter()
             sb.commands.run("true", user="root", timeout=60)
             ready_ms = (time.perf_counter() - t0) * 1000
+            # 只有打了 pause 分段的 orchestrator 才有 Resume phases，旧版不等
+            resume_ph = (ctx.pause_log.take_resume(sid, mark, timeout=3.0 if timing and "phases" in timing else 0)
+                         if ctx.pause_log else None)
             hog.sb = sb
             mem_got, read_after = hog.mem_timed()
             ok = mem_got == mem_want and hog.disk(f) == disk_want
@@ -682,7 +751,8 @@ def native_sandbox(Sandbox, ctx, point, series, pass_no, reps, rows, lock):
                    "resume_ms": call_ms + ready_ms, "resume_call_ms": call_ms, "ready_ms": ready_ms,
                    "read_before_ms": read_before, "read_after_ms": read_after,
                    "read_extra_ms": read_after - read_before,
-                   "export_mem_mib": mem_exp, "export_disk_mib": disk_exp, "sandbox_id": sid, "ok": ok}
+                   "export_mem_mib": mem_exp, "export_disk_mib": disk_exp, "sandbox_id": sid, "ok": ok,
+                   "pause_phases": (timing or {}).get("phases"), "resume_phases": resume_ph}
             with lock:
                 rows.append(row)
             if not ok:
@@ -826,7 +896,30 @@ def summarize(rows):
             first = [r for r in rs if r["kind"] == "native_first"]
             e["native_first_pause_ms"] = stat([r["pause_ms"] if r.get("pause_ms") is not None else r.get("pause_wall_ms")
                                                for r in first])
+            e.update(native_phase_stats(native))
         out.append(e)
+    return out
+
+
+def native_phase_stats(native):
+    """原生 pause / resume 的分段统计（orchestrator 打了 pause.phases / Resume phases 时才有）。"""
+    out = {}
+    pp = [r for r in native if r.get("pause_phases")]
+    if pp:
+        segs = [phase_segments(r["pause_phases"], PAUSE_SEGMENTS) for r in pp]
+        out["pause_segments"] = {n: stat([s.get(n) for s in segs]) for n, _ in PAUSE_SEGMENTS}
+        out["pause_orch_ms"] = stat([r["pause_phases"].get("snapshot_done") for r in pp])
+        # 客户端墙钟 - orchestrator 从收到请求到返回（含上传）= API、网络与 SDK
+        out["pause_api_ms"] = stat([r["pause_wall_ms"] - r["pause_phases"]["uploaded"] for r in pp
+                                    if "uploaded" in r["pause_phases"]])
+        out["pause_memfile_mib"] = stat([r["pause_phases"].get("memfile_mib") for r in pp])
+    rp = [r for r in native if r.get("resume_phases")]
+    if rp:
+        segs = [phase_segments(r["resume_phases"], RESUME_SEGMENTS) for r in rp]
+        out["resume_segments"] = {n: stat([s.get(n) for s in segs]) for n, _ in RESUME_SEGMENTS}
+        out["resume_orch_ms"] = stat([r["resume_phases"].get("created") for r in rp])
+        out["resume_api_ms"] = stat([r["resume_call_ms"] - r["resume_phases"]["created"] for r in rp
+                                     if "created" in r["resume_phases"]])
     return out
 
 
@@ -857,6 +950,37 @@ def print_host(prov, indent=""):
         return
     print("%s宿主条件：NUMA %s · numa_balancing=%s · 宿主 THP=%s" % (
         indent, h.get("numa_summary") or "?", h.get("numa_balancing"), h.get("thp")))
+    if "netns" in h:      # 旧结果文件没有这几项
+        print("%s          netns %s 个 · iptables-save %s 行 · nft %s 行 · 运行中的 firecracker %s 个 · "
+              "loadavg %s · CPU %s × %s · 调频 %s" % (
+                  indent, h.get("netns"), h.get("iptables_lines"), h.get("nft_lines"), h.get("firecracker_procs"),
+                  h.get("loadavg"), h.get("cpus"), h.get("cpu"), h.get("governor")))
+
+
+def print_native_phases(native):
+    """原生 pause / resume 的分段（p50）。各段按时间先后排，相加约等于 orchestrator 合计；
+    “API 与网络”= 客户端墙钟 - orchestrator 从收到请求到返回，即请求在 API、网络、SDK 上花的时间。"""
+    if not any(e.get("pause_segments") or e.get("resume_segments") for e in native):
+        print("  （orchestrator 没有打分段日志，6a60dec6f 起才有，原生分段从略）")
+        return
+    print("  原生分段（orchestrator 日志，p50，ms；各段按时间先后，相加约等于 orchestrator 合计；"
+          "API 与网络 = 客户端墙钟 - orchestrator 合计）")
+
+    def segs(st):
+        return "  ".join("%s %s" % (n, fmt(v)) for n, v in st.items() if v)
+
+    for e in native:
+        print("  %s" % point_label(e))
+        if e.get("pause_segments"):
+            ps = dict(e["pause_segments"])
+            up = ps.pop("上传", None)
+            print("    pause  orchestrator %s（导出内存 %s MiB）| %s | 上传 %s | API 与网络 %s" % (
+                fmt(e.get("pause_orch_ms")), fmt(e.get("pause_memfile_mib")), segs(ps), fmt(up),
+                fmt(e.get("pause_api_ms"))))
+        if e.get("resume_segments"):
+            print("    resume orchestrator %s | %s | API 与网络 %s | 第一条命令 %s" % (
+                fmt(e.get("resume_orch_ms")), segs(e["resume_segments"]), fmt(e.get("resume_api_ms")),
+                fmt(e.get("ready_ms"))))
 
 
 def print_summary(result):
@@ -899,6 +1023,7 @@ def print_summary(result):
                     fmt(e.get("read_extra_ms")), fmt(e["native_first_pause_ms"])))
             if any(e.get("native_n") and not e.get("pause_ms") for e in native):
                 print("  注意：没读到 orchestrator 的 Pause timing 日志，pause 列为空（墙钟见“墙钟”列，含上传）")
+            print_native_phases(native)
     print_stages(result)
     print("\n判定: %s（测量 %d 次，失败 %d）" % (result["verdict"], sum(1 for r in result["rows"] if r["kind"] != "base"),
                                          sum(1 for r in result["rows"] if not r["ok"])))
@@ -1181,7 +1306,33 @@ def host_conditions():
                     size = int(line.split()[-2]) // 1024
             nodes.append("%s:%s" % (p.rsplit("node", 1)[1], size if size is not None else "?"))
     thp = rd("/sys/kernel/mm/transparent_hugepage/enabled")
-    return {"numa_balancing": rd("/proc/sys/kernel/numa_balancing"),
+
+    def count_lines(cmd):
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return len(p.stdout.splitlines()) if p.returncode == 0 else None
+
+    fc_procs = 0
+    for pid in os.listdir("/proc"):
+        if pid.isdigit() and (rd("/proc/%s/comm" % pid) or "").startswith("firecracker"):
+            fc_procs += 1
+    try:
+        netns = len(os.listdir("/run/netns"))
+    except OSError:
+        netns = None
+    cpu = None
+    for line in (rd("/proc/cpuinfo") or "").splitlines():
+        if line.startswith(("model name", "CPU part")):
+            cpu = line.split(":", 1)[1].strip()
+            break
+    return {"netns": netns, "iptables_lines": count_lines(["iptables-save"]),
+            "nft_lines": count_lines(["nft", "list", "ruleset"]), "firecracker_procs": fc_procs,
+            "loadavg": " ".join((rd("/proc/loadavg") or "").split()[:3]) or None,
+            "cpus": os.cpu_count(), "cpu": cpu,
+            "governor": rd("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
+            "numa_balancing": rd("/proc/sys/kernel/numa_balancing"),
             "thp": thp.split("[")[1].split("]")[0] if thp and "[" in thp else thp,
             "numa_summary": "%d 个节点（MiB：%s）" % (len(nodes), " ".join(nodes)) if nodes else None,
             "numactl": numa, "cmdline": rd("/proc/cmdline")}

@@ -117,6 +117,85 @@ class MixTests(unittest.TestCase):
             open(os.path.join(pl.dir, "start.stdout.1"), "w").write(line % "sbx2")   # 日志轮转到新文件
             self.assertEqual(pl.take("sbx2", mark, timeout=0)["upload"], 3.25)
             self.assertIsNone(csw.PauseLog.take(pl, "none", mark, timeout=0))
+            self.assertNotIn("phases", pl.take("sbx2", mark, timeout=0))     # 旧 orchestrator 没有分段
+            self.assertIsNone(pl.take_resume("sbx2", mark, timeout=0))
+
+    def test_phase_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "alloc", "logs"))
+            pl = csw.PauseLog.__new__(csw.PauseLog)
+            pl.dir, pl.task = os.path.join(tmp, "alloc", "logs"), "start"
+            mark = pl.mark()
+            open(os.path.join(pl.dir, "start.stdout.0"), "w").write(
+                '2026-11-20T10:00:00.000+0800  INFO  Pause timing  {"sandbox.id": "s1", "pause.snapshot_ms": 240.0, '
+                '"pause.upload_ms": 60.0, "pause.phases": "acquired=0.2 vm_paused=0.4 snapfile=3.6 dirty_map=4.3 '
+                'memfile=14.0 cache_ejected=14.2 stop_begin=14.3 fc_exited=170.0 uffd_stopped=171.0 '
+                'nbd_released=200.0 rootfs_copied=225.0 rootfs_exported=226.0 rootfs_synced=231.0 rootfs_diff=231.1 '
+                'metadata=231.5 cache_added=232.0 snapshot_done=240.0 uploaded=300.0 memfile_mib=12.0"}\n'
+                '2026-11-20T10:00:01.000+0800  INFO  Resume phases  {"sandbox.id": "s1", "resume.snapshot": true, '
+                '"resume.phases": "acquired=0.1 template=1.0 slot=1.1 rootfs_ready=1.5 memory_ready=2.0 fc_cmd=4.0 '
+                'fc_started=6.0 rootfs_linked=12.0 uffd_socket=14.0 fc_api_ready=26.0 snapshot_loaded=31.0 '
+                'vm_resumed=32.0 mmds=32.2 envd_ready=45.0 created=47.0"}\n')
+            got = pl.take("s1", mark, timeout=0)
+            self.assertEqual((got["snapshot"], got["upload"]), (240.0, 60.0))
+            self.assertEqual(got["phases"]["fc_exited"], 170.0)
+            self.assertEqual(got["phases"]["memfile_mib"], 12.0)
+            ps = csw.phase_segments(got["phases"], csw.PAUSE_SEGMENTS)
+            self.assertAlmostEqual(ps["停 FC 到进程退出"], 156.0)
+            self.assertAlmostEqual(ps["断开 NBD"], 30.0)
+            self.assertAlmostEqual(ps["导出根盘差分"], 31.0)
+            self.assertAlmostEqual(ps["上传"], 60.0)
+            self.assertAlmostEqual(sum(v for k, v in ps.items() if k != "上传"), 240.0)
+            rp = pl.take_resume("s1", mark, timeout=0)
+            rs = csw.phase_segments(rp, csw.RESUME_SEGMENTS)
+            self.assertAlmostEqual(rs["起 FC 进程到 API 可用"], 24.0)   # 并行的几件事取最后完成的
+            self.assertAlmostEqual(rs["等 envd 就绪"], 12.8)
+            self.assertAlmostEqual(sum(rs.values()), 47.0)
+            self.assertIsNone(pl.take_resume("other", mark, timeout=0))
+        # 缺了某一步：这一段不出现，后一段从上一段终点算
+        self.assertEqual(csw.phase_segments({"acquired": 1.0, "snapfile": 5.0}, csw.PAUSE_SEGMENTS),
+                         {"取沙箱": 1.0, "写 snapfile": 4.0})
+
+    def test_native_phase_summary(self):
+        p = csw.norm({"P": 12, "d": 12, "f": 4})
+        rows = []
+        for rep in range(5):
+            rows.append({"series": "mix", **p, "pass": 0, "rep": rep, "kind": "native", "ok": True,
+                         "pause_wall_ms": 310.0 + rep, "pause_ms": 250.0, "pause_upload_ms": 60.0,
+                         "resume_ms": 90.0, "resume_call_ms": 82.0, "ready_ms": 8.0,
+                         "pause_phases": {"vm_paused": 1.0, "fc_exited": 150.0, "snapshot_done": 240.0,
+                                          "uploaded": 300.0, "memfile_mib": 12.0},
+                         "resume_phases": {"template": 1.0, "snapshot_loaded": 30.0, "envd_ready": 45.0,
+                                           "created": 47.0}})
+        e = csw.summarize(rows)[0]
+        self.assertEqual(e["pause_orch_ms"]["p50"], 240.0)
+        self.assertEqual(e["pause_api_ms"]["p50"], 12.0)
+        self.assertEqual(e["resume_orch_ms"]["p50"], 47.0)
+        self.assertEqual(e["resume_api_ms"]["p50"], 35.0)
+        self.assertEqual(e["pause_segments"]["停 FC 到进程退出"]["p50"], 149.0)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_native_phases([e])
+        out = buf.getvalue()
+        self.assertIn("API 与网络 35.0", out)
+        self.assertIn("停 FC 到进程退出 149.0", out)
+        self.assertIn("导出内存 12.0 MiB", out)
+        # 旧 orchestrator：没有分段，只打一行说明
+        for r in rows:
+            r["pause_phases"] = r["resume_phases"] = None
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_native_phases(csw.summarize(rows))
+        self.assertIn("从略", buf.getvalue())
+
+    def test_host_conditions_network(self):
+        h = csw.host_conditions()
+        for k in ("netns", "iptables_lines", "nft_lines", "firecracker_procs", "loadavg", "cpus"):
+            self.assertIn(k, h)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_host({"host_conditions": h})
+        self.assertIn("netns", buf.getvalue())
 
     def test_mix_table(self):
         pts = ({"P": 12, "d": 12, "f": 4}, {"P": 70, "d": 70, "f": 0.001})
