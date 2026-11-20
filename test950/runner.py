@@ -123,7 +123,7 @@ def plan(level, stacks, hours, rounds=1, series=None):
     if level in EXTRA:
         if level == "compare":
             steps = compare_steps(stacks, rounds, series)
-        elif level == "fcexit":   # 原生路径与上游相同的是进程级那套，只在它上面测
+        elif level == "fcexit":   # ARM 版 E2B 原生 pause 在进程级那套的 orchestrator 上测，只在它上面测
             steps = [{"id": "criu/fcexit", "stack": "criu", "kind": "py", "args": ["benchmark/fc_exit_trace.py"],
                       "est_min": 5, "status": "待跑", "clean_netns": True}]
             stacks = ["criu"]

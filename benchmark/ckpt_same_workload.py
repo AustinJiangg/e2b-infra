@@ -1212,8 +1212,10 @@ MIX_NOTES = (
     "restore 能回到任意一个之前的 checkpoint，沙箱一直在运行，之前的 checkpoint 仍然有效；resume 只能回到"
     "最近一次 pause，换了一代 Firecracker 进程。resume 返回时内存还没有加载，之后第一次读内存的额外耗时单列。",
     "进程级只保存这个进程（以及文件改动），沙箱里其他进程、页缓存、tmpfs 不在它的保存范围里；沙箱级保存整台 guest。",
-    "E2B pause / resume 在进程级那套代码上测（它的原生快照路径与上游相同）；pause 只计第一步（拍快照并放进"
-    "本节点缓存），与上游返回的时机一致，不含把快照复制进模板存储。",
+    "E2B pause / resume 是 ARM 版 E2B 原生的 pause / resume，在进程级那套的 orchestrator 上测（版本见下面"
+    "“进程级：orchestrator”一行；KASandbox f66dbe2c1 起停 Firecracker 前查进程状态改读 /proc、不再执行 ps，"
+    "pause 每次约少 100 ms）；pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，"
+    "不含把快照复制进模板存储。",
 )
 MIX_HEAD = ("总改动MiB", "内存MiB", "文件MiB", "进程MiB", "沙箱级checkpoint", "进程级checkpoint", "沙箱级restore",
             "进程级restore", "沙箱级首次全量", "进程级首次全量", "E2B pause", "E2B resume", "resume后首读内存")
