@@ -15,7 +15,8 @@ pause.phases 里 stop_begin → fc_exited 这一段在 950 / 920B 上都要 170�
 
 输出（每个测点 p50）：
   orchestrator 记的“停 FC 到进程退出”（stop_begin → fc_exited）；
-  内核时间线：发 SIGTERM 前 orchestrator 先跑一次 ps 查进程状态（sched_process_exec → exit）、
+  内核时间线：发 SIGTERM 前 orchestrator 先跑一次 ps 查进程状态（sched_process_exec → exit；f66dbe2c1 起
+  改读 /proc、不再起 ps，这一项显示为“-”）、
   SIGTERM → 第一个线程进入 do_exit、SIGTERM → 主线程退出完（它最后一条记录 exit_notify；do_exit 不返回，
   function_graph 记不到结束行，还开着的帧都按线程的最后一条记录收尾）；
   退出最慢的那个线程的 do_exit 调用树（各函数含子函数的耗时，<0.3 ms 的不列），其他线程 do_exit 的最大值。
@@ -322,7 +323,8 @@ def summarize(rows):
         ph = [r["pause_phases"] for r in rs if r["pause_phases"]]
         if ph:
             # orchestrator 的 stop 段减去内核里看得到的 ps 与 SIGTERM→退出完，剩下的是其余等待
-            k = [e["orch_stop_ms"], e["ps 查进程状态"], e["SIGTERM → 主线程退出完"]]
+            # f66dbe2c1 起 orchestrator 改读 /proc、不再起 ps，没有 ps 就按 0 计
+            k = [e["orch_stop_ms"], e["ps 查进程状态"] or 0.0, e["SIGTERM → 主线程退出完"]]
             e["orch_minus_kernel_ms"] = k[0] - k[1] - k[2] if None not in k else None
         out.append(e)
     return out

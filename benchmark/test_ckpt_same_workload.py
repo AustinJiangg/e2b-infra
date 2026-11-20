@@ -161,7 +161,7 @@ class MixTests(unittest.TestCase):
         ph = {"memfile": 25.0, "stop_begin": 25.0, "checks_stopped": 25.1, "fc_state_checked": 110.0,
               "fc_sigterm": 110.1, "fc_exited": 190.0, "nbd_released": 215.0}
         ps = csw.phase_segments(ph, csw.PAUSE_SEGMENTS)
-        self.assertAlmostEqual(ps["ps 查 FC 进程状态"], 85.0)
+        self.assertAlmostEqual(ps["查 FC 进程状态"], 85.0)
         self.assertAlmostEqual(ps["发 SIGTERM"], 0.1)
         self.assertAlmostEqual(ps["等 FC 进程退出"], 79.9)
         self.assertAlmostEqual(ps["断开 NBD"], 25.0)

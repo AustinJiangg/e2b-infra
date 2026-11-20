@@ -302,10 +302,11 @@ def parse_phases(text):
 # 原生分段：orchestrator 记的是各步完成的时刻（从请求开始计，ms），这里换算成相邻两步之间的耗时。
 # 每段 = 列出的时刻里最晚的一个 - 上一段的终点；列出几个时刻的段是并行做的几件事，取最后完成的。
 # orchestrator 6a60dec6f 没有 checks_stopped / fc_state_checked / fc_sigterm（之后的版本才有），那时
-# “等 FC 进程退出”一段包含发 SIGTERM 之前用 ps 查进程状态的时间。
+# “等 FC 进程退出”一段包含发 SIGTERM 之前用 ps 查进程状态的时间。237b9ac62 用 ps 查状态（约 85～106 ms），
+# f66dbe2c1 起改读 /proc/<pid>/stat（不到 0.1 ms），这一段名字因此不写 ps。
 PAUSE_SEGMENTS = (("取沙箱", ("acquired",)), ("暂停 vCPU", ("vm_paused",)), ("写 snapfile", ("snapfile",)),
                   ("取脏页集合", ("dirty_map",)), ("导出内存", ("memfile",)),
-                  ("ps 查 FC 进程状态", ("checks_stopped", "fc_state_checked")), ("发 SIGTERM", ("fc_sigterm",)),
+                  ("查 FC 进程状态", ("checks_stopped", "fc_state_checked")), ("发 SIGTERM", ("fc_sigterm",)),
                   ("等 FC 进程退出", ("fc_exited",)), ("断开 NBD", ("nbd_released",)),
                   ("导出根盘差分", ("rootfs_synced",)), ("写元数据、进缓存", ("snapshot_done",)),
                   ("上传", ("uploaded",)))
