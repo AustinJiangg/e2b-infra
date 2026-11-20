@@ -1044,6 +1044,7 @@ def print_summary(result):
                 print("  注意：没读到 orchestrator 的 Pause timing 日志，pause 列为空（墙钟见“墙钟”列，含上传）")
             print_native_phases(native)
     print_stages(result)
+    print_breakdown(result)
     print("\n判定: %s（测量 %d 次，失败 %d）" % (result["verdict"], sum(1 for r in result["rows"] if r["kind"] != "base"),
                                          sum(1 for r in result["rows"] if not r["ok"])))
 
@@ -1144,6 +1145,154 @@ def print_stages(result):
             lg = criulog_p50(rs, key.replace("_server", "_criulog"))
             if lg:
                 print("    %-14s CRIU 日志 | %s" % ("", lg))
+
+
+# ------------------------------------------------------------ 耗时分解（mix 各档）
+
+# 服务端分段之间有包含关系（例如沙箱级 frozen ⊃ snapshot），这里只取按时间先后、互不重叠的一层，
+# 每段标一个类别；“其他”= 服务端总计 - 各段之和，“API 与网络”= 客户端墙钟 - 服务端总计。
+# 两套都是先处理一类、再处理另一类，内存和文件不重叠，有两处例外：
+#   - 沙箱级 checkpoint 的 snapshot：Firecracker 导出内存的同时，把 guest 写过、还在宿主页缓存里的文件
+#     数据经 NBD 推进写层，两者在同一次调用里，分不开，类别记“内存+文件”；
+#   - 沙箱级 restore 的 conntrack 清理在后台与主流程同时进行，单列，不计入各段之和。
+BREAKDOWN = {
+    ("sandbox", "ckpt2"): (
+        ("准备", ("prepare", "rootfs_header"), "固定"),
+        ("暂停 vCPU", ("pause",), "固定"),
+        ("存脏页位图", ("save_live_bitmap",), "内存"),
+        ("导出内存、刷文件数据", ("snapshot",), "内存+文件"),
+        ("封根盘写层", ("seal",), "文件"),
+        ("恢复 vCPU", ("resume",), "固定"),
+        ("移走封好的层", ("seal_move",), "文件"),
+        ("写元数据、提交", ("append_layer", "commit"), "固定")),
+    ("sandbox", "restore"): (
+        ("读盘视图", ("disk_view_read", "assemble_view_pre"), "文件"),
+        ("暂停 vCPU", ("pause",), "固定"),
+        ("存脏页位图", ("save_live_bitmap",), "内存"),
+        ("拼出要写回的内存页", ("materialize",), "内存"),
+        ("Firecracker 写回内存、恢复 vCPU 与设备", ("fc_rollback",), "内存"),
+        ("切根盘视图", ("assemble_view", "reset_view"), "文件"),
+        ("恢复 vCPU", ("resume",), "固定"),
+        ("等 envd", ("wait_envd",), "固定")),
+    ("criu", "ckpt2"): (
+        ("找进程", ("precheck_ms", "find_pids_ms"), "固定"),
+        ("CRIU dump（冻结进程、导出内存镜像）", ("criu_dump_ms",), "内存"),
+        ("文件层下沉", ("overlay_sink_ms",), "文件")),
+    ("criu", "restore"): (
+        ("找进程", ("precheck_ms", "find_pids_ms"), "固定"),
+        ("杀旧进程（释放旧进程的内存）", ("kill_ms",), "内存"),
+        ("文件层回滚", ("overlay_restore_ms",), "文件"),
+        ("CRIU restore（建进程、读回内存）", ("criu_restore_ms",), "内存")),
+}
+BREAKDOWN_PARALLEL = {("sandbox", "restore"): (("conntrack 清理", "conntrack_bg"),)}
+BREAKDOWN_OPS = (("ckpt2", "连续 ckpt", "ckpt2_ms", "ckpt2_server"),
+                 ("restore", "restore", "restore_ms", "restore_server"))
+BREAKDOWN_CATS = ("内存", "文件", "内存+文件", "固定")
+
+
+def _med(vals):
+    vals = [v for v in vals if v is not None]
+    return statistics.median(vals) if vals else None
+
+
+def breakdown(rows, stack, op):
+    """一组样本（同一测点）的耗时分解，各项都是 p50。没有分段时 None。"""
+    name_, _, wall_key, srv_key = op
+    spec = BREAKDOWN.get((stack, name_))
+    if not spec:
+        return None
+    per = []
+    for r in rows:
+        tot = server_total(r, srv_key)
+        if tot is None:
+            continue
+        s = r.get(srv_key) or {}
+        segs = []
+        for _, keys, _ in spec:
+            vals = [float(s[k]) for k in keys if isinstance(s.get(k), (int, float)) and not isinstance(s.get(k), bool)]
+            segs.append(sum(vals) if vals else None)
+        per.append((r.get(wall_key), tot, segs, s))
+    if not per:
+        return None
+    segs = []
+    for i, (label, _, cat) in enumerate(spec):
+        v = _med([p[2][i] for p in per])
+        if v is not None:
+            segs.append((label, cat, v))
+    by_cat = {}
+    for _, cat, v in segs:
+        by_cat[cat] = by_cat.get(cat, 0.0) + v
+    par = []
+    for label, key in BREAKDOWN_PARALLEL.get((stack, name_), ()):
+        v = _med([p[3].get(key) for p in per if isinstance(p[3].get(key), (int, float))])
+        if v is not None:
+            par.append((label, v))
+    return {"n": len(per), "wall": _med([p[0] for p in per]), "total": _med([p[1] for p in per]),
+            "api": _med([p[0] - p[1] for p in per if p[0] is not None]),
+            "other": _med([p[1] - sum(x for x in p[2] if x is not None) for p in per]),
+            "segs": segs, "by_cat": by_cat, "parallel": par}
+
+
+def _criu_inside(rows, op):
+    """进程级：CRIU 自己的统计（在 CRIU dump / restore 那一段里面），一行说明。"""
+    if op == "ckpt2":
+        fz = _med([(r.get("ckpt2_criu") or {}).get("frozen_ms") for r in rows])
+        md = _med([(r.get("ckpt2_criu") or {}).get("memdump_ms") for r in rows])
+        mw = _med([(r.get("ckpt2_criu") or {}).get("memwrite_ms") for r in rows])
+        pw = _med([(r.get("ckpt2_criu") or {}).get("pages_written") for r in rows])
+        if fz is None:
+            return ""
+        return "CRIU 内部（在 CRIU dump 一段里）：进程冻住 %s，其中导出内存 %s（写镜像 %s）；写出 %s 页" % (
+            "%.1f" % fz, "-" if md is None else "%.1f" % md, "-" if mw is None else "%.1f" % mw,
+            "-" if pw is None else "%d" % pw)
+    rs = _med([(r.get("restore_criu") or {}).get("restore_ms") for r in rows])
+    pr = _med([(r.get("restore_criu") or {}).get("pages_restored") for r in rows])
+    if rs is None:
+        return ""
+    return "CRIU 内部（在 CRIU restore 一段里）：恢复 %.1f；读回 %s 页" % (rs, "-" if pr is None else "%d" % pr)
+
+
+def print_breakdown(result, series="mix"):
+    """mix 各档的耗时分解：每档两行（连续 ckpt、restore），各段按时间先后、互不重叠。"""
+    stack = result.get("stack")
+    rows = [r for r in result["rows"] if r["kind"] == "sample" and r.get("series") == series and r.get("ok", True)]
+    if not rows or not any(BREAKDOWN.get((stack, op[0])) for op in BREAKDOWN_OPS):
+        return
+    groups = {}
+    for r in rows:
+        key = tuple(r.get(k, DEFAULTS[k]) for k in DIMS)
+        groups.setdefault(key, []).append(r)
+    printed = False
+    for key, rs in groups.items():
+        lines = []
+        for op in BREAKDOWN_OPS:
+            b = breakdown(rs, stack, op)
+            if not b:
+                continue
+            lines.append("    %-9s 墙钟 %s = 服务端 %.1f + API 与网络 %s" % (
+                op[1], "-" if b["wall"] is None else "%.1f" % b["wall"], b["total"],
+                "-" if b["api"] is None else "%.1f" % b["api"]))
+            lines.append("      " + " · ".join("%s %.1f[%s]" % (n_, v_, c_) for n_, c_, v_ in b["segs"]) + " · 其他 %.1f" % b["other"])
+            lines.append("      按类：" + "  ".join("%s %.1f" % (c, b["by_cat"][c]) for c in BREAKDOWN_CATS
+                                                  if c in b["by_cat"]) + "  其他 %.1f" % b["other"])
+            for label, v in b["parallel"]:
+                lines.append("      同时进行（不计入上面各段）：%s %.1f" % (label, v))
+            if stack == "criu":
+                inside = _criu_inside(rs, op[0])
+                if inside:
+                    lines.append("      " + inside)
+        if not lines:
+            continue
+        if not printed:
+            print("\n耗时分解（%s 各档，p50，ms；各段按时间先后、互不重叠，相加约等于服务端总计；其他 = 服务端总计 - "
+                  "各段之和；API 与网络 = 客户端墙钟 - 服务端总计；[] 里是类别）" % series)
+            if stack == "sandbox":
+                print("  “导出内存、刷文件数据”是 Firecracker 拍快照的同一次调用：导出内存的同时把 guest 写过、还在宿主"
+                      "页缓存里的文件数据经 NBD 推进写层，分不开")
+            printed = True
+        print("  %s（%d 次）" % (point_label(dict(zip(DIMS, key))), len(rs)))
+        for line in lines:
+            print(line)
 
 
 # ------------------------------------------------------------ 多轮合并与两套并列

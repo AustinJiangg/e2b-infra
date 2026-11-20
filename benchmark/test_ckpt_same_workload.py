@@ -281,6 +281,57 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(merged["rounds"], 2)
         self.assertEqual(merged["summary"][0]["n"], 10)
 
+    def test_breakdown(self):
+        p = csw.norm({"P": 48, "d": 48, "f": 16})
+        rows = []
+        for i in range(3):
+            rows.append({"series": "mix", **p, "pass": 0, "rep": i, "kind": "sample", "ok": True,
+                         "ckpt2_ms": 42.0 + i, "restore_ms": 41.0 + i,
+                         "ckpt2_server": {"total": 40.0 + i, "frozen": 39.0, "checkpoint_to_files": 39.5,
+                                          "prepare": 0.2, "rootfs_header": 0.0, "pause": 0.2, "snapshot": 34.0 + i,
+                                          "seal": 4.5, "resume": 0.3, "seal_move": 0.1, "append_layer": 0.3,
+                                          "commit": 0.2, "commit_manifest": 0.2},
+                         "restore_server": {"total": 39.0, "frozen": 32.0, "rollback_in_place": 35.0,
+                                            "disk_view_read": 0.1, "assemble_view_pre": 0.1, "pause": 0.2,
+                                            "save_live_bitmap": 0.8, "materialize": 16.0, "revert_mem_write": 15.9,
+                                            "fc_rollback": 11.0, "fc_memory": 8.0, "assemble_view": 0.0,
+                                            "reset_view": 2.4, "resume": 0.3, "wait_envd": 2.4, "conntrack_bg": 7.8,
+                                            "materialize_read_mb": 85.0, "conntrack_host_entries_count": 477}})
+        b = csw.breakdown(rows, "sandbox", csw.BREAKDOWN_OPS[0])
+        self.assertEqual(b["n"], 3)
+        self.assertAlmostEqual(b["total"], 41.0)
+        self.assertAlmostEqual(b["api"], 2.0)
+        segs = {s[0]: s for s in b["segs"]}
+        self.assertNotIn("存脏页位图", segs)                     # 没有这一段的样本不列
+        self.assertEqual(segs["导出内存、刷文件数据"][1], "内存+文件")
+        self.assertAlmostEqual(segs["导出内存、刷文件数据"][2], 35.0)
+        # 其他 = 总计 - 各段之和；frozen、checkpoint_to_files、commit_manifest 是外层或内层，不重复计
+        self.assertAlmostEqual(b["other"], 41.0 - (0.2 + 0.0 + 0.2 + 35.0 + 4.5 + 0.3 + 0.1 + 0.3 + 0.2))
+        r = csw.breakdown(rows, "sandbox", csw.BREAKDOWN_OPS[1])
+        self.assertAlmostEqual(r["other"], 39.0 - (0.2 + 0.2 + 0.8 + 16.0 + 11.0 + 2.4 + 0.3 + 2.4))
+        self.assertEqual(r["parallel"], [("conntrack 清理", 7.8)])
+        self.assertAlmostEqual(r["by_cat"]["文件"], 0.2 + 2.4)
+        crows = [{"series": "mix", **p, "pass": 0, "rep": 0, "kind": "sample", "ok": True,
+                  "ckpt2_ms": 27.7, "restore_ms": 31.2,
+                  "ckpt2_server": {"total_ms": 25.6, "precheck_ms": 0.04, "find_pids_ms": 0.65, "criu_dump_ms": 23.6,
+                                   "overlay_sink_ms": 0.5, "stopped_ms": 1.2},
+                  "restore_server": {"total_ms": 29.2, "precheck_ms": 0.09, "find_pids_ms": 0.62, "kill_ms": 3.8,
+                                     "overlay_restore_ms": 0.3, "criu_restore_ms": 22.6},
+                  "ckpt2_criu": {"frozen_ms": 21.7, "memdump_ms": 17.6, "memwrite_ms": 15.4, "pages_written": 12648},
+                  "restore_criu": {"restore_ms": 20.8, "pages_restored": 13659}}]
+        c = csw.breakdown(crows, "criu", csw.BREAKDOWN_OPS[0])
+        self.assertAlmostEqual(c["other"], 25.6 - (0.04 + 0.65 + 23.6 + 0.5))   # stopped_ms 与 dump 重叠，不计
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_breakdown({"stack": "criu", "rows": crows})
+            csw.print_breakdown({"stack": "sandbox", "rows": rows})
+        out = buf.getvalue()
+        self.assertIn("P=48 d=48 f=16 sync=fsync（1 次）", out)
+        self.assertIn("CRIU 内部（在 CRIU dump 一段里）：进程冻住 21.7", out)
+        self.assertIn("读回 13659 页", out)
+        self.assertIn("同时进行（不计入上面各段）：conntrack 清理 7.8", out)
+        self.assertIn("按类：内存", out)
+
     def test_compare(self):
         s = fake_result("sandbox", fake_rows("sandbox", "dirty", {"P": 256, "d": 64}, per_mib=0.1))
         c1 = fake_result("criu", fake_rows("criu", "dirty", {"P": 256, "d": 64}, per_mib=0.3, rnd=1))
