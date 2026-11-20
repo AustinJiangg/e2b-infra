@@ -383,7 +383,7 @@ T36 的 restore 次数（16658）不计入 [§10.1](#101-731877-次-restore0-不
 | [第 20 章 §6.2](20-920b-performance.md#62-pb4py只换判据的预测) 只换判据的预测 | 920B，修复前（09-10 前后） | `probes/pb4.py` |
 | [第 20 章 §6.3](20-920b-performance.md#63-native_snapshot_benchpy六档) 六档体积、pause、resume | 920B，修复前 09-11、修复后 09-14；950 修复前 2026-09-09～10 | `acceptance/native_snapshot_bench.py --mode both`（950 那一轮为修复前代码） |
 | [第 19 章 §4](19-native-pause-resume.md#4-920b-分档结果与对照) 每档独立沙箱的分档与对照 | 新 920B 2026-11-06 | `benchmark/native_snapshot_tiers.py --mode both` |
-| [第 13 章 §6](13-native-snapshot.md#6-成本模型) 耗时拆分 | 新 920B 2026-11-06，单样本 | Firecracker 日志、文件事件与进程退出的时间线；Firecracker 内核栈采样 |
+| [第 13 章 §6](13-native-snapshot.md#6-成本模型) 耗时拆分 | 950 2026-11-20（每档 n = 20）；Firecracker 退出拆分 950 与 920B 2026-11-20（n = 5） | `benchmark/ckpt_same_workload.py --series mix` 读 orchestrator 的 `Pause timing` / `Resume phases` 日志；`benchmark/fc_exit_trace.py`（内核 ftrace） |
 | [附录 C §5.2](C-evolution-and-cases.md#52-第一版为什么贵) `touch1` 演进 | 920B 2026-09-11，同机同 Firecracker 四轮 | 同上，pause 模式 |
 | [附录 C §5.4](C-evolution-and-cases.md#54-池本身的一次无用分配) 取缓冲的分配 | 920B 2026-09-17 | `block/page_test.go` 的 `BenchmarkGetPageBuffer` |
 | [附录 C §5.5](C-evolution-and-cases.md#55-量过之后决定不做的) header 与零页、perf 采样 | 920B 2026-09-11 | 修复后 `native_snapshot_bench.py` 各代 header 与导出内容；pause 模式全档位期间的 perf |

@@ -13725,7 +13725,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <li>E2B 的 pause / resume 用同一种负载，另起沙箱测：改写 → <code>sb.pause()</code> → <code>Sandbox.connect()</code> → 执行第一条命令。只在进程级那套代码上测：它的 orchestrator 没有改动原生快照路径，等同于 ARM 上的 E2B 原生实现。pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，见表后“pause 的口径”。resume 一列是 <code>connect</code> 返回耗时加上第一条命令的耗时。每个沙箱上的第一次 pause 不计入表格（单列在 report 里）。</li>
 <li>resume 后首读：resume 返回时进程的内存还没有读回，之后第一次把整个进程的内存读一遍，比 pause 之前多花的时间。restore 返回时内存已经就位，没有这一项。</li>
 </ul>
-<p><strong>条件。</strong> 950（Kunpeng 950，宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code>），e2b-infra <code>5b829c8</code>，结果目录 <code>test950/results/20261120-091104-compare/</code>。沙箱级：orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>），脏页后端 <code>hdbss</code>，模板 <code>base</code>。进程级：orchestrator <code>ec5eb1cc…</code>（KASandbox <code>7e0a6a462</code>，比 11-19 那一轮只多一行 <code>Pause timing</code> 日志），gsd <code>8bc5dc49…</code>，脏页后端 <code>off</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB，同一份 Firecracker。每格 n = 20（首次全量 n = 2），客户端墙钟，单位 ms。沙箱级 746 次、进程级 900 次测量，内存与文件校验全部一致。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/compare-report.txt</code>。</p>
+<p><strong>条件。</strong> 950（Kunpeng 950，宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code>），e2b-infra <code>1384b02</code>，结果目录 <code>test950/results/20261120-122146-compare/</code>。沙箱级：orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>），脏页后端 <code>hdbss</code>，模板 <code>base</code>。进程级：orchestrator <code>e77c0e29…</code>（KASandbox <code>237b9ac62</code>，比 11-19 那一轮只多了 <code>Pause timing</code>、<code>Resume phases</code> 两类分段日志，不改行为），gsd <code>8bc5dc49…</code>，脏页后端 <code>off</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB，同一份 Firecracker。每格 n = 20（首次全量 n = 2），客户端墙钟，单位 ms。进程级一侧测量 308 次，失败 0；两侧内存与文件校验全部一致。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/clean-122146-compare.txt</code>。</p>
+<p><strong>测前清理。</strong> 每个测量步骤开测前，脚本先回收宿主上积累的 e2b 网络命名空间（sandbox 一步前 527 → 232 个，criu 一步前 406 → 173 个），测量时宿主挂载点约 450～560 个。同一天上午那一轮（<code>20261120-091104-compare</code>）开测时宿主有 1421 个网络命名空间，没有先清；每起一个 Firecracker 都要新建 mount 命名空间、复制宿主的整张挂载表，那一轮的 E2B resume 因此慢了约 20 ms（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来">第 19 章 §6</a>），本表不再使用那一轮的 mix 组。两套快照回滚的 checkpoint / restore 不起新进程，不受这个影响；同一档在两轮之间的差别在 ±12 ms 以内，谁快谁慢的方向没有变化。</p>
 <p><strong>p50：</strong></p>
 <div class="tw"><table>
 <thead>
@@ -13751,14 +13752,14 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;"><strong>7.0</strong></td>
-<td style="text-align: right;">8.7</td>
-<td style="text-align: right;">18.2</td>
-<td style="text-align: right;"><strong>10.6</strong></td>
-<td style="text-align: right;">285.4</td>
-<td style="text-align: right;">20.1</td>
-<td style="text-align: right;">252.7</td>
-<td style="text-align: right;">93.0</td>
+<td style="text-align: right;"><strong>6.7</strong></td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: right;">17.2</td>
+<td style="text-align: right;"><strong>10.2</strong></td>
+<td style="text-align: right;">284.0</td>
+<td style="text-align: right;">22.7</td>
+<td style="text-align: right;">230.5</td>
+<td style="text-align: right;">71.4</td>
 <td style="text-align: right;">0.0</td>
 </tr>
 <tr>
@@ -13766,29 +13767,29 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">12</td>
 <td style="text-align: right;">4</td>
 <td style="text-align: right;">12</td>
-<td style="text-align: right;">19.3</td>
-<td style="text-align: right;"><strong>14.5</strong></td>
-<td style="text-align: right;">24.2</td>
-<td style="text-align: right;"><strong>14.9</strong></td>
-<td style="text-align: right;">355.1</td>
-<td style="text-align: right;">25.4</td>
-<td style="text-align: right;">272.5</td>
-<td style="text-align: right;">89.2</td>
-<td style="text-align: right;">1.9</td>
+<td style="text-align: right;">18.3</td>
+<td style="text-align: right;"><strong>15.7</strong></td>
+<td style="text-align: right;">30.5</td>
+<td style="text-align: right;"><strong>17.3</strong></td>
+<td style="text-align: right;">283.4</td>
+<td style="text-align: right;">30.5</td>
+<td style="text-align: right;">250.9</td>
+<td style="text-align: right;">73.5</td>
+<td style="text-align: right;">1.3</td>
 </tr>
 <tr>
 <td style="text-align: right;">32</td>
 <td style="text-align: right;">24</td>
 <td style="text-align: right;">8</td>
 <td style="text-align: right;">24</td>
-<td style="text-align: right;">26.4</td>
-<td style="text-align: right;"><strong>18.9</strong></td>
-<td style="text-align: right;">33.8</td>
-<td style="text-align: right;"><strong>18.8</strong></td>
-<td style="text-align: right;">279.8</td>
+<td style="text-align: right;">24.5</td>
+<td style="text-align: right;"><strong>21.5</strong></td>
 <td style="text-align: right;">31.7</td>
-<td style="text-align: right;">278.0</td>
-<td style="text-align: right;">86.3</td>
+<td style="text-align: right;"><strong>23.3</strong></td>
+<td style="text-align: right;">266.8</td>
+<td style="text-align: right;">35.2</td>
+<td style="text-align: right;">255.7</td>
+<td style="text-align: right;">72.1</td>
 <td style="text-align: right;">3.5</td>
 </tr>
 <tr>
@@ -13796,60 +13797,60 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">48</td>
 <td style="text-align: right;">16</td>
 <td style="text-align: right;">48</td>
-<td style="text-align: right;">33.5</td>
-<td style="text-align: right;"><strong>24.5</strong></td>
-<td style="text-align: right;">41.1</td>
-<td style="text-align: right;"><strong>25.9</strong></td>
-<td style="text-align: right;">275.3</td>
-<td style="text-align: right;">42.9</td>
-<td style="text-align: right;">306.2</td>
-<td style="text-align: right;">87.9</td>
-<td style="text-align: right;">7.5</td>
+<td style="text-align: right;">35.0</td>
+<td style="text-align: right;"><strong>30.5</strong></td>
+<td style="text-align: right;">47.3</td>
+<td style="text-align: right;"><strong>29.3</strong></td>
+<td style="text-align: right;">303.0</td>
+<td style="text-align: right;">46.3</td>
+<td style="text-align: right;">277.6</td>
+<td style="text-align: right;">73.9</td>
+<td style="text-align: right;">8.1</td>
 </tr>
 <tr>
 <td style="text-align: right;">128</td>
 <td style="text-align: right;">96</td>
 <td style="text-align: right;">32</td>
 <td style="text-align: right;">96</td>
-<td style="text-align: right;">62.3</td>
-<td style="text-align: right;"><strong>57.9</strong></td>
-<td style="text-align: right;">66.9</td>
-<td style="text-align: right;"><strong>58.4</strong></td>
-<td style="text-align: right;">332.8</td>
-<td style="text-align: right;">68.0</td>
-<td style="text-align: right;">340.5</td>
-<td style="text-align: right;">89.3</td>
-<td style="text-align: right;">14.9</td>
+<td style="text-align: right;">65.4</td>
+<td style="text-align: right;"><strong>47.1</strong></td>
+<td style="text-align: right;">68.2</td>
+<td style="text-align: right;"><strong>47.4</strong></td>
+<td style="text-align: right;">290.6</td>
+<td style="text-align: right;">65.8</td>
+<td style="text-align: right;">323.0</td>
+<td style="text-align: right;">75.0</td>
+<td style="text-align: right;">14.8</td>
 </tr>
 <tr>
 <td style="text-align: right;">256</td>
 <td style="text-align: right;">192</td>
 <td style="text-align: right;">64</td>
 <td style="text-align: right;">192</td>
-<td style="text-align: right;">115.8</td>
-<td style="text-align: right;"><strong>79.4</strong></td>
-<td style="text-align: right;">107.8</td>
-<td style="text-align: right;"><strong>80.2</strong></td>
-<td style="text-align: right;">372.8</td>
-<td style="text-align: right;">109.0</td>
-<td style="text-align: right;">478.9</td>
-<td style="text-align: right;">98.5</td>
-<td style="text-align: right;">29.1</td>
+<td style="text-align: right;">114.1</td>
+<td style="text-align: right;"><strong>93.9</strong></td>
+<td style="text-align: right;">108.7</td>
+<td style="text-align: right;"><strong>92.4</strong></td>
+<td style="text-align: right;">379.0</td>
+<td style="text-align: right;">120.5</td>
+<td style="text-align: right;">457.2</td>
+<td style="text-align: right;">83.7</td>
+<td style="text-align: right;">29.2</td>
 </tr>
 <tr>
 <td style="text-align: right;">70.001</td>
 <td style="text-align: right;">70</td>
 <td style="text-align: right;">0.001</td>
 <td style="text-align: right;">70</td>
-<td style="text-align: right;"><strong>24.7</strong></td>
-<td style="text-align: right;">43.9</td>
-<td style="text-align: right;"><strong>43.0</strong></td>
-<td style="text-align: right;">44.4</td>
-<td style="text-align: right;">299.5</td>
-<td style="text-align: right;">61.7</td>
-<td style="text-align: right;">280.6</td>
-<td style="text-align: right;">91.4</td>
-<td style="text-align: right;">10.0</td>
+<td style="text-align: right;"><strong>22.3</strong></td>
+<td style="text-align: right;">35.3</td>
+<td style="text-align: right;"><strong>38.8</strong></td>
+<td style="text-align: right;">39.0</td>
+<td style="text-align: right;">302.9</td>
+<td style="text-align: right;">55.0</td>
+<td style="text-align: right;">260.1</td>
+<td style="text-align: right;">74.0</td>
+<td style="text-align: right;">10.1</td>
 </tr>
 </tbody>
 </table></div>
@@ -13879,14 +13880,14 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">8.0</td>
-<td style="text-align: right;">12.6</td>
-<td style="text-align: right;">22.6</td>
-<td style="text-align: right;">15.4</td>
-<td style="text-align: right;">299.8</td>
-<td style="text-align: right;">20.1</td>
-<td style="text-align: right;">328.3</td>
-<td style="text-align: right;">207.8</td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: right;">8.8</td>
+<td style="text-align: right;">80.1</td>
+<td style="text-align: right;">10.6</td>
+<td style="text-align: right;">284.2</td>
+<td style="text-align: right;">25.5</td>
+<td style="text-align: right;">281.3</td>
+<td style="text-align: right;">122.0</td>
 <td style="text-align: right;">0.0</td>
 </tr>
 <tr>
@@ -13894,94 +13895,95 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">12</td>
 <td style="text-align: right;">4</td>
 <td style="text-align: right;">12</td>
-<td style="text-align: right;">27.6</td>
-<td style="text-align: right;">21.5</td>
-<td style="text-align: right;">31.5</td>
-<td style="text-align: right;">20.8</td>
-<td style="text-align: right;">421.1</td>
-<td style="text-align: right;">25.6</td>
-<td style="text-align: right;">337.3</td>
-<td style="text-align: right;">155.3</td>
-<td style="text-align: right;">3.8</td>
+<td style="text-align: right;">24.8</td>
+<td style="text-align: right;">19.4</td>
+<td style="text-align: right;">73.0</td>
+<td style="text-align: right;">18.9</td>
+<td style="text-align: right;">286.9</td>
+<td style="text-align: right;">31.4</td>
+<td style="text-align: right;">284.6</td>
+<td style="text-align: right;">86.9</td>
+<td style="text-align: right;">4.0</td>
 </tr>
 <tr>
 <td style="text-align: right;">32</td>
 <td style="text-align: right;">24</td>
 <td style="text-align: right;">8</td>
 <td style="text-align: right;">24</td>
-<td style="text-align: right;">39.7</td>
-<td style="text-align: right;">30.7</td>
-<td style="text-align: right;">42.3</td>
-<td style="text-align: right;">30.6</td>
-<td style="text-align: right;">291.0</td>
 <td style="text-align: right;">31.8</td>
-<td style="text-align: right;">336.9</td>
-<td style="text-align: right;">98.0</td>
-<td style="text-align: right;">4.7</td>
+<td style="text-align: right;">27.6</td>
+<td style="text-align: right;">85.3</td>
+<td style="text-align: right;">68.0</td>
+<td style="text-align: right;">270.6</td>
+<td style="text-align: right;">38.4</td>
+<td style="text-align: right;">311.5</td>
+<td style="text-align: right;">80.5</td>
+<td style="text-align: right;">6.9</td>
 </tr>
 <tr>
 <td style="text-align: right;">64</td>
 <td style="text-align: right;">48</td>
 <td style="text-align: right;">16</td>
 <td style="text-align: right;">48</td>
-<td style="text-align: right;">45.6</td>
-<td style="text-align: right;">43.9</td>
-<td style="text-align: right;">53.1</td>
-<td style="text-align: right;">41.7</td>
-<td style="text-align: right;">288.3</td>
-<td style="text-align: right;">43.3</td>
-<td style="text-align: right;">375.3</td>
-<td style="text-align: right;">102.0</td>
-<td style="text-align: right;">9.8</td>
+<td style="text-align: right;">46.7</td>
+<td style="text-align: right;">41.3</td>
+<td style="text-align: right;">54.7</td>
+<td style="text-align: right;">38.8</td>
+<td style="text-align: right;">304.7</td>
+<td style="text-align: right;">46.9</td>
+<td style="text-align: right;">323.5</td>
+<td style="text-align: right;">86.5</td>
+<td style="text-align: right;">12.4</td>
 </tr>
 <tr>
 <td style="text-align: right;">128</td>
 <td style="text-align: right;">96</td>
 <td style="text-align: right;">32</td>
 <td style="text-align: right;">96</td>
-<td style="text-align: right;">77.3</td>
-<td style="text-align: right;">72.9</td>
-<td style="text-align: right;">83.3</td>
-<td style="text-align: right;">66.7</td>
-<td style="text-align: right;">335.3</td>
-<td style="text-align: right;">72.7</td>
-<td style="text-align: right;">453.0</td>
-<td style="text-align: right;">105.0</td>
-<td style="text-align: right;">25.3</td>
+<td style="text-align: right;">76.7</td>
+<td style="text-align: right;">68.7</td>
+<td style="text-align: right;">80.6</td>
+<td style="text-align: right;">67.3</td>
+<td style="text-align: right;">300.6</td>
+<td style="text-align: right;">66.5</td>
+<td style="text-align: right;">424.2</td>
+<td style="text-align: right;">86.1</td>
+<td style="text-align: right;">23.1</td>
 </tr>
 <tr>
 <td style="text-align: right;">256</td>
 <td style="text-align: right;">192</td>
 <td style="text-align: right;">64</td>
 <td style="text-align: right;">192</td>
-<td style="text-align: right;">141.4</td>
-<td style="text-align: right;">115.8</td>
-<td style="text-align: right;">132.5</td>
-<td style="text-align: right;">116.4</td>
-<td style="text-align: right;">403.4</td>
-<td style="text-align: right;">110.5</td>
-<td style="text-align: right;">715.3</td>
-<td style="text-align: right;">109.1</td>
-<td style="text-align: right;">35.8</td>
+<td style="text-align: right;">131.7</td>
+<td style="text-align: right;">115.6</td>
+<td style="text-align: right;">124.5</td>
+<td style="text-align: right;">102.4</td>
+<td style="text-align: right;">409.5</td>
+<td style="text-align: right;">124.8</td>
+<td style="text-align: right;">893.8</td>
+<td style="text-align: right;">93.7</td>
+<td style="text-align: right;">38.2</td>
 </tr>
 <tr>
 <td style="text-align: right;">70.001</td>
 <td style="text-align: right;">70</td>
 <td style="text-align: right;">0.001</td>
 <td style="text-align: right;">70</td>
-<td style="text-align: right;">26.0</td>
-<td style="text-align: right;">58.9</td>
-<td style="text-align: right;">60.1</td>
-<td style="text-align: right;">49.9</td>
-<td style="text-align: right;">338.8</td>
+<td style="text-align: right;">31.0</td>
+<td style="text-align: right;">38.3</td>
 <td style="text-align: right;">63.0</td>
-<td style="text-align: right;">351.4</td>
-<td style="text-align: right;">102.0</td>
-<td style="text-align: right;">16.1</td>
+<td style="text-align: right;">42.1</td>
+<td style="text-align: right;">316.4</td>
+<td style="text-align: right;">55.6</td>
+<td style="text-align: right;">314.3</td>
+<td style="text-align: right;">88.7</td>
+<td style="text-align: right;">14.9</td>
 </tr>
 </tbody>
 </table></div>
-<p><strong>restore 随进程大小</strong>（同一轮 size 组：每次改 16 MiB 内存，进程大小变化，p50）：</p>
+<p>这一轮沙箱级 restore 在 0～32 MiB 三档的 p99 是 73～85 ms，远高于各自的 p50（17～32 ms）；上午那一轮同样三档的 p99 是 22.6～42.3 ms。20 个样本里是一两次偶发的慢样本，这一轮没有打印沙箱级的服务端分段，原因没有查。</p>
+<p><strong>restore 随进程大小</strong>（上午那一轮 <code>091104</code> 的 size 组：每次改 16 MiB 内存，进程大小变化，p50；不起新进程，不受网络命名空间积累的影响）：</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -14019,7 +14021,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 </tbody>
 </table></div>
 <h4 id="d24-431-每一档谁快为什么">4.3.1 每一档谁快、为什么</h4>
-<p>解释用的是同一轮的其他测点组（只改内存的 dirty 组、只改进程大小的 size 组、只写文件的 file 组）和服务端分段，数字都是这一轮 950 的 p50。</p>
+<p>mix 组的数字取自上表（<code>122146</code>）。解释用的其他测点组（只改内存的 dirty 组、只改进程大小的 size 组、只写文件的 file 组）只在上午那一轮（<code>091104</code>）跑过，它们只做 checkpoint / restore，不受网络命名空间积累的影响。数字都是 950 的 p50。</p>
 <p>先给出两套各自的代价从哪里来，下面逐档的解释都由这几项组成：</p>
 <div class="tw"><table>
 <thead>
@@ -14027,7 +14029,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <th>项</th>
 <th>沙箱级</th>
 <th>进程级</th>
-<th>出处（同一轮）</th>
+<th>出处</th>
 </tr>
 </thead>
 <tbody>
@@ -14035,7 +14037,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td>checkpoint 固定开销</td>
 <td>约 7 ms：暂停 vCPU、写快照文件</td>
 <td>随进程大小：冻结进程、收集进程状态、扫描整个进程的页表</td>
-<td>mix 0 档 7.0 对 8.7（进程几乎为空）；dirty 组 d = 0（256 MiB 进程，约 7 万个页）6.9 对 15.3</td>
+<td>mix 0 档 6.7 对 8.2（进程几乎为空）；dirty 组 d = 0（256 MiB 进程，约 7 万个页）6.9 对 15.3</td>
 </tr>
 <tr>
 <td>checkpoint 每 MiB 内存改动</td>
@@ -14051,23 +14053,23 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 </tr>
 <tr>
 <td>restore</td>
-<td>随改动量：约 18～22 ms 起，内存每 MiB 约 0.25 ms；与进程大小无关</td>
-<td>随进程大小：每 MiB 约 0.36 ms；与改动量无关</td>
-<td>dirty 组 d = 0 → 256：21.8 → 85.1，进程级 94.2～108.5；size 组 P = 32 → 384：沙箱级 22.4～26.9，进程级 22.4 → 147.5；进程级 256 MiB 进程每次恢复 67429 个页</td>
+<td>随改动量：约 17～22 ms 起，内存每 MiB 约 0.25 ms；与进程大小无关</td>
+<td>随进程大小：约 10 ms 起，每 MiB 进程约 0.4 ms；与改动量无关</td>
+<td>dirty 组 d = 0 → 256：21.8 → 85.1，进程级 94.2～108.5；size 组 P = 32 → 384：沙箱级 22.4～26.9，进程级 22.4 → 147.5；mix 组进程级 0 档 10.2、256 档 92.4；进程级 256 MiB 进程每次恢复 67429 个页</td>
 </tr>
 </tbody>
 </table></div>
 <p>沙箱级 restore 只把改过的页写回仍在运行的 Firecracker 进程；进程级 restore 要结束旧进程，再由 CRIU 把整个进程从镜像重建出来，所以它的代价跟“进程多大”走，不跟“改了多少”走。本表里进程大小等于内存改动，两项碰在一起。</p>
-<p><strong>0 / 0 / 0（进程 0 MiB）。</strong> 只剩固定开销。checkpoint 沙箱级 7.0、进程级 8.7，接近：进程几乎为空，进程级要扫的页表很少。restore 进程级 10.6、沙箱级 18.2，进程级快 1.7 倍：进程级要重建的进程几乎为空；沙箱级 restore 有约 18 ms 的固定开销（暂停 vCPU、原地写回、复位设备，其中 conntrack 清理约 5 ms）。</p>
-<p><strong>16、32、64 三档（进程 12～48 MiB）。</strong> 进程级 checkpoint 低 4.8～9.0 ms（14.5～24.5 对 19.3～33.5），restore 低 9.3～15.2 ms（14.9～25.9 对 24.2～41.1），都快 1.3～1.8 倍。checkpoint：这几档有 1/4 的改动是文件，沙箱级每 MiB 文件约 1 ms，进程级基本不花；进程小，进程级的固定开销也小。restore：进程级重建 12～48 MiB 的进程，约 10.6 + 0.36 × 进程 MiB；沙箱级回滚 16～64 MiB 改动，还要回滚写文件时进了 guest 页缓存的页。</p>
-<p><strong>128、256 两档（进程 96、192 MiB）。</strong> 仍是进程级更低。checkpoint 57.9 对 62.3、79.4 对 115.8：128 档只差 4.4 ms，在 p99 的波动以内；256 档沙箱级 115.8 ms，大致是只改 192 MiB 内存（dirty 组插值约 30 ms）与只写 64 MiB 文件（75.6 ms）两项之和，还高约 10 ms，这一档没有打印服务端分段，余下的部分没有拆开。restore 58.4 对 66.9、80.2 对 107.8：进程级与 size 组的斜率吻合（10.6 + 0.36 × 192 ≈ 80，实测 80.2）。</p>
-<p><strong>70 / 70 / 0.001（进程 70 MiB）。</strong> 没有文件写入，沙箱级的文件代价不出现。checkpoint 沙箱级快 1.8 倍（24.7 对 43.9）：只剩内存代价，沙箱级每 MiB 约 0.11 ms，进程级约 0.32 ms。restore 两侧接近（43.0 对 44.4）：沙箱级回滚 70 MiB 改动、进程级重建 70 MiB 进程，在这个大小上代价相当。</p>
+<p><strong>0 / 0 / 0（进程 0 MiB）。</strong> 只剩固定开销。checkpoint 沙箱级 6.7、进程级 8.2，接近：进程几乎为空，进程级要扫的页表很少。restore 进程级 10.2、沙箱级 17.2，进程级快 1.7 倍：进程级要重建的进程几乎为空；沙箱级 restore 有约 17 ms 的固定开销（暂停 vCPU、原地写回、复位设备，其中 conntrack 清理约 5 ms）。</p>
+<p><strong>16、32、64 三档（进程 12～48 MiB）。</strong> 进程级 checkpoint 低 2.6～4.5 ms（15.7～30.5 对 18.3～35.0），快 1.1～1.2 倍；restore 低 8.4～18.0 ms（17.3～29.3 对 30.5～47.3），快 1.4～1.8 倍。checkpoint：这几档有 1/4 的改动是文件，沙箱级每 MiB 文件约 1 ms，进程级基本不花；进程小，进程级的固定开销也小。restore：进程级重建 12～48 MiB 的进程，约 10 + 0.4 × 进程 MiB；沙箱级回滚 16～64 MiB 改动，还要回滚写文件时进了 guest 页缓存的页。</p>
+<p><strong>128、256 两档（进程 96、192 MiB）。</strong> 仍是进程级更低。checkpoint 47.1 对 65.4、93.9 对 114.1，快 1.4、1.2 倍；256 档沙箱级 114.1 ms，大致是只改 192 MiB 内存（dirty 组插值约 30 ms）与只写 64 MiB 文件（75.6 ms）两项之和，还高约 8 ms，这一档没有打印沙箱级的服务端分段，余下的部分没有拆开。restore 47.4 对 68.2、92.4 对 108.7：进程级按 0 档与 256 档两点算每 MiB 进程约 0.43 ms，size 组是约 0.36 ms，两轮之间有差异，量级一致。</p>
+<p><strong>70 / 70 / 0.001（进程 70 MiB）。</strong> 没有文件写入，沙箱级的文件代价不出现。checkpoint 沙箱级快 1.6 倍（22.3 对 35.3）：只剩内存代价，沙箱级每 MiB 约 0.11 ms，进程级约 0.32 ms。restore 两侧持平（38.8 对 39.0）：沙箱级回滚 70 MiB 改动、进程级重建 70 MiB 进程，在这个大小上代价相当。</p>
 <p><strong>与 2026-11-19 那一轮的区别。</strong> 那一轮进程固定 256 MiB：restore 每档都是沙箱级更低，128、256 两档的 checkpoint 也是沙箱级更低（原始输出在工作区 <code>rollback-reports/950-compare-20261119/compare.txt</code>）。差别来自进程大小：进程级的 checkpoint 固定开销和 restore 都随进程大小增长，进程从 256 MiB 降到 12～192 MiB，这两项都变小。两轮说的是同一件事：进程比改动大得多时沙箱级 restore 更快（size 组 P = 256 MiB 时 24.5 对 120.3）；进程小、改动里有文件时进程级更快。</p>
-<p><strong>E2B pause。</strong> 252.7～478.9 ms，一页不改也要 252.7 ms。固定开销来自停掉虚机、等 Firecracker 进程退出、断开根盘的 NBD、导出根盘差分（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来">第 19 章 §6</a>）；随改动增长的部分来自导出内存，上游的判据导出所有驻留在内存里的页，不只是改过的页。两套 checkpoint 比 pause 快 4.1～36 倍：沙箱级 4.1～36 倍，进程级 5.9～29 倍。</p>
-<p><strong>E2B resume。</strong> 86.3～98.5 ms，基本不随档位变化：resume 不搬运内存，返回时内存还在快照文件里，之后按缺页从文件读回。读回整个进程的内存比 pause 之前多花 0～29.1 ms，随进程大小增长。</p>
+<p><strong>E2B pause。</strong> 230.5～457.2 ms，一页不改也要 230.5 ms。按 orchestrator 的分段日志，0 档的 226 ms 里：停 Firecracker 之前先执行一次 <code>ps</code> 查它的进程状态 106 ms，发 SIGTERM 后等进程退出 72 ms（主要是内核销毁 KVM 虚机），断开根盘的 NBD 19 ms，暂停 vCPU、写快照、导出内存一共只有约 27 ms（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来">第 19 章 §6</a>）。随改动增长的部分来自导出内存和导出根盘差分；导出内存的判据是所有驻留在内存里的页，不只是改过的页（0 档也要导出 162 MiB）。两套 checkpoint 比 pause 快 4.0～34 倍：沙箱级 4.0～34 倍，进程级 4.9～28 倍。</p>
+<p><strong>E2B resume。</strong> 71.4～83.7 ms，基本不随档位变化：resume 不搬运内存，返回时内存还在快照文件里，之后按缺页从文件读回。0 档的 60 ms 服务端时间里，起一个新的 Firecracker 到它的 API 可用 35 ms（其中建沙箱 cgroup 约 13 ms），等 guest 里的 envd 就绪 15 ms，加载快照 6 ms。读回整个进程的内存比 pause 之前多花 0～29.2 ms，随进程大小增长。</p>
 <ul>
-<li>总改动 128 MiB 以内的档，两套 restore 都快于 resume：沙箱级快 1.3～5.1 倍，进程级快 1.5～8.8 倍。70 档两套都快约 2.1 倍。</li>
-<li>256 档沙箱级 restore 107.8 ms，比 resume 的 98.5 ms 慢 9.3 ms；进程级 80.2 ms 仍更快。把 resume 之后读回 192 MiB 内存的 29.1 ms 算上，resume 一侧共 127.6 ms，两套 restore 都更快。</li>
+<li>总改动 128 MiB 以内的档，两套 restore 都快于 resume：沙箱级快 1.1～4.2 倍，进程级快 1.6～7.0 倍。70 档两套都快约 1.9 倍。</li>
+<li>256 档两套 restore 都慢于 resume：沙箱级 108.7 ms 慢 25.0 ms，进程级 92.4 ms 慢 8.7 ms。把 resume 之后读回 192 MiB 内存的 29.2 ms 算上，resume 一侧共 112.9 ms，两套 restore 都更快。</li>
 </ul>
 <p><strong>这张表不能直接说明的三件事。</strong></p>
 <ul>
@@ -14077,9 +14079,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 </ul>
 <p><strong>pause 的口径。</strong> 上游的 <code>Pause</code> 分两步：第一步拍快照并放进本节点的缓存目录（默认 <code>/orchestrator/build</code>），第二步把这些文件上传到模板存储；上游第一步完成就返回，第二步在后台做。两套代码都改成第二步完成才返回（openEuler 基线提交 <code>01665a0c9</code>），理由写在代码注释里：快照数据真正写进存储之前，不能把快照标成就绪。本表的 pause 只计第一步，与上游一致：</p>
 <ul>
-<li>进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>），只加日志、不改行为。脚本从日志读出等上传的时间，pause = <code>sb.pause()</code> 墙钟减去它。</li>
+<li>进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>；<code>6a60dec6f</code> 起加 <code>pause.phases</code> 分段），只加日志、不改行为。脚本从日志读出等上传的时间，pause = <code>sb.pause()</code> 墙钟减去它。</li>
 <li>第一步已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分这些步骤，固定开销基本都在第一步。</li>
-<li>这一轮 950 上 pause 墙钟 309.3～663.8 ms，其中等上传 54.7～186.8 ms，随导出量增长。存储是 <code>STORAGE_PROVIDER=Local</code>，上传只是把缓存目录里的几个文件复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），不做 <code>fsync</code>。换成对象存储后上传会更长，只计第一步的口径不受影响。</li>
+<li>这一轮 950 上 pause 墙钟 285.2～627.9 ms，其中等上传 55.2～182.5 ms，随导出量增长。存储是 <code>STORAGE_PROVIDER=Local</code>，上传只是把缓存目录里的几个文件复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），不做 <code>fsync</code>。换成对象存储后上传会更长，只计第一步的口径不受影响。</li>
 <li>第一步结束时，内存差分写在缓存目录里一个 <code>mmap</code> 的文件中，没有刷盘；根盘差分写完会 <code>fsync</code>。所以上游返回时，内存差分很可能还在页缓存里。</li>
 </ul>
 <hr />
@@ -15146,7 +15148,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li>语义上，沙箱级让沙箱内的一切回到同一时刻（连接作废、单调时钟倒退）；进程级保住范围外的一切（envd、日志、时钟），代价是范围外的进程可能拿着被丢弃时间线里的旧对象。</li>
 <li>失败的结局不同：沙箱级在提交点之后失败是"撕裂"，沙箱要销毁重建；进程级在杀进程之后失败，再 restore 一次即可恢复。</li>
 <li>两套目前<strong>不能在同一个沙箱上一起用</strong>：入口是同一个端口，一台宿主上只能运行其中一套的 orchestrator；合并的方案未实施。</li>
-<li>对外分档表（§4.3，950，2026-11-20，进程大小 = 内存改动，内存 : 文件 = 3 : 1）：0 MiB 档与只改内存的 70 MiB 档 checkpoint 沙箱级更低；有文件写入的 16～256 MiB 档 checkpoint、restore 都是进程级更低（1.1～1.8 倍），因为沙箱级每 MiB 文件约 1 ms、进程级的固定开销与 restore 随进程大小增长而本表进程小；进程比改动大时（size 组 P ≥ 64 MiB）沙箱级 restore 更低。两套 checkpoint 比 E2B pause（只计第一步）快 4.1～36 倍；128 MiB 以内的档两套 restore 都快于 resume，256 档沙箱级 restore 慢 9.3 ms，算上 resume 后读回内存的 29.1 ms 仍更快。</li>
+<li>对外分档表（§4.3，950，2026-11-20，开测前清过网络命名空间，进程大小 = 内存改动，内存 : 文件 = 3 : 1）：0 MiB 档与只改内存的 70 MiB 档 checkpoint 沙箱级更低；有文件写入的 16～256 MiB 档 checkpoint、restore 都是进程级更低（1.1～1.8 倍），因为沙箱级每 MiB 文件约 1 ms、进程级的固定开销与 restore 随进程大小增长而本表进程小；进程比改动大时（size 组 P ≥ 64 MiB）沙箱级 restore 更低。两套 checkpoint 比 E2B pause（只计第一步）快 4.0～34 倍；128 MiB 以内的档两套 restore 都快于 resume，256 档两套 restore 都慢于 resume（慢 25.0、8.7 ms），算上 resume 后读回内存的 29.2 ms 都更快。</li>
 <li>进程级的增量不依赖 HDBSS，代码路径里不使用它；HDBSS 能否与进程级同时启用没有测试，本书不下结论。950 上首轮进程级运行时，沙箱级的能力文件显示 HDBSS 已启用（KVM capability 502），两套栈不同时运行，这一轮不回答这个问题。</li>
 </ol><nav class="pager" data-n="24"></nav></article><article id="v25" class="doc" hidden><h1 id="d25-快速上手">快速上手</h1>
 <h2 id="d25-本章目标">本章目标</h2>

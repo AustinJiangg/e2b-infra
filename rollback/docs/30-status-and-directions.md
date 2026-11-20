@@ -15,7 +15,7 @@
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复：触发条件或根因待定位 | 保留现象记录，需要针对负载复现；一次短测不能关闭概率项，见 [第 22 章 §7](22-acceptance.md#7-已知项与缺口)、[第 21 章](21-concurrency-and-longrun.md) |
 | restore 应答丢失、客户端偶发 `Bad file descriptor` | 已修复（SDK），950 待复验 | 950 并发 N=16 出现 1 次：服务端约 140 ms 完成 restore 并写回应答，客户端等满 300 s 超时；920B 长跑里每轮 0–2 次的 `Bad file descriptor` 是同一个原因。根因是同一进程内全部沙箱共用的 httpcore 连接池在连接总数超过 `max_keepalive_connections`（默认 20）时，会关掉刚分给另一个线程的连接。SDK 把该上限默认改为与最大连接数相同，920B 复验未再出现，见 [第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失) |
 | 重启 orchestrator 后旧沙箱的 Firecracker 残留 | 已修复（2026-11-17 修复版 RPM `2026.09-3`），950 待复验 | `nomad job restart` 时 orchestrator 关网络池超过 job 的 30 s kill_timeout，被 SIGKILL；Firecracker 在自己的进程组里，不随之退出，由 init 收养，一直占着内存和网络槽位（920B 2026-11-17 复现）。deltabox 分支 2026-07 已有启动时清理遗留 Firecracker 的代码，构建 RPM 的 `0001` 补丁没有带上。`2026.09-3` 的补丁加了同样的清理（只结束父进程为 init、路径在 `/fc-versions/` 下、API socket 名为 `fc-<沙箱>-<随机>.sock` 的进程），920B 复验 T18 通过；被结束的 Firecracker 占过的 NBD 设备暂不回收 |
-| netns 泄漏、偶发 GC 长暂停 | 待修复：分别为上游运维处置、未归因 | 各项影响范围与处理不同，不能归为同一个回滚缺陷，见 [附录 B §11](B-920b-results.md#11-已知未解决)、[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏) |
+| netns 泄漏、偶发 GC 长暂停 | 待修复：分别为上游运维处置、未归因 | 各项影响范围与处理不同，不能归为同一个回滚缺陷，积累的 netns 还会拖慢原生 resume（每起一个 Firecracker 都要复制宿主挂载表，[第 13 章 §6.3](13-native-snapshot.md#63-测试环境对这两组数字的影响)），测性能前要先回收。见 [附录 B §11](B-920b-results.md#11-已知未解决)、[第 28 章 §9](28-troubleshooting.md#9-网络槽位netns泄漏) |
 
 ## 2. 验证缺口
 
@@ -27,7 +27,7 @@
 | 950 长期运行与专项覆盖 | 待验证 | 已有默认功能、短时并发与混合短稳态证据；小时级长跑、滚动保留、资源收敛以及重启 / 注入 / 配额等专项仍需按目标结论补测，见 [第 21 章](21-concurrency-and-longrun.md)、[第 17 章](17-functional-verification.md) |
 | 950 部署身份、原始数据与 HDBSS 覆盖 | 待验证 | 各轮身份与回传材料分别核对；默认 order 1 已有实测，其他 order 比较待补。HDBSS 与软件写保护对照已决定不做，见 [第 22 章 §7](22-acceptance.md#7-已知项与缺口) |
 | 跨树回滚与 HDBSS 武装时序 | 待验证 | 前者已有单元测试，缺端到端用例；后者由调用点位置保证，缺断言，见 [第 22 章 §7](22-acceptance.md#7-已知项与缺口) |
-| 原生 pause / resume 固定开销 | 待验证：部分未归因 | pause 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；950 没有逐段数据；920B 上 resume 比不含修复的对照慢 25～36 ms，原因未查。见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)、[附录 B §13.4](B-920b-results.md#134-native_snapshot_tierspy每档独立沙箱) |
+| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20） | pause 0 档约 226 ms：发 SIGTERM 前的 `ps` 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态约 27 ms；resume 约 60 ms：起新 Firecracker 约 35 ms（cgroup v2 建 cgroup 约 13 ms、新建 mount 命名空间随挂载点数增长）、等 envd 约 15 ms。仍未拆：256 档起 Firecracker 多出的约 9 ms、等 envd 一段；920B 上 resume 比不含修复的对照慢 25～36 ms，原因未查。见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)、[第 19 章 §6](19-native-pause-resume.md#6-固定开销从哪里来) |
 
 ### 2.2 读代码发现的待验证项
 

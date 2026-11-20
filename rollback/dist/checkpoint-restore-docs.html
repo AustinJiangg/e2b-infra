@@ -7958,7 +7958,7 @@ GC 的 STW 阶段要等所有处于 <code>_Prunning</code> 的 P 响应抢占。
 <ul>
 <li>不等上传也已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分。<code>sbx.Pause</code> 导出根盘差分时把 <code>s.Close</code> 作为关闭钩子传进去（<code>RootfsDiffCreator.closeHook</code>），固定开销基本都在这一段（§6 时间线 232 ms 之前）。</li>
 <li>这一段结束时，内存差分在本节点缓存目录（<code>DEFAULT_CACHE_DIR</code>，默认 <code>/orchestrator/build</code>）里一个 <code>mmap</code> 的文件中，由 <code>process_vm_readv</code> 从 Firecracker 进程读出写入（<code>block/cache.go</code>），这条路径上没有刷盘；<code>snapfile</code> 由 Firecracker 写出，也不刷盘；根盘差分写完会 <code>fsync</code>（<code>build/local_diff.go</code> 的 <code>CloseToDiff</code>）。所以上游返回时，内存差分很可能还在页缓存里。</li>
-<li>上传在 <code>STORAGE_PROVIDER=Local</code> 时只是把这几个文件用 <code>io.Copy</code> 复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），同样不 <code>fsync</code>（<code>shared/pkg/storage/storage_fs.go</code> 的 <code>StoreFile</code>）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms，同日 950 compare 里 54.7～186.8 ms（随导出量增长）。进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 <code>Local</code> 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。</li>
+<li>上传在 <code>STORAGE_PROVIDER=Local</code> 时只是把这几个文件用 <code>io.Copy</code> 复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），同样不 <code>fsync</code>（<code>shared/pkg/storage/storage_fs.go</code> 的 <code>StoreFile</code>）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms，同日 950 compare 里 55.2～182.5 ms（随导出量增长）。进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>；<code>6a60dec6f</code> 起另有 <code>pause.phases</code> 分段），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 <code>Local</code> 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。</li>
 </ul>
 <p><code>Checkpoint</code> 拉起新沙箱时，三个 id 的变化是：</p>
 <div class="tw"><table>
@@ -8180,158 +8180,219 @@ GC 的 STW 阶段要等所有处于 <code>_Prunning</code> 的 P 响应抢占。
 <p>一句话：<strong>原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。</strong> 即使内存判据修成精确的（<a href="#d14">第 14 章</a>），
 "每次打快照都停掉沙箱、每次恢复都重建进程并换回工作集"这两项不变 —— 它们来自"沙箱离场"这个语义本身。</p>
 <p>修复后的分档实测见 <a href="#d19">第 19 章</a>：pause 由一段与改动量无关的固定开销主导，resume 与档位基本无关。分档数字与判定都以该章为准。</p>
-<p>下面两节按阶段说明这些时间花在哪里。拆分来自 920B（<code>kvm-wp</code>，产物在 tmpfs）的单样本跟踪，用来说明结构；950 没有做同样的逐段测量，各段数值不能直接套到 950。</p>
-<h3 id="d13-61-pause改动量为-0-也要约-250-ms">6.1 pause：改动量为 0 也要约 250 ms</h3>
-<p>0 MiB 档总耗时 234.9 ms 的一次 pause，时间点从 <code>Sandbox.Pause</code> 开始计：</p>
+<p>下面两节按阶段说明这些时间花在哪里。数字来自 950（2026-11-20，结果目录 <code>test950/results/20261120-122146-compare/</code>）：进程级那套 orchestrator（KASandbox <code>237b9ac62</code>，原生快照路径与上游相同，只加了分段日志）在 pause、resume 的每一步打点，测试脚本从 <code>Pause timing</code>、<code>Resume phases</code> 两类日志读出各段，每档 n = 20，取 p50。Firecracker 退出那一段另用内核 ftrace 拆到函数（<code>bash test950.sh fcexit</code>，每档 n = 5）。开测前清理过宿主上积累的网络命名空间，原因见 §6.3。</p>
+<h3 id="d13-61-pause改动量为-0-也要约-230-ms">6.1 pause：改动量为 0 也要约 230 ms</h3>
+<p>各段按时间先后（orchestrator 日志，p50，ms）：</p>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>时间点 ms</th>
-<th>发生的事</th>
-<th>依据</th>
+<th>段</th>
+<th>做什么</th>
+<th style="text-align: right;">0 MiB 档</th>
+<th style="text-align: right;">256 MiB 档</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>0～约 10</td>
-<td>Firecracker 暂停约 0.08 ms；写 <code>snapfile</code> 约 3.2 ms；取脏页位图 0.67 ms；约 9.6 ms 建好内存差分文件</td>
-<td>Firecracker 日志、文件事件</td>
+<td>暂停 vCPU</td>
+<td>调 Firecracker API 暂停虚机</td>
+<td style="text-align: right;">0.5</td>
+<td style="text-align: right;">0.5</td>
 </tr>
 <tr>
-<td>约 12</td>
-<td>建根盘差分文件，进入 <code>ExportDiff</code>，开始停沙箱</td>
-<td>文件事件</td>
+<td>写 <code>snapfile</code></td>
+<td>Firecracker 写虚机状态；它同时把根盘设备上还没写回的数据经 NBD 刷出去，所以随写文件量增长</td>
+<td style="text-align: right;">3.9</td>
+<td style="text-align: right;">69.0</td>
 </tr>
 <tr>
-<td>约 12～169</td>
-<td>Firecracker 收到 SIGTERM 后退出，168.8 ms 时进程结束</td>
-<td>进程退出时间；内部分段见下</td>
+<td>取脏页集合</td>
+<td>确定要导出哪些页</td>
+<td style="text-align: right;">3.2</td>
+<td style="text-align: right;">3.5</td>
 </tr>
 <tr>
-<td>169～232</td>
-<td><code>doStop</code> 收尾（删 cgroup、停 uffd）；<code>NBDProvider.Close</code> 依次刷盘、断开 NBD 设备；<code>ExportDiff</code> 导出根盘差分</td>
-<td>代码顺序、文件事件。这段没有单独计时</td>
+<td>导出内存</td>
+<td>按驻留页导出（ARM 适配基线的判据，<a href="#d13-32-arm-适配基线上的退化">§3.2</a>），0 档也要导出 162 MiB，256 档 431 MiB</td>
+<td style="text-align: right;">19.6</td>
+<td style="text-align: right;">84.2</td>
 </tr>
 <tr>
-<td>232～235</td>
-<td>上传到本地存储并返回</td>
-<td>文件事件</td>
+<td><code>ps</code> 查 Firecracker 进程状态</td>
+<td>发 SIGTERM 之前执行一次 <code>ps -o stat= -p PID</code></td>
+<td style="text-align: right;">106.0</td>
+<td style="text-align: right;">114.1</td>
+</tr>
+<tr>
+<td>发 SIGTERM</td>
+<td>通知 Firecracker 退出</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">0.0</td>
+</tr>
+<tr>
+<td>等 Firecracker 进程退出</td>
+<td>内核拆除虚机，见下表</td>
+<td style="text-align: right;">71.6</td>
+<td style="text-align: right;">72.1</td>
+</tr>
+<tr>
+<td>断开 NBD</td>
+<td><code>NBDProvider.Close</code> 刷盘并断开 NBD 设备</td>
+<td style="text-align: right;">19.4</td>
+<td style="text-align: right;">20.1</td>
+</tr>
+<tr>
+<td>导出根盘差分</td>
+<td>根盘差分要等 NBD 设备释放后才能导出（<a href="#d13-41-exportdiff-的步骤">§4.1</a>）</td>
+<td style="text-align: right;">0.8</td>
+<td style="text-align: right;">78.9</td>
+</tr>
+<tr>
+<td>写元数据、进缓存</td>
+<td>放进本节点的快照缓存</td>
+<td style="text-align: right;">0.3</td>
+<td style="text-align: right;">0.5</td>
+</tr>
+<tr>
+<td><strong>orchestrator 合计</strong></td>
+<td></td>
+<td style="text-align: right;"><strong>226.2</strong></td>
+<td style="text-align: right;"><strong>450.5</strong></td>
 </tr>
 </tbody>
 </table></div>
-<p><strong>真正保存内存状态的只有前约 10 ms，其余约 225 ms 都在销毁虚机环境并等它结束。</strong> 根盘差分要等 NBD 设备释放后才能导出（<a href="#d13-41-exportdiff-的步骤">§4.1</a>），<code>Pause</code> 又要等上传完成，所以这段等待全部计入 <code>pause</code>。</p>
-<p>对 Firecracker 进程做内核栈采样的另一次运行（总耗时 289 ms，进程在 220.9 ms 消失；采样本身拖慢了退出，时间点只能近似参考）显示退出过程的内容：</p>
+<p>客户端看到的 pause（只计第一步，不含上传）是 230.5 / 457.2 ms，比 orchestrator 合计多出的 4～6 ms 是 API 与网络。之后把快照上传到模板存储另花 55.1 / 182.4 ms。</p>
+<p><strong>真正保存状态的步骤（暂停到导出内存）在 0 档只有约 27 ms。每次都要付、与改动量无关的是三段：<code>ps</code> 约 106 ms、等 Firecracker 退出约 72 ms、断开 NBD 约 20 ms，合计约 197 ms。</strong> 改动量从 0 增加到 256 MiB 时，增长的 224 ms 全部来自搬数据：写 <code>snapfile</code> 时刷根盘 +65 ms，导出内存 +65 ms，导出根盘差分 +78 ms；进程退出和断开 NBD 不变。</p>
+<p><strong><code>ps</code> 那 106 ms。</strong> 上游 <code>fc/process.go</code> 的 <code>Process.Stop</code> 在发 SIGTERM 之前调用 <code>getProcessState</code>，它执行 <code>ps -o stat= -p PID</code>，代码注释写明用途是检查进程是否处于 D 状态（gopsutil 看不到），结果只用来打一行日志，不影响后续步骤。耗时在 <code>ps</code> 自身：920B 上宿主约 4000 个进程时单独执行它约 85 ms，直接读 <code>/proc/PID/stat</code> 只要 0.07 ms。本项目没有改这一步：原生路径作为对照要与上游保持一致。早先在 920B 上对 Firecracker 做内核栈采样时，有约 114 ms 一直看不到栈、没能归因，就是这一段：那时 Firecracker 还没收到信号。</p>
+<p><strong>Firecracker 退出那 72 ms。</strong> ftrace 只跟踪这个 Firecracker 的线程，950 上 0 档 5 次的 p50（跟踪本身有开销，看比例和归属）：</p>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>时间点 ms</th>
-<th>内核栈</th>
-<th>含义</th>
+<th>段</th>
+<th style="text-align: right;">ms</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>约 9～123</td>
-<td>主线程在运行，栈不可读</td>
-<td><strong>未归因</strong></td>
+<td>开始停沙箱 → Firecracker 退出（orchestrator 计）</td>
+<td style="text-align: right;">185.2</td>
 </tr>
 <tr>
-<td>123.4</td>
-<td><code>synchronize_rcu_expedited</code> ← <code>namespace_unlock</code> ← <code>drop_collected_mounts</code> ← <code>put_mnt_ns</code> ← <code>free_nsproxy</code></td>
-<td>进程退出时释放 mount 命名空间，等 RCU 宽限期</td>
+<td>　<code>ps</code> 查进程状态（<code>ps</code> 进程 exec 到退出）</td>
+<td style="text-align: right;">104.7</td>
 </tr>
 <tr>
-<td>137</td>
-<td><code>cleanup_mnt</code></td>
-<td>卸载挂载</td>
+<td>　SIGTERM → 主线程退出完（<code>exit_notify</code>）</td>
+<td style="text-align: right;">79.1</td>
 </tr>
 <tr>
-<td>140.5</td>
-<td><code>__flush_workqueue</code> ← <code>kvm_irqfd_release</code> ← <code>kvm_vm_release</code></td>
-<td>关闭 KVM 虚机 fd，等 irqfd 清理完成</td>
+<td>　　关闭 KVM 虚机的 fd（<code>kvm_vm_release</code>）</td>
+<td style="text-align: right;">74.4</td>
 </tr>
 <tr>
-<td>149.4</td>
-<td><code>__wait_rcu_gp</code> ← <code>synchronize_rcu</code> ← <code>kvm_destroy_vm</code></td>
-<td>销毁 KVM 虚机，等 RCU 宽限期</td>
+<td>　　　其中销毁 KVM 虚机（<code>kvm_destroy_vm</code>）</td>
+<td style="text-align: right;">53.2</td>
+</tr>
+<tr>
+<td>　　释放 mount 命名空间（<code>put_mnt_ns</code>）</td>
+<td style="text-align: right;">1.9</td>
+</tr>
+<tr>
+<td>　　释放地址空间（<code>exit_mm</code>）</td>
+<td style="text-align: right;">0.3</td>
+</tr>
+<tr>
+<td>　其余（起 <code>ps</code> 之前、Go 收到退出之后）</td>
+<td style="text-align: right;">1.4</td>
 </tr>
 </tbody>
 </table></div>
-<p>这次采样里约 114 ms 的未归因段是退出过程中最长的一段，要继续优化 pause 应从这里查起。</p>
-<p><strong>改动量增大时的变化。</strong> 同样的跟踪在 256 MiB 档（总耗时 443 ms）得到：约 61 ms 建好内存差分文件，88.8 ms 建根盘差分文件，280 ms 进程退出，368.9～440.1 ms 写根盘差分。与 0 MiB 档相比：</p>
+<p>SIGTERM 发出后，第一个线程立刻进入 <code>do_exit</code>；时间几乎都花在关闭 KVM 虚机的 fd 上。920B 的原始跟踪里，<code>kvm_destroy_vm</code> 的时间主要在 <code>synchronize_rcu</code> 等 RCU 宽限期，<code>kvm_vm_release</code> 里另有 irqfd 清理（<code>kvm_irqfd_release</code>）约 11 ms。guest 内存走 hugetlb，释放地址空间只要 0.3 ms。192 MiB 档这一段是 63.7 ms，与 0 档同一量级。920B 上同样的测量是 <code>ps</code> 104.3 ms、退出 86.1 ms（其中 <code>kvm_vm_release</code> 75.5 ms），两台机器结构相同。</p>
+<h3 id="d13-62-resume各档-7085-ms">6.2 resume：各档 70～85 ms</h3>
+<p>各段按时间先后（orchestrator 日志，p50，ms）：</p>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>阶段</th>
-<th>0 MiB 档</th>
-<th>256 MiB 档</th>
-<th>增长</th>
+<th>段</th>
+<th style="text-align: right;">0 MiB 档</th>
+<th style="text-align: right;">256 MiB 档</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>开始停沙箱之前（含内存差分导出）</td>
-<td>12.4 ms</td>
-<td>88.8 ms</td>
-<td>约 76 ms</td>
+<td>排队、取模板</td>
+<td style="text-align: right;">0.2</td>
+<td style="text-align: right;">0.2</td>
 </tr>
 <tr>
-<td>开始停沙箱到 Firecracker 退出</td>
-<td>约 156 ms</td>
-<td>约 191 ms</td>
-<td>约 35 ms</td>
+<td>网络槽位、NBD、uffd</td>
+<td style="text-align: right;">0.2</td>
+<td style="text-align: right;">0.3</td>
 </tr>
 <tr>
-<td>Firecracker 退出到根盘差分导出完成</td>
-<td>约 63 ms</td>
-<td>约 160 ms</td>
-<td>约 97 ms，其中写根盘差分约 71 ms（64.5 MiB）</td>
+<td>起 Firecracker 进程到 API 可用</td>
+<td style="text-align: right;">35.0</td>
+<td style="text-align: right;">45.0</td>
+</tr>
+<tr>
+<td>加载 <code>snapfile</code></td>
+<td style="text-align: right;">6.0</td>
+<td style="text-align: right;">4.2</td>
+</tr>
+<tr>
+<td>恢复 vCPU、写 MMDS</td>
+<td style="text-align: right;">0.9</td>
+<td style="text-align: right;">1.0</td>
+</tr>
+<tr>
+<td>等 envd 就绪</td>
+<td style="text-align: right;">15.3</td>
+<td style="text-align: right;">18.5</td>
+</tr>
+<tr>
+<td>收尾返回</td>
+<td style="text-align: right;">0.7</td>
+<td style="text-align: right;">0.7</td>
+</tr>
+<tr>
+<td><strong>orchestrator 合计</strong></td>
+<td style="text-align: right;"><strong>60.2</strong></td>
+<td style="text-align: right;"><strong>67.3</strong></td>
+</tr>
+<tr>
+<td>API 与网络</td>
+<td style="text-align: right;">3.9</td>
+<td style="text-align: right;">4.3</td>
+</tr>
+<tr>
+<td>第一条命令</td>
+<td style="text-align: right;">7.7</td>
+<td style="text-align: right;">9.1</td>
+</tr>
+<tr>
+<td><strong>客户端 resume</strong>（<code>connect</code> 返回 + 第一条命令）</td>
+<td style="text-align: right;"><strong>71.4</strong></td>
+<td style="text-align: right;"><strong>83.7</strong></td>
 </tr>
 </tbody>
 </table></div>
-<p>所以增长不全是拷数据，进程退出本身也慢约 35 ms。这是单样本的比较，只说明方向。</p>
-<h3 id="d13-62-resume各档都在-100-ms-上下">6.2 resume：各档都在 100 ms 上下</h3>
-<p>一次 <code>Sandbox.connect()</code> 耗时 92.6 ms、第一条命令 97.9 ms 完成的 resume，时间点从客户端发起调用开始计：</p>
-<div class="tw"><table>
-<thead>
-<tr>
-<th>时间点 ms</th>
-<th>发生的事</th>
-<th>依据</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>0～35</td>
-<td>请求经 API 到节点（约 +3 ms 开始建 cgroup），建网络槽位、NBD、uffd，启动 Firecracker 进程（约 +27 ms 进程起来，+28 ms API 就绪）</td>
-<td>cgroup 与 Firecracker 日志、代码顺序</td>
-</tr>
-<tr>
-<td>35～57</td>
-<td>加载 <code>snapfile</code>（<code>load snapshot</code> 21.3 ms）</td>
-<td>Firecracker 日志</td>
-</tr>
-<tr>
-<td>57～58</td>
-<td>恢复 vCPU（<code>resume vm</code> 0.9 ms）</td>
-<td>Firecracker 日志</td>
-</tr>
-<tr>
-<td>58～93</td>
-<td>等 envd 就绪和 API 返回</td>
-<td>这段未细拆</td>
-</tr>
-<tr>
-<td>93～98</td>
-<td>第一条命令执行</td>
-<td>客户端计时</td>
-</tr>
-</tbody>
-</table></div>
-<p>这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 耗时<strong>不随档位变化</strong>。</p>
+<p>最大的一段是起一个新的 Firecracker。它包括：</p>
+<ul>
+<li>建沙箱 cgroup。950 是 cgroup v2，orchestrator 启动时在 <code>/sys/fs/cgroup/e2b</code> 上打开 <code>cpu</code>、<code>memory</code> 两个控制器（<code>cgroup/manager.go</code> 的 <code>Initialize</code>），每个沙箱在它下面 <code>mkdir</code> 一个子目录，内核要为两个控制器建好接口文件，测试脚本单独 <code>mkdir</code> / <code>rmdir</code> 一个这样的目录约 12.6～13.6 ms。920B 是 cgroup v1，<code>Initialize</code> 直接跳过，同一步约 0.1 ms。这是 950 的 resume 比 920B 多出的主要部分。</li>
+<li>启动命令 <code>unshare -m -- bash -c '…'</code>：先新建 mount 命名空间，内核要复制宿主的整张挂载表，再 <code>mount --make-rprivate /</code>，再 <code>ip netns exec</code> 进入沙箱的网络命名空间，最后启动 Firecracker，等它的 API socket 可用。新建 mount 命名空间的耗时与宿主挂载点数成正比，920B 上约每个挂载点 10 µs（2915 个挂载点时 <code>unshare -m</code> 29.3 ms，1486 个时 14.4 ms）。</li>
+</ul>
+<p>256 档这一段多出约 9 ms，其他档都是 35～37 ms；等 envd 就绪 15～19 ms。这两处这一轮都没有再拆。</p>
+<p>这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 耗时<strong>基本不随档位变化</strong>。</p>
 <p>成本只是推迟了。950 上（2026-11-06，256 MiB 档，<code>hdbss</code>，存储 <code>Local</code>，见 <a href="#d19">第 19 章</a>）恢复后第一次读 192 MiB 内存负载需要 702.6 ms，快照前同一读法 590.9 ms，多出约 112 ms 不计入 resume 耗时，而由 guest 里第一个访问这些页的程序承担。</p>
-<h3 id="d13-63-与-checkpoint--restore-的差别">6.3 与 checkpoint / restore 的差别</h3>
-<p>本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（<a href="#d09">第 9 章</a>）。§6.1、§6.2 里进程退出、KVM 销毁、NBD 断开、进程启动、加载 <code>snapfile</code> 这些固定步骤都不会发生，所以这部分固定开销不计入 checkpoint / restore。举一个量级：950 上（2026-11-17，混合负载 0 MiB 档，墙钟 p50，见 <a href="#d18">第 18 章</a>）checkpoint / restore 是 22.1 / 21.3 ms。</p>
+<h3 id="d13-63-测试环境对这两组数字的影响">6.3 测试环境对这两组数字的影响</h3>
+<p>两项环境因素会改变上面的固定开销，与 ARM 适配代码无关：</p>
+<ul>
+<li><strong>宿主挂载点数。</strong> 每个 e2b 网络命名空间在 <code>/run/netns</code> 下留一到两个 nsfs 挂载点。orchestrator 重启时不回收上一次留下的网络槽位，本项目测试中频繁切换栈、重启 orchestrator，950 上曾积累到 1421 个网络命名空间。每起一个 Firecracker 都要复制一遍挂载表，resume 随之变慢：950 上同一天，开测时有 666 个网络命名空间的一轮，起 Firecracker 一段 45.2 ms；清理到约 450 个挂载点后这一段 35.0 ms。有 1421 个网络命名空间的一轮没有分段日志，0 档 resume 93.0 ms，清理后 71.4 ms。pause 里释放 mount 命名空间一段（<code>put_mnt_ns</code>）也随挂载点数增长，在约 430 个挂载点时是 1.9 ms。<code>bash test950.sh</code> 现在在每个测量步骤开测前先回收网络命名空间。</li>
+<li><strong>cgroup 版本。</strong> cgroup v2 上每次 resume 多约 13 ms 建沙箱 cgroup（§6.2）。</li>
+</ul>
+<p>上游在 x86 上的数字取决于同样的因素：宿主进程数（<code>ps</code>）、KVM 销毁虚机的耗时、挂载点数和 cgroup 版本。本项目没有在 x86 上测，不给出对比。</p>
+<h3 id="d13-64-与-checkpoint--restore-的差别">6.4 与 checkpoint / restore 的差别</h3>
+<p>本方案 checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（<a href="#d09">第 9 章</a>）。§6.1、§6.2 里 <code>ps</code>、进程退出、KVM 销毁、NBD 断开、建 cgroup、进程启动、加载 <code>snapfile</code> 这些固定步骤都不会发生，所以这部分固定开销不计入 checkpoint / restore。举一个量级：950 上（2026-11-17，混合负载 0 MiB 档，墙钟 p50，见 <a href="#d18">第 18 章</a>）checkpoint / restore 是 22.1 / 21.3 ms。</p>
 <p>这不是"原生实现得慢"：原生要产出能离开这个进程、这台宿主的自足快照，停掉并重建进程是这个目标的一部分（<a href="#d13-7-它擅长什么">§7</a>）。</p>
 <h2 id="d13-7-它擅长什么">7. 它擅长什么</h2>
 <p>这套设计对它的目标场景是<strong>合适</strong>的：</p>
@@ -8417,6 +8478,7 @@ GC 的 STW 阶段要等所有处于 <code>_Prunning</code> 的 P 响应抢占。
 <li>导出磁盘增量的参数之一就是关掉沙箱：写层摘出后 Overlay 作废，所以必须停沙箱。</li>
 <li>恢复新建 Firecracker 进程，工作集靠缺页换回；这部分成本不进 resume 耗时，由 guest 里第一个访问这些页的程序承担。</li>
 <li>原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。分档数字见 <a href="#d19">第 19 章</a>。</li>
+<li>950 上 0 档 pause 约 226 ms 里，发 SIGTERM 前的一次 <code>ps</code> 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态只有约 27 ms；resume 约 60 ms 里，起新 Firecracker 约 35 ms（含 cgroup v2 建 cgroup 约 13 ms）、等 envd 约 15 ms。宿主挂载点数和 cgroup 版本会改变这些数字（§6.3）。</li>
 <li>这套设计适合跨节点迁移、长期持久化、崩溃恢复和沙箱离场，不适合高频、低延迟、不能中断的回退。</li>
 </ul><nav class="pager" data-n="13"></nav></article><article id="v14" class="doc" hidden><h1 id="d14-精确增量的设计与实现">精确增量的设计与实现</h1>
 <h2 id="d14-本章目标">本章目标</h2>
@@ -14695,7 +14757,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <figure class="paper"><img loading="lazy" alt="920B 上 checkpoint / restore 与原生 pause / resume 按档的 p50" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDAwIiBoZWlnaHQ9IjY5NCIgdmlld0JveD0iMCAwIDE0MDAgNjk0IiBmb250LWZhbWlseT0iJ1BpbmdGYW5nIFNDJywnSGlyYWdpbm8gU2FucyBHQicsJ01pY3Jvc29mdCBZYUhlaScsJ05vdG8gU2FucyBDSksgU0MnLCdOb3RvIFNhbnMgU0MnLCdTb3VyY2UgSGFuIFNhbnMgU0MnLHNhbnMtc2VyaWYiPgo8ZGVmcz4KPC9kZWZzPgo8cmVjdCB3aWR0aD0iMTQwMCIgaGVpZ2h0PSI2OTQiIGZpbGw9IiNGRkZGRkYiLz4KPHRleHQgeD0iNDguMCIgeT0iNjIuMCIgZm9udC1zaXplPSIzMCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij45MjBC77yaY2hlY2twb2ludCAvIHJlc3RvcmUg5LiO5Y6f55SfIHBhdXNlIC8gcmVzdW1lIOaMieaho+eahCBwNTA8L3RleHQ+Cjx0ZXh0IHg9IjQ4LjAiIHk9Ijk2LjAiIGZvbnQtc2l6ZT0iMTUuNSIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij45MjBC77yMa3ZtLXdw77yM5a6i5oi356uv5aKZ6ZKfIHA1MO+8jG1z44CCY2hlY2twb2ludCAvIHJlc3RvcmUg5Y+W56ysIDIwIOeroCDCpzIuMu+8iDIwMjYtMDktMjnvvIxkZWx0YWJveC1kZXZAOGVhNTMyMmJm77yM5Lqn54mp5ZyoIGV4dDQg55yf55uY77yM5q+P5qGjIG4gPSAxMDAg5oiWIDYw77yJ77ybcGF1c2UgLzwvdGV4dD4KPHRleHQgeD0iNDguMCIgeT0iMTIwLjAiIGZvbnQtc2l6ZT0iMTUuNSIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5yZXN1bWUg5Y+W5pys56ugIMKnNC4xIOeyvuehruWinumHj+aehOW7uu+8iDIwMjYtMTEtMDbvvIxkZWx0YWJveC1kZXZANTdhMzA2MzJj77yM5qih5p2/55uu5b2V5ZyoIHRtcGZz77yM5q+P5qGjIG4gPSAxNe+8ieOAguS4pOWIl+eahOS6p+eJqeebmOWSjOaehOW7uumDveS4jeWQjO+8iMKnNS4y77yJ77yM5Y+q5YiX5pWw5a2X77yM5LiN566X5YCN5pWw44CC5qiq6L205oyJPC90ZXh0Pgo8dGV4dCB4PSI0OC4wIiB5PSIxNDQuMCIgZm9udC1zaXplPSIxNS41IiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuaho+S9jemhuuW6j+etiei3neaOkuWIl+OAgjwvdGV4dD4KPGxpbmUgeDE9IjQ4LjAiIHkxPSIxNzQuMCIgeDI9Ijc0LjAiIHkyPSIxNzQuMCIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjIuNiIvPgo8dGV4dCB4PSI4Mi4wIiB5PSIxNzkuMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5jaGVja3BvaW50IC8gcmVzdG9yZe+8iOacrOaWueahiO+8iTwvdGV4dD4KPGxpbmUgeDE9IjMzMy45IiB5MT0iMTc0LjAiIHgyPSIzNTkuOSIgeTI9IjE3NC4wIiBzdHJva2U9IiNEODVBMzAiIHN0cm9rZS13aWR0aD0iMi42Ii8+Cjx0ZXh0IHg9IjM2Ny45IiB5PSIxNzkuMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij7ljp/nlJ8gcGF1c2UgLyByZXN1bWU8L3RleHQ+Cjx0ZXh0IHg9IjQ4LjAiIHk9IjIzMi4wIiBmb250LXNpemU9IjE2IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuS/neWtmO+8mmNoZWNrcG9pbnQg5LiOIHBhdXNlPC90ZXh0Pgo8bGluZSB4MT0iMTY2LjAiIHkxPSI1MDQuMCIgeDI9IjY2NS4wIiB5Mj0iNTA0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI1MDguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4wIG1zPC90ZXh0Pgo8bGluZSB4MT0iMTY2LjAiIHkxPSI0NTQuMCIgeDI9IjY2NS4wIiB5Mj0iNDU0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI0NTguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMDAgbXM8L3RleHQ+CjxsaW5lIHgxPSIxNjYuMCIgeTE9IjQwNC4wIiB4Mj0iNjY1LjAiIHkyPSI0MDQuMCIgc3Ryb2tlPSIjRThFNkRGIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iMTU2LjAiIHk9IjQwOC41IiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJlbmQiPjIwMCBtczwvdGV4dD4KPGxpbmUgeDE9IjE2Ni4wIiB5MT0iMzU0LjAiIHgyPSI2NjUuMCIgeTI9IjM1NC4wIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSIxNTYuMCIgeT0iMzU4LjUiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9ImVuZCI+MzAwIG1zPC90ZXh0Pgo8bGluZSB4MT0iMTY2LjAiIHkxPSIzMDQuMCIgeDI9IjY2NS4wIiB5Mj0iMzA0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSIzMDguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj40MDAgbXM8L3RleHQ+CjxsaW5lIHgxPSIxNjYuMCIgeTE9IjI1NC4wIiB4Mj0iNjY1LjAiIHkyPSIyNTQuMCIgc3Ryb2tlPSIjRThFNkRGIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iMTU2LjAiIHk9IjI1OC41IiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJlbmQiPjUwMCBtczwvdGV4dD4KPGxpbmUgeDE9IjE2Ni4wIiB5MT0iNTA0LjAiIHgyPSI2NjUuMCIgeTI9IjUwNC4wIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMS4yIi8+Cjxwb2x5bGluZSBwb2ludHM9IjIwNy42LDQ5Ni42IDI5MC44LDQ5NC40IDM3My45LDQ5Mi40IDQ1Ny4xLDQ4Ni44IDU0MC4yLDQ3Ni4xIDYyMy40LDQ1NS40IiBmaWxsPSJub25lIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMi42IiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iMjA3LjYiIGN5PSI0OTYuNiIgcj0iNS41IiBmaWxsPSIjMUQ5RTc1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIyOTAuOCIgY3k9IjQ5NC40IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjM3My45IiBjeT0iNDkyLjQiIHI9IjUuNSIgZmlsbD0iIzFEOUU3NSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iNDU3LjEiIGN5PSI0ODYuOCIgcj0iNS41IiBmaWxsPSIjMUQ5RTc1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSI1NDAuMiIgY3k9IjQ3Ni4xIiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjYyMy40IiBjeT0iNDU1LjQiIHI9IjUuNSIgZmlsbD0iIzFEOUU3NSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPHBvbHlsaW5lIHBvaW50cz0iMjA3LjYsMzY1LjQgMjkwLjgsMzU1LjQgMzczLjksMzQ4LjQgNDU3LjEsMzM3LjIgNTQwLjIsMzIzLjIgNjIzLjQsMjgwLjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0Q4NUEzMCIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8Y2lyY2xlIGN4PSIyMDcuNiIgY3k9IjM2NS40IiByPSI1LjUiIGZpbGw9IiNEODVBMzAiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjI5MC44IiBjeT0iMzU1LjQiIHI9IjUuNSIgZmlsbD0iI0Q4NUEzMCIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iMzczLjkiIGN5PSIzNDguNCIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSI0NTcuMSIgY3k9IjMzNy4yIiByPSI1LjUiIGZpbGw9IiNEODVBMzAiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjU0MC4yIiBjeT0iMzIzLjIiIHI9IjUuNSIgZmlsbD0iI0Q4NUEzMCIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iNjIzLjQiIGN5PSIyODAuOCIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8dGV4dCB4PSIyMDcuNiIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MDwvdGV4dD4KPHRleHQgeD0iMjA3LjYiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjI5MC44IiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xNjwvdGV4dD4KPHRleHQgeD0iMjkwLjgiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjM3My45IiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4zMjwvdGV4dD4KPHRleHQgeD0iMzczLjkiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjQ1Ny4xIiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42NDwvdGV4dD4KPHRleHQgeD0iNDU3LjEiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjU0MC4yIiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xMjg8L3RleHQ+Cjx0ZXh0IHg9IjU0MC4yIiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8dGV4dCB4PSI2MjMuNCIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MjU2PC90ZXh0Pgo8dGV4dCB4PSI2MjMuNCIgeT0iNTQ2LjAiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pQjwvdGV4dD4KPGxpbmUgeDE9IjE2Ni4wIiB5MT0iNTUzLjAiIHgyPSI2NjUuMCIgeTI9IjU1My4wIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSIxNTYuMCIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJlbmQiPmNoZWNrcG9pbnQ8L3RleHQ+Cjx0ZXh0IHg9IjIwNy42IiB5PSI1NzAuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTQuOTwvdGV4dD4KPHRleHQgeD0iMjkwLjgiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xOS4yPC90ZXh0Pgo8dGV4dCB4PSIzNzMuOSIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjIzLjM8L3RleHQ+Cjx0ZXh0IHg9IjQ1Ny4xIiB5PSI1NzAuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzQuNDwvdGV4dD4KPHRleHQgeD0iNTQwLjIiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj41NS45PC90ZXh0Pgo8dGV4dCB4PSI2MjMuNCIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk3LjM8L3RleHQ+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9ImVuZCI+cGF1c2U8L3RleHQ+Cjx0ZXh0IHg9IjIwNy42IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Mjc3LjI8L3RleHQ+Cjx0ZXh0IHg9IjI5MC44IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Mjk3LjM8L3RleHQ+Cjx0ZXh0IHg9IjM3My45IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzExLjI8L3RleHQ+Cjx0ZXh0IHg9IjQ1Ny4xIiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzMzLjY8L3RleHQ+Cjx0ZXh0IHg9IjU0MC4yIiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzYxLjU8L3RleHQ+Cjx0ZXh0IHg9IjYyMy40IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NDQ2LjQ8L3RleHQ+Cjx0ZXh0IHg9IjczNS4wIiB5PSIyMzIuMCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij7mgaLlpI3vvJpyZXN0b3JlIOS4jiByZXN1bWU8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjUwNC4wIiB4Mj0iMTM1Mi4wIiB5Mj0iNTA0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSI1MDguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4wIG1zPC90ZXh0Pgo8bGluZSB4MT0iODUzLjAiIHkxPSI0NjIuMyIgeDI9IjEzNTIuMCIgeTI9IjQ2Mi4zIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI4NDMuMCIgeT0iNDY2LjgiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9ImVuZCI+MjAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjQyMC43IiB4Mj0iMTM1Mi4wIiB5Mj0iNDIwLjciIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSI0MjUuMiIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj40MCBtczwvdGV4dD4KPGxpbmUgeDE9Ijg1My4wIiB5MT0iMzc5LjAiIHgyPSIxMzUyLjAiIHkyPSIzNzkuMCIgc3Ryb2tlPSIjRThFNkRGIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iODQzLjAiIHk9IjM4My41IiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJlbmQiPjYwIG1zPC90ZXh0Pgo8bGluZSB4MT0iODUzLjAiIHkxPSIzMzcuMyIgeDI9IjEzNTIuMCIgeTI9IjMzNy4zIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI4NDMuMCIgeT0iMzQxLjgiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9ImVuZCI+ODAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjI5NS43IiB4Mj0iMTM1Mi4wIiB5Mj0iMjk1LjciIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSIzMDAuMiIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMDAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjI1NC4wIiB4Mj0iMTM1Mi4wIiB5Mj0iMjU0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSIyNTguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMjAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjUwNC4wIiB4Mj0iMTM1Mi4wIiB5Mj0iNTA0LjAiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHBvbHlsaW5lIHBvaW50cz0iODk0LjYsNDY2LjMgOTc3LjgsNDU5LjQgMTA2MC45LDQ1MS43IDExNDQuMSw0MzkuOCAxMjI3LjIsNDEzLjIgMTMxMC40LDM2Ni4zIiBmaWxsPSJub25lIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMi42IiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iODk0LjYiIGN5PSI0NjYuMyIgcj0iNS41IiBmaWxsPSIjMUQ5RTc1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSI5NzcuOCIgY3k9IjQ1OS40IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjEwNjAuOSIgY3k9IjQ1MS43IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjExNDQuMSIgY3k9IjQzOS44IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjEyMjcuMiIgY3k9IjQxMy4yIiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjEzMTAuNCIgY3k9IjM2Ni4zIiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+Cjxwb2x5bGluZSBwb2ludHM9Ijg5NC42LDMyMi4xIDk3Ny44LDMxNy4xIDEwNjAuOSwzMDguMiAxMTQ0LjEsMzA4LjQgMTIyNy4yLDMwMy42IDEzMTAuNCwzMDYuNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDg1QTMwIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxjaXJjbGUgY3g9Ijg5NC42IiBjeT0iMzIyLjEiIHI9IjUuNSIgZmlsbD0iI0Q4NUEzMCIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iOTc3LjgiIGN5PSIzMTcuMSIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMDYwLjkiIGN5PSIzMDguMiIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMTQ0LjEiIGN5PSIzMDguNCIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMjI3LjIiIGN5PSIzMDMuNiIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMzEwLjQiIGN5PSIzMDYuNyIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8dGV4dCB4PSI4OTQuNiIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MDwvdGV4dD4KPHRleHQgeD0iODk0LjYiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9Ijk3Ny44IiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xNjwvdGV4dD4KPHRleHQgeD0iOTc3LjgiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjEwNjAuOSIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzI8L3RleHQ+Cjx0ZXh0IHg9IjEwNjAuOSIgeT0iNTQ2LjAiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pQjwvdGV4dD4KPHRleHQgeD0iMTE0NC4xIiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42NDwvdGV4dD4KPHRleHQgeD0iMTE0NC4xIiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8dGV4dCB4PSIxMjI3LjIiIHk9IjUyOC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjEyODwvdGV4dD4KPHRleHQgeD0iMTIyNy4yIiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8dGV4dCB4PSIxMzEwLjQiIHk9IjUyOC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjI1NjwvdGV4dD4KPHRleHQgeD0iMTMxMC40IiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8bGluZSB4MT0iODUzLjAiIHkxPSI1NTMuMCIgeDI9IjEzNTIuMCIgeTI9IjU1My4wIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI4NDMuMCIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJlbmQiPnJlc3RvcmU8L3RleHQ+Cjx0ZXh0IHg9Ijg5NC42IiB5PSI1NzAuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTguMTwvdGV4dD4KPHRleHQgeD0iOTc3LjgiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yMS40PC90ZXh0Pgo8dGV4dCB4PSIxMDYwLjkiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yNS4xPC90ZXh0Pgo8dGV4dCB4PSIxMTQ0LjEiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4zMC44PC90ZXh0Pgo8dGV4dCB4PSIxMjI3LjIiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj40My42PC90ZXh0Pgo8dGV4dCB4PSIxMzEwLjQiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42Ni4xPC90ZXh0Pgo8dGV4dCB4PSI4NDMuMCIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJlbmQiPnJlc3VtZTwvdGV4dD4KPHRleHQgeD0iODk0LjYiIHk9IjU5Mi4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjNzEyQjEzIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj44Ny4zPC90ZXh0Pgo8dGV4dCB4PSI5NzcuOCIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjg5Ljc8L3RleHQ+Cjx0ZXh0IHg9IjEwNjAuOSIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk0LjA8L3RleHQ+Cjx0ZXh0IHg9IjExNDQuMSIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjkzLjk8L3RleHQ+Cjx0ZXh0IHg9IjEyMjcuMiIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk2LjI8L3RleHQ+Cjx0ZXh0IHg9IjEzMTAuNCIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk0Ljc8L3RleHQ+CjxsaW5lIHgxPSI0OCIgeTE9IjYzNiIgeDI9IjEzNTIiIHkyPSI2MzYiIHN0cm9rZT0iI0U1RTNEQiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjQ4LjAiIHk9IjY2Mi4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuazqO+8muaoqui9tOaYr+aho++8iOaAu+aUueWKqCBNaULvvIzlhoXlrZg65paH5Lu2ID0gMzox77yJ44CCcGF1c2UgLyByZXN1bWUg5YiX5LiO5ZCM6L2u5a+554Wn5p6E5bu655qE5q+U6L6D6KeB5pys56ugIMKnNC4x44CCPC90ZXh0Pgo8L3N2Zz4="><figcaption><b>图 19-2</b>920B 上 checkpoint / restore 与原生 pause / resume 按档的 p50</figcaption></figure>
 
 <h3 id="d19-53-950-同一轮2026-11-20">5.3 950 同一轮（2026-11-20）</h3>
-<p>§5.1 的两组数来自不同轮次、不同负载。2026-11-20 用 <code>bash test950.sh compare</code> 的 mix 组，在同一台 950、同一时段、同一种负载上把 checkpoint / restore 和 pause / resume 一起测了：每档新建沙箱，常驻进程的大小等于这一档的内存改动，改写内存并写根盘文件后 <code>fsync</code>，内存与文件按 3 : 1 拆分；pause / resume 在同一负载上另起沙箱测。pause / resume 只在进程级那套代码上测，它的原生路径与上游相同；pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，等上传的时间从 orchestrator 的 <code>Pause timing</code> 日志读出后扣掉（§7）。每格 n = 20，客户端墙钟 p50，单位 ms。条件：e2b-infra <code>5b829c8</code>；本方案 orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>，<code>hdbss</code>，模板 <code>base</code>）；进程级那套的 orchestrator <code>ec5eb1cc…</code>（脏页跟踪关闭，模板 <code>base-criu</code>）。</p>
+<p>§5.1 的两组数来自不同轮次、不同负载。2026-11-20 用 <code>bash test950.sh compare --series mix</code>，在同一台 950、同一时段、同一种负载上把 checkpoint / restore 和 pause / resume 一起测了：每档新建沙箱，常驻进程的大小等于这一档的内存改动，改写内存并写根盘文件后 <code>fsync</code>，内存与文件按 3 : 1 拆分；pause / resume 在同一负载上另起沙箱测。pause / resume 只在进程级那套代码上测，它的原生路径与上游相同；pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，等上传的时间从 orchestrator 的 <code>Pause timing</code> 日志读出后扣掉（§7）。每个测量步骤开测前先回收宿主上积累的网络命名空间（§6.3）。每格 n = 20，客户端墙钟 p50，单位 ms。条件：e2b-infra <code>1384b02</code>，结果目录 <code>test950/results/20261120-122146-compare/</code>；本方案 orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>，<code>hdbss</code>，模板 <code>base</code>）；进程级那套的 orchestrator <code>e77c0e29…</code>（KASandbox <code>237b9ac62</code>，脏页跟踪关闭，模板 <code>base-criu</code>）。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -14712,146 +14774,147 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <tbody>
 <tr>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">7.0</td>
-<td style="text-align: right;">252.7</td>
-<td style="text-align: right;">36.1</td>
-<td style="text-align: right;">18.2</td>
-<td style="text-align: right;">93.0</td>
-<td style="text-align: right;">5.1</td>
+<td style="text-align: right;">6.7</td>
+<td style="text-align: right;">230.5</td>
+<td style="text-align: right;">34.4</td>
+<td style="text-align: right;">17.2</td>
+<td style="text-align: right;">71.4</td>
+<td style="text-align: right;">4.2</td>
 <td style="text-align: right;">0.0</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
-<td style="text-align: right;">19.3</td>
-<td style="text-align: right;">272.5</td>
-<td style="text-align: right;">14.1</td>
-<td style="text-align: right;">24.2</td>
-<td style="text-align: right;">89.2</td>
-<td style="text-align: right;">3.7</td>
-<td style="text-align: right;">1.9</td>
+<td style="text-align: right;">18.3</td>
+<td style="text-align: right;">250.9</td>
+<td style="text-align: right;">13.7</td>
+<td style="text-align: right;">30.5</td>
+<td style="text-align: right;">73.5</td>
+<td style="text-align: right;">2.4</td>
+<td style="text-align: right;">1.3</td>
 </tr>
 <tr>
 <td style="text-align: right;">32</td>
-<td style="text-align: right;">26.4</td>
-<td style="text-align: right;">278.0</td>
-<td style="text-align: right;">10.5</td>
-<td style="text-align: right;">33.8</td>
-<td style="text-align: right;">86.3</td>
-<td style="text-align: right;">2.6</td>
+<td style="text-align: right;">24.5</td>
+<td style="text-align: right;">255.7</td>
+<td style="text-align: right;">10.4</td>
+<td style="text-align: right;">31.7</td>
+<td style="text-align: right;">72.1</td>
+<td style="text-align: right;">2.3</td>
 <td style="text-align: right;">3.5</td>
 </tr>
 <tr>
 <td style="text-align: right;">64</td>
-<td style="text-align: right;">33.5</td>
-<td style="text-align: right;">306.2</td>
-<td style="text-align: right;">9.1</td>
-<td style="text-align: right;">41.1</td>
-<td style="text-align: right;">87.9</td>
-<td style="text-align: right;">2.1</td>
-<td style="text-align: right;">7.5</td>
+<td style="text-align: right;">35.0</td>
+<td style="text-align: right;">277.6</td>
+<td style="text-align: right;">7.9</td>
+<td style="text-align: right;">47.3</td>
+<td style="text-align: right;">73.9</td>
+<td style="text-align: right;">1.6</td>
+<td style="text-align: right;">8.1</td>
 </tr>
 <tr>
 <td style="text-align: right;">128</td>
-<td style="text-align: right;">62.3</td>
-<td style="text-align: right;">340.5</td>
-<td style="text-align: right;">5.5</td>
-<td style="text-align: right;">66.9</td>
-<td style="text-align: right;">89.3</td>
-<td style="text-align: right;">1.3</td>
-<td style="text-align: right;">14.9</td>
+<td style="text-align: right;">65.4</td>
+<td style="text-align: right;">323.0</td>
+<td style="text-align: right;">4.9</td>
+<td style="text-align: right;">68.2</td>
+<td style="text-align: right;">75.0</td>
+<td style="text-align: right;">1.1</td>
+<td style="text-align: right;">14.8</td>
 </tr>
 <tr>
 <td style="text-align: right;">256</td>
-<td style="text-align: right;">115.8</td>
-<td style="text-align: right;">478.9</td>
-<td style="text-align: right;">4.1</td>
-<td style="text-align: right;">107.8</td>
-<td style="text-align: right;">98.5</td>
-<td style="text-align: right;">0.91</td>
-<td style="text-align: right;">29.1</td>
+<td style="text-align: right;">114.1</td>
+<td style="text-align: right;">457.2</td>
+<td style="text-align: right;">4.0</td>
+<td style="text-align: right;">108.7</td>
+<td style="text-align: right;">83.7</td>
+<td style="text-align: right;">0.77</td>
+<td style="text-align: right;">29.2</td>
 </tr>
 <tr>
 <td style="text-align: right;">70.001（只改内存 70）</td>
-<td style="text-align: right;">24.7</td>
-<td style="text-align: right;">280.6</td>
-<td style="text-align: right;">11.4</td>
-<td style="text-align: right;">43.0</td>
-<td style="text-align: right;">91.4</td>
-<td style="text-align: right;">2.1</td>
-<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">22.3</td>
+<td style="text-align: right;">260.1</td>
+<td style="text-align: right;">11.7</td>
+<td style="text-align: right;">38.8</td>
+<td style="text-align: right;">74.0</td>
+<td style="text-align: right;">1.9</td>
+<td style="text-align: right;">10.1</td>
 </tr>
 </tbody>
 </table></div>
 <ul>
-<li>同一负载、同一轮，倍数可以直接读：checkpoint 比 pause 快 4.1～36 倍；restore 比 resume 快 1.3～5.1 倍，只有 256 档慢 9.3 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 127.6 ms，restore 仍更快。</li>
-<li>这一轮的 pause 不含等上传。等上传另记：pause 墙钟 309.3～663.8 ms，其中等上传 54.7～186.8 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。</li>
+<li>同一负载、同一轮，倍数可以直接读：checkpoint 比 pause 快 4.0～34 倍；restore 在 128 档以内比 resume 快 1.1～4.2 倍，256 档慢 25.0 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 112.9 ms，restore 仍快 4.2 ms。</li>
+<li>这一轮的 pause 不含等上传。等上传另记：pause 墙钟 285.2～627.9 ms，其中等上传 55.2～182.5 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。</li>
+<li>同一天上午那一轮（<code>20261120-091104-compare</code>）开测时宿主有 1421 个网络命名空间，没有先清，resume 是 86.3～98.5 ms，比这一轮慢 14～22 ms，pause 慢 17～29 ms。resume 变慢的原因见 §6.3；pause 那一轮没有分段日志，变慢的原因没有核实。那一轮的 pause / resume 不再使用。</li>
 <li>2026-11-19 那一轮固定 256 MiB 进程、pause 含等上传、两套代码各测一遍，结论的方向相同（checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍），原始输出存于工作区 <code>rollback-reports/950-compare-20261119/compare.txt</code>。</li>
-<li>两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-20">第 24 章 §4.3</a>。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/compare-report.txt</code>。</li>
+<li>两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-20">第 24 章 §4.3</a>。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/clean-122146-compare.txt</code>。</li>
 </ul>
 <h2 id="d19-6-固定开销从哪里来">6. 固定开销从哪里来</h2>
-<p>本节的时间拆分来自 920B（<code>kvm-wp</code>，产物在 tmpfs）的单样本跟踪，完整表格见 <a href="#d13-6-成本模型">第 13 章 §6</a>。950 没有做同样的逐段测量，各段数值不能直接套到 950。</p>
-<p><strong>pause。</strong> 一次 0 MiB 档的 pause 总耗时 234.9 ms：</p>
+<p>本节的数字来自 950（2026-11-20）：进程级那套 orchestrator 在 pause、resume 的每一步打点，每档 n = 20 取 p50；Firecracker 退出一段另用内核 ftrace 拆到函数。逐段的完整表格和机理在 <a href="#d13-6-成本模型">第 13 章 §6</a>，这里只给结论。</p>
+<h3 id="d19-61-pause">6.1 pause</h3>
+<p>0 MiB 档 orchestrator 合计 226.2 ms，真正保存状态的只有约 27 ms：</p>
 <div class="tw"><table>
 <thead>
 <tr>
-<th>时间点 ms</th>
-<th>发生的事</th>
+<th>段</th>
+<th style="text-align: right;">0 MiB 档</th>
+<th style="text-align: right;">256 MiB 档</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>0～约 10</td>
-<td>暂停虚机、写 <code>snapfile</code>、取脏页位图、建好内存差分文件</td>
+<td>暂停 vCPU、写 <code>snapfile</code>、取脏页集合、导出内存</td>
+<td style="text-align: right;">27.2</td>
+<td style="text-align: right;">157.2</td>
 </tr>
 <tr>
-<td>约 12～169</td>
-<td>开始停沙箱，Firecracker 收到 SIGTERM 后退出，168.8 ms 时进程结束</td>
+<td>发 SIGTERM 之前执行一次 <code>ps</code> 查 Firecracker 的进程状态</td>
+<td style="text-align: right;">106.0</td>
+<td style="text-align: right;">114.1</td>
 </tr>
 <tr>
-<td>169～232</td>
-<td><code>doStop</code> 收尾，<code>NBDProvider.Close</code> 刷盘并断开 NBD，<code>ExportDiff</code> 导出根盘差分</td>
+<td>等 Firecracker 进程退出</td>
+<td style="text-align: right;">71.6</td>
+<td style="text-align: right;">72.1</td>
 </tr>
 <tr>
-<td>232～235</td>
-<td>上传到本地存储并返回</td>
+<td>断开 NBD</td>
+<td style="text-align: right;">19.4</td>
+<td style="text-align: right;">20.1</td>
+</tr>
+<tr>
+<td>导出根盘差分、写元数据</td>
+<td style="text-align: right;">1.1</td>
+<td style="text-align: right;">79.4</td>
+</tr>
+<tr>
+<td>合计</td>
+<td style="text-align: right;">226.2</td>
+<td style="text-align: right;">450.5</td>
 </tr>
 </tbody>
 </table></div>
-<p>真正保存内存状态的只有前约 10 ms，其余约 225 ms 都在销毁虚机环境并等它结束。根盘差分要等 NBD 设备释放后才能导出，<code>Pause</code> 又要等上传完成，所以这段等待全部计入 pause。另一次运行对 Firecracker 进程做内核栈采样，看到退出过程里有等 RCU 宽限期、卸载挂载、关闭 KVM 虚机 fd 这些步骤，但约 9～123 ms 这段约 114 ms 没有归因。</p>
-<p><strong>改动量增大时。</strong> 256 MiB 档一次总耗时 443 ms 的跟踪里，增长不全是拷数据：开始停沙箱之前增长约 76 ms，Firecracker 退出增长约 35 ms，退出之后到根盘差分导出完成增长约 97 ms。这是单样本比较，只说明方向。</p>
-<p><strong>resume。</strong> 一次 <code>Sandbox.connect()</code> 耗时 92.6 ms、第一条命令 97.9 ms 完成的 resume：</p>
-<div class="tw"><table>
-<thead>
-<tr>
-<th>时间点 ms</th>
-<th>发生的事</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>0～35</td>
-<td>请求到节点，建网络槽位、NBD、uffd，启动 Firecracker 进程</td>
-</tr>
-<tr>
-<td>35～57</td>
-<td>加载 <code>snapfile</code></td>
-</tr>
-<tr>
-<td>57～58</td>
-<td>恢复 vCPU</td>
-</tr>
-<tr>
-<td>58～93</td>
-<td>等 envd 就绪和 API 返回，这段未细拆</td>
-</tr>
-<tr>
-<td>93～98</td>
-<td>第一条命令执行</td>
-</tr>
-</tbody>
-</table></div>
+<ul>
+<li><code>ps</code> 一段来自上游 <code>Process.Stop</code>：发 SIGTERM 之前执行 <code>ps -o stat= -p PID</code>，只为在日志里提示进程是否处于 D 状态。直接读 <code>/proc/PID/stat</code> 只要 0.07 ms（920B 实测）；本项目没有改，原生路径作为对照与上游保持一致。</li>
+<li>等退出一段几乎都在内核关闭 KVM 虚机的 fd（<code>kvm_vm_release</code> 74.4 ms，其中 <code>kvm_destroy_vm</code> 53.2 ms，主要在等 RCU 宽限期）；释放地址空间只要 0.3 ms，释放 mount 命名空间 1.9 ms。</li>
+<li>改动量从 0 到 256 MiB，增长的 224 ms 都来自搬数据：写 <code>snapfile</code> 时刷根盘、导出内存（162 → 431 MiB，按驻留页导出）、导出根盘差分；<code>ps</code>、进程退出、断开 NBD 不变。</li>
+</ul>
+<h3 id="d19-62-resume">6.2 resume</h3>
+<p>0 MiB 档客户端 71.4 ms，其中 orchestrator 60.2 ms：起一个新的 Firecracker 到 API 可用 35.0 ms，加载 <code>snapfile</code> 6.0 ms，恢复 vCPU 与写 MMDS 0.9 ms，等 envd 就绪 15.3 ms；另有 API 与网络 3.9 ms、第一条命令 7.7 ms。起 Firecracker 一段包括：</p>
+<ul>
+<li>建沙箱 cgroup 约 13 ms。950 是 cgroup v2，每个沙箱要在开了 <code>cpu</code>、<code>memory</code> 控制器的 <code>/sys/fs/cgroup/e2b</code> 下新建目录；920B 是 cgroup v1，这一步约 0.1 ms。</li>
+<li><code>unshare -m</code> 新建 mount 命名空间，要复制宿主的整张挂载表，耗时与挂载点数成正比（920B 上约每个挂载点 10 µs）；然后 <code>ip netns exec</code> 进入网络命名空间，启动 Firecracker。</li>
+</ul>
 <p>这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 不随档位变化，内存读取的成本落在恢复之后（§3.3）。</p>
-<p><strong>checkpoint / restore 没有这些步骤。</strong> checkpoint 不停虚机，也不销毁任何资源；restore 把内存写回活着的 Firecracker 进程（<a href="#d09">第 9 章</a>）。进程退出、KVM 销毁、NBD 断开、进程启动、加载 <code>snapfile</code> 都不会发生。这不表示原生实现有缺陷：原生要产出能离开这个进程、这台宿主的自足快照，停掉并重建进程是这个目标的一部分（<a href="#d13-7-它擅长什么">第 13 章 §7</a>）。</p>
+<h3 id="d19-63-测试环境的影响">6.3 测试环境的影响</h3>
+<ul>
+<li><strong>网络命名空间积累。</strong> 每个 e2b 网络命名空间在 <code>/run/netns</code> 下留一到两个挂载点；orchestrator 重启时不回收上一次的网络槽位，测试中频繁切换栈会让它们越积越多。同一天上午那一轮开测时有 1421 个网络命名空间，0 档 resume 93.0 ms；第二轮（<code>110854</code>，有分段日志）开测时 666 个，起 Firecracker 一段 45.2 ms；这一轮开测前清到约 170～230 个（挂载点约 450），这一段 35.0 ms，0 档 resume 71.4 ms。<code>bash test950.sh</code> 现在在每个测量步骤开测前先回收网络命名空间，报告里打印测量开始和结束时的网络命名空间数、挂载点数与 cgroup 版本。</li>
+<li><strong>cgroup 版本。</strong> cgroup v2 上每次 resume 多约 13 ms。</li>
+<li><strong>宿主进程数。</strong> <code>ps</code> 一段随宿主进程数增长。</li>
+</ul>
+<p>920B 上同样的拆分：<code>ps</code> 104.3 ms，SIGTERM 到进程退出 86.1 ms（其中 <code>kvm_vm_release</code> 75.5 ms），结构与 950 相同。所以 950 与 920B 的 pause / resume 差别来自这些环境因素和 cgroup 版本，不来自 ARM 适配代码。上游在 x86 上的耗时取决于同样的因素，本项目没有在 x86 上测。</p>
 <h2 id="d19-7-边界">7. 边界</h2>
 <p><strong>已测：</strong></p>
 <ul>
@@ -14879,11 +14942,12 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <h2 id="d19-本章要点">本章要点</h2>
 <ul>
 <li>精确增量在 950 和 920B 上都生效：导出内存随写入量增长，0 MiB 档约 16 MiB。</li>
-<li>pause 由固定开销主导。950 按六档 p50 拟合约为 245.5 ms + 0.52 ms/MiB，920B 约为 275.2 ms + 0.48 ms/MiB。固定开销来自销毁虚机环境，不含本方案的对照构建同样存在。</li>
+<li>pause 由固定开销主导。950 按六档 p50 拟合约为 245.5 ms + 0.52 ms/MiB，920B 约为 275.2 ms + 0.48 ms/MiB。固定开销来自销毁虚机环境，不含本方案的对照构建同样存在：950 上 0 档约 226 ms 里，发 SIGTERM 前的一次 <code>ps</code> 约 106 ms，内核销毁 KVM 虚机约 72 ms，断开 NBD 约 20 ms，真正保存状态只有约 27 ms（§6.1）。</li>
 <li>resume 基本不随档位变化，950 上 0～128 MiB 档 p50 在 106.1～109.3 ms。成本推迟到恢复之后，950 上第一次读 192 MiB 内存负载比快照前慢约 112 ms。</li>
 <li>950 上 checkpoint / restore 与 pause / resume 的差距在小档最大，但两组负载和部署条件不同，倍数只说明量级。</li>
 <li>数字接近不代表语义接近：restore 保留进程和 checkpoint，resume 换一代进程，之前的 checkpoint 全部失效。</li>
-<li>950 同一轮、同一负载（§5.3，2026-11-20）：checkpoint 比 pause 快 4.1～36 倍；restore 比 resume 快 1.3～5.1 倍，只有 256 档慢 9.3 ms，算上 resume 后读回内存仍更快。pause 只计第一步，与上游返回的时机一致。</li>
+<li>950 同一轮、同一负载（§5.3，2026-11-20，开测前清过网络命名空间）：checkpoint 比 pause 快 4.0～34 倍；restore 在 128 档以内比 resume 快 1.1～4.2 倍，256 档慢 25.0 ms，算上 resume 后读回内存仍快 4.2 ms。pause 只计第一步，与上游返回的时机一致。</li>
+<li>resume 约 60 ms 的服务端时间里，起新 Firecracker 约 35 ms（950 的 cgroup v2 建沙箱 cgroup 约 13 ms，新建 mount 命名空间随宿主挂载点数增长），等 envd 约 15 ms（§6.2）。宿主上积累的网络命名空间会让 resume 慢 14～22 ms，测前要清理（§6.3）。</li>
 <li>950 两套代码上各跑一遍（§3.5）的结论与 920B 相同：沙箱级这套的 pause 每档更快、导出更小，resume 每档慢 20～35 ms。</li>
 <li>950 的逐段拆分、不开跟踪的对照仍待补。</li>
 </ul><nav class="pager" data-n="19"></nav></article><article id="v20" class="doc" hidden><h1 id="d20-920b-性能与平台差异">920B 性能与平台差异</h1>
@@ -18655,8 +18719,8 @@ bash<span class="w"> </span>rollback/scripts/950/run.sh<span class="w"> </span>h
 </tr>
 <tr>
 <td>原生 pause / resume 固定开销</td>
-<td>待验证项：部分未归因</td>
-<td>约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；950 没有逐段数据；920B 上 resume 比对照慢的原因未查</td>
+<td>已拆分（950，2026-11-20），余项待查</td>
+<td>pause 的固定开销是发 SIGTERM 前的 <code>ps</code>、内核销毁 KVM 虚机和断开 NBD，resume 的大头是起新 Firecracker（cgroup v2 建 cgroup、新建 mount 命名空间）和等 envd，见 <a href="#d13-6-成本模型">第 13 章 §6</a>；等 envd 一段未再拆，920B 上 resume 比对照慢的原因未查</td>
 </tr>
 <tr>
 <td>封层刷屏障与重复刷盘</td>
@@ -21488,7 +21552,7 @@ ps<span class="w"> </span>-L<span class="w"> </span>-o<span class="w"> </span><s
 <p><strong>怎么处置</strong>：当前代码在拷贝前用 <code>MADV_POPULATE_READ/WRITE</code> 把缺页挪进系统调用（要求宿主内核 ≥ 5.14，交付内核满足），常规负载下不应再出现。仍出现时按 <a href="https://github.com/AustinJiangg/e2b-infra/blob/main/deploy-docs/12-orchestrator%E8%B5%84%E6%BA%90%E9%85%8D%E9%A2%9D%E8%B0%83%E4%BC%98.md"><code>deploy-docs/12-orchestrator资源配额调优.md</code></a> 核对 job 的内存上限与页缓存；取证开关用完即关。</p>
 <p>原理：<a href="#d12-8-节点级效应">第 12 章 §8</a>。</p>
 <h2 id="d28-9-网络槽位netns泄漏">9. 网络槽位（netns）泄漏</h2>
-<p><strong>症状</strong>：netns 数远超"300 + 历史峰值并发"；新沙箱起得慢；重启后很久才就绪；性能测试长尾变多。</p>
+<p><strong>症状</strong>：netns 数远超"300 + 历史峰值并发"；新沙箱起得慢；重启后很久才就绪；性能测试长尾变多；原生 resume 变慢（每起一个 Firecracker 都要复制宿主挂载表，每个 netns 在 <code>/run/netns</code> 下有一到两个挂载点，见 <a href="#d13-63-测试环境对这两组数字的影响">第 13 章 §6.3</a>）。</p>
 <p><strong>看哪里</strong></p>
 <div class="hl"><pre><span></span><code>ip<span class="w"> </span>netns<span class="w"> </span>list<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-cE<span class="w"> </span><span class="s1">&#39;^ns-[0-9]+$&#39;</span>
 ip<span class="w"> </span>-o<span class="w"> </span>link<span class="w"> </span><span class="p">|</span><span class="w"> </span>wc<span class="w"> </span>-l
@@ -22451,7 +22515,7 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 <tr>
 <td>netns 泄漏、偶发 GC 长暂停</td>
 <td>待修复：分别为上游运维处置、未归因</td>
-<td>各项影响范围与处理不同，不能归为同一个回滚缺陷，见 <a href="#dB-11-已知未解决">附录 B §11</a>、<a href="#d28-9-网络槽位netns泄漏">第 28 章 §9</a></td>
+<td>各项影响范围与处理不同，不能归为同一个回滚缺陷，积累的 netns 还会拖慢原生 resume（每起一个 Firecracker 都要复制宿主挂载表，<a href="#d13-63-测试环境对这两组数字的影响">第 13 章 §6.3</a>），测性能前要先回收。见 <a href="#dB-11-已知未解决">附录 B §11</a>、<a href="#d28-9-网络槽位netns泄漏">第 28 章 §9</a></td>
 </tr>
 </tbody>
 </table></div>
@@ -22488,8 +22552,8 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 </tr>
 <tr>
 <td>原生 pause / resume 固定开销</td>
-<td>待验证：部分未归因</td>
-<td>pause 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；950 没有逐段数据；920B 上 resume 比不含修复的对照慢 25～36 ms，原因未查。见 <a href="#d13-6-成本模型">第 13 章 §6</a>、<a href="#dB-134-native_snapshot_tierspy每档独立沙箱">附录 B §13.4</a></td>
+<td>已拆分（950，2026-11-20）</td>
+<td>pause 0 档约 226 ms：发 SIGTERM 前的 <code>ps</code> 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态约 27 ms；resume 约 60 ms：起新 Firecracker 约 35 ms（cgroup v2 建 cgroup 约 13 ms、新建 mount 命名空间随挂载点数增长）、等 envd 约 15 ms。仍未拆：256 档起 Firecracker 多出的约 9 ms、等 envd 一段；920B 上 resume 比不含修复的对照慢 25～36 ms，原因未查。见 <a href="#d13-6-成本模型">第 13 章 §6</a>、<a href="#d19-6-固定开销从哪里来">第 19 章 §6</a></td>
 </tr>
 </tbody>
 </table></div>
@@ -24590,8 +24654,8 @@ d1 的 43352 是驱动全程数，按 900 s 日志窗口统计是 43313，口径
 </tr>
 <tr>
 <td><a href="#d13-6-成本模型">第 13 章 §6</a> 耗时拆分</td>
-<td>新 920B 2026-11-06，单样本</td>
-<td>Firecracker 日志、文件事件与进程退出的时间线；Firecracker 内核栈采样</td>
+<td>950 2026-11-20（每档 n = 20）；Firecracker 退出拆分 950 与 920B 2026-11-20（n = 5）</td>
+<td><code>benchmark/ckpt_same_workload.py --series mix</code> 读 orchestrator 的 <code>Pause timing</code> / <code>Resume phases</code> 日志；<code>benchmark/fc_exit_trace.py</code>（内核 ftrace）</td>
 </tr>
 <tr>
 <td><a href="#dC-52-第一版为什么贵">附录 C §5.2</a> <code>touch1</code> 演进</td>
