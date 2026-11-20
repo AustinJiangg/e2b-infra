@@ -4,10 +4,15 @@
 不重写任何测试，只编排现有脚本：
   沙箱级  rollback/scripts/950/run.sh 的各档
   进程级  criu-rollback/deploy/950.sh 的 quick / acceptance / stress / stress-ext / soak
-另有两项单独的性能测量：native（原生 pause / resume）、compare（同一负载下的 checkpoint / restore）。
+另有三项单独的性能测量：native（原生 pause / resume）、compare（同一负载下的 checkpoint / restore）、
+fcexit（原生 pause 里 Firecracker 退出的内核拆分，只在进程级栈上）。
 切栈用 950.sh criu / sandbox，跑完停在沙箱级。只用标准库。
 结果都留在 test950/results/<时间>-<档>/，用 bash test950.sh report 打印到终端（不打包、不需要拷文件）。
 e2b 的网络命名空间超过 TEST950_NETNS_LIMIT（默认 1500）时，在下一步之前自动 950.sh recycle-netns。
+性能测量步骤（compare、native、fcexit、沙箱级 perf / perf-full）切好栈后、开测之前总要清一次
+（TEST950_CLEAN_NETNS=0 关掉）：每次重启 orchestrator 都会留下一池 netns，每个 netns 在 /run/netns 下有
+挂载点，Firecracker 启动时新建 mount 命名空间要复制整张挂载表，netns 积得越多 resume 越慢；清掉之后只剩
+当前 orchestrator 自己的一池，与不频繁重启的生产节点一致。
 """
 import argparse
 from datetime import datetime
@@ -55,7 +60,10 @@ LEVELS = ("quick", "standard", "extended", "long")
 # 与四档并列、单独执行的两项性能测量（不进 quick ⊂ standard ⊂ extended，也不进 long）：
 #   native   e2b 原生 pause / resume 分档（benchmark/native_snapshot_tiers.py），在所选栈上各跑一遍
 #   compare  同一负载下的 checkpoint / restore（benchmark/ckpt_same_workload.py），两套各跑一遍
-EXTRA = ("native", "compare")
+#   fcexit   原生 pause 里“停 Firecracker 到进程退出”的内核拆分（benchmark/fc_exit_trace.py），只在进程级栈
+EXTRA = ("native", "compare", "fcexit")
+CLEAN_NETNS = os.environ.get("TEST950_CLEAN_NETNS", "1") != "0"
+PERF_STEPS = ("perf", "perf-full")     # 沙箱级 run.sh 里测性能的档，开测前也清 netns
 TEMPLATES = {"sandbox": os.environ.get("SANDBOX_TEMPLATE", "base"),
              "criu": os.environ.get("CRIU_TEMPLATE", "base-criu")}
 STACKS = ("sandbox", "criu")
@@ -101,7 +109,8 @@ def compare_steps(stacks, rounds, series):
             if st == "criu":
                 args.append("--criu-logs")
             sid = "%s/compare" % st if rounds == 1 else "%s/compare-r%d" % (st, r)
-            steps.append({"id": sid, "stack": st, "kind": "py", "args": args, "est_min": est, "status": "待跑"})
+            steps.append({"id": sid, "stack": st, "kind": "py", "args": args, "est_min": est, "status": "待跑",
+                          "clean_netns": True})
     if len(stacks) == 2:
         steps.append({"id": "%s/compare-table" % steps[-1]["stack"], "stack": steps[-1]["stack"], "kind": "py",
                       "args": ["benchmark/ckpt_same_workload.py", "--compare-siblings"], "est_min": 1,
@@ -114,13 +123,17 @@ def plan(level, stacks, hours, rounds=1, series=None):
     if level in EXTRA:
         if level == "compare":
             steps = compare_steps(stacks, rounds, series)
+        elif level == "fcexit":   # 原生路径与上游相同的是进程级那套，只在它上面测
+            steps = [{"id": "criu/fcexit", "stack": "criu", "kind": "py", "args": ["benchmark/fc_exit_trace.py"],
+                      "est_min": 5, "status": "待跑", "clean_netns": True}]
+            stacks = ["criu"]
         else:
             steps = []
             for st in stacks:
                 args = ["benchmark/native_snapshot_tiers.py", "--mode", "both", "--passes", "3", "--iters", "8",
                         "--template", TEMPLATES[st]]
                 steps.append({"id": "%s/%s" % (st, level), "stack": st, "kind": "py", "args": args,
-                              "est_min": 8, "status": "待跑"})     # 920B 实测每套 7.5 分钟
+                              "est_min": 8, "status": "待跑", "clean_netns": True})     # 920B 实测每套 7.5 分钟
         if "criu" in stacks:
             steps.append({"id": "sandbox/smoke-after", "stack": "sandbox", "kind": "run",
                           "args": ["smoke"], "est_min": 1, "status": "待跑"})
@@ -136,7 +149,8 @@ def plan(level, stacks, hours, rounds=1, series=None):
                 if est is None:
                     est = int(hours * 60) + 30
                 steps.append({"id": "%s/%s" % (stack, name), "stack": stack, "kind": kind,
-                              "args": args, "est_min": est, "status": "待跑"})
+                              "args": args, "est_min": est, "status": "待跑",
+                              "clean_netns": stack == "sandbox" and name in PERF_STEPS})
     # 进程级测完回到沙箱级，再跑一次沙箱级冒烟，确认原服务完好
     if "criu" in stacks:
         steps.append({"id": "sandbox/smoke-after", "stack": "sandbox", "kind": "run",
@@ -151,7 +165,8 @@ def estimate(steps):
     """还没通过的步骤的预估合计，加上其间的切栈。"""
     todo = [s for s in steps if s["status"] != "PASS"]
     switches = sum(1 for a, b in zip(todo, todo[1:]) if a["stack"] != b["stack"])
-    return sum(s["est_min"] for s in todo) + switches * SWITCH_MIN, switches
+    cleans = sum(1 for s in todo if s.get("clean_netns")) if CLEAN_NETNS else 0
+    return sum(s["est_min"] for s in todo) + (switches + cleans) * SWITCH_MIN, switches
 
 
 def dur(seconds):
@@ -232,7 +247,7 @@ def resources():
         k, v = line.split(":", 1)
         mem[k] = v.strip()
     res = {"time": datetime.now().isoformat(), "MemAvailable": mem.get("MemAvailable"),
-           "netns": stack.e2b_netns(),
+           "netns": stack.e2b_netns(), "mounts": mounts(),
            "firecracker": len(stack.e2b_firecrackers()),
            "root_used_kB": sh("df -k --output=used / | tail -1")}
     if pid:
@@ -247,11 +262,33 @@ def current_stack():
     return "criu" if stack.is_criu(exe) else "sandbox"
 
 
+def criu_files_stale():
+    """进程级栈上运行的文件（gsd、orchestrator、内核）与仓库里交付版本不同的那些（按 manifest 的 sha256）。
+    git pull 换了部署包、但上一轮结束时已在进程级栈上时，要重新执行 950.sh criu 才会装上新版本。"""
+    try:
+        m = json.loads((DEPLOY / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return []
+    stale = []
+    for art in m.get("artifacts", {}).values():
+        path = stack.hfc() / art["path"]
+        try:
+            if stack.sha(path) != art["sha256"]:
+                stale.append(str(path))
+        except OSError:
+            stale.append(str(path))
+    return stale
+
+
 def ensure_stack(want, run_dir):
-    """切到要测的栈。已经在目标栈上就不调用 950.sh（只装了沙箱级、没跑过 950.sh all 的机器也能测沙箱级）。"""
+    """切到要测的栈。已经在目标栈上就不调用 950.sh（只装了沙箱级、没跑过 950.sh all 的机器也能测沙箱级）；
+    但进程级栈上运行的文件不是仓库里的交付版本时，仍执行一次 950.sh criu 换上新版本。"""
     if current_stack() == want:
-        log("当前已是%s栈" % ("沙箱级" if want == "sandbox" else "进程级"))
-        return
+        stale = criu_files_stale() if want == "criu" else []
+        if not stale:
+            log("当前已是%s栈" % ("沙箱级" if want == "sandbox" else "进程级"))
+            return
+        log("当前已是进程级栈，但这些文件不是交付版本，重新执行 950.sh criu：%s" % "、".join(stale))
     target = want
     log("确保当前是%s栈（950.sh %s）" % ("沙箱级" if want == "sandbox" else "进程级", target))
     with (run_dir / ("switch-%s.log" % target)).open("a") as f:
@@ -329,21 +366,34 @@ def outcome(step, rc, out):
     return ("PASS" if rc == 0 else "FAIL"), "退出码 %d" % rc
 
 
-def maybe_recycle(data, run_dir):
-    """e2b netns 超过上限就清一次（每次重启 orchestrator 会留下约 300 个，extended 一轮能涨到六七千）。
-    清理失败只记录，不影响测试步骤。"""
+def mounts():
+    try:
+        return len(Path("/proc/self/mountinfo").read_text().splitlines())
+    except OSError:
+        return None
+
+
+def maybe_recycle(data, run_dir, force=None):
+    """e2b netns 超过上限就清一次（每次重启 orchestrator 会留下约 300 个，extended 一轮能涨到六七千）；
+    force 给出原因时不看上限、总要清（性能测量步骤开测之前）。清理失败只记录，不影响测试步骤。"""
     n = stack.e2b_netns()
-    if n <= NETNS_LIMIT:
+    if not force and n <= NETNS_LIMIT:
         return
     logf = run_dir / ("recycle-netns-%s.log" % datetime.now().strftime("%H%M%S"))
-    log("e2b netns %d 个，超过 %d，先清理（950.sh recycle-netns，日志 %s）" % (n, NETNS_LIMIT, logf.name))
+    m0 = mounts()
+    if force:
+        log("e2b netns %d 个、挂载点 %s 个，%s，先清理（950.sh recycle-netns，日志 %s）" % (n, m0, force, logf.name))
+    else:
+        log("e2b netns %d 个，超过 %d，先清理（950.sh recycle-netns，日志 %s）" % (n, NETNS_LIMIT, logf.name))
     t0 = time.time()
     with logf.open("w") as f:
         r = subprocess.run(["bash", str(STACK_SH), "recycle-netns"], cwd=REPO, stdout=f, stderr=subprocess.STDOUT)
     rec = {"time": datetime.now().isoformat(), "before": n, "after": stack.e2b_netns(),
+           "mounts_before": m0, "mounts_after": mounts(), "why": force or "超过上限",
            "seconds": int(time.time() - t0), "ok": r.returncode == 0}
     data.setdefault("recycles", []).append(rec)
-    log("清理%s：e2b netns %d → %d（%s）" % ("完成" if rec["ok"] else "失败（继续测试）", n, rec["after"], dur(rec["seconds"])))
+    log("清理%s：e2b netns %d → %d，挂载点 %s → %s（%s）" % ("完成" if rec["ok"] else "失败（继续测试）", n, rec["after"],
+                                                    m0, rec["mounts_after"], dur(rec["seconds"])))
 
 
 def write_summary(data, run_dir):
@@ -358,10 +408,12 @@ def write_summary(data, run_dir):
                                                 dur(s["seconds"]) if "seconds" in s else "-",
                                                 s.get("detail", "")))
     if data.get("recycles"):
-        lines += ["", "## 自动清理 netns", "", "| 时刻 | 清理前 | 清理后 | 用时 | 结果 |", "|---|---|---|---|---|"]
+        lines += ["", "## 自动清理 netns", "", "| 时刻 | 原因 | netns 清理前 | 清理后 | 挂载点 清理前 | 清理后 | 用时 | 结果 |",
+                  "|---|---|---|---|---|---|---|---|"]
         for r in data["recycles"]:
-            lines.append("| %s | %s | %s | %s | %s |" % (r["time"][11:19], r["before"], r["after"], dur(r["seconds"]),
-                                                        "OK" if r["ok"] else "失败"))
+            lines.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                r["time"][11:19], r.get("why", "超过上限"), r["before"], r["after"], r.get("mounts_before", "-"),
+                r.get("mounts_after", "-"), dur(r["seconds"]), "OK" if r["ok"] else "失败"))
     lines += ["", "## 身份", ""]
     for key, ident in data.get("identity", {}).items():
         orch = ident["orchestrator"]
@@ -369,11 +421,12 @@ def write_summary(data, run_dir):
                      % (key, orch["exe"], orch["sha256"], ident["host_kernel"], ident["repo_commit"][:12],
                         "（有未提交改动）" if ident["repo_dirty"] else ""))
     if data.get("resources"):
-        lines += ["", "## 宿主资源", "", "| 时刻 | MemAvailable | netns | firecracker | 根盘已用 kB | orchestrator fd |",
-                  "|---|---|---|---|---|---|"]
+        lines += ["", "## 宿主资源", "", "| 时刻 | MemAvailable | netns | 挂载点 | firecracker | 根盘已用 kB | orchestrator fd |",
+                  "|---|---|---|---|---|---|---|"]
         for when, r in data["resources"].items():
-            lines.append("| %s | %s | %s | %s | %s | %s |" % (when, r["MemAvailable"], r["netns"], r["firecracker"],
-                                                         r["root_used_kB"], r.get("orchestrator_fds", "-")))
+            lines.append("| %s | %s | %s | %s | %s | %s | %s |" % (when, r["MemAvailable"], r["netns"], r.get("mounts", "-"),
+                                                              r["firecracker"], r["root_used_kB"],
+                                                              r.get("orchestrator_fds", "-")))
     (run_dir / "SUMMARY.md").write_text("\n".join(lines) + "\n")
     (run_dir / "run.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))
 
@@ -428,6 +481,8 @@ def execute(args):
             data["identity"][key] = identity(current)
             (run_dir / ("identity-%s.json" % key.replace(":", ""))).write_text(
                 json.dumps(data["identity"][key], ensure_ascii=False, indent=1))
+        if step.get("clean_netns") and CLEAN_NETNS:
+            maybe_recycle(data, run_dir, force="开测前清掉重启留下的 netns")
         step["status"] = "运行中"
         step["started"] = datetime.now().isoformat()
         save(data)
@@ -523,11 +578,13 @@ def print_overview(run):
     if data.get("resources"):
         print("-- 宿主资源（e2b 的 netns / firecracker）")
         for when, r in data["resources"].items():
-            print("  %s：MemAvailable %s，netns %s，firecracker %s，根盘已用 %s kB，orchestrator fd %s" % (
-                when, r["MemAvailable"], r["netns"], r["firecracker"], r["root_used_kB"], r.get("orchestrator_fds", "-")))
+            print("  %s：MemAvailable %s，netns %s，挂载点 %s，firecracker %s，根盘已用 %s kB，orchestrator fd %s" % (
+                when, r["MemAvailable"], r["netns"], r.get("mounts", "-"), r["firecracker"], r["root_used_kB"],
+                r.get("orchestrator_fds", "-")))
     for r in data.get("recycles", []):
-        print("  自动清理 netns %s：%s → %s（%s）%s" % (r["time"][11:19], r["before"], r["after"], dur(r["seconds"]),
-                                                  "" if r["ok"] else " 失败"))
+        print("  清理 netns %s（%s）：netns %s → %s，挂载点 %s → %s（%s）%s" % (
+            r["time"][11:19], r.get("why", "超过上限"), r["before"], r["after"], r.get("mounts_before", "-"),
+            r.get("mounts_after", "-"), dur(r["seconds"]), "" if r["ok"] else " 失败"))
     has_table = any(s["id"].endswith("/compare-table") and (run / s["id"].replace("/", "-")).is_dir()
                     for s in data["steps"])
     for s in data["steps"]:

@@ -80,8 +80,10 @@ B 紧跟在 A 之后，是"连续的 checkpoint"。两者分开列：进程级 r
 fork、恢复各段耗时与页数），把 criu_dump / criu_restore 再拆开；读在每轮核对之后，不在计时区间内。
 
 每次运行开头记录宿主条件（NUMA 节点与大小、kernel.numa_balancing、宿主 THP、内核命令行，
-以及 netns 个数、iptables / nft 规则行数、运行中的 firecracker 个数、loadavg、CPU 型号与调频），
-两轮结果或两台机器对不上时先看这里。
+以及 netns 个数、iptables / nft 规则行数、运行中的 firecracker 个数、loadavg、CPU 型号与调频、
+挂载点个数（每个 netns 在 /run/netns 下有一到两个 nsfs 挂载，Firecracker 每次启动新建 mount 命名空间要复制
+整张挂载表，resume 随它变慢）、cgroup 版本与 e2b 下的沙箱 cgroup（v2 上 resume 每次要建一个）），
+运行结束时再记一次，两轮结果或两台机器对不上时先看这里。
 
 在部署宿主上运行，用当前栈对应的 SDK 环境：
     python3 ckpt_same_workload.py --out result.json
@@ -299,9 +301,12 @@ def parse_phases(text):
 
 # 原生分段：orchestrator 记的是各步完成的时刻（从请求开始计，ms），这里换算成相邻两步之间的耗时。
 # 每段 = 列出的时刻里最晚的一个 - 上一段的终点；列出几个时刻的段是并行做的几件事，取最后完成的。
+# orchestrator 6a60dec6f 没有 checks_stopped / fc_state_checked / fc_sigterm（之后的版本才有），那时
+# “等 FC 进程退出”一段包含发 SIGTERM 之前用 ps 查进程状态的时间。
 PAUSE_SEGMENTS = (("取沙箱", ("acquired",)), ("暂停 vCPU", ("vm_paused",)), ("写 snapfile", ("snapfile",)),
                   ("取脏页集合", ("dirty_map",)), ("导出内存", ("memfile",)),
-                  ("停 FC 到进程退出", ("fc_exited",)), ("断开 NBD", ("nbd_released",)),
+                  ("ps 查 FC 进程状态", ("checks_stopped", "fc_state_checked")), ("发 SIGTERM", ("fc_sigterm",)),
+                  ("等 FC 进程退出", ("fc_exited",)), ("断开 NBD", ("nbd_released",)),
                   ("导出根盘差分", ("rootfs_synced",)), ("写元数据、进缓存", ("snapshot_done",)),
                   ("上传", ("uploaded",)))
 RESUME_SEGMENTS = (("排队、取模板", ("acquired", "template")),
@@ -955,6 +960,19 @@ def print_host(prov, indent=""):
               "loadavg %s · CPU %s × %s · 调频 %s" % (
                   indent, h.get("netns"), h.get("iptables_lines"), h.get("nft_lines"), h.get("firecracker_procs"),
                   h.get("loadavg"), h.get("cpus"), h.get("cpu"), h.get("governor")))
+    if "mounts" in h:
+        cg = "cgroup %s" % h.get("cgroup")
+        if h.get("cgroup_mkdir_ms") is not None:
+            cg += "（e2b 下 %s 个沙箱 cgroup、%s 个已删未回收，控制器 %s，新建一个 %.1f ms）" % (
+                h.get("e2b_cgroups"), h.get("e2b_cgroups_dying"), h.get("e2b_controllers"), h["cgroup_mkdir_ms"])
+        print("%s          挂载点 %s 个（nsfs %s 个，每个 netns 一到两个）· %s" % (
+            indent, h.get("mounts"), h.get("nsfs_mounts"), cg))
+    e = prov.get("host_conditions_end") or {}
+    if "mounts" in e:
+        print("%s结束时：netns %s 个 · 挂载点 %s 个 · 运行中的 firecracker %s 个 · loadavg %s%s" % (
+            indent, e.get("netns"), e.get("mounts"), e.get("firecracker_procs"), e.get("loadavg"),
+            " · e2b 下 %s 个沙箱 cgroup、%s 个已删未回收" % (e.get("e2b_cgroups"), e.get("e2b_cgroups_dying"))
+            if e.get("e2b_cgroups") is not None else ""))
 
 
 def print_native_phases(native):
@@ -1280,6 +1298,35 @@ def print_compare(merged, table):
 
 # ------------------------------------------------------------ 主流程
 
+E2B_CGROUP = "/sys/fs/cgroup/e2b"     # orchestrator 给每个沙箱建 sbx-<id>（只在 cgroup v2 上）
+
+
+def cgroup_conditions():
+    """cgroup 版本；v2 时 e2b 下的沙箱 cgroup 个数、已删未回收（dying）个数、新建一个 cgroup 要多久。
+    orchestrator 每次新建或 resume 沙箱都要建一个（resume 分段里的 create cgroup），v1 上它跳过。"""
+    out = {"cgroup": "v2" if os.path.exists("/sys/fs/cgroup/cgroup.controllers") else "v1"}
+    if out["cgroup"] != "v2" or not os.path.isdir(E2B_CGROUP):
+        return out
+    try:
+        out["e2b_cgroups"] = sum(1 for p in os.listdir(E2B_CGROUP) if p.startswith("sbx-"))
+        with open(os.path.join(E2B_CGROUP, "cgroup.stat")) as f:
+            st = dict(line.split() for line in f if line.strip())
+        out["e2b_cgroups_dying"] = int(st.get("nr_dying_descendants", 0))
+        with open(os.path.join(E2B_CGROUP, "cgroup.subtree_control")) as f:
+            out["e2b_controllers"] = f.read().strip()
+        times = []
+        for i in range(5):       # 建一个临时子 cgroup 马上删掉，与 orchestrator 的 mkdir 相同
+            p = os.path.join(E2B_CGROUP, "test950-probe-%d-%d" % (os.getpid(), i))
+            t0 = time.perf_counter()
+            os.mkdir(p)
+            times.append((time.perf_counter() - t0) * 1000)
+            os.rmdir(p)
+        out["cgroup_mkdir_ms"] = statistics.median(times)
+    except (OSError, ValueError):
+        pass
+    return out
+
+
 def host_conditions():
     """宿主条件：NUMA 节点与大小、numa_balancing、THP、内核命令行。读不到的项为 None。"""
     def rd(path):
@@ -1322,12 +1369,15 @@ def host_conditions():
         netns = len(os.listdir("/run/netns"))
     except OSError:
         netns = None
+    mounts = (rd("/proc/self/mountinfo") or "").splitlines()
+    cg = cgroup_conditions()
     cpu = None
     for line in (rd("/proc/cpuinfo") or "").splitlines():
         if line.startswith(("model name", "CPU part")):
             cpu = line.split(":", 1)[1].strip()
             break
-    return {"netns": netns, "iptables_lines": count_lines(["iptables-save"]),
+    return {"mounts": len(mounts), "nsfs_mounts": sum(1 for l in mounts if " nsfs " in l), **cg,
+            "netns": netns, "iptables_lines": count_lines(["iptables-save"]),
             "nft_lines": count_lines(["nft", "list", "ruleset"]), "firecracker_procs": fc_procs,
             "loadavg": " ".join((rd("/proc/loadavg") or "").split()[:3]) or None,
             "cpus": os.cpu_count(), "cpu": cpu,
@@ -1459,6 +1509,7 @@ def main():
         LOG.exception("测试停止")
     finally:
         result["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        result["provenance"]["host_conditions_end"] = host_conditions()
         result["summary"] = summarize(result["rows"])
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=1)

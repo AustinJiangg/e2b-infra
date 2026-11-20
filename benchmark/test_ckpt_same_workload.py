@@ -141,7 +141,7 @@ class MixTests(unittest.TestCase):
             self.assertEqual(got["phases"]["fc_exited"], 170.0)
             self.assertEqual(got["phases"]["memfile_mib"], 12.0)
             ps = csw.phase_segments(got["phases"], csw.PAUSE_SEGMENTS)
-            self.assertAlmostEqual(ps["停 FC 到进程退出"], 156.0)
+            self.assertAlmostEqual(ps["等 FC 进程退出"], 156.0)
             self.assertAlmostEqual(ps["断开 NBD"], 30.0)
             self.assertAlmostEqual(ps["导出根盘差分"], 31.0)
             self.assertAlmostEqual(ps["上传"], 60.0)
@@ -155,6 +155,16 @@ class MixTests(unittest.TestCase):
         # 缺了某一步：这一段不出现，后一段从上一段终点算
         self.assertEqual(csw.phase_segments({"acquired": 1.0, "snapfile": 5.0}, csw.PAUSE_SEGMENTS),
                          {"取沙箱": 1.0, "写 snapfile": 4.0})
+
+    def test_pause_segments_with_stop_marks(self):
+        # 新 orchestrator 在停 FC 里多三个时刻：ps 查状态、发 SIGTERM 各成一段
+        ph = {"memfile": 25.0, "stop_begin": 25.0, "checks_stopped": 25.1, "fc_state_checked": 110.0,
+              "fc_sigterm": 110.1, "fc_exited": 190.0, "nbd_released": 215.0}
+        ps = csw.phase_segments(ph, csw.PAUSE_SEGMENTS)
+        self.assertAlmostEqual(ps["ps 查 FC 进程状态"], 85.0)
+        self.assertAlmostEqual(ps["发 SIGTERM"], 0.1)
+        self.assertAlmostEqual(ps["等 FC 进程退出"], 79.9)
+        self.assertAlmostEqual(ps["断开 NBD"], 25.0)
 
     def test_native_phase_summary(self):
         p = csw.norm({"P": 12, "d": 12, "f": 4})
@@ -172,13 +182,13 @@ class MixTests(unittest.TestCase):
         self.assertEqual(e["pause_api_ms"]["p50"], 12.0)
         self.assertEqual(e["resume_orch_ms"]["p50"], 47.0)
         self.assertEqual(e["resume_api_ms"]["p50"], 35.0)
-        self.assertEqual(e["pause_segments"]["停 FC 到进程退出"]["p50"], 149.0)
+        self.assertEqual(e["pause_segments"]["等 FC 进程退出"]["p50"], 149.0)
         buf = io.StringIO()
         with redirect_stdout(buf):
             csw.print_native_phases([e])
         out = buf.getvalue()
         self.assertIn("API 与网络 35.0", out)
-        self.assertIn("停 FC 到进程退出 149.0", out)
+        self.assertIn("等 FC 进程退出 149.0", out)
         self.assertIn("导出内存 12.0 MiB", out)
         # 旧 orchestrator：没有分段，只打一行说明
         for r in rows:
@@ -190,12 +200,23 @@ class MixTests(unittest.TestCase):
 
     def test_host_conditions_network(self):
         h = csw.host_conditions()
-        for k in ("netns", "iptables_lines", "nft_lines", "firecracker_procs", "loadavg", "cpus"):
+        for k in ("netns", "iptables_lines", "nft_lines", "firecracker_procs", "loadavg", "cpus", "mounts",
+                  "nsfs_mounts", "cgroup"):
             self.assertIn(k, h)
         buf = io.StringIO()
         with redirect_stdout(buf):
-            csw.print_host({"host_conditions": h})
-        self.assertIn("netns", buf.getvalue())
+            csw.print_host({"host_conditions": h, "host_conditions_end": h})
+        out = buf.getvalue()
+        self.assertIn("netns", out)
+        self.assertIn("挂载点", out)
+        self.assertIn("结束时", out)
+        # v2 上的 cgroup 一行
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_host({"host_conditions": dict(h, cgroup="v2", e2b_cgroups=3, e2b_cgroups_dying=40,
+                                                    e2b_controllers="cpu memory", cgroup_mkdir_ms=12.7)})
+        self.assertIn("40 个已删未回收", buf.getvalue())
+        self.assertIn("新建一个 12.7 ms", buf.getvalue())
 
     def test_mix_table(self):
         pts = ({"P": 12, "d": 12, "f": 4}, {"P": 70, "d": 70, "f": 0.001})

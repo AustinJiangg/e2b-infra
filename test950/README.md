@@ -46,13 +46,16 @@ bash test950.sh native
 bash test950.sh compare
 ```
 ```bash
+bash test950.sh fcexit
+```
+```bash
 bash test950.sh status
 ```
 ```bash
 bash test950.sh report
 ```
 
-默认两套都测。只测一套时加 `--stack sandbox` 或 `--stack criu`。`native`、`compare` 是两项单独的性能测量，不在四档里，见第 6 节。
+默认两套都测。只测一套时加 `--stack sandbox` 或 `--stack criu`。`native`、`compare`、`fcexit` 是三项单独的性能测量，不在四档里，见第 6 节。
 
 | 参数 | 作用 |
 |---|---|
@@ -79,6 +82,8 @@ bash test950.sh report
 - long 会同时开 16 个沙箱。
 
 **网络命名空间**：每次重启 orchestrator 会留下约 300 个 e2b netns，920B 上 extended 一轮从 1608 涨到 7494。现在每一步开始前和整轮结束时检查，超过 1500 个（`TEST950_NETNS_LIMIT` 可改）就调用 `950.sh recycle-netns` 清理，约 1～2 分钟，清理记录列在 `report` 里；清理失败只记录，不影响测试步骤。
+
+**性能测量前总要清一次 netns。** 每个 netns 在 `/run/netns` 下有一到两个挂载点；Firecracker 每次启动（新建沙箱、resume）都先新建一个 mount 命名空间，要复制整张挂载表，退出时再销毁它，两头的耗时都随挂载点个数增长（920B 实测：2915 个挂载点时一次 `unshare -m` 要 29 ms，减到 1486 个时 14 ms）。所以重启留下的 netns 越多，原生 resume、pause 就越慢，测出来的是"这台机器重启了多少次"。性能测量步骤（`compare`、`native`、`fcexit`，以及沙箱级的 `perf`、`perf-full`）切好栈之后、开测之前，不看上限，总要执行一次 `950.sh recycle-netns`，只留当前 orchestrator 自己的一池（与不频繁重启的生产节点一致），每次多约 2 分钟。`report` 的清理记录里有清理前后的 netns 与挂载点个数；性能脚本的宿主条件里另有开始、结束两次的挂载点个数。设 `TEST950_CLEAN_NETNS=0` 可关掉这一项（只剩超过上限才清）。切栈时如果已经在进程级栈上、但运行中的 gsd / orchestrator / 内核与仓库里的交付版本不同（例如 `git pull` 换了部署包），也会重新执行一次 `950.sh criu` 装上新版本。
 
 **HDBSS**：在没有 HDBSS 的机器上（例如 920B），`hdbss` 两项整档判 SKIP。
 
@@ -143,7 +148,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 
 沙箱级的两项修复都在 2026-11-17 修复版 RPM `2026.09-3` 里（orchestrator 与 SDK 覆盖层），按部署文档重新构建、部署 RPM 后生效；只想先拿到连接池修复而不重新部署时，可对客户端 conda 环境单独执行一次 `e2b-deploy/dep/e2b-sdk-checkpoint/install.py`（装完会自动重放 `patch_e2b.py`）；进程级的 gsd 与 SDK 由 `950.sh criu` 自动更新（`criu-rollback/deploy/README.md` 第 14 节）。
 
-## 6. 两项单独的性能测量：`native` 与 `compare`
+## 6. 三项单独的性能测量：`native`、`compare` 与 `fcexit`
 
 四档测的是两套快照回滚本身。下面两项用来回答"和 e2b 原生 pause / resume 比快多少""两套为什么快慢不同"，与四档互不包含，各自单独执行，默认两套都测，跑完停在沙箱级（最后同样做一次沙箱级冒烟）。
 
@@ -151,6 +156,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 |---|---|---|---|
 | `bash test950.sh native` | e2b 原生 pause / resume，以及 `create_snapshot` → 从快照新建沙箱（snapshot 模式）。在沙箱级、进程级两套代码上各跑一遍 | `benchmark/native_snapshot_tiers.py --mode both --passes 3 --iters 8` | 六档（0～256 MiB，内存:文件 = 3:1），每档每种模式 24 个增量样本 + 3 个首次样本 |
 | `bash test950.sh compare [--rounds N] [--series 组]` | 同一种负载下的 checkpoint / restore：两套用同一个常驻进程（P MiB 的内存，改写其中 d MiB）和同一个文件负载 | `benchmark/ckpt_same_workload.py` | 默认六组测点，每点每轮 20 个样本（见下） |
+| `bash test950.sh fcexit` | 原生 pause 里"停 Firecracker 到进程退出"那一段在内核里花在哪：只在进程级栈上（原生路径与上游相同），对这个 Firecracker 的线程开 ftrace | `benchmark/fc_exit_trace.py` | 进程 0、192 MiB 两个测点，每点 5 次 pause（另加第 0 次不计） |
 
 **为什么原生 pause / resume 要在两套代码上各跑一遍。** 沙箱级为了 checkpoint / restore 改过原生路径（4 KiB 写跟踪的精确增量差分，以及脏页跟踪本身）；进程级的 orchestrator 不含这些改动，但也不是纯上游：它来自 KASandbox 一脉，pause 要等快照上传完才返回（上游不等），模板注入了 gsd、guest 内核打了补丁。两套各跑一遍，差值就是"我们的改动对原生路径的影响"，对外引用原生数字时要写明是哪一套上测的。与 checkpoint / restore 语义对应的是 snapshot 模式（可以对同一个点反复恢复）；pause 模式只能回到最近一次 pause。
 
@@ -187,6 +193,8 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 已有的结果可以不重跑、只重新打印汇总：例如重打最近一次 compare 的沙箱级结果：`python3 benchmark/ckpt_same_workload.py --print test950/results/$(ls test950/results | grep compare | tail -1)/sandbox-compare/result.json`（旧结果没有脏页后端和 CRIU 统计，这两项显示为 `?` 或不打印；`--print` 可以给同一套的多个结果文件，合并后打印）。两套并列：`python3 benchmark/ckpt_same_workload.py --compare 沙箱级结果.json 进程级结果.json …`，每套可以给多轮。
 
 结果同样用 `bash test950.sh report` 打印，逐步打印的是脚本自己的汇总表；`bash test950.sh report sandbox/native` 等打印单步的汇总和日志末尾。
+
+**`fcexit`：Firecracker 退出的内核拆分。** 原生 pause 要等 Firecracker 进程退出才能断开根盘、导出根盘差分，orchestrator 的分段里“停 FC 到进程退出”在 950 和 920B 上都是 170～200 ms，占 pause 的七成以上，用户态看不到里面。`fc_exit_trace.py` 在进程级栈上建沙箱、写满 P MiB 内存，每次 pause 之前把这个 Firecracker 的全部线程设进 `set_ftrace_pid`，用 `function_graph` 只跟踪退出路径上的一组函数（`do_exit`，释放地址空间的 `exit_mm` / `exit_mmap`，关文件与 KVM 的 `task_work_run` / `__fput` / `kvm_vm_release` / `kvm_destroy_vm`，销毁命名空间的 `exit_task_namespaces` / `put_mnt_ns`，等 RCU 的 `synchronize_rcu*` 等），另开 `signal_generate`（SIGTERM）与 `sched_process_exit` 两个事件。汇总按测点打 p50：orchestrator 记的这一段、SIGTERM 到主线程退出的内核时间线、退出最慢的线程的 `do_exit` 调用树。跟踪本身有开销，各段比不跟踪时略长，看的是比例和归属。ftrace 全机共用：开跑时 `current_tracer` 不是 `nop` 或已有函数过滤，就认为有人在用、不跑；结束时（包括出错）把 tracer、过滤、pid、事件、选项、时钟恢复成默认。打印：`bash test950.sh report criu/fcexit`。
 
 **模板存储在 tmpfs 上时。** 每次原生 pause / `create_snapshot` 都会产出一个新 build，沙箱结束后不会被自动删除。模板存储放在 tmpfs（如新 920B 的 `/tmp/templates`）时，这些文件记在 orchestrator 所在 Nomad 任务的内存 cgroup 上、回收不掉，一轮几百个样本就会让 orchestrator 因 cgroup OOM 被杀。所以 `native_snapshot_tiers.py` 在 `STORAGE_PROVIDER=Local` 时，每个沙箱结束后删掉它自己产生的 build 目录（只删记下的 build id，`--keep-builds` 可关）。
 

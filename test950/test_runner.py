@@ -1,4 +1,5 @@
 """本地单测：档的展开、含密钥文件的识别、终端汇报。不碰栈、不建沙箱。"""
+import json
 import unittest
 from pathlib import Path
 
@@ -47,6 +48,45 @@ class RunnerTests(unittest.TestCase):
         _, switches = runner.estimate(runner.plan("compare", ["sandbox", "criu"], 4, rounds=3))
         self.assertEqual(switches, 4)   # s→c、c→s、s→c，回沙箱级冒烟再 1 次；并列步骤跟在最后一个栈上不切
         self.assertEqual(self.ids("compare", ["criu"]), ["criu/compare", "sandbox/smoke-after"])
+
+    def test_criu_files_stale(self):
+        import tempfile, hashlib
+        with tempfile.TemporaryDirectory() as d:
+            dep, fc = Path(d) / "deploy", Path(d) / "fc"
+            dep.mkdir(); fc.mkdir()
+            (fc / "orchestrator").write_bytes(b"new")
+            (fc / "gsd").write_bytes(b"old")
+            sha = lambda b: hashlib.sha256(b).hexdigest()
+            (dep / "manifest.json").write_text(json.dumps({"artifacts": {
+                "orchestrator": {"path": "orchestrator", "sha256": sha(b"new")},
+                "gsd": {"path": "gsd", "sha256": sha(b"newer")},
+                "kernel": {"path": "kernels/x/vmlinux.bin", "sha256": sha(b"k")}}}))
+            old = runner.DEPLOY, runner.stack.hfc
+            runner.DEPLOY, runner.stack.hfc = dep, lambda: fc
+            try:
+                self.assertEqual(sorted(runner.criu_files_stale()), sorted([str(fc / "gsd"), str(fc / "kernels/x/vmlinux.bin")]))
+            finally:
+                runner.DEPLOY, runner.stack.hfc = old
+
+    def test_fcexit_and_clean_netns(self):
+        # fcexit 只在进程级栈上，测完回沙箱级冒烟；不管 --stack 给的是什么
+        self.assertEqual(self.ids("fcexit", ["sandbox", "criu"]), ["criu/fcexit", "sandbox/smoke-after"])
+        self.assertEqual(self.ids("fcexit", ["sandbox"]), ["criu/fcexit", "sandbox/smoke-after"])
+        steps = runner.plan("fcexit", ["sandbox", "criu"], 4)
+        self.assertEqual(steps[0]["args"], ["benchmark/fc_exit_trace.py"])
+        # 性能测量步骤开测前清 netns；并列表、冒烟、功能测试不清
+        clean = lambda level, st=("sandbox", "criu"): {s["id"] for s in runner.plan(level, list(st), 4)
+                                                       if s.get("clean_netns")}
+        self.assertEqual(clean("fcexit"), {"criu/fcexit"})
+        self.assertEqual(clean("native"), {"sandbox/native", "criu/native"})
+        self.assertEqual(clean("compare"), {"sandbox/compare", "criu/compare"})
+        self.assertEqual(clean("standard"), {"sandbox/perf"})
+        self.assertEqual(clean("extended"), {"sandbox/perf", "sandbox/perf-full"})
+        # 预估把每次清理算进去
+        steps = runner.plan("compare", ["sandbox", "criu"], 4)
+        total, switches = runner.estimate(steps)
+        base = sum(s["est_min"] for s in steps) + switches * runner.SWITCH_MIN
+        self.assertEqual(total, base + (2 * runner.SWITCH_MIN if runner.CLEAN_NETNS else 0))
 
     def test_secret_filter(self):
         for name in ("job-before.json", ".job-cur.json", "job-restore.json", "x.env", "acl.token",

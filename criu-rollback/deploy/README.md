@@ -145,14 +145,14 @@ criu-rollback/deploy/
 |---|---|
 | gsd | criu-rollback-dev `9728cef73`（`daae6968f` 之上：dump 日志由 CRIU 直接写文件、一次 checkpoint 的多棵进程树并行 dump 和并行 restore、可选的延迟页 restore（默认关），见第 14 节；`daae6968f` 及更早修的 restore 层切换空间预留、checkpoint 预检内存余量、根盘写满报 `resource_exhausted`、restore 之后的第一次 checkpoint 保持增量都在）。经 `strip -g`，SHA256 `8bc5dc49…`（去调试段前 `63450009…`）；之前的 `1a0a3b67…`（`daae6968f`）、`421597e5…`、`3f28abd0…`（`7cdadccf2`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉 |
 | guest 内核 | 手册已验证的 `259f1a25c` 发布产物，未改，`b81306e7…` |
-| orchestrator | criu-rollback-dev `6a60dec6f`：`259f1a25c` 之上四处 orchestrator 改动——宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`（`bc3cce9`），建根盘时把 ext4 的 inode 表清零（`9cdd806`），原生 pause 打一行分段计时日志（`7e0a6a462`），原生 pause / resume 记下各步完成的时刻（`6a60dec6f`）；后两处只加日志、不改行为，见第 14 节。经 `strip -g`，SHA256 `54e53ef3…`（去调试段前 `9cf4cded…`）；之前的 `ec5eb1cc…`（`7e0a6a462`）、`daa44b22…`（`9cdd8067e`）、`063e580e…`（`259f1a25c-e2bv`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
+| orchestrator | criu-rollback-dev `237b9ac62`：`259f1a25c` 之上五处 orchestrator 改动——宿主机侧网卡名由 `veth-<n>` 改为 `e2bv-<n>`（`bc3cce9`），建根盘时把 ext4 的 inode 表清零（`9cdd806`），原生 pause 打一行分段计时日志（`7e0a6a462`），原生 pause / resume 记下各步完成的时刻（`6a60dec6f`），停 Firecracker 时记下 ps 查状态与发 SIGTERM 两个时刻（`237b9ac62`）；后三处只加日志、不改行为，见第 14 节。经 `strip -g`，SHA256 `e77c0e29…`（去调试段前 `61aff251…`）；之前的 `54e53ef3…`（`6a60dec6f`）、`ec5eb1cc…`（`7e0a6a462`）、`daa44b22…`（`9cdd8067e`）、`063e580e…`（`259f1a25c-e2bv`）在 manifest 里登记为被取代，`950.sh criu` 会直接换掉。手册第 20 章的 `818fa667…` 是改网卡名之前的版本 |
 | 去调试段 | GNU strip 2.41 `-g`：只删 DWARF，保留符号表；`.text`、`.rodata`、`.data`、`.noptrdata`、`.gopclntab`、`.go.buildinfo` 与加载段逐字节相同，BuildID 与 `gsd -commit` 不变。panic 栈、pprof、perf 照常显示函数名，只是不能再用 gdb/dlv 按源码行调试 |
 | SDK | criu-rollback-dev `daae6968f` 的 `py-sdk/e2b`、`py-sdk/e2b_connect` 逐文件打包；含流量 token、`Sandbox.connect` 路由头、共享连接池 keepalive 上限三处修复 |
 | 镜像 | `ubuntu:22.04-custom-criu421`，arm64，CRIU 4.2.1。镜像配置摘要 `7caae4a62095a4371cbef9d4cf31a6734463f6cda976d34d95f49f9ae78a96ab`（docker 传统存储显示的 image ID），OCI 清单摘要 `b7a2fdd21a5bd5a9013aca2c3062b28425038199daf19825ffe4fe84d537b165`（containerd 镜像存储显示的 image ID） |
 | Python | 使用本机 `jll-e2b` 克隆出的 `jll-e2b-criu`，保留原 Python 版本；不携带 Python 环境 |
 | SDK wheel | `2.19.0+gsd.daae6968f`，源码版本 2.19.0 加本地标识；通用 `py3-none-any` 包 |
 
-gsd 是 `9728cef73`，orchestrator 是 `6a60dec6f`，SDK 仍是 `daae6968f`（这两轮 SDK 没有改动，不重新打包），内核仍是 `259f1a25c` 那一版。
+gsd 是 `9728cef73`，orchestrator 是 `237b9ac62`，SDK 仍是 `daae6968f`（这两轮 SDK 没有改动，不重新打包），内核仍是 `259f1a25c` 那一版。
 
 `overlay-init`、`gsd.service` 已嵌入 orchestrator，无需单独安装。Firecracker、宿主内核、原沙箱级二进制和模板继续使用机器上已有的内容。
 
@@ -363,6 +363,12 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 这套入口已在 920B 实际切换过服务（第 14 节），950 上尚未执行。只有在 950 上完成第 8、9、10 节之后，才能确认这台 950 的实际运行结果。
 
 ## 14. 更新记录与 920B 实测
+
+### 2026-11-20（三）：停 Firecracker 时记下 ps 与 SIGTERM（orchestrator 换版本，`237b9ac62`）
+
+- **为什么。** 原生 pause 的分段里“停 FC 到进程退出”约 170～200 ms。920B 上用 ftrace 拆开（`test950.sh fcexit`）发现，其中约 85～110 ms 在发 SIGTERM 之前：`Process.Stop` 先执行一次 `ps -o stat= -p <pid>`，只为在日志里提示 Firecracker 是否处于 D 状态；在约 4000 个进程的宿主上这条 `ps` 本身就要约 85 ms（直接读 `/proc/<pid>/stat` 不到 0.1 ms）。这是上游代码的做法。
+- **改了什么。** `doStop` 停完健康检查记 `checks_stopped`，`Process.Stop` 查完进程状态记 `fc_state_checked`、发出 SIGTERM 记 `fc_sigterm`。只加日志，行为不变。脚本的原生分段据此把“停 FC”拆成“ps 查 FC 进程状态”“发 SIGTERM”“等 FC 进程退出”三段。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`（`test950.sh` 切到进程级时会自动做），orchestrator 是上一版（`54e53ef3…`）时直接换掉，`base-criu` 重建一次。其余不变。
 
 ### 2026-11-20（二）：原生 pause / resume 记下各步完成的时刻（orchestrator 换版本，`6a60dec6f`）
 
