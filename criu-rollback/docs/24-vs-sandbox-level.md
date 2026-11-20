@@ -217,7 +217,7 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 
 - checkpoint 是连续 checkpoint：上一次 checkpoint 之后改写，再做一次；restore 回到改写之前的那个 checkpoint。
 - 首次全量是每个新沙箱上的第一次 checkpoint：沙箱级保存整台 guest 的内存，进程级只保存这个进程。每档 2 个样本。
-- E2B 的 pause / resume 用同一种负载，另起沙箱测：改写 → `sb.pause()` → `Sandbox.connect()` → 执行第一条命令。只在进程级那套代码上测：它的 orchestrator 没有改动原生快照路径，等同于 ARM 上的 E2B 原生实现。pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，见表后“pause 的口径”。resume 一列是 `connect` 返回耗时加上第一条命令的耗时。每个沙箱上的第一次 pause 不计入表格（单列在 report 里）。
+- E2B 的 pause / resume 用同一种负载，另起沙箱测：改写 → `sb.pause()` → `Sandbox.connect()` → 执行第一条命令。只在进程级那套代码上测：本节用的 orchestrator `e77c0e29…`（KASandbox `237b9ac62`）没有改动原生快照路径，等同于 ARM 上的 E2B 原生实现。部署包自 `f66dbe2c1` 起把停 Firecracker 之前的 `ps` 改为读 `/proc`，pause 每次约少 100 ms（920B），之后用新包测的 E2B pause 不再等于上游，与本节数字不可直接比较。pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，见表后“pause 的口径”。resume 一列是 `connect` 返回耗时加上第一条命令的耗时。每个沙箱上的第一次 pause 不计入表格（单列在 report 里）。
 - resume 后首读：resume 返回时进程的内存还没有读回，之后第一次把整个进程的内存读一遍，比 pause 之前多花的时间。restore 返回时内存已经就位，没有这一项。
 
 **条件。** 950（Kunpeng 950，宿主内核 `6.6.0-159.4.3.154.oe2403sp4.aarch64`），e2b-infra `1384b02`，结果目录 `test950/results/20261120-122146-compare/`。沙箱级：orchestrator `3a1b4c51…`（RPM `2026.09-3`），脏页后端 `hdbss`，模板 `base`。进程级：orchestrator `e77c0e29…`（KASandbox `237b9ac62`，比 11-19 那一轮只多了 `Pause timing`、`Resume phases` 两类分段日志，不改行为），gsd `8bc5dc49…`，脏页后端 `off`，模板 `base-criu`。两侧都是 2 vCPU / 2048 MB，同一份 Firecracker。每格 n = 20（首次全量 n = 2），客户端墙钟，单位 ms。进程级一侧测量 308 次，失败 0；两侧内存与文件校验全部一致。原始终端输出存于工作区 `rollback-reports/950-test950-20261120/clean-122146-compare.txt`。
@@ -287,7 +287,7 @@ mix 组的数字取自上表（`122146`）。解释用的其他测点组（只�
 
 **与 2026-11-19 那一轮的区别。** 那一轮进程固定 256 MiB：restore 每档都是沙箱级更低，128、256 两档的 checkpoint 也是沙箱级更低（原始输出在工作区 `rollback-reports/950-compare-20261119/compare.txt`）。差别来自进程大小：进程级的 checkpoint 固定开销和 restore 都随进程大小增长，进程从 256 MiB 降到 12～192 MiB，这两项都变小。两轮说的是同一件事：进程比改动大得多时沙箱级 restore 更快（size 组 P = 256 MiB 时 24.5 对 120.3）；进程小、改动里有文件时进程级更快。
 
-**E2B pause。** 230.5～457.2 ms，一页不改也要 230.5 ms。按 orchestrator 的分段日志，0 档的 226 ms 里：停 Firecracker 之前先执行一次 `ps` 查它的进程状态 106 ms，发 SIGTERM 后等进程退出 72 ms（主要是内核销毁 KVM 虚机），断开根盘的 NBD 19 ms，暂停 vCPU、写快照、导出内存一共只有约 27 ms（沙箱级手册[第 19 章 §6](../../rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来)）。随改动增长的部分来自导出内存和导出根盘差分；导出内存的判据是所有驻留在内存里的页，不只是改过的页（0 档也要导出 162 MiB）。两套 checkpoint 比 pause 快 4.0～34 倍：沙箱级 4.0～34 倍，进程级 4.9～28 倍。
+**E2B pause。** 230.5～457.2 ms，一页不改也要 230.5 ms。按 orchestrator 的分段日志，0 档的 226 ms 里：停 Firecracker 之前先执行一次 `ps` 查它的进程状态 106 ms（上游做法；部署包 `f66dbe2c1` 起改读 `/proc`，见上），发 SIGTERM 后等进程退出 72 ms（主要是内核销毁 KVM 虚机），断开根盘的 NBD 19 ms，暂停 vCPU、写快照、导出内存一共只有约 27 ms（沙箱级手册[第 19 章 §6](../../rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来)）。随改动增长的部分来自导出内存和导出根盘差分；导出内存的判据是所有驻留在内存里的页，不只是改过的页（0 档也要导出 162 MiB）。两套 checkpoint 比 pause 快 4.0～34 倍：沙箱级 4.0～34 倍，进程级 4.9～28 倍。
 
 **E2B resume。** 71.4～83.7 ms，基本不随档位变化：resume 不搬运内存，返回时内存还在快照文件里，之后按缺页从文件读回。0 档的 60 ms 服务端时间里，起一个新的 Firecracker 到它的 API 可用 35 ms（其中建沙箱 cgroup 约 13 ms），等 guest 里的 envd 就绪 15 ms，加载快照 6 ms。读回整个进程的内存比 pause 之前多花 0～29.2 ms，随进程大小增长。
 

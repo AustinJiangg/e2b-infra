@@ -256,7 +256,7 @@ bash rollback/scripts/950/run.sh long
 | 950 部署身份、原始数据与 HDBSS 覆盖 | 待验证项 | 2026-11-17 一轮身份已记录；JSON / JSONL 未回传；其他 order 待补 |
 | 跨树回滚与 HDBSS 武装时序 | 待验证项 | 前者有单元测试，缺端到端用例；后者由调用点位置保证，缺断言 |
 | 视图块数与装配成本增长 | 待验证项 | 长跑末尾块数尚未饱和，需要更长实测确认走势 |
-| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20），余项待查 | pause 的固定开销是发 SIGTERM 前的 `ps`、内核销毁 KVM 虚机和断开 NBD，resume 的大头是起新 Firecracker（cgroup v2 建 cgroup、新建 mount 命名空间）和等 envd，见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)；等 envd 一段未再拆，920B 上 resume 比对照慢的原因未查 |
+| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20），余项待查 | pause 的固定开销是发 SIGTERM 前的 `ps`、内核销毁 KVM 虚机和断开 NBD，resume 的大头是起新 Firecracker（cgroup v2 建 cgroup、新建 mount 命名空间）和等 envd，见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)；进程级部署包 `f66dbe2c1` 已把 `ps` 改为读 `/proc`（920B 停 FC 一段 192 → 85 ms，950 待重测），那套的原生 pause 不再等于上游；等 envd 一段未再拆，920B 上 resume 比对照慢的原因未查 |
 | 封层刷屏障与重复刷盘 | 待验证项 | V1–V3 均未验证 |
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复问题：根因或触发条件待定位 | 保留现象记录，需要针对负载复现 |
 | restore 应答丢失 | 已修复，950 待复验 | 950 并发 N=16 出现 1 次，服务端已完成、客户端等满 300 s。2026-11-17 在 920B 复现并查实是客户端 SDK 共享连接池在多线程下误关正在使用的连接，SDK 已修，920B 复验未再出现（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)） |

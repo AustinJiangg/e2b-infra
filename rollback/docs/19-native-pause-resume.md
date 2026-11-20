@@ -327,7 +327,7 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 | 导出根盘差分、写元数据 | 1.1 | 79.4 |
 | 合计 | 226.2 | 450.5 |
 
-- `ps` 一段来自上游 `Process.Stop`：发 SIGTERM 之前执行 `ps -o stat= -p PID`，只为在日志里提示进程是否处于 D 状态。直接读 `/proc/PID/stat` 只要 0.07 ms（920B 实测）；本项目没有改，原生路径作为对照与上游保持一致。
+- `ps` 一段来自上游 `Process.Stop`：发 SIGTERM 之前执行 `ps -o stat= -p PID`，只为在日志里提示进程是否处于 D 状态。直接读 `/proc/PID/stat` 只要 0.07 ms（920B 实测）。上表测自 `e77c0e29…`（KASandbox `237b9ac62`），这一步与上游相同；进程级部署包自 `f66dbe2c1` 起改为读 `/proc`，920B 上同一脚本（`test950.sh fcexit`，每测点 5 次 p50）：“停 FC 到进程退出”0 档 192.2 → 84.8 ms、192 档 178.0 → 77.5 ms，pause 墙钟 312.9 → 202.9 ms、391.4 → 312.6 ms。从这一版起进程级那套的原生 pause 不再等于上游；沙箱级 RPM 没有改。950 待用新版重测。
 - 等退出一段几乎都在内核关闭 KVM 虚机的 fd（`kvm_vm_release` 74.4 ms，其中 `kvm_destroy_vm` 53.2 ms，主要在等 RCU 宽限期）；释放地址空间只要 0.3 ms，释放 mount 命名空间 1.9 ms。
 - 改动量从 0 到 256 MiB，增长的 224 ms 都来自搬数据：写 `snapfile` 时刷根盘、导出内存（162 → 431 MiB，按驻留页导出）、导出根盘差分；`ps`、进程退出、断开 NBD 不变。
 
@@ -344,7 +344,7 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 
 - **网络命名空间积累。** 每个 e2b 网络命名空间在 `/run/netns` 下留一到两个挂载点；orchestrator 重启时不回收上一次的网络槽位，测试中频繁切换栈会让它们越积越多。同一天上午那一轮开测时有 1421 个网络命名空间，0 档 resume 93.0 ms；第二轮（`110854`，有分段日志）开测时 666 个，起 Firecracker 一段 45.2 ms；这一轮开测前清到约 170～230 个（挂载点约 450），这一段 35.0 ms，0 档 resume 71.4 ms。`bash test950.sh` 现在在每个测量步骤开测前先回收网络命名空间，报告里打印测量开始和结束时的网络命名空间数、挂载点数与 cgroup 版本。
 - **cgroup 版本。** cgroup v2 上每次 resume 多约 13 ms。
-- **宿主进程数。** `ps` 一段随宿主进程数增长。
+- **宿主进程数。** `ps` 一段随宿主进程数增长（进程级部署包 `f66dbe2c1` 起没有这一段）。
 
 920B 上同样的拆分：`ps` 104.3 ms，SIGTERM 到进程退出 86.1 ms（其中 `kvm_vm_release` 75.5 ms），结构与 950 相同。所以 950 与 920B 的 pause / resume 差别来自这些环境因素和 cgroup 版本，不来自 ARM 适配代码。上游在 x86 上的耗时取决于同样的因素，本项目没有在 x86 上测。
 

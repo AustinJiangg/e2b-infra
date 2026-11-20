@@ -221,7 +221,7 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 
 **真正保存状态的步骤（暂停到导出内存）在 0 档只有约 27 ms。每次都要付、与改动量无关的是三段：`ps` 约 106 ms、等 Firecracker 退出约 72 ms、断开 NBD 约 20 ms，合计约 197 ms。** 改动量从 0 增加到 256 MiB 时，增长的 224 ms 全部来自搬数据：写 `snapfile` 时刷根盘 +65 ms，导出内存 +65 ms，导出根盘差分 +78 ms；进程退出和断开 NBD 不变。
 
-**`ps` 那 106 ms。** 上游 `fc/process.go` 的 `Process.Stop` 在发 SIGTERM 之前调用 `getProcessState`，它执行 `ps -o stat= -p PID`，代码注释写明用途是检查进程是否处于 D 状态（gopsutil 看不到），结果只用来打一行日志，不影响后续步骤。耗时在 `ps` 自身：920B 上宿主约 4000 个进程时单独执行它约 85 ms，直接读 `/proc/PID/stat` 只要 0.07 ms。本项目没有改这一步：原生路径作为对照要与上游保持一致。早先在 920B 上对 Firecracker 做内核栈采样时，有约 114 ms 一直看不到栈、没能归因，就是这一段：那时 Firecracker 还没收到信号。
+**`ps` 那 106 ms。** 上游 `fc/process.go` 的 `Process.Stop` 在发 SIGTERM 之前调用 `getProcessState`，它执行 `ps -o stat= -p PID`，代码注释写明用途是检查进程是否处于 D 状态（gopsutil 看不到），结果只用来打一行日志，不影响后续步骤。耗时在 `ps` 自身：920B 上宿主约 4000 个进程时单独执行它约 85 ms，直接读 `/proc/PID/stat` 只要 0.07 ms。本节的数字测自进程级部署包的 orchestrator `e77c0e29…`（KASandbox `237b9ac62`），这一步仍与上游相同。之后进程级部署包的 orchestrator（KASandbox `f66dbe2c1`）把这一步改为读 `/proc/PID/stat`，只取状态字母，日志不变。920B 上同一脚本（`test950.sh fcexit`，每测点 5 次 p50）：“停 FC 到进程退出”0 档 192.2 → 84.8 ms、192 档 178.0 → 77.5 ms，pause 墙钟 312.9 → 202.9 ms、391.4 → 312.6 ms（工作区 `rollback-reports/920b-ps2proc-20261120/`）。**从这一版起，进程级那套上测到的原生 pause 不再等于上游，每次约少 100 ms**；沙箱级 RPM 里的 orchestrator 没有改，仍与上游相同。950 上还没有用新版重测。早先在 920B 上对 Firecracker 做内核栈采样时，有约 114 ms 一直看不到栈、没能归因，就是这一段：那时 Firecracker 还没收到信号。
 
 **Firecracker 退出那 72 ms。** ftrace 只跟踪这个 Firecracker 的线程，950 上 0 档 5 次的 p50（跟踪本身有开销，看比例和归属）：
 
@@ -317,5 +317,5 @@ SIGTERM 发出后，第一个线程立刻进入 `do_exit`；时间几乎都花�
 - 导出磁盘增量的参数之一就是关掉沙箱：写层摘出后 Overlay 作废，所以必须停沙箱。
 - 恢复新建 Firecracker 进程，工作集靠缺页换回；这部分成本不进 resume 耗时，由 guest 里第一个访问这些页的程序承担。
 - 原生方案的主要代价来自销毁和重建虚机，改动量只决定其上的增量部分。分档数字见 [第 19 章](19-native-pause-resume.md)。
-- 950 上 0 档 pause 约 226 ms 里，发 SIGTERM 前的一次 `ps` 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态只有约 27 ms；resume 约 60 ms 里，起新 Firecracker 约 35 ms（含 cgroup v2 建 cgroup 约 13 ms）、等 envd 约 15 ms。宿主挂载点数和 cgroup 版本会改变这些数字（§6.3）。
+- 950 上 0 档 pause 约 226 ms 里，发 SIGTERM 前的一次 `ps` 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态只有约 27 ms；resume 约 60 ms 里，起新 Firecracker 约 35 ms（含 cgroup v2 建 cgroup 约 13 ms）、等 envd 约 15 ms。宿主挂载点数和 cgroup 版本会改变这些数字（§6.3）。进程级部署包自 `f66dbe2c1` 起把那次 `ps` 改为读 `/proc`，那套上的原生 pause 每次约少 100 ms、不再等于上游（§6.1）。
 - 这套设计适合跨节点迁移、长期持久化、崩溃恢复和沙箱离场，不适合高频、低延迟、不能中断的回退。
