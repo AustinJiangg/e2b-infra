@@ -19,7 +19,7 @@
 
 - 不等上传也已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分。`sbx.Pause` 导出根盘差分时把 `s.Close` 作为关闭钩子传进去（`RootfsDiffCreator.closeHook`），固定开销基本都在这一段（§6 时间线 232 ms 之前）。
 - 这一段结束时，内存差分在本节点缓存目录（`DEFAULT_CACHE_DIR`，默认 `/orchestrator/build`）里一个 `mmap` 的文件中，由 `process_vm_readv` 从 Firecracker 进程读出写入（`block/cache.go`），这条路径上没有刷盘；`snapfile` 由 Firecracker 写出，也不刷盘；根盘差分写完会 `fsync`（`build/local_diff.go` 的 `CloseToDiff`）。所以上游返回时，内存差分很可能还在页缓存里。
-- 上传在 `STORAGE_PROVIDER=Local` 时只是把这几个文件用 `io.Copy` 复制到 `LOCAL_TEMPLATE_STORAGE_BASE_PATH`（默认 `/tmp/templates`），同样不 `fsync`（`shared/pkg/storage/storage_fs.go` 的 `StoreFile`）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms。进程级那套的 orchestrator 从 `7e0a6a462` 起每次 pause 打一行 `Pause timing` 日志（`pause.snapshot_ms`、`pause.upload_ms`），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 `Local` 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。
+- 上传在 `STORAGE_PROVIDER=Local` 时只是把这几个文件用 `io.Copy` 复制到 `LOCAL_TEMPLATE_STORAGE_BASE_PATH`（默认 `/tmp/templates`），同样不 `fsync`（`shared/pkg/storage/storage_fs.go` 的 `StoreFile`）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms，同日 950 compare 里 54.7～186.8 ms（随导出量增长）。进程级那套的 orchestrator 从 `7e0a6a462` 起每次 pause 打一行 `Pause timing` 日志（`pause.snapshot_ms`、`pause.upload_ms`），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 `Local` 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。
 
 `Checkpoint` 拉起新沙箱时，三个 id 的变化是：
 

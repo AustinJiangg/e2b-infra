@@ -7958,7 +7958,7 @@ GC 的 STW 阶段要等所有处于 <code>_Prunning</code> 的 P 响应抢占。
 <ul>
 <li>不等上传也已经包含停虚机、等 Firecracker 退出、断开 NBD、导出根盘差分。<code>sbx.Pause</code> 导出根盘差分时把 <code>s.Close</code> 作为关闭钩子传进去（<code>RootfsDiffCreator.closeHook</code>），固定开销基本都在这一段（§6 时间线 232 ms 之前）。</li>
 <li>这一段结束时，内存差分在本节点缓存目录（<code>DEFAULT_CACHE_DIR</code>，默认 <code>/orchestrator/build</code>）里一个 <code>mmap</code> 的文件中，由 <code>process_vm_readv</code> 从 Firecracker 进程读出写入（<code>block/cache.go</code>），这条路径上没有刷盘；<code>snapfile</code> 由 Firecracker 写出，也不刷盘；根盘差分写完会 <code>fsync</code>（<code>build/local_diff.go</code> 的 <code>CloseToDiff</code>）。所以上游返回时，内存差分很可能还在页缓存里。</li>
-<li>上传在 <code>STORAGE_PROVIDER=Local</code> 时只是把这几个文件用 <code>io.Copy</code> 复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），同样不 <code>fsync</code>（<code>shared/pkg/storage/storage_fs.go</code> 的 <code>StoreFile</code>）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms。进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 <code>Local</code> 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。</li>
+<li>上传在 <code>STORAGE_PROVIDER=Local</code> 时只是把这几个文件用 <code>io.Copy</code> 复制到 <code>LOCAL_TEMPLATE_STORAGE_BASE_PATH</code>（默认 <code>/tmp/templates</code>），同样不 <code>fsync</code>（<code>shared/pkg/storage/storage_fs.go</code> 的 <code>StoreFile</code>）。920B 上模板目录是 tmpfs，这一段的长短取决于要复制多少：精确增量构建一次导出约 16 MiB 时约 3 ms（§6）；进程级那套导出全部驻留内存，2026-11-20 的 920B smoke 里约 68～90 ms，同日 950 compare 里 54.7～186.8 ms（随导出量增长）。进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起每次 pause 打一行 <code>Pause timing</code> 日志（<code>pause.snapshot_ms</code>、<code>pause.upload_ms</code>），把两段分开记，只加日志、不改行为。等上传保证的是快照被标成就绪时文件已经在模板存储里，在 <code>Local</code> 存储上并不保证已经落盘；换成对象存储，等上传才意味着数据已经写到远端。</li>
 </ul>
 <p><code>Checkpoint</code> 拉起新沙箱时，三个 id 的变化是：</p>
 <div class="tw"><table>
@@ -14694,107 +14694,99 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 </table></div>
 <figure class="paper"><img loading="lazy" alt="920B 上 checkpoint / restore 与原生 pause / resume 按档的 p50" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDAwIiBoZWlnaHQ9IjY5NCIgdmlld0JveD0iMCAwIDE0MDAgNjk0IiBmb250LWZhbWlseT0iJ1BpbmdGYW5nIFNDJywnSGlyYWdpbm8gU2FucyBHQicsJ01pY3Jvc29mdCBZYUhlaScsJ05vdG8gU2FucyBDSksgU0MnLCdOb3RvIFNhbnMgU0MnLCdTb3VyY2UgSGFuIFNhbnMgU0MnLHNhbnMtc2VyaWYiPgo8ZGVmcz4KPC9kZWZzPgo8cmVjdCB3aWR0aD0iMTQwMCIgaGVpZ2h0PSI2OTQiIGZpbGw9IiNGRkZGRkYiLz4KPHRleHQgeD0iNDguMCIgeT0iNjIuMCIgZm9udC1zaXplPSIzMCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij45MjBC77yaY2hlY2twb2ludCAvIHJlc3RvcmUg5LiO5Y6f55SfIHBhdXNlIC8gcmVzdW1lIOaMieaho+eahCBwNTA8L3RleHQ+Cjx0ZXh0IHg9IjQ4LjAiIHk9Ijk2LjAiIGZvbnQtc2l6ZT0iMTUuNSIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij45MjBC77yMa3ZtLXdw77yM5a6i5oi356uv5aKZ6ZKfIHA1MO+8jG1z44CCY2hlY2twb2ludCAvIHJlc3RvcmUg5Y+W56ysIDIwIOeroCDCpzIuMu+8iDIwMjYtMDktMjnvvIxkZWx0YWJveC1kZXZAOGVhNTMyMmJm77yM5Lqn54mp5ZyoIGV4dDQg55yf55uY77yM5q+P5qGjIG4gPSAxMDAg5oiWIDYw77yJ77ybcGF1c2UgLzwvdGV4dD4KPHRleHQgeD0iNDguMCIgeT0iMTIwLjAiIGZvbnQtc2l6ZT0iMTUuNSIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5yZXN1bWUg5Y+W5pys56ugIMKnNC4xIOeyvuehruWinumHj+aehOW7uu+8iDIwMjYtMTEtMDbvvIxkZWx0YWJveC1kZXZANTdhMzA2MzJj77yM5qih5p2/55uu5b2V5ZyoIHRtcGZz77yM5q+P5qGjIG4gPSAxNe+8ieOAguS4pOWIl+eahOS6p+eJqeebmOWSjOaehOW7uumDveS4jeWQjO+8iMKnNS4y77yJ77yM5Y+q5YiX5pWw5a2X77yM5LiN566X5YCN5pWw44CC5qiq6L205oyJPC90ZXh0Pgo8dGV4dCB4PSI0OC4wIiB5PSIxNDQuMCIgZm9udC1zaXplPSIxNS41IiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuaho+S9jemhuuW6j+etiei3neaOkuWIl+OAgjwvdGV4dD4KPGxpbmUgeDE9IjQ4LjAiIHkxPSIxNzQuMCIgeDI9Ijc0LjAiIHkyPSIxNzQuMCIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjIuNiIvPgo8dGV4dCB4PSI4Mi4wIiB5PSIxNzkuMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5jaGVja3BvaW50IC8gcmVzdG9yZe+8iOacrOaWueahiO+8iTwvdGV4dD4KPGxpbmUgeDE9IjMzMy45IiB5MT0iMTc0LjAiIHgyPSIzNTkuOSIgeTI9IjE3NC4wIiBzdHJva2U9IiNEODVBMzAiIHN0cm9rZS13aWR0aD0iMi42Ii8+Cjx0ZXh0IHg9IjM2Ny45IiB5PSIxNzkuMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij7ljp/nlJ8gcGF1c2UgLyByZXN1bWU8L3RleHQ+Cjx0ZXh0IHg9IjQ4LjAiIHk9IjIzMi4wIiBmb250LXNpemU9IjE2IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuS/neWtmO+8mmNoZWNrcG9pbnQg5LiOIHBhdXNlPC90ZXh0Pgo8bGluZSB4MT0iMTY2LjAiIHkxPSI1MDQuMCIgeDI9IjY2NS4wIiB5Mj0iNTA0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI1MDguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4wIG1zPC90ZXh0Pgo8bGluZSB4MT0iMTY2LjAiIHkxPSI0NTQuMCIgeDI9IjY2NS4wIiB5Mj0iNDU0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI0NTguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMDAgbXM8L3RleHQ+CjxsaW5lIHgxPSIxNjYuMCIgeTE9IjQwNC4wIiB4Mj0iNjY1LjAiIHkyPSI0MDQuMCIgc3Ryb2tlPSIjRThFNkRGIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iMTU2LjAiIHk9IjQwOC41IiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJlbmQiPjIwMCBtczwvdGV4dD4KPGxpbmUgeDE9IjE2Ni4wIiB5MT0iMzU0LjAiIHgyPSI2NjUuMCIgeTI9IjM1NC4wIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSIxNTYuMCIgeT0iMzU4LjUiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9ImVuZCI+MzAwIG1zPC90ZXh0Pgo8bGluZSB4MT0iMTY2LjAiIHkxPSIzMDQuMCIgeDI9IjY2NS4wIiB5Mj0iMzA0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSIzMDguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj40MDAgbXM8L3RleHQ+CjxsaW5lIHgxPSIxNjYuMCIgeTE9IjI1NC4wIiB4Mj0iNjY1LjAiIHkyPSIyNTQuMCIgc3Ryb2tlPSIjRThFNkRGIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iMTU2LjAiIHk9IjI1OC41IiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJlbmQiPjUwMCBtczwvdGV4dD4KPGxpbmUgeDE9IjE2Ni4wIiB5MT0iNTA0LjAiIHgyPSI2NjUuMCIgeTI9IjUwNC4wIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMS4yIi8+Cjxwb2x5bGluZSBwb2ludHM9IjIwNy42LDQ5Ni42IDI5MC44LDQ5NC40IDM3My45LDQ5Mi40IDQ1Ny4xLDQ4Ni44IDU0MC4yLDQ3Ni4xIDYyMy40LDQ1NS40IiBmaWxsPSJub25lIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMi42IiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iMjA3LjYiIGN5PSI0OTYuNiIgcj0iNS41IiBmaWxsPSIjMUQ5RTc1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIyOTAuOCIgY3k9IjQ5NC40IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjM3My45IiBjeT0iNDkyLjQiIHI9IjUuNSIgZmlsbD0iIzFEOUU3NSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iNDU3LjEiIGN5PSI0ODYuOCIgcj0iNS41IiBmaWxsPSIjMUQ5RTc1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSI1NDAuMiIgY3k9IjQ3Ni4xIiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjYyMy40IiBjeT0iNDU1LjQiIHI9IjUuNSIgZmlsbD0iIzFEOUU3NSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPHBvbHlsaW5lIHBvaW50cz0iMjA3LjYsMzY1LjQgMjkwLjgsMzU1LjQgMzczLjksMzQ4LjQgNDU3LjEsMzM3LjIgNTQwLjIsMzIzLjIgNjIzLjQsMjgwLjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0Q4NUEzMCIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8Y2lyY2xlIGN4PSIyMDcuNiIgY3k9IjM2NS40IiByPSI1LjUiIGZpbGw9IiNEODVBMzAiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjI5MC44IiBjeT0iMzU1LjQiIHI9IjUuNSIgZmlsbD0iI0Q4NUEzMCIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iMzczLjkiIGN5PSIzNDguNCIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSI0NTcuMSIgY3k9IjMzNy4yIiByPSI1LjUiIGZpbGw9IiNEODVBMzAiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjU0MC4yIiBjeT0iMzIzLjIiIHI9IjUuNSIgZmlsbD0iI0Q4NUEzMCIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iNjIzLjQiIGN5PSIyODAuOCIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8dGV4dCB4PSIyMDcuNiIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MDwvdGV4dD4KPHRleHQgeD0iMjA3LjYiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjI5MC44IiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xNjwvdGV4dD4KPHRleHQgeD0iMjkwLjgiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjM3My45IiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4zMjwvdGV4dD4KPHRleHQgeD0iMzczLjkiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjQ1Ny4xIiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42NDwvdGV4dD4KPHRleHQgeD0iNDU3LjEiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjU0MC4yIiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xMjg8L3RleHQ+Cjx0ZXh0IHg9IjU0MC4yIiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8dGV4dCB4PSI2MjMuNCIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MjU2PC90ZXh0Pgo8dGV4dCB4PSI2MjMuNCIgeT0iNTQ2LjAiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pQjwvdGV4dD4KPGxpbmUgeDE9IjE2Ni4wIiB5MT0iNTUzLjAiIHgyPSI2NjUuMCIgeTI9IjU1My4wIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSIxNTYuMCIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJlbmQiPmNoZWNrcG9pbnQ8L3RleHQ+Cjx0ZXh0IHg9IjIwNy42IiB5PSI1NzAuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTQuOTwvdGV4dD4KPHRleHQgeD0iMjkwLjgiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xOS4yPC90ZXh0Pgo8dGV4dCB4PSIzNzMuOSIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjIzLjM8L3RleHQ+Cjx0ZXh0IHg9IjQ1Ny4xIiB5PSI1NzAuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzQuNDwvdGV4dD4KPHRleHQgeD0iNTQwLjIiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj41NS45PC90ZXh0Pgo8dGV4dCB4PSI2MjMuNCIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk3LjM8L3RleHQ+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9ImVuZCI+cGF1c2U8L3RleHQ+Cjx0ZXh0IHg9IjIwNy42IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Mjc3LjI8L3RleHQ+Cjx0ZXh0IHg9IjI5MC44IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Mjk3LjM8L3RleHQ+Cjx0ZXh0IHg9IjM3My45IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzExLjI8L3RleHQ+Cjx0ZXh0IHg9IjQ1Ny4xIiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzMzLjY8L3RleHQ+Cjx0ZXh0IHg9IjU0MC4yIiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzYxLjU8L3RleHQ+Cjx0ZXh0IHg9IjYyMy40IiB5PSI1OTIuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzcxMkIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NDQ2LjQ8L3RleHQ+Cjx0ZXh0IHg9IjczNS4wIiB5PSIyMzIuMCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij7mgaLlpI3vvJpyZXN0b3JlIOS4jiByZXN1bWU8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjUwNC4wIiB4Mj0iMTM1Mi4wIiB5Mj0iNTA0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSI1MDguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4wIG1zPC90ZXh0Pgo8bGluZSB4MT0iODUzLjAiIHkxPSI0NjIuMyIgeDI9IjEzNTIuMCIgeTI9IjQ2Mi4zIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI4NDMuMCIgeT0iNDY2LjgiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9ImVuZCI+MjAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjQyMC43IiB4Mj0iMTM1Mi4wIiB5Mj0iNDIwLjciIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSI0MjUuMiIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj40MCBtczwvdGV4dD4KPGxpbmUgeDE9Ijg1My4wIiB5MT0iMzc5LjAiIHgyPSIxMzUyLjAiIHkyPSIzNzkuMCIgc3Ryb2tlPSIjRThFNkRGIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iODQzLjAiIHk9IjM4My41IiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJlbmQiPjYwIG1zPC90ZXh0Pgo8bGluZSB4MT0iODUzLjAiIHkxPSIzMzcuMyIgeDI9IjEzNTIuMCIgeTI9IjMzNy4zIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI4NDMuMCIgeT0iMzQxLjgiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9ImVuZCI+ODAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjI5NS43IiB4Mj0iMTM1Mi4wIiB5Mj0iMjk1LjciIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSIzMDAuMiIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMDAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjI1NC4wIiB4Mj0iMTM1Mi4wIiB5Mj0iMjU0LjAiIHN0cm9rZT0iI0U4RTZERiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9Ijg0My4wIiB5PSIyNTguNSIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMjAgbXM8L3RleHQ+CjxsaW5lIHgxPSI4NTMuMCIgeTE9IjUwNC4wIiB4Mj0iMTM1Mi4wIiB5Mj0iNTA0LjAiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHBvbHlsaW5lIHBvaW50cz0iODk0LjYsNDY2LjMgOTc3LjgsNDU5LjQgMTA2MC45LDQ1MS43IDExNDQuMSw0MzkuOCAxMjI3LjIsNDEzLjIgMTMxMC40LDM2Ni4zIiBmaWxsPSJub25lIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMi42IiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iODk0LjYiIGN5PSI0NjYuMyIgcj0iNS41IiBmaWxsPSIjMUQ5RTc1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSI5NzcuOCIgY3k9IjQ1OS40IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjEwNjAuOSIgY3k9IjQ1MS43IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjExNDQuMSIgY3k9IjQzOS44IiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjEyMjcuMiIgY3k9IjQxMy4yIiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+CjxjaXJjbGUgY3g9IjEzMTAuNCIgY3k9IjM2Ni4zIiByPSI1LjUiIGZpbGw9IiMxRDlFNzUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIxLjQiIGZpbGwtb3BhY2l0eT0iMS4wIi8+Cjxwb2x5bGluZSBwb2ludHM9Ijg5NC42LDMyMi4xIDk3Ny44LDMxNy4xIDEwNjAuOSwzMDguMiAxMTQ0LjEsMzA4LjQgMTIyNy4yLDMwMy42IDEzMTAuNCwzMDYuNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDg1QTMwIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxjaXJjbGUgY3g9Ijg5NC42IiBjeT0iMzIyLjEiIHI9IjUuNSIgZmlsbD0iI0Q4NUEzMCIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbC1vcGFjaXR5PSIxLjAiLz4KPGNpcmNsZSBjeD0iOTc3LjgiIGN5PSIzMTcuMSIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMDYwLjkiIGN5PSIzMDguMiIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMTQ0LjEiIGN5PSIzMDguNCIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMjI3LjIiIGN5PSIzMDMuNiIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8Y2lyY2xlIGN4PSIxMzEwLjQiIGN5PSIzMDYuNyIgcj0iNS41IiBmaWxsPSIjRDg1QTMwIiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMS40IiBmaWxsLW9wYWNpdHk9IjEuMCIvPgo8dGV4dCB4PSI4OTQuNiIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MDwvdGV4dD4KPHRleHQgeD0iODk0LjYiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9Ijk3Ny44IiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xNjwvdGV4dD4KPHRleHQgeD0iOTc3LjgiIHk9IjU0Ni4wIiBmb250LXNpemU9IjEyIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NaUI8L3RleHQ+Cjx0ZXh0IHg9IjEwNjAuOSIgeT0iNTI4LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzI8L3RleHQ+Cjx0ZXh0IHg9IjEwNjAuOSIgeT0iNTQ2LjAiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pQjwvdGV4dD4KPHRleHQgeD0iMTE0NC4xIiB5PSI1MjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42NDwvdGV4dD4KPHRleHQgeD0iMTE0NC4xIiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8dGV4dCB4PSIxMjI3LjIiIHk9IjUyOC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjEyODwvdGV4dD4KPHRleHQgeD0iMTIyNy4yIiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8dGV4dCB4PSIxMzEwLjQiIHk9IjUyOC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjI1NjwvdGV4dD4KPHRleHQgeD0iMTMxMC40IiB5PSI1NDYuMCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlCPC90ZXh0Pgo8bGluZSB4MT0iODUzLjAiIHkxPSI1NTMuMCIgeDI9IjEzNTIuMCIgeTI9IjU1My4wIiBzdHJva2U9IiNFOEU2REYiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI4NDMuMCIgeT0iNTcwLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJlbmQiPnJlc3RvcmU8L3RleHQ+Cjx0ZXh0IHg9Ijg5NC42IiB5PSI1NzAuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTguMTwvdGV4dD4KPHRleHQgeD0iOTc3LjgiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yMS40PC90ZXh0Pgo8dGV4dCB4PSIxMDYwLjkiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yNS4xPC90ZXh0Pgo8dGV4dCB4PSIxMTQ0LjEiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4zMC44PC90ZXh0Pgo8dGV4dCB4PSIxMjI3LjIiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj40My42PC90ZXh0Pgo8dGV4dCB4PSIxMzEwLjQiIHk9IjU3MC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42Ni4xPC90ZXh0Pgo8dGV4dCB4PSI4NDMuMCIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJlbmQiPnJlc3VtZTwvdGV4dD4KPHRleHQgeD0iODk0LjYiIHk9IjU5Mi4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjNzEyQjEzIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj44Ny4zPC90ZXh0Pgo8dGV4dCB4PSI5NzcuOCIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjg5Ljc8L3RleHQ+Cjx0ZXh0IHg9IjEwNjAuOSIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk0LjA8L3RleHQ+Cjx0ZXh0IHg9IjExNDQuMSIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjkzLjk8L3RleHQ+Cjx0ZXh0IHg9IjEyMjcuMiIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk2LjI8L3RleHQ+Cjx0ZXh0IHg9IjEzMTAuNCIgeT0iNTkyLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM3MTJCMTMiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjk0Ljc8L3RleHQ+CjxsaW5lIHgxPSI0OCIgeTE9IjYzNiIgeDI9IjEzNTIiIHkyPSI2MzYiIHN0cm9rZT0iI0U1RTNEQiIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjQ4LjAiIHk9IjY2Mi4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuazqO+8muaoqui9tOaYr+aho++8iOaAu+aUueWKqCBNaULvvIzlhoXlrZg65paH5Lu2ID0gMzox77yJ44CCcGF1c2UgLyByZXN1bWUg5YiX5LiO5ZCM6L2u5a+554Wn5p6E5bu655qE5q+U6L6D6KeB5pys56ugIMKnNC4x44CCPC90ZXh0Pgo8L3N2Zz4="><figcaption><b>图 19-2</b>920B 上 checkpoint / restore 与原生 pause / resume 按档的 p50</figcaption></figure>
 
-<h3 id="d19-53-950-同一轮2026-11-19">5.3 950 同一轮（2026-11-19）</h3>
-<p>§5.1 的两组数来自不同轮次、不同负载。2026-11-19 用 <code>bash test950.sh compare</code> 的 mix 组在同一台 950、同一时段、同一种负载上把 checkpoint / restore 和 pause / resume 一起测了：沙箱里一个常驻进程写满 256 MiB 匿名内存，每档改写其中一部分并写根盘文件后 <code>fsync</code>，内存与文件按 3 : 1 拆分；pause / resume 在同一负载上另起沙箱测。每格 n = 20，客户端墙钟 p50，单位 ms。条件：e2b-infra <code>1525eea</code>，沙箱级 orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>，<code>hdbss</code>，模板 <code>base</code>）；进程级那套的 orchestrator <code>daa44b22…</code>（脏页跟踪关闭，模板 <code>base-criu</code>），它的原生路径与上游相同。</p>
+<h3 id="d19-53-950-同一轮2026-11-20">5.3 950 同一轮（2026-11-20）</h3>
+<p>§5.1 的两组数来自不同轮次、不同负载。2026-11-20 用 <code>bash test950.sh compare</code> 的 mix 组，在同一台 950、同一时段、同一种负载上把 checkpoint / restore 和 pause / resume 一起测了：每档新建沙箱，常驻进程的大小等于这一档的内存改动，改写内存并写根盘文件后 <code>fsync</code>，内存与文件按 3 : 1 拆分；pause / resume 在同一负载上另起沙箱测。pause / resume 只在进程级那套代码上测，它的原生路径与上游相同；pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，等上传的时间从 orchestrator 的 <code>Pause timing</code> 日志读出后扣掉（§7）。每格 n = 20，客户端墙钟 p50，单位 ms。条件：e2b-infra <code>5b829c8</code>；本方案 orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>，<code>hdbss</code>，模板 <code>base</code>）；进程级那套的 orchestrator <code>ec5eb1cc…</code>（脏页跟踪关闭，模板 <code>base-criu</code>）。</p>
 <div class="tw"><table>
 <thead>
 <tr>
 <th style="text-align: right;">总改动 MiB</th>
 <th style="text-align: right;">checkpoint</th>
-<th style="text-align: right;">pause（本方案代码）</th>
+<th style="text-align: right;">E2B pause</th>
 <th style="text-align: right;">倍数</th>
 <th style="text-align: right;">restore</th>
-<th style="text-align: right;">resume（本方案代码）</th>
+<th style="text-align: right;">E2B resume</th>
 <th style="text-align: right;">倍数</th>
-<th style="text-align: right;">pause（进程级那套）</th>
-<th style="text-align: right;">resume（进程级那套）</th>
+<th style="text-align: right;">resume 后首读</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">6.3</td>
-<td style="text-align: right;">264.5</td>
-<td style="text-align: right;">42.0</td>
-<td style="text-align: right;">16.7</td>
-<td style="text-align: right;">111.6</td>
-<td style="text-align: right;">6.7</td>
-<td style="text-align: right;">431.4</td>
-<td style="text-align: right;">93.8</td>
+<td style="text-align: right;">7.0</td>
+<td style="text-align: right;">252.7</td>
+<td style="text-align: right;">36.1</td>
+<td style="text-align: right;">18.2</td>
+<td style="text-align: right;">93.0</td>
+<td style="text-align: right;">5.1</td>
+<td style="text-align: right;">0.0</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
 <td style="text-align: right;">19.3</td>
-<td style="text-align: right;">277.2</td>
-<td style="text-align: right;">14.4</td>
-<td style="text-align: right;">27.4</td>
-<td style="text-align: right;">112.4</td>
-<td style="text-align: right;">4.1</td>
-<td style="text-align: right;">440.6</td>
-<td style="text-align: right;">84.7</td>
+<td style="text-align: right;">272.5</td>
+<td style="text-align: right;">14.1</td>
+<td style="text-align: right;">24.2</td>
+<td style="text-align: right;">89.2</td>
+<td style="text-align: right;">3.7</td>
+<td style="text-align: right;">1.9</td>
 </tr>
 <tr>
 <td style="text-align: right;">32</td>
-<td style="text-align: right;">23.7</td>
-<td style="text-align: right;">292.1</td>
-<td style="text-align: right;">12.3</td>
-<td style="text-align: right;">30.1</td>
-<td style="text-align: right;">111.7</td>
-<td style="text-align: right;">3.7</td>
-<td style="text-align: right;">470.1</td>
-<td style="text-align: right;">85.1</td>
+<td style="text-align: right;">26.4</td>
+<td style="text-align: right;">278.0</td>
+<td style="text-align: right;">10.5</td>
+<td style="text-align: right;">33.8</td>
+<td style="text-align: right;">86.3</td>
+<td style="text-align: right;">2.6</td>
+<td style="text-align: right;">3.5</td>
 </tr>
 <tr>
 <td style="text-align: right;">64</td>
-<td style="text-align: right;">34.2</td>
-<td style="text-align: right;">311.5</td>
+<td style="text-align: right;">33.5</td>
+<td style="text-align: right;">306.2</td>
 <td style="text-align: right;">9.1</td>
-<td style="text-align: right;">40.8</td>
-<td style="text-align: right;">109.4</td>
-<td style="text-align: right;">2.7</td>
-<td style="text-align: right;">515.0</td>
-<td style="text-align: right;">87.8</td>
+<td style="text-align: right;">41.1</td>
+<td style="text-align: right;">87.9</td>
+<td style="text-align: right;">2.1</td>
+<td style="text-align: right;">7.5</td>
 </tr>
 <tr>
 <td style="text-align: right;">128</td>
-<td style="text-align: right;">49.4</td>
-<td style="text-align: right;">349.8</td>
-<td style="text-align: right;">7.1</td>
-<td style="text-align: right;">51.7</td>
-<td style="text-align: right;">113.2</td>
-<td style="text-align: right;">2.2</td>
-<td style="text-align: right;">575.7</td>
-<td style="text-align: right;">91.2</td>
+<td style="text-align: right;">62.3</td>
+<td style="text-align: right;">340.5</td>
+<td style="text-align: right;">5.5</td>
+<td style="text-align: right;">66.9</td>
+<td style="text-align: right;">89.3</td>
+<td style="text-align: right;">1.3</td>
+<td style="text-align: right;">14.9</td>
 </tr>
 <tr>
 <td style="text-align: right;">256</td>
-<td style="text-align: right;">96.8</td>
-<td style="text-align: right;">415.9</td>
-<td style="text-align: right;">4.3</td>
-<td style="text-align: right;">81.9</td>
-<td style="text-align: right;">115.5</td>
-<td style="text-align: right;">1.4</td>
-<td style="text-align: right;">671.8</td>
-<td style="text-align: right;">93.4</td>
+<td style="text-align: right;">115.8</td>
+<td style="text-align: right;">478.9</td>
+<td style="text-align: right;">4.1</td>
+<td style="text-align: right;">107.8</td>
+<td style="text-align: right;">98.5</td>
+<td style="text-align: right;">0.91</td>
+<td style="text-align: right;">29.1</td>
 </tr>
 <tr>
 <td style="text-align: right;">70.001（只改内存 70）</td>
-<td style="text-align: right;">22.4</td>
-<td style="text-align: right;">282.7</td>
-<td style="text-align: right;">12.6</td>
-<td style="text-align: right;">36.3</td>
-<td style="text-align: right;">111.2</td>
-<td style="text-align: right;">3.1</td>
-<td style="text-align: right;">471.3</td>
-<td style="text-align: right;">92.5</td>
+<td style="text-align: right;">24.7</td>
+<td style="text-align: right;">280.6</td>
+<td style="text-align: right;">11.4</td>
+<td style="text-align: right;">43.0</td>
+<td style="text-align: right;">91.4</td>
+<td style="text-align: right;">2.1</td>
+<td style="text-align: right;">10.0</td>
 </tr>
 </tbody>
 </table></div>
 <ul>
-<li>同一负载、同一轮，倍数可以直接读：checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍。量级与 §5.1 相同。</li>
-<li>本方案代码的 pause 每档比进程级那套快 163～256 ms，因为精确增量只导出写过的页；resume 每档慢 18～28 ms，差在 <code>connect</code> 一段，与 §3.5 一致，原因未查。</li>
-<li>pause 一列包含把快照复制进模板存储这一步，上游不等这一步就返回，见 §7 与<a href="#d13">第 13 章 §1</a>。</li>
-<li>两套快照回滚的完整对外表（含进程级 checkpoint / restore 与 p99）和逐档解释在进程级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-19">第 24 章 §4.3</a>。原始终端输出存于工作区 <code>rollback-reports/950-compare-20261119/compare.txt</code>。</li>
+<li>同一负载、同一轮，倍数可以直接读：checkpoint 比 pause 快 4.1～36 倍；restore 比 resume 快 1.3～5.1 倍，只有 256 档慢 9.3 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 127.6 ms，restore 仍更快。</li>
+<li>这一轮的 pause 不含等上传。等上传另记：pause 墙钟 309.3～663.8 ms，其中等上传 54.7～186.8 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。</li>
+<li>2026-11-19 那一轮固定 256 MiB 进程、pause 含等上传、两套代码各测一遍，结论的方向相同（checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍），原始输出存于工作区 <code>rollback-reports/950-compare-20261119/compare.txt</code>。</li>
+<li>两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-20">第 24 章 §4.3</a>。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/compare-report.txt</code>。</li>
 </ul>
 <h2 id="d19-6-固定开销从哪里来">6. 固定开销从哪里来</h2>
 <p>本节的时间拆分来自 920B（<code>kvm-wp</code>，产物在 tmpfs）的单样本跟踪，完整表格见 <a href="#d13-6-成本模型">第 13 章 §6</a>。950 没有做同样的逐段测量，各段数值不能直接套到 950。</p>
@@ -14863,7 +14855,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <h2 id="d19-7-边界">7. 边界</h2>
 <p><strong>已测：</strong></p>
 <ul>
-<li>950：2026-11-06 pause 模式六档，108 个样本；2026-11-18 两套代码各跑 pause、snapshot 两种模式，各 324 个样本（§3.5）；2026-11-19 在同一负载上与 checkpoint / restore 同轮测量，两套代码各 140 次 pause / resume（§5.3）。内容与进程校验全过。</li>
+<li>950：2026-11-06 pause 模式六档，108 个样本；2026-11-18 两套代码各跑 pause、snapshot 两种模式，各 324 个样本（§3.5）；2026-11-19 在同一负载上与 checkpoint / restore 同轮测量，两套代码各 140 次 pause / resume；2026-11-20 改为进程大小随档位、只在进程级代码上测、pause 只计第一步，140 次（§5.3）。内容与进程校验全过。</li>
 <li>920B：精确增量构建与对照构建各 216 个样本，含 pause、snapshot 两种模式。</li>
 </ul>
 <p><strong>没有测，或不能从这组数据得出：</strong></p>
@@ -14872,7 +14864,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li>950 没有逐段拆分，也没有做“不开脏页跟踪”的对照，所以不能据此给出 HDBSS 对原生路径的净影响。</li>
 <li>功能用例 T39、T41 已在同一份二进制 <code>a5d03902…</code> 上通过（2026-11-17 func，<a href="#d17-3-功能回归结果">第 17 章 §3</a>）；<code>pb2.py</code> 在 950 上待复跑（<a href="#d15-102-缺口">第 15 章 §10.2</a>）。</li>
 <li>每档 n = 15，是短时单沙箱串行测量，不表示并发或长期尾延迟。</li>
-<li>存储是 <code>Local</code>，pause 含把快照复制进模板存储这一步。上游的 <code>Pause</code> 不等这一步就返回，两套代码都等（<a href="#d13">第 13 章 §1</a>），所以 pause 列比上游多算了这一步。这一步的长短取决于复制多少：920B 上模板目录是 tmpfs，精确增量构建导出约 16 MiB 时约 3 ms（§6），进程级那套导出全部驻留内存时约 68～90 ms（2026-11-20 smoke）。本章各表的 pause 都含这一步；进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起把两段分开记（第 13 章 §1）。换成对象存储后上传耗时要另测，resume 后的按需加载也要走网络。</li>
+<li>存储是 <code>Local</code>，pause 含把快照复制进模板存储这一步。上游的 <code>Pause</code> 不等这一步就返回，两套代码都等（<a href="#d13">第 13 章 §1</a>），所以 pause 列比上游多算了这一步。这一步的长短取决于复制多少：920B 上模板目录是 tmpfs，精确增量构建导出约 16 MiB 时约 3 ms（§6），进程级那套导出全部驻留内存时，920B 上约 68～90 ms（2026-11-20 smoke），950 上 54.7～186.8 ms（2026-11-20 compare，随导出量增长）。本章 §3、§4、§5.1、§5.2 的 pause 都含这一步，§5.3 不含；进程级那套的 orchestrator 从 <code>7e0a6a462</code> 起把两段分开记（第 13 章 §1）。换成对象存储后上传耗时要另测，resume 后的按需加载也要走网络。</li>
 <li>950 与 920B 的脏页后端、存储和模板都不同，表中数字不互相相减，差值不能归因于 HDBSS。</li>
 <li>对照构建不是纯上游，它只说明“不含本方案时”的一份实测，不能当作上游基线。</li>
 </ul>
@@ -14891,7 +14883,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li>resume 基本不随档位变化，950 上 0～128 MiB 档 p50 在 106.1～109.3 ms。成本推迟到恢复之后，950 上第一次读 192 MiB 内存负载比快照前慢约 112 ms。</li>
 <li>950 上 checkpoint / restore 与 pause / resume 的差距在小档最大，但两组负载和部署条件不同，倍数只说明量级。</li>
 <li>数字接近不代表语义接近：restore 保留进程和 checkpoint，resume 换一代进程，之前的 checkpoint 全部失效。</li>
-<li>950 同一轮、同一负载（§5.3）：checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍；pause 列含复制进模板存储这一步，上游不等这一步。</li>
+<li>950 同一轮、同一负载（§5.3，2026-11-20）：checkpoint 比 pause 快 4.1～36 倍；restore 比 resume 快 1.3～5.1 倍，只有 256 档慢 9.3 ms，算上 resume 后读回内存仍更快。pause 只计第一步，与上游返回的时机一致。</li>
 <li>950 两套代码上各跑一遍（§3.5）的结论与 920B 相同：沙箱级这套的 pause 每档更快、导出更小，resume 每档慢 20～35 ms。</li>
 <li>950 的逐段拆分、不开跟踪的对照仍待补。</li>
 </ul><nav class="pager" data-n="19"></nav></article><article id="v20" class="doc" hidden><h1 id="d20-920b-性能与平台差异">920B 性能与平台差异</h1>
