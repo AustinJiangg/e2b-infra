@@ -202,7 +202,7 @@ bash rollback/scripts/950/run.sh long
 | 18 | 跨树回滚 | 有单元测试（丢失 epoch 后跨树 restore 三种 sidecar 形态），无端到端用例 |
 | 19 | HDBSS 在 vCPU 创建之后武装 | 只靠调用点位置保证，没有断言 |
 | 20 | 条件标签留档 | 每轮必须记全机型、脏页后端、产物盘、模板、二进制 sha、脚本参数；漏记的数据事后补不上 |
-| 21 | 原生 pause / resume | 950 与 920B 分档已测（[第 19 章](19-native-pause-resume.md)）。950 的 `create_snapshot()` 路径、逐段拆分、不开跟踪的对照，以及 `pb2.py` 待补；T39、T41 已在同一二进制上通过（2026-11-17 func）。pause 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；920B 上 resume 比对照慢 25.1～36.0 ms，原因未查 |
+| 21 | 原生 pause / resume | 950 与 920B 分档已测（[第 19 章](19-native-pause-resume.md)）。950 的逐段拆分已在 2026-11-20 补上（[第 13 章 §6](13-native-snapshot.md#6-成本模型)）；`create_snapshot()` 路径、不开跟踪的对照，以及 `pb2.py` 待补；T39、T41 已在同一二进制上通过（2026-11-17 func）。pause 约 110 ms 的 Firecracker 退出前段和 resume 末尾约 35 ms 未拆开；920B 上 resume 比对照慢 25.1～36.0 ms，原因未查 |
 | 22 | 封层刷屏障与重复刷盘 | V1–V3 均未验证，现状、依据和测法见 [第 30 章 §2.2](30-status-and-directions.md#22-读代码发现的待验证项) |
 | 23 | 部署脚本的 80 → 3002 转发劫持 hyperloop 请求 | `build.sh` 装的 `nat PREROUTING --dport 80 -j REDIRECT --to-port 3002` 不限入口网卡、排在各槽位的 hyperloop 规则（→ 5010）前面，guest 发往 hyperloop 的请求全被转给 client-proxy：hyperloop 这条链路实际不通，client-proxy 在 16 沙箱负载下每秒约 900 条 `invalid host`，long11 两小时写出约 9.1 GB 日志。不影响 checkpoint / restore 的结果。2026-09-30 决定暂不改，改法是给该规则加 `! -i veth+`（[附录 C §6](C-evolution-and-cases.md#6-80-端口的转发规则劫持-hyperloop-请求)） |
 
@@ -256,7 +256,7 @@ bash rollback/scripts/950/run.sh long
 | 950 部署身份、原始数据与 HDBSS 覆盖 | 待验证项 | 2026-11-17 一轮身份已记录；JSON / JSONL 未回传；其他 order 待补 |
 | 跨树回滚与 HDBSS 武装时序 | 待验证项 | 前者有单元测试，缺端到端用例；后者由调用点位置保证，缺断言 |
 | 视图块数与装配成本增长 | 待验证项 | 长跑末尾块数尚未饱和，需要更长实测确认走势 |
-| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20），余项待查 | pause 的固定开销是发 SIGTERM 前的 `ps`、内核销毁 KVM 虚机和断开 NBD，resume 的大头是起新 Firecracker（cgroup v2 建 cgroup、新建 mount 命名空间）和等 envd，见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)；进程级部署包 `f66dbe2c1` 已把 `ps` 改为读 `/proc`（0 档停 FC 一段 950 185 → 52 ms、920B 192 → 85 ms），那套的原生 pause 不再等于上游；等 envd 一段未再拆，920B 上 resume 比对照慢的原因未查 |
+| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20），余项待查 | pause 的固定开销是内核销毁 KVM 虚机和断开 NBD（发 SIGTERM 前那次 `ps` 约 106 ms 已在进程级部署包 `f66dbe2c1` 改为读 `/proc`，pause 每档少 89～129 ms），resume 的大头是起新 Firecracker（cgroup v2 建 cgroup、新建 mount 命名空间）和等 envd，见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)；等 envd 一段未再拆，920B 上 resume 比对照慢的原因未查 |
 | 封层刷屏障与重复刷盘 | 待验证项 | V1–V3 均未验证 |
 | 空闲后操作变慢、首个增量的两种耗时形态 | 待修复问题：根因或触发条件待定位 | 保留现象记录，需要针对负载复现 |
 | restore 应答丢失 | 已修复，950 待复验 | 950 并发 N=16 出现 1 次，服务端已完成、客户端等满 300 s。2026-11-17 在 920B 复现并查实是客户端 SDK 共享连接池在多线程下误关正在使用的连接，SDK 已修，920B 复验未再出现（[第 21 章 §2.3](21-concurrency-and-longrun.md#23-n16-的一次-restore-应答丢失)） |

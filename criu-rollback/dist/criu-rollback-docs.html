@@ -13715,17 +13715,17 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <li><strong>checkpoint</strong>：内存改动两侧都随改动量增长，沙箱级每一项都更低；文件写入只在沙箱级计费。改动以文件为主时进程级更快：内存改 64 MiB 的同时写的文件超过约 16 MiB，进程级的 checkpoint 就更低。沙箱级的文件代价还与“写完多久才 checkpoint”有关（§5.5），这里用的是写完立刻 checkpoint 的数。</li>
 </ul>
 <h3 id="d24-43-对外分档表9502026-11-20">4.3 对外分档表（950，2026-11-20）</h3>
-<p>这张表用于对外展示：两套快照回滚和 E2B 原生 pause / resume 放在同一张表里，都在同一台 950、同一时段、同一个脚本、同一种负载上测。表里只给每一档的数字；每一档谁快、为什么快，写在表后面（§4.3.1）。</p>
+<p>这张表用于对外展示：两套快照回滚和 E2B 原生 pause / resume 放在同一张表里，都在同一台 950、同一天、同一个脚本、同一种负载上测。表里只给每一档的数字；每一档谁快、为什么快，写在表后面（§4.3.1）。</p>
 <p><strong>负载。</strong> 每一档新建一个沙箱。沙箱里一个常驻进程预先分配并写满 P MiB 匿名内存，P 等于这一档的内存改动，也就是每一步把整个进程改写一遍；改写之后再向根盘文件写“文件 MiB”那么多，然后 <code>fsync</code>。前六档的内存和文件按 3 : 1 拆分；最后一档只改内存 70 MiB，文件只写 0.001 MiB（1 KiB 左右）。</p>
 <p><strong>为什么进程大小随档位变。</strong> 这是刻意构造的。进程级 restore 每次重建整个进程，代价随进程大小增长，与改动量无关（§3）。2026-11-19 那一轮固定用 256 MiB 进程，进程级 restore 每档都约 100 ms，表里这一列不随档位变化，读者容易误解。让 P 等于内存改动之后，沙箱级 restore 随改动量、进程级 restore 随进程大小，两者在本表中取值相同，两列都随档位增长。实际使用中进程往往比每一步的改动大，这时进程级 restore 按进程大小计，见表后的 size 小表与 §4.2。</p>
 <p><strong>各列测的是什么。</strong></p>
 <ul>
 <li>checkpoint 是连续 checkpoint：上一次 checkpoint 之后改写，再做一次；restore 回到改写之前的那个 checkpoint。</li>
 <li>首次全量是每个新沙箱上的第一次 checkpoint：沙箱级保存整台 guest 的内存，进程级只保存这个进程。每档 2 个样本。</li>
-<li>E2B 的 pause / resume 用同一种负载，另起沙箱测：改写 → <code>sb.pause()</code> → <code>Sandbox.connect()</code> → 执行第一条命令。只在进程级那套代码上测：本节用的 orchestrator <code>e77c0e29…</code>（KASandbox <code>237b9ac62</code>）没有改动原生快照路径，等同于 ARM 上的 E2B 原生实现。部署包自 <code>f66dbe2c1</code> 起把停 Firecracker 之前的 <code>ps</code> 改为读 <code>/proc</code>，pause 每次约少 100 ms（950 与 920B 的 <code>test950.sh fcexit</code> 都是如此，<code>ps</code> 一段约 104 ms 消失），之后用新包测的 E2B pause 不再等于上游，与本节数字不可直接比较。pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，见表后“pause 的口径”。resume 一列是 <code>connect</code> 返回耗时加上第一条命令的耗时。每个沙箱上的第一次 pause 不计入表格（单列在 report 里）。</li>
+<li>E2B 的 pause / resume 用同一种负载，另起沙箱测：改写 → <code>sb.pause()</code> → <code>Sandbox.connect()</code> → 执行第一条命令。只在进程级那套代码上测（orchestrator <code>fbe72d14…</code>，KASandbox <code>f66dbe2c1</code>），代表 ARM 上的 E2B 原生实现；这一版把停 Firecracker 前查进程状态由执行 <code>ps</code> 改为读 <code>/proc</code>，见表后“E2B pause”。pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，见表后“pause 的口径”。resume 一列是 <code>connect</code> 返回耗时加上第一条命令的耗时。每个沙箱上的第一次 pause 不计入表格（单列在 report 里）。</li>
 <li>resume 后首读：resume 返回时进程的内存还没有读回，之后第一次把整个进程的内存读一遍，比 pause 之前多花的时间。restore 返回时内存已经就位，没有这一项。</li>
 </ul>
-<p><strong>条件。</strong> 950（Kunpeng 950，宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code>），e2b-infra <code>1384b02</code>，结果目录 <code>test950/results/20261120-122146-compare/</code>。沙箱级：orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>），脏页后端 <code>hdbss</code>，模板 <code>base</code>。进程级：orchestrator <code>e77c0e29…</code>（KASandbox <code>237b9ac62</code>，比 11-19 那一轮只多了 <code>Pause timing</code>、<code>Resume phases</code> 两类分段日志，不改行为），gsd <code>8bc5dc49…</code>，脏页后端 <code>off</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB，同一份 Firecracker。每格 n = 20（首次全量 n = 2），客户端墙钟，单位 ms。进程级一侧测量 308 次，失败 0；两侧内存与文件校验全部一致。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/clean-122146-compare.txt</code>。</p>
+<p><strong>条件。</strong> 950（Kunpeng 950，宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code>），e2b-infra <code>1384b02</code>，结果目录 <code>test950/results/20261120-122146-compare/</code>。沙箱级：orchestrator <code>3a1b4c51…</code>（RPM <code>2026.09-3</code>），脏页后端 <code>hdbss</code>，模板 <code>base</code>。进程级：orchestrator <code>e77c0e29…</code>（KASandbox <code>237b9ac62</code>，比 11-19 那一轮只多了 <code>Pause timing</code>、<code>Resume phases</code> 两类分段日志，不改行为），gsd <code>8bc5dc49…</code>，脏页后端 <code>off</code>，模板 <code>base-criu</code>。两侧都是 2 vCPU / 2048 MB，同一份 Firecracker。每格 n = 20（首次全量 n = 2），客户端墙钟，单位 ms。进程级一侧测量 308 次，失败 0；两侧内存与文件校验全部一致。E2B pause、E2B resume、resume 后首读三列取自同一天 16:50 那一轮（e2b-infra <code>1b12e6d</code>，结果目录 <code>test950/results/20261120-165024-compare/</code>，<code>bash test950.sh compare --series mix --stack criu</code>），同一负载、同一脚本，开测前同样清过网络命名空间。原始终端输出存于工作区 <code>rollback-reports/950-test950-20261120/</code>（<code>clean-122146-compare.txt</code>、<code>compare-165024-criu-ps2proc.txt</code>）。</p>
 <p><strong>测前清理。</strong> 每个测量步骤开测前，脚本先回收宿主上积累的 e2b 网络命名空间（sandbox 一步前 527 → 232 个，criu 一步前 406 → 173 个），测量时宿主挂载点约 450～560 个。同一天上午那一轮（<code>20261120-091104-compare</code>）开测时宿主有 1421 个网络命名空间，没有先清；每起一个 Firecracker 都要新建 mount 命名空间、复制宿主的整张挂载表，那一轮的 E2B resume 因此慢了约 20 ms（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来">第 19 章 §6</a>），本表不再使用那一轮的 mix 组。两套快照回滚的 checkpoint / restore 不起新进程，不受这个影响；同一档在两轮之间的差别在 ±12 ms 以内，谁快谁慢的方向没有变化。</p>
 <p><strong>p50：</strong></p>
 <div class="tw"><table>
@@ -13758,9 +13758,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;"><strong>10.2</strong></td>
 <td style="text-align: right;">284.0</td>
 <td style="text-align: right;">22.7</td>
-<td style="text-align: right;">230.5</td>
-<td style="text-align: right;">71.4</td>
-<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">112.9</td>
+<td style="text-align: right;">69.1</td>
+<td style="text-align: right;">0.4</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
@@ -13773,9 +13773,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;"><strong>17.3</strong></td>
 <td style="text-align: right;">283.4</td>
 <td style="text-align: right;">30.5</td>
-<td style="text-align: right;">250.9</td>
-<td style="text-align: right;">73.5</td>
-<td style="text-align: right;">1.3</td>
+<td style="text-align: right;">133.4</td>
+<td style="text-align: right;">68.2</td>
+<td style="text-align: right;">2.7</td>
 </tr>
 <tr>
 <td style="text-align: right;">32</td>
@@ -13788,9 +13788,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;"><strong>23.3</strong></td>
 <td style="text-align: right;">266.8</td>
 <td style="text-align: right;">35.2</td>
-<td style="text-align: right;">255.7</td>
-<td style="text-align: right;">72.1</td>
-<td style="text-align: right;">3.5</td>
+<td style="text-align: right;">153.6</td>
+<td style="text-align: right;">69.0</td>
+<td style="text-align: right;">4.0</td>
 </tr>
 <tr>
 <td style="text-align: right;">64</td>
@@ -13803,9 +13803,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;"><strong>29.3</strong></td>
 <td style="text-align: right;">303.0</td>
 <td style="text-align: right;">46.3</td>
-<td style="text-align: right;">277.6</td>
-<td style="text-align: right;">73.9</td>
-<td style="text-align: right;">8.1</td>
+<td style="text-align: right;">188.4</td>
+<td style="text-align: right;">73.6</td>
+<td style="text-align: right;">7.9</td>
 </tr>
 <tr>
 <td style="text-align: right;">128</td>
@@ -13818,9 +13818,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;"><strong>47.4</strong></td>
 <td style="text-align: right;">290.6</td>
 <td style="text-align: right;">65.8</td>
-<td style="text-align: right;">323.0</td>
-<td style="text-align: right;">75.0</td>
-<td style="text-align: right;">14.8</td>
+<td style="text-align: right;">213.1</td>
+<td style="text-align: right;">76.6</td>
+<td style="text-align: right;">16.0</td>
 </tr>
 <tr>
 <td style="text-align: right;">256</td>
@@ -13833,9 +13833,9 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;"><strong>92.4</strong></td>
 <td style="text-align: right;">379.0</td>
 <td style="text-align: right;">120.5</td>
-<td style="text-align: right;">457.2</td>
-<td style="text-align: right;">83.7</td>
-<td style="text-align: right;">29.2</td>
+<td style="text-align: right;">336.3</td>
+<td style="text-align: right;">82.0</td>
+<td style="text-align: right;">33.1</td>
 </tr>
 <tr>
 <td style="text-align: right;">70.001</td>
@@ -13848,14 +13848,14 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">39.0</td>
 <td style="text-align: right;">302.9</td>
 <td style="text-align: right;">55.0</td>
-<td style="text-align: right;">260.1</td>
-<td style="text-align: right;">74.0</td>
-<td style="text-align: right;">10.1</td>
+<td style="text-align: right;">130.8</td>
+<td style="text-align: right;">74.9</td>
+<td style="text-align: right;">8.3</td>
 </tr>
 </tbody>
 </table></div>
 <p>加粗的是两套快照回滚的 checkpoint、restore 中 p50 更低的一侧。</p>
-<p><strong>p99：</strong>（n = 20，按最近秩取，接近最大值；首次全量 n = 2）</p>
+<p><strong>p99：</strong>（n = 20，按最近秩取，接近最大值；首次全量 n = 2；resume 后首读只列 p50）</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -13871,7 +13871,6 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <th style="text-align: right;">进程级首次全量</th>
 <th style="text-align: right;">E2B pause</th>
 <th style="text-align: right;">E2B resume</th>
-<th style="text-align: right;">resume 后首读</th>
 </tr>
 </thead>
 <tbody>
@@ -13886,9 +13885,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">10.6</td>
 <td style="text-align: right;">284.2</td>
 <td style="text-align: right;">25.5</td>
-<td style="text-align: right;">281.3</td>
-<td style="text-align: right;">122.0</td>
-<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">143.8</td>
+<td style="text-align: right;">77.9</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
@@ -13901,9 +13899,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">18.9</td>
 <td style="text-align: right;">286.9</td>
 <td style="text-align: right;">31.4</td>
-<td style="text-align: right;">284.6</td>
-<td style="text-align: right;">86.9</td>
-<td style="text-align: right;">4.0</td>
+<td style="text-align: right;">185.1</td>
+<td style="text-align: right;">75.3</td>
 </tr>
 <tr>
 <td style="text-align: right;">32</td>
@@ -13916,9 +13913,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">68.0</td>
 <td style="text-align: right;">270.6</td>
 <td style="text-align: right;">38.4</td>
-<td style="text-align: right;">311.5</td>
-<td style="text-align: right;">80.5</td>
-<td style="text-align: right;">6.9</td>
+<td style="text-align: right;">219.9</td>
+<td style="text-align: right;">74.7</td>
 </tr>
 <tr>
 <td style="text-align: right;">64</td>
@@ -13931,9 +13927,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">38.8</td>
 <td style="text-align: right;">304.7</td>
 <td style="text-align: right;">46.9</td>
-<td style="text-align: right;">323.5</td>
-<td style="text-align: right;">86.5</td>
-<td style="text-align: right;">12.4</td>
+<td style="text-align: right;">224.2</td>
+<td style="text-align: right;">83.3</td>
 </tr>
 <tr>
 <td style="text-align: right;">128</td>
@@ -13946,9 +13941,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">67.3</td>
 <td style="text-align: right;">300.6</td>
 <td style="text-align: right;">66.5</td>
-<td style="text-align: right;">424.2</td>
-<td style="text-align: right;">86.1</td>
-<td style="text-align: right;">23.1</td>
+<td style="text-align: right;">307.2</td>
+<td style="text-align: right;">88.9</td>
 </tr>
 <tr>
 <td style="text-align: right;">256</td>
@@ -13961,9 +13955,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">102.4</td>
 <td style="text-align: right;">409.5</td>
 <td style="text-align: right;">124.8</td>
-<td style="text-align: right;">893.8</td>
-<td style="text-align: right;">93.7</td>
-<td style="text-align: right;">38.2</td>
+<td style="text-align: right;">558.8</td>
+<td style="text-align: right;">98.0</td>
 </tr>
 <tr>
 <td style="text-align: right;">70.001</td>
@@ -13976,9 +13969,8 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <td style="text-align: right;">42.1</td>
 <td style="text-align: right;">316.4</td>
 <td style="text-align: right;">55.6</td>
-<td style="text-align: right;">314.3</td>
-<td style="text-align: right;">88.7</td>
-<td style="text-align: right;">14.9</td>
+<td style="text-align: right;">279.5</td>
+<td style="text-align: right;">90.8</td>
 </tr>
 </tbody>
 </table></div>
@@ -14065,11 +14057,12 @@ checkpoint 一侧，脏页后端不同也会改变沙箱级的代价，所以这
 <p><strong>128、256 两档（进程 96、192 MiB）。</strong> 仍是进程级更低。checkpoint 47.1 对 65.4、93.9 对 114.1，快 1.4、1.2 倍；256 档沙箱级 114.1 ms，大致是只改 192 MiB 内存（dirty 组插值约 30 ms）与只写 64 MiB 文件（75.6 ms）两项之和，还高约 8 ms，这一档没有打印沙箱级的服务端分段，余下的部分没有拆开。restore 47.4 对 68.2、92.4 对 108.7：进程级按 0 档与 256 档两点算每 MiB 进程约 0.43 ms，size 组是约 0.36 ms，两轮之间有差异，量级一致。</p>
 <p><strong>70 / 70 / 0.001（进程 70 MiB）。</strong> 没有文件写入，沙箱级的文件代价不出现。checkpoint 沙箱级快 1.6 倍（22.3 对 35.3）：只剩内存代价，沙箱级每 MiB 约 0.11 ms，进程级约 0.32 ms。restore 两侧持平（38.8 对 39.0）：沙箱级回滚 70 MiB 改动、进程级重建 70 MiB 进程，在这个大小上代价相当。</p>
 <p><strong>与 2026-11-19 那一轮的区别。</strong> 那一轮进程固定 256 MiB：restore 每档都是沙箱级更低，128、256 两档的 checkpoint 也是沙箱级更低（原始输出在工作区 <code>rollback-reports/950-compare-20261119/compare.txt</code>）。差别来自进程大小：进程级的 checkpoint 固定开销和 restore 都随进程大小增长，进程从 256 MiB 降到 12～192 MiB，这两项都变小。两轮说的是同一件事：进程比改动大得多时沙箱级 restore 更快（size 组 P = 256 MiB 时 24.5 对 120.3）；进程小、改动里有文件时进程级更快。</p>
-<p><strong>E2B pause。</strong> 230.5～457.2 ms，一页不改也要 230.5 ms。按 orchestrator 的分段日志，0 档的 226 ms 里：停 Firecracker 之前先执行一次 <code>ps</code> 查它的进程状态 106 ms（上游做法；部署包 <code>f66dbe2c1</code> 起改读 <code>/proc</code>，见上），发 SIGTERM 后等进程退出 72 ms（主要是内核销毁 KVM 虚机），断开根盘的 NBD 19 ms，暂停 vCPU、写快照、导出内存一共只有约 27 ms（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来">第 19 章 §6</a>）。随改动增长的部分来自导出内存和导出根盘差分；导出内存的判据是所有驻留在内存里的页，不只是改过的页（0 档也要导出 162 MiB）。两套 checkpoint 比 pause 快 4.0～34 倍：沙箱级 4.0～34 倍，进程级 4.9～28 倍。</p>
-<p><strong>E2B resume。</strong> 71.4～83.7 ms，基本不随档位变化：resume 不搬运内存，返回时内存还在快照文件里，之后按缺页从文件读回。0 档的 60 ms 服务端时间里，起一个新的 Firecracker 到它的 API 可用 35 ms（其中建沙箱 cgroup 约 13 ms），等 guest 里的 envd 就绪 15 ms，加载快照 6 ms。读回整个进程的内存比 pause 之前多花 0～29.2 ms，随进程大小增长。</p>
+<p><strong>E2B pause。</strong> 112.9～336.3 ms，一页不改也要 112.9 ms。按 orchestrator 的分段日志，0 档的 108 ms 里：停 Firecracker 并等它退出 57 ms（主要是内核销毁 KVM 虚机），断开根盘的 NBD 20 ms，暂停 vCPU、写快照、导出内存一共约 28 ms（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/19-native-pause-resume.md#6-固定开销从哪里来">第 19 章 §6</a>）。随改动增长的部分来自写快照时刷根盘、导出内存和导出根盘差分；导出内存的判据是所有驻留在内存里的页，不只是改过的页（0 档也要导出 168 MiB）。两套 checkpoint 比 pause 快 2.9～17 倍：沙箱级 2.9～17 倍，进程级 3.6～14 倍。</p>
+<p>上游在发 SIGTERM 之前先执行一次 <code>ps</code> 查 Firecracker 的进程状态，只为在日志里提示 D 状态，950 上约 106 ms；进程级部署包从 <code>f66dbe2c1</code> 起改为读 <code>/proc/PID/stat</code>（0.8 ms）。改前同一负载、同一天 12:21 那一轮（orchestrator <code>e77c0e29…</code>，与本表 checkpoint / restore 同一轮），E2B pause 是 230.5～457.2 ms，每档多 89～129 ms，两套 checkpoint 比它快 4.0～34 倍；resume 71.4～83.7 ms，基本不变（沙箱级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/rollback/docs/13-native-snapshot.md#61-pause改动量为-0-也要约-110-ms">第 13 章 §6.1</a>）。</p>
+<p><strong>E2B resume。</strong> 68.2～82.0 ms，基本不随档位变化：resume 不搬运内存，返回时内存还在快照文件里，之后按缺页从文件读回。0 档的 57 ms 服务端时间里，起一个新的 Firecracker 到它的 API 可用 34 ms（其中建沙箱 cgroup 约 13 ms），等 guest 里的 envd 就绪 16 ms，加载快照 5 ms。读回整个进程的内存比 pause 之前多花 0.4～33.1 ms，随进程大小增长。</p>
 <ul>
-<li>总改动 128 MiB 以内的档，两套 restore 都快于 resume：沙箱级快 1.1～4.2 倍，进程级快 1.6～7.0 倍。70 档两套都快约 1.9 倍。</li>
-<li>256 档两套 restore 都慢于 resume：沙箱级 108.7 ms 慢 25.0 ms，进程级 92.4 ms 慢 8.7 ms。把 resume 之后读回 192 MiB 内存的 29.2 ms 算上，resume 一侧共 112.9 ms，两套 restore 都更快。</li>
+<li>总改动 128 MiB 以内的档，两套 restore 都快于 resume：沙箱级快 1.1～4.0 倍，进程级快 1.6～6.8 倍。70 档两套都快约 1.9 倍。</li>
+<li>256 档两套 restore 都慢于 resume：沙箱级 108.7 ms 慢 26.7 ms，进程级 92.4 ms 慢 10.4 ms。把 resume 之后读回 192 MiB 内存的 33.1 ms 算上，resume 一侧共 115.1 ms，两套 restore 都更快。</li>
 </ul>
 <p><strong>这张表不能直接说明的三件事。</strong></p>
 <ul>
@@ -15148,7 +15141,7 @@ checkpoint 会失败并带回 CRIU 的日志。本书没有整理这份清单（
 <li>语义上，沙箱级让沙箱内的一切回到同一时刻（连接作废、单调时钟倒退）；进程级保住范围外的一切（envd、日志、时钟），代价是范围外的进程可能拿着被丢弃时间线里的旧对象。</li>
 <li>失败的结局不同：沙箱级在提交点之后失败是"撕裂"，沙箱要销毁重建；进程级在杀进程之后失败，再 restore 一次即可恢复。</li>
 <li>两套目前<strong>不能在同一个沙箱上一起用</strong>：入口是同一个端口，一台宿主上只能运行其中一套的 orchestrator；合并的方案未实施。</li>
-<li>对外分档表（§4.3，950，2026-11-20，开测前清过网络命名空间，进程大小 = 内存改动，内存 : 文件 = 3 : 1）：0 MiB 档与只改内存的 70 MiB 档 checkpoint 沙箱级更低；有文件写入的 16～256 MiB 档 checkpoint、restore 都是进程级更低（1.1～1.8 倍），因为沙箱级每 MiB 文件约 1 ms、进程级的固定开销与 restore 随进程大小增长而本表进程小；进程比改动大时（size 组 P ≥ 64 MiB）沙箱级 restore 更低。两套 checkpoint 比 E2B pause（只计第一步）快 4.0～34 倍；128 MiB 以内的档两套 restore 都快于 resume，256 档两套 restore 都慢于 resume（慢 25.0、8.7 ms），算上 resume 后读回内存的 29.2 ms 都更快。</li>
+<li>对外分档表（§4.3，950，2026-11-20，开测前清过网络命名空间，进程大小 = 内存改动，内存 : 文件 = 3 : 1）：0 MiB 档与只改内存的 70 MiB 档 checkpoint 沙箱级更低；有文件写入的 16～256 MiB 档 checkpoint、restore 都是进程级更低（1.1～1.8 倍），因为沙箱级每 MiB 文件约 1 ms、进程级的固定开销与 restore 随进程大小增长而本表进程小；进程比改动大时（size 组 P ≥ 64 MiB）沙箱级 restore 更低。两套 checkpoint 比 E2B pause（只计第一步）快 2.9～17 倍（停 Firecracker 前的 <code>ps</code> 改为读 <code>/proc</code> 之前是 4.0～34 倍）；128 MiB 以内的档两套 restore 都快于 resume，256 档两套 restore 都慢于 resume（慢 26.7、10.4 ms），算上 resume 后读回内存的 33.1 ms 都更快。</li>
 <li>进程级的增量不依赖 HDBSS，代码路径里不使用它；HDBSS 能否与进程级同时启用没有测试，本书不下结论。950 上首轮进程级运行时，沙箱级的能力文件显示 HDBSS 已启用（KVM capability 502），两套栈不同时运行，这一轮不回答这个问题。</li>
 </ol><nav class="pager" data-n="24"></nav></article><article id="v25" class="doc" hidden><h1 id="d25-快速上手">快速上手</h1>
 <h2 id="d25-本章目标">本章目标</h2>
