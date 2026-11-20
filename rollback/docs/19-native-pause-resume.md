@@ -327,7 +327,7 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 | 导出根盘差分、写元数据 | 1.1 | 79.4 |
 | 合计 | 226.2 | 450.5 |
 
-- `ps` 一段来自上游 `Process.Stop`：发 SIGTERM 之前执行 `ps -o stat= -p PID`，只为在日志里提示进程是否处于 D 状态。直接读 `/proc/PID/stat` 只要 0.07 ms（920B 实测）。上表测自 `e77c0e29…`（KASandbox `237b9ac62`），这一步与上游相同；进程级部署包自 `f66dbe2c1` 起改为读 `/proc`，920B 上同一脚本（`test950.sh fcexit`，每测点 5 次 p50）：“停 FC 到进程退出”0 档 192.2 → 84.8 ms、192 档 178.0 → 77.5 ms，pause 墙钟 312.9 → 202.9 ms、391.4 → 312.6 ms。从这一版起进程级那套的原生 pause 不再等于上游；沙箱级 RPM 没有改。950 待用新版重测。
+- `ps` 一段来自上游 `Process.Stop`：发 SIGTERM 之前执行 `ps -o stat= -p PID`，只为在日志里提示进程是否处于 D 状态。直接读 `/proc/PID/stat` 只要 0.07 ms（920B 实测）。上表测自 `e77c0e29…`（KASandbox `237b9ac62`），这一步与上游相同；进程级部署包自 `f66dbe2c1` 起改为读 `/proc`，920B 上同一脚本（`test950.sh fcexit`，每测点 5 次 p50）：“停 FC 到进程退出”0 档 192.2 → 84.8 ms、192 档 178.0 → 77.5 ms，pause 墙钟 312.9 → 202.9 ms、391.4 → 312.6 ms。从这一版起进程级那套的原生 pause 不再等于上游；沙箱级 RPM 没有改。950 上用新版重测，`ps` 一段（约 104 ms）消失，“停 FC 到进程退出”0 档 185.2 → 52.3 ms、192 档 168.7 → 61.3 ms（详见 [第 13 章 §6.1](13-native-snapshot.md#6-成本模型)）。
 - 等退出一段几乎都在内核关闭 KVM 虚机的 fd（`kvm_vm_release` 74.4 ms，其中 `kvm_destroy_vm` 53.2 ms，主要在等 RCU 宽限期）；释放地址空间只要 0.3 ms，释放 mount 命名空间 1.9 ms。
 - 改动量从 0 到 256 MiB，增长的 224 ms 都来自搬数据：写 `snapfile` 时刷根盘、导出内存（162 → 431 MiB，按驻留页导出）、导出根盘差分；`ps`、进程退出、断开 NBD 不变。
 

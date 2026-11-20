@@ -27,7 +27,7 @@
 | 950 长期运行与专项覆盖 | 待验证 | 已有默认功能、短时并发与混合短稳态证据；小时级长跑、滚动保留、资源收敛以及重启 / 注入 / 配额等专项仍需按目标结论补测，见 [第 21 章](21-concurrency-and-longrun.md)、[第 17 章](17-functional-verification.md) |
 | 950 部署身份、原始数据与 HDBSS 覆盖 | 待验证 | 各轮身份与回传材料分别核对；默认 order 1 已有实测，其他 order 比较待补。HDBSS 与软件写保护对照已决定不做，见 [第 22 章 §7](22-acceptance.md#7-已知项与缺口) |
 | 跨树回滚与 HDBSS 武装时序 | 待验证 | 前者已有单元测试，缺端到端用例；后者由调用点位置保证，缺断言，见 [第 22 章 §7](22-acceptance.md#7-已知项与缺口) |
-| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20） | pause 0 档约 226 ms：发 SIGTERM 前的 `ps` 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态约 27 ms（进程级部署包 `f66dbe2c1` 已把 `ps` 改为读 `/proc`，920B 停 FC 一段 192 → 85 ms，950 待重测；从这一版起那套的原生 pause 不再等于上游，沙箱级 RPM 未改）；resume 约 60 ms：起新 Firecracker 约 35 ms（cgroup v2 建 cgroup 约 13 ms、新建 mount 命名空间随挂载点数增长）、等 envd 约 15 ms。仍未拆：256 档起 Firecracker 多出的约 9 ms、等 envd 一段；920B 上 resume 比不含修复的对照慢 25～36 ms，原因未查。见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)、[第 19 章 §6](19-native-pause-resume.md#6-固定开销从哪里来) |
+| 原生 pause / resume 固定开销 | 已拆分（950，2026-11-20） | pause 0 档约 226 ms：发 SIGTERM 前的 `ps` 约 106 ms、内核销毁 KVM 虚机约 72 ms、断开 NBD 约 20 ms，保存状态约 27 ms（进程级部署包 `f66dbe2c1` 已把 `ps` 改为读 `/proc`，0 档停 FC 一段 950 185 → 52 ms、920B 192 → 85 ms；从这一版起那套的原生 pause 不再等于上游，沙箱级 RPM 未改）；resume 约 60 ms：起新 Firecracker 约 35 ms（cgroup v2 建 cgroup 约 13 ms、新建 mount 命名空间随挂载点数增长）、等 envd 约 15 ms。仍未拆：256 档起 Firecracker 多出的约 9 ms、等 envd 一段；920B 上 resume 比不含修复的对照慢 25～36 ms，原因未查。见 [第 13 章 §6](13-native-snapshot.md#6-成本模型)、[第 19 章 §6](19-native-pause-resume.md#6-固定开销从哪里来) |
 
 ### 2.2 读代码发现的待验证项
 
