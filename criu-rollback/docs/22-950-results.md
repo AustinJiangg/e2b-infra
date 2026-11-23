@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：四轮已填（2026-11-17、11-18、11-23）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 `test950.sh` extended、native、compare 三档里的进程级各步，全部 PASS（§10）。第四轮是 2026-11-23 的 `test950.sh dbm`：换上带补丁 0004 的 guest 内核之后的验收与 soft-dirty 开关 A/B，全部 PASS（§11）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
+> **状态：五轮已填（2026-11-17、11-18、11-23 两轮）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 `test950.sh` extended、native、compare 三档里的进程级各步，全部 PASS（§10）。第四轮是 2026-11-23 的 `test950.sh dbm`：换上带补丁 0004 的 guest 内核之后的验收与 soft-dirty 开关 A/B，全部 PASS（§11）。第五轮是同一天换上带补丁 0005 的 guest 内核之后的 `test950.sh standard --stack criu`，全部 PASS（§12）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -486,6 +486,27 @@ e2b-infra `f3ab5f1` 起，部署包里进程级的 guest 内核换成带补丁 0
 
 ---
 
+## 12. 第五轮：换上补丁 0005 之后的验收与压测（2026-11-23）
+
+e2b-infra `26300e3` 起，部署包里进程级的 guest 内核再换一版：在 0004 之上加补丁 0005，回移上游修复 `2efc6332f18b`，让 KSM 合并页时保留 soft-dirty（[16](16-known-limits.md) 的 K-05）。
+950 上 `git pull` 之后跑了 `bash test950.sh standard --stack criu`；切到进程级栈时，`950.sh` 换上新内核并重建了 `base-criu`。
+
+| 项 | 值 |
+|---|---|
+| 仓库提交 | e2b-infra `26300e3`（950 上工作区里多出来的仍是用 LFS 拉下来的包） |
+| 被测文件 | guest 内核 `6fdcd2d6…`（0001～0005，构建标识 `#2 SMP Mon Nov 23 15:55:37 CST 2026`；第四轮是 `35b25505…`），gsd `8bc5dc49…`，orchestrator `fbe72d14…`，Firecracker v1.13.1 `18f3faa7…`；宿主内核 `6.6.0-159.4.3.154.oe2403sp4.aarch64` |
+| 结果目录 | `test950/results/20261123-165639-standard/` |
+| 验收 `criu/acceptance` | 16:57:54 起，3 分 55 秒，**PASS**：guest-check、verify_gsd、verify_fixes、verify_multitree、clear_refs_race、restore_incremental、perf-run1..3 全部 PASS。guest-check 核对了模板里的内核构建标识 |
+| 压测 `criu/stress` | 2 分 36 秒，**PASS**：whiteout；all、noworkers 各 300 轮，create 134 / restore 153 / delete 13，p50 31 / 55 ms 与 11 / 28 ms；multitree、deldense 各 200 轮，校验 192 次、0 失败 |
+| 回切冒烟 `sandbox/smoke-after` | PASS 5 / FAIL 0 / SKIP 0 |
+
+- **与前几轮一致。** 压测计数与第三轮（§10.2）、新 920B 上同一内核的那一轮相同；0005 只改 KSM 合并时的一条路径，guest 默认不开 KSM，验收与压测不经过它，这一轮确认的是换内核之后进程级功能整体正常。
+- **KSM 用例没有在 950 上跑。** 0005 修掉的漏记，是在新 920B 的独立 Firecracker 虚机里用 `sdcheck` 验证的：KSM 合并的漏报从 1585 / 1590 页降到 0（[03](03-criu-and-incremental-memory.md) §3.4）。
+
+原始终端输出存于工作区 `rollback-reports/950-ksm-20261123/`。
+
+---
+
 ## 本章要点
 
 - 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。
@@ -493,6 +514,7 @@ e2b-infra `f3ab5f1` 起，部署包里进程级的 guest 内核换成带补丁 0
 - 分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。
 - 2026-11-18 的第三轮（gsd `1a0a3b67…`）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 `resource_exhausted` 从五十多次降到 0（§10）；分档性能三轮中位数与第二轮相差不超过 3.7 ms（§10.5）。
 - 2026-11-23 的第四轮（guest 内核 `35b25505…`，带补丁 0004）验收与 A/B 全部 PASS。950 的 guest 有 DBM，checkpoint 之后改写内存的耗时降到原来的 1/4～1/9，每 MiB 省约 0.35 ms；两轮期间宿主上另有约 100 个 Firecracker 进程，checkpoint 与 restore 的差不判读（§11）。
+- 同一天的第五轮（guest 内核 `6fdcd2d6…`，加了补丁 0005）验收与压测全部 PASS，压测计数与前几轮相同（§12）。
 - 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。
 - 950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。
