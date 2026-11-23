@@ -39,11 +39,15 @@ bytearray，且进程大小随档位一起变），并列时分不开"改动量"
              进程级的测点另起一个沙箱，在同一负载上测 e2b 原生 pause / resume（见下面"原生 pause /
              resume"）。两套并列时 mix 另打一张对外表（p50 一张、p99 一张），附 size 组的 restore 小表。
     mix256   旧的 mix：进程固定 256 MiB，档位同 mix（大进程、小改动；不进对外表，不测原生）
+    big      大进程、小改动：进程固定 256 MiB，(d, f) = (0,0) (12,4) (48,16)，即总改动 0、16、64 MiB，
+             内存 : 文件 = 3 : 1。补 mix 的另一面：mix 里进程大小等于改动（改动比例 100%），这里只改进程的
+             一小部分，更接近实际使用。与 mix 一样在进程级栈上另起沙箱测原生 pause / resume；
+             两套并列时另打一张对外表。
 
-默认跑 mix,dirty,size,file,conc,layout,trees；filewait、mix256 要显式写 --series 或用 --series all。
+默认跑 mix,dirty,size,file,conc,layout,trees；filewait、mix256、big 要显式写 --series 或用 --series all。
 文件大小可以是小数（MiB），不是整 MiB 时按字节数一次写入。
 
-原生 pause / resume（只在 mix 组、只在进程级栈上：进程级那套的 orchestrator 没有改原生快照路径，
+原生 pause / resume（只在 mix、big 组，只在进程级栈上：进程级那套的 orchestrator 没有改原生快照路径，
 等同于 ARM 上的 e2b 原生实现）：同一个测点、同样起常驻进程并写满、写好文件、等 ext4 初始化，然后
 循环"改写 d MiB、写 f MiB → 读一遍内存（计时）→ sb.pause() → Sandbox.connect() → 第一条命令 →
 读一遍内存（计时）→ 核对内存 SHA256 与文件"。
@@ -127,6 +131,7 @@ SBX_TIMEOUT = 3600
 # 测点的各个量与默认值；测点字典里没写的量取这里的值
 DEFAULTS = {"P": 16, "d": 0, "f": 0, "layout": "seq", "trees": 1, "sync": "fsync", "wait": 0}
 MIX_POINTS = ((0, 0), (12, 4), (24, 8), (48, 16), (96, 32), (192, 64), (70, 0.001))
+BIG_POINTS = ((0, 0), (12, 4), (48, 16))
 DIMS = ("P", "d", "f", "layout", "trees", "sync", "wait")
 SERIES = {
     "dirty": [{"P": 256, "d": d} for d in (0, 16, 32, 64, 128, 256)],
@@ -137,11 +142,12 @@ SERIES = {
     "filewait": [{"P": 16, "f": 64, "sync": s, "wait": w} for s in ("fsync", "none") for w in (0, 10, 40)],
     "mix": [{"P": int(d), "d": d, "f": f} for d, f in MIX_POINTS],       # 进程大小 = 内存改动
     "mix256": [{"P": 256, "d": d, "f": f} for d, f in MIX_POINTS],
+    "big": [{"P": 256, "d": d, "f": f} for d, f in BIG_POINTS],        # 大进程、小改动
 }
-NATIVE_SERIES = ("mix",)     # 这些组的每个测点另起沙箱测原生 pause / resume（只在进程级栈上）
+NATIVE_SERIES = ("mix", "big")     # 这些组的每个测点另起沙箱测原生 pause / resume（只在进程级栈上）
 NATIVE_STACK = "criu"
 DEFAULT_SERIES = "mix,dirty,size,file,conc,layout,trees"
-ALL_SERIES = "mix,dirty,size,file,conc,layout,trees,filewait,mix256"
+ALL_SERIES = "mix,dirty,size,file,conc,layout,trees,filewait,mix256,big"
 SERIES_RUNS = {"filewait": (1, 6)}     # 没显式给 --passes/--reps 时这些组用的（沙箱数, 次数）
 CONC = [1, 4, 8, 16]
 CONC_POINT = {"P": 64, "d": 16}
@@ -942,7 +948,8 @@ TITLES = {"mix": "mix：对外分档表，进程大小 = 内存改动 d MiB，�
           "trees": "trees：合计 64 MiB、改动 16 MiB，分到几棵进程树",
           "filewait": "filewait：写 64 MiB 文件，落盘方式 × 写完等待",
           "scen": "scen：场景文件里的场景",
-          "mix256": "mix256：进程固定 256 MiB，改写 d MiB 内存 + 写 f MiB 文件（旧 mix）"}
+          "mix256": "mix256：进程固定 256 MiB，改写 d MiB 内存 + 写 f MiB 文件（旧 mix）",
+          "big": "big：大进程小改动，进程固定 256 MiB，改写 d MiB 内存 + 写 f MiB 文件"}
 
 
 def series_order(summary):
@@ -1044,7 +1051,8 @@ def print_summary(result):
                 print("  注意：没读到 orchestrator 的 Pause timing 日志，pause 列为空（墙钟见“墙钟”列，含上传）")
             print_native_phases(native)
     print_stages(result)
-    print_breakdown(result)
+    for s_ in ("mix", "big"):
+        print_breakdown(result, s_)
     print("\n判定: %s（测量 %d 次，失败 %d）" % (result["verdict"], sum(1 for r in result["rows"] if r["kind"] != "base"),
                                          sum(1 for r in result["rows"] if not r["ok"])))
 
@@ -1348,8 +1356,8 @@ def compare_table(results):
     return merged, table
 
 
-def mix_rows(table):
-    rows = [t for t in table if t["series"] == "mix"]
+def mix_rows(table, series="mix"):
+    rows = [t for t in table if t["series"] == series]
     return sorted(rows, key=lambda t: (t["s"]["d"] + t["s"]["f"], t["s"]["d"]))
 
 
@@ -1380,8 +1388,37 @@ def mix_cells(t, q):
     return cells
 
 
+BIG_NOTES = (
+    "进程固定 256 MiB，每档只改写其中 d MiB 内存、写 f MiB 文件（内存 : 文件 = 3 : 1）；与 mix 表互补："
+    "mix 里进程大小等于改动，这里改动只占进程的一小部分。",
+    "沙箱级 restore 随改动量增长，进程级 restore 随进程大小增长（这里固定 256 MiB）；E2B pause 导出全部驻留内存，"
+    "随进程大小增长，与改动量无关。",
+)
+
+
+def print_big_table(merged, table):
+    """big 组（大进程、小改动）的对外表：列同 mix 表。"""
+    rows = mix_rows(table, "big")
+    if not rows:
+        return
+    print("\n---- 对外分档表（big：大进程小改动）----")
+    print("checkpoint 为连续 checkpoint，restore 回到改写之前的基点；客户端墙钟，单位 ms。")
+    for q in ("p50", "p99"):
+        print("\n[%s]" % q)
+        print("\t".join(MIX_HEAD))
+        for t in rows:
+            print("\t".join(mix_cells(t, q)))
+    print("\n说明：")
+    for i, note in enumerate(BIG_NOTES, 1):
+        print("%d. %s" % (i, note))
+    a, b = rows[0]["s"], rows[0]["c"]
+    print("\n样本数（每档）：checkpoint / restore 沙箱级 %d、进程级 %d；pause / resume %s"
+          % (a["n"], b["n"], b.get("native_n", "-")))
+
+
 def print_mix_table(merged, table):
     """对外展示的分档表：两套 checkpoint / restore / 首次全量与原生 pause / resume 并排，附 size 组的 restore。"""
+    print_big_table(merged, table)
     rows = mix_rows(table)
     if not rows:
         return

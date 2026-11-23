@@ -91,6 +91,12 @@ class MixTests(unittest.TestCase):
         self.assertEqual([(q["d"], q["f"]) for q in csw.SERIES["mix"]][-1], (70, 0.001))
         self.assertTrue(all(3 * q["f"] == q["d"] for q in csw.SERIES["mix"][:-1]))
         self.assertEqual(csw.SERIES["mix"][-1]["P"], 70)
+        # big：进程固定 256 MiB，总改动 0、16、64 MiB，3 : 1，也测原生
+        self.assertTrue(all(q["P"] == 256 for q in csw.SERIES["big"]))
+        self.assertEqual([q["d"] + q["f"] for q in csw.SERIES["big"]], [0, 16, 64])
+        self.assertTrue(all(3 * q["f"] == q["d"] for q in csw.SERIES["big"]))
+        self.assertIn("big", csw.NATIVE_SERIES)
+        self.assertIn("big", csw.ALL_SERIES.split(","))
 
     def test_mix_points(self):
         self.assertTrue(all(q["P"] == q["d"] for q in csw.SERIES["mix"]))
