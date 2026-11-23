@@ -177,6 +177,8 @@ CRIU 做增量 dump 时读的就是它。
 把上面的机制对应到 CRIU 的两个选项：`--track-mem` 就是让 CRIU 在 dump 的过程中替我们做第 1 步；
 `--prev-images-dir` 就是让 CRIU 在下一次 dump 时去读 pagemap，只保存 soft-dirty 为 1 的页。
 
+上面是上游内核的做法，补丁 0002 在 arm64 上也照此实现。它的代价是：每次 checkpoint 之后，每一页的第一次写都要缺页一次。arm64 上补丁 0004 改由处理器硬件记录这次写，不再缺页，见 §3.4。
+
 ### 3.2 两级标记：页表项上一级，内存区域上一级
 
 除了每一页自己的标记位，内核还在每个**内存区域**（VMA，进程地址空间里连续的一段，例如堆、某次 `mmap` 得到的一块）上放了一个标志 `VM_SOFTDIRTY`。
@@ -208,6 +210,58 @@ soft-dirty 需要每个处理器架构各自实现：在页表项里选哪一位
 配置上需要同时打开 `CONFIG_CHECKPOINT_RESTORE=y`（`fc-kernels/configs/arm64/6.1.158.config:196`）和
 `CONFIG_MEM_SOFT_DIRTY=y`（同文件 `:3359`）。x86_64 的那份配置没有打开 `CONFIG_CHECKPOINT_RESTORE`，
 这是 gsd 目前只支持 arm64 guest 的原因之一（[04](04-goals-and-tradeoffs.md)）。
+
+### 3.4 用硬件脏位记录写入：补丁 0004
+
+**第一次写的代价。** 按 §3.1 第 2、3 步的做法，每次 checkpoint 之后，进程每写到一页还没写过的页，都要缺页一次、进出内核一次。
+这笔时间花在业务进程自己的写指令上，不在 checkpoint、restore 的任何计时项里，所以分档表看不到它。
+2026-11-23 在 920B 的进程级沙箱里（guest 2 vCPU，4 KiB 页，THP 为 never）直接量过：
+写过 `clear_refs` 之后，第一遍写比第二遍写每页多花约 1.0 µs（每页只写 1 字节）到 1.2 µs（整页写满），折合每 MiB 0.25～0.32 ms；
+256 MiB 整页写满，第一遍 87.7 ms，第二遍 5.8 ms。第一遍每页正好缺页一次，第二遍为 0 次。写 `clear_refs` 本身很便宜，256 MiB 约 0.9 ms。
+
+**arm64 的硬件脏位。** ARMv8.1 起，处理器可以自己记录"这一页被写过"，这个功能叫 DBM（Dirty Bit Modifier，硬件脏位管理）。它用到页表项里的两位：
+
+- DBM 位（第 51 位）。Linux 在 arm64 上直接把它当作"可写"位，`PTE_WRITE` 就定义为 `PTE_DBM`；
+- 只读位（第 7 位，`PTE_RDONLY`，即架构里的 AP[2]）。
+
+DBM 位为 1、只读位也为 1 的页，处理器看作"可写但还干净"：写它时不产生缺页，处理器执行这条写指令时自己把只读位清掉。
+因此"可写位为 1 而只读位为 0"就表示这一页被硬件记成了脏，内核用 `pte_hw_dirty` 判断这个状态。
+guest 启动日志里有 `CPU features: detected: Hardware dirty bit management` 这一行，就说明 DBM 可用。920B 的 guest 有这一行。
+950 上没有直接看启动日志，是由 A/B 结果确认的：没有 DBM 时开关不起作用，两轮的改写耗时应当相同，实测却明显不同（[22](22-950-results.md) §11）。
+
+原来的清标记（`fs/proc/task_mmu.c` 的 `clear_soft_dirty`）用 `pte_wrprotect` 去掉写权限。在 arm64 上，去掉写权限就是清掉 `PTE_WRITE`，也就是清掉 DBM 位，
+处理器因此只能靠缺页通知内核。硬件本来能自己记录写入，这条路径上却没有用上。
+
+**0004 改了什么。** 补丁 `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch` 只动 `arch/arm64/include/asm/pgtable.h` 和 `fs/proc/task_mmu.c` 两个文件（增 41 行、删 3 行）：
+
+| 改动 | 作用 |
+|---|---|
+| `clear_soft_dirty` 遇到可写的页，改调新函数 `pte_clear_soft_dirty_keep_write`：先把硬件脏转进软件的 `PTE_DIRTY` 位，再置上只读位，保留 `PTE_WRITE`（即 DBM），清掉 soft-dirty 位 | 页回到"可写但干净"，下一次写由硬件记录，不缺页。软件 `PTE_DIRTY` 是内核自己判断"这一页要不要回写"用的，转进去之后这份信息不丢 |
+| `pte_soft_dirty` 改成"soft-dirty 位为 1，或者页是硬件脏" | 清标记之后的写不再经过内核，soft-dirty 位不会被置上，这次写只体现为硬件脏。pagemap 报告时、换出和页迁移在拆掉页表项之前转存标记时，用的都是这个函数，所以这三处都能看到这次写 |
+| `pte_mkclean` 遇到硬件脏的页，先置上 soft-dirty 位再清脏 | 内核有几处会主动把页清干净（`MADV_FREE`、fork 时处理共享映射等）。在清掉硬件脏之前先把这次写记到 soft-dirty 位上，不让它丢掉 |
+
+`pte_wrprotect` 和 `pte_modify` 不用改：0002 已经让它们在折叠硬件脏位时经 `pte_mkdirty` 置上 soft-dirty。
+本来就不可写的页（例如 fork 之后写时复制的共享页）仍按原来的方式处理，写的时候照旧缺页。
+处理器没有 DBM 时，"可写但干净"的页一写就缺页，缺页处理经 `pte_mkdirty` 把它标脏并置上 soft-dirty，结果与原来的方式相同。
+
+gsd 和 CRIU 都不用改：CRIU 仍然往 `clear_refs` 写 `4`、读 pagemap 的第 55 位，变的只是内核在这两处背后的做法。
+
+**开关。** 0004 加了一个内核参数 `soft_dirty_dbm`，默认开。在沙箱里往 `/sys/module/kernel/parameters/soft_dirty_dbm` 写 `0` 或 `1` 立即生效，
+只影响这一个沙箱之后的清标记；写 `0` 就回到 §3.1 的写保护方式（[28](28-configuration-and-observability.md) §2.3）。
+
+**正确性。** 这项改动只要漏掉一条路径，后果就是某次写没有被标脏、从下一次增量里静默漏掉，restore 之后这一页回到旧内容。所以分两层验证：
+
+- **独立的 Firecracker 虚机**（不经 e2b，2 vCPU / 2 GiB，接一块换出盘）。清标记之后经各条路径写随机选的页，比对"真正写过的页"与"pagemap 报为 soft-dirty 的页"，漏报必须为 0。
+  覆盖的路径有：普通写、只读不写、fork（子进程退出；子进程存活、写时复制）、`mprotect` 先只读再可写、写后 `MADV_FREE`、另一个线程写、`mremap` 搬家、
+  换出 8193 页后读回与再写、内存规整（迁移 1629 页），以及 200 轮随机组合。开关为 0 和为 1 时漏报都是 0。
+  `mremap` 和内存规整之后会多报一些页，这是内核搬页时把整段都标脏造成的，基线内核同样如此；多报只会多写一些镜像，不影响正确性。
+- **端到端**：920B 和 950 上进程级验收全部通过；同一负载开关为 0、1 各跑一轮，每次 restore 之后内存与文件的校验都一致（[20](20-920b-performance.md) §5.5、[22](22-950-results.md) §11）。
+
+KSM（内核同页合并）合并页时会丢掉 soft-dirty 标记。这一点与 0004 无关，没有 0004 的内核也一样，见 [16](16-known-limits.md) 的 K-05。
+
+**省下多少。** 独立虚机里，写过 `clear_refs` 之后第一遍写比第二遍多出的时间从每 MiB 0.25～0.31 ms 降到 0.009～0.023 ms，每页缺页次数从 1 降到 0；
+256 MiB 整页写满，第一遍从 85.1 ms 降到 11.1 ms。端到端，常驻进程在 checkpoint 之后改写 256 MiB 内存，920B 上从 87.6 ms 降到 20.1 ms，950 上从 119.1 ms 降到 28.5 ms。
+checkpoint 与 restore 本身不变：两种方式标出的脏页相同，CRIU 要写出和读回的页数也就相同。这项代价怎么计入"改写加 checkpoint"的一个周期，见 [17](17-cost-model.md) §7。
 
 ---
 
@@ -397,6 +451,7 @@ dump 结束后只给"dump 之前不是停着的"进程发 `SIGCONT`（`resumable
 | 透明大页的兜底检查 | `ensureTHPNever`（`packages/gsd/main.go:196`） |
 | 开机时关闭透明大页 | `overlay-init.sh.tpl` 的 Step 6（`packages/orchestrator/internal/template/build/core/rootfs/gsdfiles/`） |
 | arm64 的 soft-dirty | `0002-overlayfs-hot-switch-checkpoint.patch` 中 `arch/arm64/` 下的改动：`PTE_SOFT_DIRTY`、`pte_mksoft_dirty`、`pte_mkdirty`、`ptep_set_access_flags` |
+| 清标记不写保护、硬件脏算作写过 | `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch`：`clear_soft_dirty`、`pte_clear_soft_dirty_keep_write`、`pte_soft_dirty`、`pte_mkclean`，参数 `soft_dirty_dbm` |
 | 内核配置 | `fc-kernels/configs/arm64/6.1.158.config`（`:196`、`:930`、`:3359`） |
 
 ---
@@ -408,7 +463,8 @@ dump 结束后只给"dump 之前不是停着的"进程发 `SIGCONT`（`resumable
 2. 增量靠 `--track-mem` 加 `--prev-images-dir`：只写上次以来改过的页，其余的记为"在父镜像里"，由 `parent` 符号链接串成链。
    因此**父镜像必须活得比子镜像久**，删除、检查和失败处理都围绕这一条。
 3. soft-dirty 的原理是"清标记并去掉写权限 → 第一次写触发缺页 → 内核置标记并放行"。6.1 的上游内核在 arm64 上没有它，
-   由热切层补丁在页表项第 63 位（换出页第 61 位）上实现。
+   由热切层补丁在页表项第 63 位（换出页第 61 位）上实现。它让每页在每次 checkpoint 之后的第一次写都缺页一次，约每 MiB 0.25～0.32 ms；
+   补丁 0004 在 arm64 上改由硬件脏位（DBM）记录这次写，不再缺页，开关 `soft_dirty_dbm` 默认开，checkpoint 与 restore 不变。
 4. 透明大页开着时，一个 2 MiB 的大页只有一个标记位，零散写入会让增量放大到接近全量；所以 **`never` 是设计约束**，
    由 `overlay-init` 在开机时设置、gsd 启动时兜底。代价是 restore 变慢。
 5. "假全量"来自内存区域级的 `VM_SOFTDIRTY`：两次 dump 之间分配新内存会触发（负载要预分配、原地写）；

@@ -23,7 +23,7 @@
 |---|---|---|---|
 | **guest 里的 gsd** | 命令行参数与 `GSD_*` 环境变量（§2.1） | gsd 进程启动时 | 参数写在模板里的 `gsd.service` 中。要对所有沙箱生效：改 orchestrator 里的服务单元模板，重编 orchestrator，重建模板。只改一个正在运行的沙箱：在沙箱里加 systemd drop-in 后重启 gsd |
 | **宿主的 orchestrator** | `HOST_GSD_PATH`、`HOST_KERNELS_DIR`（§2.2） | orchestrator 进程启动时读一次 | 改 job 的环境变量并重启 orchestrator（切栈脚本做的就是这件事，[27](27-deployment.md)）；只影响**之后建的模板** |
-| **guest 内核** | 模块参数 `overlay.ckpt_move_open`（§2.3） | 每次 checkpoint 时读当前值 | 在沙箱里写 sysfs 立即生效，只影响这一个沙箱 |
+| **guest 内核** | 模块参数 `overlay.ckpt_move_open`、内核参数 `soft_dirty_dbm`（§2.3） | 前者每次 checkpoint 时读当前值，后者每次清 soft-dirty 时读 | 在沙箱里写 sysfs 立即生效，只影响这一个沙箱 |
 | **客户端 SDK** | 连接参数与 `E2B_*` 环境变量（§2.4） | 创建或连接沙箱对象时 | 重新创建沙箱对象 |
 
 贯穿全书的一条规则在这里尤其要紧：**模板固化了建模板时的 gsd、内核和服务单元**。沙箱是从模板快照恢复出来的，gsd 进程在快照里已经带着它的参数在跑。
@@ -102,9 +102,9 @@ p=<orchestrator 的进程号>
 tr '\0' '\n' < /proc/$p/environ | grep -E '^HOST_(GSD_PATH|KERNELS_DIR)=' || echo "两个都没设，用默认值"
 ```
 
-### 2.3 内核模块参数 `overlay.ckpt_move_open`
+### 2.3 内核参数 `overlay.ckpt_move_open` 与 `soft_dirty_dbm`
 
-由 `0003-overlayfs-hot-switch-fixes.patch` 加入，决定 checkpoint 时怎样对待"正被以写方式打开着"的 overlay 文件。背景是：这样的文件在 checkpoint 之后还会被原来的文件描述符继续写，如果不处理，这些写入会改到已经保存下来的那一层里（[08](08-overlay-switch-consistency.md)）。
+**`overlay.ckpt_move_open`** 由 `0003-overlayfs-hot-switch-fixes.patch` 加入，决定 checkpoint 时怎样对待"正被以写方式打开着"的 overlay 文件。背景是：这样的文件在 checkpoint 之后还会被原来的文件描述符继续写，如果不处理，这些写入会改到已经保存下来的那一层里（[08](08-overlay-switch-consistency.md)）。
 处理办法是把原文件留在新的可写层、在保存下来的层里放一份拷贝，代价是拷贝的时间。
 
 | 值 | 行为 |
@@ -121,6 +121,24 @@ echo 1 > /sys/module/overlay/parameters/ckpt_move_open
 ```
 
 默认值 2 是正确性优先的选择。只有在确认沙箱里长期以写方式打开的大文件不需要被 checkpoint 精确保存时，才考虑调低；代价的量级见 [26](26-semantics-and-limits.md) 与 [20](20-920b-performance.md)。无论取哪个值，有多个硬链接的文件都不搬，内核会打一条限速告警（§4.3）。
+
+**`soft_dirty_dbm`** 由补丁 `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch` 加入，决定清 soft-dirty 时怎样对待可写的页（原理在 [03](03-criu-and-incremental-memory.md) §3.4）：
+
+| 值 | 行为 |
+|---|---|
+| `Y`（默认） | 可写的页不写保护，只设回"可写但干净"；之后的写由处理器的硬件脏位记录，不缺页 |
+| `N` | 原来的方式：去掉写权限，之后每页第一次写缺页一次 |
+
+读写位置是 `/sys/module/kernel/parameters/soft_dirty_dbm`（权限 0644，读出来是 `Y` 或 `N`，写 `0`、`1` 都可以；也可以在内核命令行上写 `soft_dirty_dbm=0`）。
+在沙箱里写立即生效，只影响这一个沙箱之后的清标记：
+
+```bash
+cat /sys/module/kernel/parameters/soft_dirty_dbm
+echo 0 > /sys/module/kernel/parameters/soft_dirty_dbm
+```
+
+两个值下增量 checkpoint 与 restore 都正确，差别只在业务进程写内存的快慢（[17](17-cost-model.md) §7）。关掉它只用于对照测量（`benchmark/ckpt_same_workload.py --soft-dirty-dbm 0`）。
+处理器没有 DBM 时，取哪个值都等于原来的方式。沙箱里没有这个文件，说明模板里的内核没有打 0004。
 
 ### 2.4 SDK 的连接参数与环境变量
 
@@ -450,6 +468,7 @@ python3 -m json.tool < /var/lib/gsd/snapshots/state.json | head -n 60
 | 模板里 gsd 的启动参数与服务设置 | `packages/orchestrator/internal/template/build/core/rootfs/gsdfiles/gsd.service.tpl`；取值来源 `newTemplateModel`（`…/rootfs/templates.go:49`） |
 | `HOST_GSD_PATH`、`HOST_KERNELS_DIR` | `packages/orchestrator/internal/cfg/model.go:22`、`:23`；`GSDEnabled`（`:39`） |
 | `overlay.ckpt_move_open` | 补丁 `0003-overlayfs-hot-switch-fixes.patch` 的 `module_param_named(ckpt_move_open, …)` 与 `ovl_ckpt_want_move` |
+| `soft_dirty_dbm` | 补丁 `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch` 的 `core_param(soft_dirty_dbm, …)` 与 `clear_soft_dirty`（`fs/proc/task_mmu.c`） |
 | SDK 的连接配置 | `py-sdk/e2b/connection_config.py`（`get_checkpointd_url` 在 `:168`） |
 | 计时键的定义 | `packages/gsd/spec/checkpoint/checkpoint.proto` 的 `Timings`；SDK 侧 `timings_dict`（`py-sdk/e2b/sandbox/checkpoint/types.py:62`） |
 | 各计时键的赋值点与日志字段 | `CreateCheckpoint`（`ckpt/service.go:163`）、`RestoreCheckpoint`（`ckpt/service.go:463`）；杀进程的细分 `killStats`（`ckpt/criu.go:197`） |
@@ -464,10 +483,11 @@ python3 -m json.tool < /var/lib/gsd/snapshots/state.json | head -n 60
 
 ## 本章要点
 
-- 开关分四处：guest 里 gsd 的参数、宿主 orchestrator 的两个环境变量、guest 内核的一个模块参数、客户端 SDK 的连接配置。前两处的值在建模板时固化进模板，改了之后要重建模板才对新沙箱生效。
+- 开关分四处：guest 里 gsd 的参数、宿主 orchestrator 的两个环境变量、guest 内核的两个参数、客户端 SDK 的连接配置。前两处的值在建模板时固化进模板，改了之后要重建模板才对新沙箱生效。
 - gsd 的五个路径参数在模板里总是显式传入并与启动脚本一致，编译进去的前两个默认值不可用；两个 CRIU 时限默认各 60 秒、针对单棵树，全部树合计 3 倍。
 - `HOST_GSD_PATH` 默认 `/fc-gsd/gsd`、默认注入；只有小写 `off` 才关闭注入；开着而文件读不到时建模板失败。
 - `overlay.ckpt_move_open` 默认 2：checkpoint 时为以写方式打开的文件留拷贝，保证之后的写入不改到 checkpoint；可在沙箱里写 sysfs 调低，以正确性换时间。
+- `soft_dirty_dbm` 默认开：清 soft-dirty 时不写保护，写入由硬件脏位记录；写 0 回到写保护方式，结果相同、只是写内存变慢，只用于对照测量。
 - 计时键都是 gsd 自己计的毫秒数：`total_ms` 不含排队与网络；`criu_dump_ms`、`criu_restore_ms` 是各棵树之和；`stopped_ms` 从第一棵树保存完算起；没发生的阶段不出现。每棵树的明细和杀进程的细分只在日志里。
 - gsd 的 JSON 日志与 CRIU restore 的原始输出在 `journalctl -u gsd` 里；保存失败时镜像目录里的 `criu-dump.log` 已被删除，完整一份在 `<snapshot-store>/last-failed-criu-dump.log`。
 - journal 在单独挂出的 `/var/log` 上，不随 restore 回滚（2026-10-09 在新 920B 上确认）；它会因 CRIU 的详细输出持续增长，journald 的限流还可能丢掉 gsd 的日志，需要完整日志时先关限流。

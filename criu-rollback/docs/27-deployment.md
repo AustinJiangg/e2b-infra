@@ -26,7 +26,7 @@
 |---|---|---|---|
 | gsd | `packages/gsd/` | 宿主 `/fc-criu/gsd`；建模板时被拷进 guest 的 `/usr/bin/gsd` | 纯 Go、静态链接（`CGO_ENABLED=0`）的 arm64 二进制。宿主上的这个文件只在建模板时被读取，宿主自己不运行它 |
 | 进程级版 orchestrator | `packages/orchestrator/` | 宿主 `/fc-criu/orchestrator` | 与上游相比多了"建模板时注入 gsd"的逻辑（[06](06-guest-boot-and-injection.md)）。需要 CGO（`CGO_ENABLED=1`） |
-| guest 内核 | `fc-kernels/`（构建脚本、config、补丁） | 宿主 `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 上游 6.1.158 的固定基线加三个补丁。arm64 的 `Image`，文件名按 orchestrator 的约定叫 `vmlinux.bin` |
+| guest 内核 | `fc-kernels/`（构建脚本、config、补丁） | 宿主 `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 上游 6.1.158 的固定基线加四个补丁。arm64 的 `Image`，文件名按 orchestrator 的约定叫 `vmlinux.bin` |
 | guest 基础镜像 | `packages/gsd/docker/Dockerfile.criu421` | 镜像仓库，例如 `…/e2b-orchestration/ubuntu:22.04-custom-criu421` | 在 `ubuntu:22.04-custom` 上加源码编译的 CRIU 4.2.1（`/usr/sbin/criu`） |
 | 启动脚本与服务单元 | `packages/orchestrator/internal/template/build/core/rootfs/gsdfiles/` | 嵌在 orchestrator 二进制里，建模板时写进 guest 的 `/usr/bin/overlay-init` 与 `/etc/systemd/system/gsd.service` | 不需要单独部署 |
 | Python SDK | `py-sdk/` | 客户端的解释器 | 见 [25](25-quickstart.md) |
@@ -93,7 +93,7 @@ install -D -m 755 $OUT/orchestrator /fc-criu/orchestrator
 内核的三样输入都在代码仓的 `fc-kernels/` 下：
 
 - **基线**：`kernel_base_tags.txt` 把 6.1.158 固定在上游 amazonlinux/linux 的 tag `microvm-kernel-6.1.158-15.288.amzn2023`。补丁是对着这个 tag 做的；不固定的话，上游出一个新 tag 就会悄悄换掉补丁脚下的基线。
-- **补丁**：`patches/6.1.158/` 下按文件名顺序应用的三个——`0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch`（上游带来的，与 gsd 无关）、`0002-overlayfs-hot-switch-checkpoint.patch`（文件系统热切层与 arm64 脏页跟踪）、`0003-overlayfs-hot-switch-fixes.patch`（对 0002 的全部修复）。
+- **补丁**：`patches/6.1.158/` 下按文件名顺序应用的四个——`0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch`（上游带来的，与 gsd 无关）、`0002-overlayfs-hot-switch-checkpoint.patch`（文件系统热切层与 arm64 脏页跟踪）、`0003-overlayfs-hot-switch-fixes.patch`（对 0002 的全部修复）、`0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch`（arm64 上用硬件脏位记录写入，2026-11-23 加入，开关默认开，[03](03-criu-and-incremental-memory.md) §3.4）。
 - **config**：`configs/arm64/6.1.158.config`，其中 `CONFIG_CHECKPOINT_RESTORE=y`、`CONFIG_MEM_SOFT_DIRTY=y`、`CONFIG_OVERLAY_FS=y`。
 
 联网的 Debian / Ubuntu 机器上直接用仓库里的脚本：
@@ -104,7 +104,7 @@ cd $W/fc-kernels
 # 产物：builds/vmlinux-6.1.158/arm64/vmlinux.bin
 ```
 
-脚本会装依赖、克隆内核源码、检出固定的 tag、依次 `git apply` 三个补丁、`make olddefconfig`、编出 `Image`。
+脚本会装依赖、克隆内核源码、检出固定的 tag、依次 `git apply` 四个补丁、`make olddefconfig`、编出 `Image`。
 
 不联网的机器（新 920B 就是这种情况）手工做同样的几步。前提是本机已有一份带这个 tag 的内核源码克隆和 arm64 的编译环境：
 
@@ -132,22 +132,23 @@ sha256sum /fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 
 ### 2.3 核对补丁能从基线重放
 
-仓库里的三个补丁文件是内核改动的唯一正本。要确认"手上这个内核的源码树"确实等于"基线加这三个补丁"，不靠比对补丁文本，而是从基线重放一遍、比较 git 的树哈希：
+仓库里的四个补丁文件是内核改动的唯一正本。要确认"手上这个内核的源码树"确实等于"基线加这四个补丁"，不靠比对补丁文本，而是从基线重放一遍、比较 git 的树哈希：
 
 ```bash
 cd <内核源码克隆>
 git worktree add --detach /tmp/applycheck microvm-kernel-6.1.158-15.288.amzn2023
 cd /tmp/applycheck
-for p in $W/fc-kernels/patches/6.1.158/000[123]-*.patch; do
+for p in $W/fc-kernels/patches/6.1.158/000[1-4]-*.patch; do
   sha256sum "$p"; git apply --index "$p" && echo "  apply OK"
 done
 git write-tree
 cd - && git worktree remove /tmp/applycheck
 ```
 
-`git write-tree` 输出的是应用完三个补丁之后整棵源码树的哈希，它只取决于文件内容，与提交历史、提交说明无关。
+`git write-tree` 输出的是应用完全部补丁之后整棵源码树的哈希，它只取决于文件内容，与提交历史、提交说明无关。
 2026-10-08 在新 920B 上对 `259f1a25c` 里的三个补丁做这一步（`bc3cce913` 里的这三个文件没有变化），三个都 `apply OK`，得到的树哈希是 `744cbce67cef413e4838035c8a2788f97e5e9d3a`，与编出发布内核的那棵源码树相同。
-以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。三个补丁文件各自的 sha256 记在 [19](19-920b-functional.md)。
+2026-11-23 加入 0004 之后（代码仓 `criu-rollback-dev` 分支 `b3668b6`）在新 920B 上重做了这一步：四个都 `apply OK`，树哈希是 `9117988d010b4dcb8230fd767f1a337382474b3e`，与编出部署包里 guest 内核 `35b25505…` 的那棵源码树相同；只打前三个时仍得到上面的 `744cbce6…`。
+以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。前三个补丁文件各自的 sha256 记在 [19](19-920b-functional.md)，0004 的 sha256 是 `c2cd24607871370f4deec8efcc9192af407b549945e5d1c2d387645cf1421aed`。
 
 调试用的内核（打开 KASAN、lockdep 等检查）用同一棵源码树、另一份 config 编，做法与注意事项在 [18](18-testing-and-debug-kernel.md)，config 片段随手册附带在 `scripts/kernel/`。
 
@@ -446,9 +447,9 @@ bash criu-rollback/deploy/950.sh all
 
 ## 本章要点
 
-- 要部署的是 gsd、进程级版 orchestrator、打了三个补丁的 guest 内核、带 CRIU 4.2.1 的基础镜像和 Python SDK，必须来自同一个提交；Firecracker 和宿主内核不动；只支持 arm64 的 guest。
+- 要部署的是 gsd、进程级版 orchestrator、打了补丁的 guest 内核、带 CRIU 4.2.1 的基础镜像和 Python SDK，必须来自同一个提交；Firecracker 和宿主内核不动；只支持 arm64 的 guest。
 - 离线构建靠 `GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly` 加预先备好的模块缓存；提交号用 `-ldflags` 嵌进二进制，先 vet 和单测再编。
-- 内核从 `kernel_base_tags.txt` 固定的 tag 出发按顺序打三个补丁；用"从基线重放、比较 `git write-tree`"核对源码树，而不是比对补丁文本。
+- 内核从 `kernel_base_tags.txt` 固定的 tag 出发按顺序打四个补丁；用"从基线重放、比较 `git write-tree`"核对源码树，而不是比对补丁文本。
 - 运行时只有三个文件：`/fc-criu/gsd`、`/fc-criu/orchestrator`、`/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin`。job 里显式设 `HOST_GSD_PATH` 指向这个 gsd（内置默认 `/fc-gsd/gsd` 是旧布局）；与别的栈共用的机器用 `HOST_KERNELS_DIR` 指向补丁内核，只跑进程级的机器把内核直接放 `/fc-kernels`。
 - 切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；`950.sh` 切换前先删掉全部 e2b 沙箱（不碰 AgentENV 的），开发用的 `switch-gsd-new920b.sh` 则在还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。
 - 模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。

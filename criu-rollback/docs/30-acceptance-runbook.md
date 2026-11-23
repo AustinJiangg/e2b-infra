@@ -116,7 +116,7 @@ EOF
 |---|---|---|
 | guest 内 `gsd -commit` | 等于宿主上 `/fc-criu/gsd -commit` 的输出 | 模板是换 gsd 之前建的，要重建模板 |
 | guest 内 `/usr/bin/gsd` 的 sha256 | 等于宿主上 `/fc-criu/gsd` 的 sha256 | 同上 |
-| `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[27](27-deployment.md)） |
+| `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[27](27-deployment.md)）。部署包的 `ops/guest_check.py` 从 `manifest.json` 读期望的构建标识（2026-11-23 起是 `#2 SMP Mon Nov 23 11:39:42 CST 2026`），并核对 `soft_dirty_dbm` 的默认值为 `Y` |
 | THP | `always madvise [never]` | overlay-init 不是当前版本；增量会退化成接近全量（[03](03-criu-and-incremental-memory.md)） |
 | `rcu_expedited` | `1` | gsd 不是当前版本或没有正常启动（[12](12-restore.md)） |
 | `gsd.service` | `active` | 见 [29](29-troubleshooting.md) |
@@ -373,6 +373,8 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 | `bash criu-rollback/deploy/950.sh stress-ext` | [18](18-testing-and-debug-kernel.md) §5.1 的八组（含 enospc）各 1000 轮；多棵树、删文件密集各 3 个种子 200 轮（容量以内），再各 1000 轮（`*-capacity`，把 guest 内存或根盘用满，看容量耗尽时是否仍安全失败）；all、noworkers 各 5 个种子 300 轮；最后跑兼容矩阵 `rollback/scripts/acceptance/compat_matrix.py`（含 checkpoint → pause → resume → restore，即 [16](16-known-limits.md) 的 T-09） | 压测同 §5.2；enospc 另判删掉填充后 checkpoint 与 restore 恢复、内容正确；兼容矩阵无 `BROKEN` |
 | `bash criu-rollback/deploy/950.sh soak --hours 4` | 一个沙箱、六个 worker、十种文件操作，按时长连续 checkpoint / restore / delete；前后记录宿主内存、netns、orchestrator fd 与根盘用量 | 同 §5.2；资源只记录不判 |
 
+`test950.sh dbm` 是这些入口之上的一档：先跑 `950.sh acceptance`，再用 `benchmark/ckpt_same_workload.py` 把同一组负载跑两轮，每个沙箱里分别把 `soft_dirty_dbm` 写成 0 和 1，最后打印 A/B 表（`bash test950.sh report criu/dbm-table`）。判据只有功能性的：两轮每次 restore 之后内存与文件校验一致；耗时只留档。结果的读法见 [20](20-920b-performance.md) §5.5、[22](22-950-results.md) §11。
+
 两点与本章的做法不同：SDK 用进程级 conda 环境里的解释器（入口自动选用，不需要激活），不设 `PYTHONPATH`；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。
 
 单独执行时输出目录默认是 `criu-rollback/deploy/results/<时间>-acceptance/` 和 `…-stress/`，可以用 `--out` 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 `criu-rollback/scripts/.env`、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 [22](22-950-results.md)。
@@ -383,7 +385,7 @@ worker 的操作总数和 `ENOENT`、`ESTALE` 的次数随机器负载变化，�
 
 - 在运行进程级栈的宿主机上、用装好 SDK 依赖的 conda 环境加代码仓的 `py-sdk`、对模板 `base-criu` 跑；开始前确认三个文件的 sha256、确认机器上没有别人的沙箱。
 - 顺序固定：部署自检 → `verify_gsd.py` → `verify_fixes.py` → `verify_multitree.py` → `verify_clear_refs_race.py` → `demo_checkpoint_perf.py` 三次 → 可选的探针与压测。前一步不过就停下来查。
-- 部署自检查的是"模板里装的是不是要验的那一套"：guest 内 gsd 的提交号与 sha256、内核版本串、THP、`rcu_expedited`、`/health`、criu 版本、`/` 与 `/tmp`。换过内核、gsd、overlay-init 而没有重建模板，是最常见的白跑原因。
+- 部署自检查的是"模板里装的是不是要验的那一套"：guest 内 gsd 的提交号与 sha256、内核版本串（期望的构建标识从部署包的 `manifest.json` 读）、`soft_dirty_dbm`、THP、`rcu_expedited`、`/health`、criu 版本、`/` 与 `/tmp`。换过内核、gsd、overlay-init 而没有重建模板，是最常见的白跑原因。
 - `verify_gsd.py`、`verify_clear_refs_race.py` 与 `stress_overlay_ckpt.py` 的退出码不是判定，分别看末行的根盘判定、漏页轮数、以及按判据表核对汇总 JSON。
 - `verify_fixes.py` 通过的样子是 PASS 26 / FAIL 0 / SKIP 2；它和 `verify_multitree.py` 都把 dmesg 的可疑行只记作证据，要另外搜一遍。
 - 压测在首次部署、换内核、改补丁时跑，一律带看门狗；判据是 `RESULT` 为 `DONE rc=0`、dmesg 与串口关键词零命中、worker 只有允许的 errno、没有心跳过期、gsd 侧只有 `resource_exhausted`。改过内核补丁还要在调试内核上再跑一遍并确认 `debug_locks` 为 1。

@@ -73,7 +73,8 @@
 | 术语 | 标识 | 一句话 | 详见 |
 |---|---|---|---|
 | **CRIU** | `/usr/sbin/criu` | 用户态的进程 checkpoint/restore 工具；本方案固定用基础镜像里源码编译的 4.2.1 | [03](03-criu-and-incremental-memory.md) |
-| **soft-dirty** | `PTE_SOFT_DIRTY` | 页表项上的"上次清零之后被写过"标志，增量 dump 靠它；arm64 上由补丁 0002 提供 | [03](03-criu-and-incremental-memory.md) |
+| **soft-dirty** | `PTE_SOFT_DIRTY` | 页表项上的"上次清零之后被写过"标志，增量 dump 靠它；arm64 上由补丁 0002 提供，补丁 0004 改由硬件脏位记录写入 | [03](03-criu-and-incremental-memory.md) |
+| **DBM** | `PTE_DBM`（即 `PTE_WRITE`） | arm64 的硬件脏位管理：可写而干净的页被写时，处理器自己把它记成脏，不缺页；补丁 0004 让 soft-dirty 用上它，开关 `soft_dirty_dbm` | [03](03-criu-and-incremental-memory.md) |
 | **clear_refs** | `/proc/<pid>/clear_refs` 写 `4` | 清掉一个进程全部页的 soft-dirty 标志 | [03](03-criu-and-incremental-memory.md)、[11](11-checkpoint.md) |
 | **THP** | 透明大页 | 必须是 never，否则 soft-dirty 按 2 MiB 记 | [03](03-criu-and-incremental-memory.md) |
 | **MMDS** | — | Firecracker 提供给 guest 的元数据服务；gsd 每个请求从这里读访问令牌的哈希 | [05](05-architecture.md) |
@@ -145,6 +146,7 @@ gsd 的启动参数取值在 `template/build/core/rootfs/templates.go:57-61`。
 | `patches/6.1.158/0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch` | 上游的 virtio_balloon 补丁，与 gsd 无关 |
 | `patches/6.1.158/0002-overlayfs-hot-switch-checkpoint.patch` | 初始实现的补丁：热切层 ioctl、arm64 soft-dirty。未改动 |
 | `patches/6.1.158/0003-overlayfs-hot-switch-fixes.patch` | 全部修复，合并成一个；文件头的提交说明按主题列出 |
+| `patches/6.1.158/0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch` | 2026-11-23 加入：清 soft-dirty 时可写的页不写保护，写入由硬件脏位（DBM）记录；`pte_soft_dirty` 把硬件脏也算作写过；开关 `soft_dirty_dbm` 默认开 |
 
 补丁 0003 按主题到函数（主题名与提交说明的六组一一对应，机制都在 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)）：
 
@@ -179,7 +181,7 @@ gsd 的启动参数取值在 `template/build/core/rootfs/templates.go:57-61`。
 |---|---|---|
 | 宿主 | `/fc-criu/gsd` | gsd 二进制（部署时用 `HOST_GSD_PATH` 指过来；内置默认 `/fc-gsd/gsd` 是旧布局） |
 | 宿主 | `/fc-criu/orchestrator` | 带注入逻辑的 orchestrator |
-| 宿主 | `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 打过三个补丁的 guest 内核（与沙箱级共用的机器用 `HOST_KERNELS_DIR=/fc-criu/kernels` 指过来） |
+| 宿主 | `/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin` | 打过补丁的 guest 内核（与沙箱级共用的机器用 `HOST_KERNELS_DIR=/fc-criu/kernels` 指过来） |
 | guest | `/usr/bin/gsd`、`/usr/bin/overlay-init`、`/usr/sbin/criu` | 注入的 gsd 与 init；基础镜像自带的 CRIU |
 | guest | `/mnt/lower` | 基础层（ext4 根的 bind） |
 | guest | `/overlay/workspace/{upper,work}` | 开机时的初始 upper 与 work |

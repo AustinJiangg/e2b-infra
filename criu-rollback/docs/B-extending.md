@@ -24,7 +24,7 @@
 | gsd（Go，guest 内守护进程） | `packages/gsd/`：编排在 `internal/services/checkpoint/`（本书简写 `ckpt/`），鉴权在 `internal/permissions/` | 同目录 `*_test.go`；`ckpt/fake_test.go` 提供假的 `/proc` 和假的 CRIU | `cd packages/gsd && go vet ./... && go test -race -count=1 ./...` |
 | orchestrator 的注入（Go） | `packages/orchestrator/internal/cfg/`、`internal/template/build/`（`core/rootfs/`、`layer/`、`phases/base/`） | 同目录 `*_test.go` | `cd packages/orchestrator && go test -count=1 ./internal/template/... ./internal/cfg/...` |
 | Python SDK | `py-sdk/`：`e2b/sandbox_sync/checkpoint.py`、`e2b/sandbox_async/checkpoint.py`、`e2b/gsd/` | `py-sdk/tests/test_gsd_*.py` | `cd py-sdk && pytest tests/test_gsd_checkpoint.py tests/test_gsd_errors.py tests/test_gsd_headers.py` |
-| guest 内核补丁 | `fc-kernels/patches/6.1.158/`（三个补丁）、`fc-kernels/build.sh`、`kernel_base_tags.txt` | 无单测，靠调试内核压测（§4.3） | [27](27-deployment.md) |
+| guest 内核补丁 | `fc-kernels/patches/6.1.158/`（四个补丁）、`fc-kernels/build.sh`、`kernel_base_tags.txt` | 无单测，靠调试内核压测（§4.3） | [27](27-deployment.md) |
 
 离线构建时 Go 的环境变量是 `GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly`；
 gsd 以 `CGO_ENABLED=0` 静态编译，orchestrator 需要 `CGO_ENABLED=1`；两者都用 `-ldflags "-X main.commitSHA=<提交号>"` 把提交号编进去。完整命令在 [27](27-deployment.md)。
@@ -72,7 +72,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 `CheckpointInfo`
 ### 2.4 改内核补丁
 
 - 在内核源码树的开发分支上按主题一个提交一个提交地做，验证通过后再压成一个补丁替换仓库里的 0003，并更新它文件头的提交说明。0002 保持不动。
-- 替换后做可重放性核对：从 `kernel_base_tags.txt` 里的基线 tag 依次 `git apply` 三个补丁，`git write-tree` 的结果必须与开发分支末端的树相同（[27](27-deployment.md)）。
+- 替换后做可重放性核对：从 `kernel_base_tags.txt` 里的基线 tag 依次 `git apply` 全部补丁，`git write-tree` 的结果必须与开发分支末端的树相同（[27](27-deployment.md)）。
 - 发布版和调试版两种配置都要编过，不引入新的告警。
 - 必须满足 §3.2 的四条内核不变量，并通过 §4.3 的调试内核压测。
 

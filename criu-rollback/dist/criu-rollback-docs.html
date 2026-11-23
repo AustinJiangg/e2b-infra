@@ -982,7 +982,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     checkpoint 时把当前可写层原地变成只读层、换上一个新的空可写层；restore 时把整个层栈切回 checkpoint 时的样子。
     切换通过一个自定义的内核 ioctl 完成，根文件系统不卸载，也不搬数据（机制见 <a href="#d07">07</a>）。</li>
 </ul>
-<p>所以这套方案由四块组成，同在一个代码仓库里：guest 内的 <strong>gsd 守护进程</strong>、打了两个补丁的 <strong>guest 内核</strong>、
+<p>所以这套方案由四块组成，同在一个代码仓库里：guest 内的 <strong>gsd 守护进程</strong>、打了三个补丁的 <strong>guest 内核</strong>、
 建模板时把 gsd 装进沙箱的 <strong>orchestrator 注入逻辑</strong>，以及 <strong>Python SDK</strong>。Firecracker 本身没有改动。</p>
 <h3 id="d01-32-它解决什么问题">3.2 它解决什么问题</h3>
 <p>一个 AI Agent 在沙箱里执行多步任务：装依赖、改配置、跑构建、跑测试。某一步把环境搞坏了，它想回到上一步结束时的状态，
@@ -1774,6 +1774,7 @@ CRIU 沿着 <code>parent</code> 一级一级往上读（所以 <code>buildCriuRe
 CRIU 做增量 dump 时读的就是它。</p>
 <p>把上面的机制对应到 CRIU 的两个选项：<code>--track-mem</code> 就是让 CRIU 在 dump 的过程中替我们做第 1 步；
 <code>--prev-images-dir</code> 就是让 CRIU 在下一次 dump 时去读 pagemap，只保存 soft-dirty 为 1 的页。</p>
+<p>上面是上游内核的做法，补丁 0002 在 arm64 上也照此实现。它的代价是：每次 checkpoint 之后，每一页的第一次写都要缺页一次。arm64 上补丁 0004 改由处理器硬件记录这次写，不再缺页，见 §3.4。</p>
 <h3 id="d03-32-两级标记页表项上一级内存区域上一级">3.2 两级标记：页表项上一级，内存区域上一级</h3>
 <p>除了每一页自己的标记位，内核还在每个<strong>内存区域</strong>（VMA，进程地址空间里连续的一段，例如堆、某次 <code>mmap</code> 得到的一块）上放了一个标志 <code>VM_SOFTDIRTY</code>。
 它的作用是处理"新出现的内存"：</p>
@@ -1821,6 +1822,64 @@ CRIU 做增量 dump 时读的就是它。</p>
 <p>配置上需要同时打开 <code>CONFIG_CHECKPOINT_RESTORE=y</code>（<code>fc-kernels/configs/arm64/6.1.158.config:196</code>）和
 <code>CONFIG_MEM_SOFT_DIRTY=y</code>（同文件 <code>:3359</code>）。x86_64 的那份配置没有打开 <code>CONFIG_CHECKPOINT_RESTORE</code>，
 这是 gsd 目前只支持 arm64 guest 的原因之一（<a href="#d04">04</a>）。</p>
+<h3 id="d03-34-用硬件脏位记录写入补丁-0004">3.4 用硬件脏位记录写入：补丁 0004</h3>
+<p><strong>第一次写的代价。</strong> 按 §3.1 第 2、3 步的做法，每次 checkpoint 之后，进程每写到一页还没写过的页，都要缺页一次、进出内核一次。
+这笔时间花在业务进程自己的写指令上，不在 checkpoint、restore 的任何计时项里，所以分档表看不到它。
+2026-11-23 在 920B 的进程级沙箱里（guest 2 vCPU，4 KiB 页，THP 为 never）直接量过：
+写过 <code>clear_refs</code> 之后，第一遍写比第二遍写每页多花约 1.0 µs（每页只写 1 字节）到 1.2 µs（整页写满），折合每 MiB 0.25～0.32 ms；
+256 MiB 整页写满，第一遍 87.7 ms，第二遍 5.8 ms。第一遍每页正好缺页一次，第二遍为 0 次。写 <code>clear_refs</code> 本身很便宜，256 MiB 约 0.9 ms。</p>
+<p><strong>arm64 的硬件脏位。</strong> ARMv8.1 起，处理器可以自己记录"这一页被写过"，这个功能叫 DBM（Dirty Bit Modifier，硬件脏位管理）。它用到页表项里的两位：</p>
+<ul>
+<li>DBM 位（第 51 位）。Linux 在 arm64 上直接把它当作"可写"位，<code>PTE_WRITE</code> 就定义为 <code>PTE_DBM</code>；</li>
+<li>只读位（第 7 位，<code>PTE_RDONLY</code>，即架构里的 AP[2]）。</li>
+</ul>
+<p>DBM 位为 1、只读位也为 1 的页，处理器看作"可写但还干净"：写它时不产生缺页，处理器执行这条写指令时自己把只读位清掉。
+因此"可写位为 1 而只读位为 0"就表示这一页被硬件记成了脏，内核用 <code>pte_hw_dirty</code> 判断这个状态。
+guest 启动日志里有 <code>CPU features: detected: Hardware dirty bit management</code> 这一行，就说明 DBM 可用。920B 的 guest 有这一行。
+950 上没有直接看启动日志，是由 A/B 结果确认的：没有 DBM 时开关不起作用，两轮的改写耗时应当相同，实测却明显不同（<a href="#d22">22</a> §11）。</p>
+<p>原来的清标记（<code>fs/proc/task_mmu.c</code> 的 <code>clear_soft_dirty</code>）用 <code>pte_wrprotect</code> 去掉写权限。在 arm64 上，去掉写权限就是清掉 <code>PTE_WRITE</code>，也就是清掉 DBM 位，
+处理器因此只能靠缺页通知内核。硬件本来能自己记录写入，这条路径上却没有用上。</p>
+<p><strong>0004 改了什么。</strong> 补丁 <code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code> 只动 <code>arch/arm64/include/asm/pgtable.h</code> 和 <code>fs/proc/task_mmu.c</code> 两个文件（增 41 行、删 3 行）：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>改动</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clear_soft_dirty</code> 遇到可写的页，改调新函数 <code>pte_clear_soft_dirty_keep_write</code>：先把硬件脏转进软件的 <code>PTE_DIRTY</code> 位，再置上只读位，保留 <code>PTE_WRITE</code>（即 DBM），清掉 soft-dirty 位</td>
+<td>页回到"可写但干净"，下一次写由硬件记录，不缺页。软件 <code>PTE_DIRTY</code> 是内核自己判断"这一页要不要回写"用的，转进去之后这份信息不丢</td>
+</tr>
+<tr>
+<td><code>pte_soft_dirty</code> 改成"soft-dirty 位为 1，或者页是硬件脏"</td>
+<td>清标记之后的写不再经过内核，soft-dirty 位不会被置上，这次写只体现为硬件脏。pagemap 报告时、换出和页迁移在拆掉页表项之前转存标记时，用的都是这个函数，所以这三处都能看到这次写</td>
+</tr>
+<tr>
+<td><code>pte_mkclean</code> 遇到硬件脏的页，先置上 soft-dirty 位再清脏</td>
+<td>内核有几处会主动把页清干净（<code>MADV_FREE</code>、fork 时处理共享映射等）。在清掉硬件脏之前先把这次写记到 soft-dirty 位上，不让它丢掉</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>pte_wrprotect</code> 和 <code>pte_modify</code> 不用改：0002 已经让它们在折叠硬件脏位时经 <code>pte_mkdirty</code> 置上 soft-dirty。
+本来就不可写的页（例如 fork 之后写时复制的共享页）仍按原来的方式处理，写的时候照旧缺页。
+处理器没有 DBM 时，"可写但干净"的页一写就缺页，缺页处理经 <code>pte_mkdirty</code> 把它标脏并置上 soft-dirty，结果与原来的方式相同。</p>
+<p>gsd 和 CRIU 都不用改：CRIU 仍然往 <code>clear_refs</code> 写 <code>4</code>、读 pagemap 的第 55 位，变的只是内核在这两处背后的做法。</p>
+<p><strong>开关。</strong> 0004 加了一个内核参数 <code>soft_dirty_dbm</code>，默认开。在沙箱里往 <code>/sys/module/kernel/parameters/soft_dirty_dbm</code> 写 <code>0</code> 或 <code>1</code> 立即生效，
+只影响这一个沙箱之后的清标记；写 <code>0</code> 就回到 §3.1 的写保护方式（<a href="#d28">28</a> §2.3）。</p>
+<p><strong>正确性。</strong> 这项改动只要漏掉一条路径，后果就是某次写没有被标脏、从下一次增量里静默漏掉，restore 之后这一页回到旧内容。所以分两层验证：</p>
+<ul>
+<li><strong>独立的 Firecracker 虚机</strong>（不经 e2b，2 vCPU / 2 GiB，接一块换出盘）。清标记之后经各条路径写随机选的页，比对"真正写过的页"与"pagemap 报为 soft-dirty 的页"，漏报必须为 0。
+    覆盖的路径有：普通写、只读不写、fork（子进程退出；子进程存活、写时复制）、<code>mprotect</code> 先只读再可写、写后 <code>MADV_FREE</code>、另一个线程写、<code>mremap</code> 搬家、
+    换出 8193 页后读回与再写、内存规整（迁移 1629 页），以及 200 轮随机组合。开关为 0 和为 1 时漏报都是 0。
+    <code>mremap</code> 和内存规整之后会多报一些页，这是内核搬页时把整段都标脏造成的，基线内核同样如此；多报只会多写一些镜像，不影响正确性。</li>
+<li><strong>端到端</strong>：920B 和 950 上进程级验收全部通过；同一负载开关为 0、1 各跑一轮，每次 restore 之后内存与文件的校验都一致（<a href="#d20">20</a> §5.5、<a href="#d22">22</a> §11）。</li>
+</ul>
+<p>KSM（内核同页合并）合并页时会丢掉 soft-dirty 标记。这一点与 0004 无关，没有 0004 的内核也一样，见 <a href="#d16">16</a> 的 K-05。</p>
+<p><strong>省下多少。</strong> 独立虚机里，写过 <code>clear_refs</code> 之后第一遍写比第二遍多出的时间从每 MiB 0.25～0.31 ms 降到 0.009～0.023 ms，每页缺页次数从 1 降到 0；
+256 MiB 整页写满，第一遍从 85.1 ms 降到 11.1 ms。端到端，常驻进程在 checkpoint 之后改写 256 MiB 内存，920B 上从 87.6 ms 降到 20.1 ms，950 上从 119.1 ms 降到 28.5 ms。
+checkpoint 与 restore 本身不变：两种方式标出的脏页相同，CRIU 要写出和读回的页数也就相同。这项代价怎么计入"改写加 checkpoint"的一个周期，见 <a href="#d17">17</a> §7。</p>
 <hr />
 <h2 id="d03-4-透明大页的两难">4. 透明大页的两难</h2>
 <h3 id="d03-41-透明大页是什么">4.1 透明大页是什么</h3>
@@ -2053,6 +2112,10 @@ dump 结束后只给"dump 之前不是停着的"进程发 <code>SIGCONT</code>�
 <td><code>0002-overlayfs-hot-switch-checkpoint.patch</code> 中 <code>arch/arm64/</code> 下的改动：<code>PTE_SOFT_DIRTY</code>、<code>pte_mksoft_dirty</code>、<code>pte_mkdirty</code>、<code>ptep_set_access_flags</code></td>
 </tr>
 <tr>
+<td>清标记不写保护、硬件脏算作写过</td>
+<td><code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>：<code>clear_soft_dirty</code>、<code>pte_clear_soft_dirty_keep_write</code>、<code>pte_soft_dirty</code>、<code>pte_mkclean</code>，参数 <code>soft_dirty_dbm</code></td>
+</tr>
+<tr>
 <td>内核配置</td>
 <td><code>fc-kernels/configs/arm64/6.1.158.config</code>（<code>:196</code>、<code>:930</code>、<code>:3359</code>）</td>
 </tr>
@@ -2066,7 +2129,8 @@ dump 结束后只给"dump 之前不是停着的"进程发 <code>SIGCONT</code>�
 <li>增量靠 <code>--track-mem</code> 加 <code>--prev-images-dir</code>：只写上次以来改过的页，其余的记为"在父镜像里"，由 <code>parent</code> 符号链接串成链。
     因此<strong>父镜像必须活得比子镜像久</strong>，删除、检查和失败处理都围绕这一条。</li>
 <li>soft-dirty 的原理是"清标记并去掉写权限 → 第一次写触发缺页 → 内核置标记并放行"。6.1 的上游内核在 arm64 上没有它，
-    由热切层补丁在页表项第 63 位（换出页第 61 位）上实现。</li>
+    由热切层补丁在页表项第 63 位（换出页第 61 位）上实现。它让每页在每次 checkpoint 之后的第一次写都缺页一次，约每 MiB 0.25～0.32 ms；
+    补丁 0004 在 arm64 上改由硬件脏位（DBM）记录这次写，不再缺页，开关 <code>soft_dirty_dbm</code> 默认开，checkpoint 与 restore 不变。</li>
 <li>透明大页开着时，一个 2 MiB 的大页只有一个标记位，零散写入会让增量放大到接近全量；所以 <strong><code>never</code> 是设计约束</strong>，
     由 <code>overlay-init</code> 在开机时设置、gsd 启动时兜底。代价是 restore 变慢。</li>
 <li>"假全量"来自内存区域级的 <code>VM_SOFTDIRTY</code>：两次 dump 之间分配新内存会触发（负载要预分配、原地写）；
@@ -2128,8 +2192,8 @@ dump 结束后只给"dump 之前不是停着的"进程发 <code>SIGCONT</code>�
 <tbody>
 <tr>
 <td>guest 内核</td>
-<td>两个补丁：<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（热切层 ioctl 与 arm64 的 soft-dirty）和 <code>0003-overlayfs-hot-switch-fixes.patch</code>（在它之上的全部修复）</td>
-<td><a href="#d07">07</a>、<a href="#d08">08</a>、<a href="#d09">09</a></td>
+<td>三个补丁：<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（热切层 ioctl 与 arm64 的 soft-dirty）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（在它之上的全部修复），以及 2026-11-23 加入的 <code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>（arm64 上用硬件脏位记录写入，省掉 checkpoint 之后第一次写的缺页）</td>
+<td><a href="#d03">03</a>、<a href="#d07">07</a>、<a href="#d08">08</a>、<a href="#d09">09</a></td>
 </tr>
 <tr>
 <td>guest 守护进程</td>
@@ -2213,6 +2277,7 @@ dump 结束后只给"dump 之前不是停着的"进程发 <code>SIGCONT</code>�
 </tr>
 </tbody>
 </table></div>
+<p><code>0004</code> 不在这张表里，因为它只改变 soft-dirty 的记录方式，不改变结果。没有它，或者把它的开关 <code>soft_dirty_dbm</code> 关掉，增量 checkpoint 与 restore 照常工作，只是每次 checkpoint 之后，业务进程每写一页还没写过的页都要多缺页一次（<a href="#d03">03</a> §3.4）。</p>
 <h3 id="d04-21-为什么只支持-arm64">2.1 为什么只支持 arm64</h3>
 <p>有两个各自独立的原因，任何一个都足以排除 x86_64：</p>
 <ul>
@@ -3421,6 +3486,7 @@ restore 时把层栈换回去（<a href="#d07">07</a>）。</p>
 <li><strong><code>overlay-init</code></strong>：它只在建模板时的开机过程中运行过，沙箱恢复时不再运行。改它的效果只体现在此后新建的模板上。</li>
 </ul>
 <p>所以换这三者中的任何一样，都要重建模板。反过来看这也是一个保障：已有模板不会因为宿主上换了文件而悄悄变样。</p>
+<p>部署包的入口 <code>950.sh</code> 切到进程级栈时，按 gsd、orchestrator、guest 内核三个文件的 sha256 判断要不要重建 <code>base-criu</code>（<code>criu-rollback/deploy/ops/flow.py</code> 的 <code>TEMPLATE_INPUTS</code>）。2026-11-23 换上带补丁 0004 的内核之前，它只比较前两个文件，换了内核也不会重建模板，模板会继续用旧内核启动。</p>
 <p>这条事实不是理论推演，它曾经让一次性能对照作废：对照实验切换了宿主的内核目录，以为在比较两个内核，实际上两组用的是同一个已有模板、同一个内核，
 "内核对耗时的影响很小"的结论因此不成立（经过与教训见 <a href="#dE">附录 E</a>）。此后凡是比较内核或 gsd 版本，一律为每个版本各建一个模板。</p>
 <p>验证一个模板里到底是什么，可以在沙箱里看三样：<code>/proc/version</code> 里的内核构建时间、<code>gsd -commit</code> 输出的提交号、<code>/usr/bin/gsd</code> 的校验和（做法见 <a href="#d30">30</a>）。</p>
@@ -3802,6 +3868,7 @@ work 目录只有内核使用，固定 0755。</p>
 <li>页中间目录一级的同名操作直接复用页表项一级的实现，所以大页存在时 soft-dirty 的粒度是 2 MiB——这就是透明大页必须关掉的原因。</li>
 </ul>
 <p><code>0003</code> 补丁在这一半上只做了一件事：删掉 <code>fs/proc/task_mmu.c</code> 里遗留的调试计数与调试输出。</p>
+<p><code>0004</code> 补丁（2026-11-23 加入）改了这一半的做法：清标记时不再去掉可写页的写权限，改由处理器的硬件脏位（DBM）记录之后的写，省掉每页第一次写的缺页；pagemap 把硬件脏的页也报成 soft-dirty。它与 overlayfs 无关，原理、正确性验证和开关在 <a href="#d03">03</a> §3.4。</p>
 <hr />
 <h2 id="d07-代码位置">代码位置</h2>
 <div class="tw"><table>
@@ -3843,6 +3910,10 @@ work 目录只有内核使用，固定 0755。</p>
 <tr>
 <td>arm64 soft-dirty</td>
 <td><code>0002-overlayfs-hot-switch-checkpoint.patch</code> 对 <code>arch/arm64/</code> 的修改</td>
+</tr>
+<tr>
+<td>arm64 soft-dirty 用硬件脏位</td>
+<td><code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code></td>
 </tr>
 <tr>
 <td>gsd 的切换封装</td>
@@ -8064,7 +8135,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li><strong>见过但没查清的 3 项</strong>（§2）：新沙箱首个请求偶发约 5 秒、一组压测里 checkpoint 返回过 2 次 <code>internal</code>（同一个沙箱的第 174、177 轮）、极低概率的单发 <code>ENOTEMPTY</code>。
     三项都不损坏数据，都没有稳定的复现办法。</li>
 <li><strong>没有在真机上走到的分支 9 项</strong>（§3）：集中在多棵树的异常路径和注入开关的关闭态。除 T-09 只有代码注释的论证外，其余都<strong>只有单测、没有在新 920B 上走过</strong>。</li>
-<li><strong>内核里记录在案的 4 项</strong>（§4）：<code>/proc/mounts</code> 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留，以及一条已在最后一轮处理、为对照旧结果而保留的记录。</li>
+<li><strong>内核里记录在案的 5 项</strong>（§4）：<code>/proc/mounts</code> 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留、KSM 合并会丢掉 soft-dirty 标记（guest 默认不开 KSM），以及一条已在最后一轮处理、为对照旧结果而保留的记录。</li>
 <li>950：只跑了首轮验收和四组压测（全部 PASS，<a href="#d22">22</a>）。本章的实测都在新 920B 上完成。</li>
 </ul>
 <p>表里"状态"一列的取值：<strong>设计如此</strong>（是取舍的结果，不计划改）、<strong>未查</strong>（见过现象，原因不明）、<strong>未测</strong>（有代码、有单测，没有新 920B 上的结果）、<strong>未处理</strong>（知道问题在哪，没有改）、<strong>已修</strong>（这一版起不再出现）、<strong>已减轻</strong>（主要来源已去掉，仍可能遇到）。</p>
@@ -8409,6 +8480,12 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <td>窗口内没有机会让那个 inode 被回收再复用，实际不构成问题；与原有的另一对写法相同，记一笔</td>
 <td>未处理</td>
 </tr>
+<tr>
+<td>K-05</td>
+<td>KSM（内核同页合并）把内容相同的两页合成一页时，<code>replace_page</code> 为合并后的共享页新建一个只读页表项，不带原页表项上的 soft-dirty 位，也不是硬件脏。合并之前写进这一页的那次写，因此在 pagemap 里不再报为写过</td>
+<td>某一页在 checkpoint 之后被写过、又在下一次 checkpoint 之前被 KSM 合并，这次写就从下一次增量里漏掉，restore 之后这一页是旧内容。只影响用 <code>madvise(MADV_MERGEABLE)</code> 标记过、而且 guest 里开着 KSM 的内存。guest 内核编进了 KSM（<code>CONFIG_KSM=y</code>），但内核默认不运行它（<code>/sys/kernel/mm/ksm/run</code> 为 0），gsd 与模板都不打开它。2026-11-23 在独立虚机里检查过，没有补丁 0004 的内核同样漏报，不是 0004 引入的（<a href="#d03">03</a> §3.4）。用 checkpoint 的沙箱里不要打开 KSM</td>
+<td>未处理</td>
+</tr>
 </tbody>
 </table></div>
 <p><strong>一条为对照旧结果而保留的记录。</strong> 较早一轮的结果文件里记过这样一个潜在问题：overlay inode 的哈希键是真实 inode 的内存地址；
@@ -8483,6 +8560,10 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <td>L-08</td>
 <td><code>fc-kernels/configs/x86_64/6.1.158.config</code>；<code>0002-overlayfs-hot-switch-checkpoint.patch</code> 的 arm64 部分</td>
 </tr>
+<tr>
+<td>K-05</td>
+<td>2026-11-23 独立 Firecracker 虚机的逐路径检查（<code>sdcheck.c</code> 的两项 KSM 用例，基线内核与带 0004 的内核各一份输出），存 <code>rollback-reports/920b-softdirty-dbm-proto-20261123/</code></td>
+</tr>
 </tbody>
 </table></div>
 <hr />
@@ -8546,6 +8627,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li>三个没查清的现象（首个请求约 5 秒、同一沙箱上 2 次 checkpoint 返回 <code>internal</code>、单发 <code>ENOTEMPTY</code>）都不损坏数据，都没有稳定复现。</li>
 <li>没有新 920B 上的结果的分支集中在<strong>多棵树的异常路径</strong>和<strong>注入开关的关闭态</strong>；它们只有单测、没有在新 920B 上走过，评审时应当把它们算作未验证。默认路径建模板已于 2026-10-09 在新 920B 上确认；建模板的自检不验证内核是否带补丁（L-16）。</li>
 <li>950 只跑了首轮验收和四组压测；本章的全部实测依据来自新 920B。</li>
+<li>KSM 合并会让 soft-dirty 漏记写入（K-05），与补丁 0004 无关；guest 默认不开 KSM，用 checkpoint 的沙箱里不要打开它。</li>
 </ol><nav class="pager" data-n="16"></nav></article><article id="v17" class="doc" hidden><h1 id="d17-性能原理代价模型">性能原理：代价模型</h1>
 <h2 id="d17-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -8555,6 +8637,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li>说出 restore 里哪些时间是这套机制的下限，再往下压要付什么代价；</li>
 <li>估算多棵进程树时的耗时和冻结窗口，并知道这个估算的依据只到三棵树；</li>
 <li>找出按量增长的几项额外开销：可写打开的文件、每个请求的鉴权、首个请求的延迟；</li>
+<li>说出 checkpoint 之后业务进程第一次写的代价有多大，以及补丁 0004 怎样去掉它；</li>
 <li>读性能数字时避开几个常见的误读。</li>
 </ol>
 <p>本章只讲成本的来源和增长方式。文中的数字都标了平台、日期和口径，用来建立量级感；判定性数字在 <a href="#d20">20</a>，不能与本章的数相减。
@@ -8679,7 +8762,65 @@ THP 开着时零散的写入会让每次增量都退化成全量。原理和实�
 所以 THP 为 never 不在可调项之列：开机脚本在切换根文件系统之前设置它，gsd 启动时再检查一次并兜底（<code>ensureTHPNever</code>，<code>main.go:196</code>）。
 如果在部署里看到增量 checkpoint 忽然变得和全量一样大，首先要查的就是 THP 是不是被改回去了（<a href="#d29">29</a>）。</p>
 <hr />
-<h2 id="d17-7-读数时的注意事项">7. 读数时的注意事项</h2>
+<h2 id="d17-7-负载一侧的代价checkpoint-之后的第一次写">7. 负载一侧的代价：checkpoint 之后的第一次写</h2>
+<p>前面各节的耗时都是 gsd 一侧的计时。进程级还有一项代价落在业务进程身上，不在任何计时键里：checkpoint 清掉 soft-dirty 之后，
+业务进程每写到一页还没写过的页，按原来的做法都要缺页一次（<a href="#d03">03</a> §3.4）。
+这项代价只在写的时候付，同一页在两次 checkpoint 之间最多付一次，只读的页不付。</p>
+<p>它的量级与 checkpoint 写镜像相当。下表是同一负载在 checkpoint 之后改写内存的耗时，以及紧接着那次 checkpoint 的耗时。
+口径：2026-11-23，脚本 <code>benchmark/ckpt_same_workload.py</code>，每个测点 20 次的中位数，单位 ms；"改写"是常驻进程自己计的时，checkpoint 是客户端墙钟。
+"关"是写保护方式（开关 <code>soft_dirty_dbm</code> 为 0），"开"是补丁 0004 的硬件脏位方式。完整的表在 <a href="#d20">20</a> §5.5 和 <a href="#d22">22</a> §11。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>负载</th>
+<th>平台</th>
+<th>改写：关 → 开</th>
+<th>紧接着的 checkpoint：关 → 开</th>
+<th>改写加 checkpoint：关 → 开</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>256 MiB 进程，连续改写 256 MiB</td>
+<td>920B</td>
+<td>87.6 → 20.1</td>
+<td>98.5 → 99.4</td>
+<td>186.1 → 119.5</td>
+</tr>
+<tr>
+<td>同上</td>
+<td>950</td>
+<td>119.1 → 28.5</td>
+<td>112.9 → 102.5</td>
+<td>232.0 → 131.0</td>
+</tr>
+<tr>
+<td>192 MiB 进程，改写 192 MiB 内存、写 64 MiB 文件</td>
+<td>920B</td>
+<td>65.7 → 15.5</td>
+<td>82.1 → 79.8</td>
+<td>147.8 → 95.3</td>
+</tr>
+<tr>
+<td>同上</td>
+<td>950</td>
+<td>105.2 → 21.5</td>
+<td>79.2 → 84.4</td>
+<td>184.4 → 105.9</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>关的时候，这项代价与 checkpoint 同量级。</strong> 连续改写每 MiB 约 0.34 ms（920B）、0.47 ms（950），增量 checkpoint 写镜像每 MiB 约 0.38～0.44 ms。
+    一个"改写加 checkpoint"的周期里，将近一半的时间花在业务进程自己的缺页上。</li>
+<li><strong>开之后改写降到原来的 1/4 上下</strong>，每 MiB 约 0.08 ms（920B）、0.11 ms（950）。省下的是每 MiB 约 0.26 ms（920B）、0.35 ms（950）。</li>
+<li><strong>checkpoint 与 restore 不变。</strong> 两种方式标出的脏页相同，CRIU 写出、读回的页数也相同。表里 checkpoint 一列的差值两个方向都有；
+    950 那两轮宿主上另有负载，差值不判读（<a href="#d22">22</a> §11.2）。</li>
+<li><strong>比较两种方案时要单独加上这一项。</strong> 分档表和与沙箱级的对比（<a href="#d24">24</a>）只计 checkpoint 与 restore，不含这一项。
+    业务在两次 checkpoint 之间写得多时，要把它加上看。沙箱级一侧在 KVM 写保护方式下也有同类代价（guest 的写陷入宿主），在 HDBSS 方式下没有；这两项都没有在同一口径下量过。</li>
+</ul>
+<hr />
+<h2 id="d17-8-读数时的注意事项">8. 读数时的注意事项</h2>
 <ul>
 <li>两次测量之间差 3 ms 以内不要解释（<a href="#dE">附录 E</a> §3.3）。</li>
 <li>性能脚本三轮之间可能整体漂移一二十毫秒，尤其是同一台机器上还有别的沙箱在跑的时候。它适合看各档之间的相对形状，不适合比较两个版本；比较版本用逐轮交错的对照。</li>
@@ -8720,6 +8861,10 @@ THP 开着时零散的写入会让每次增量都退化成全量。原理和实�
 <td>§5 鉴权开销</td>
 <td><code>gsd-fixes-20260930</code>、<code>gsd-release-20261008</code></td>
 </tr>
+<tr>
+<td>§7 负载一侧的改写耗时</td>
+<td>920B <code>test950/results/20261123-114920-dbm/</code>，950 <code>test950/results/20261123-140916-dbm/</code></td>
+</tr>
 </tbody>
 </table></div>
 <hr />
@@ -8759,6 +8904,7 @@ THP 开着时零散的写入会让每次增量都退化成全量。原理和实�
 <li>逐棵串行时，每多一棵 64 MiB 的树，restore 约 +28 ms、增量 dump 约 +11 ms、全量 dump 约 +45 ms；先 dump 的树要多停"其余各棵的 dump 时间之和"。依据只到三棵树。<code>9728cef73</code> 起并行，16 棵树的 checkpoint 238 → 65 ms、restore 137 → 96 ms。</li>
 <li>另有三项按量或按次的代价：可写打开的文件在 checkpoint 时每 MiB 约 0.8 ms；鉴权每个请求约 0.6 ms；回收逻辑让 restore 的 ioctl 多 0.04～0.06 ms。</li>
 <li>THP 为 never 的代价不可免除，因为打开它会让增量 checkpoint 退化成全量。</li>
+<li>进程级还有一项不在计时键里的负载侧代价：checkpoint 之后每页第一次写都缺页一次，量级与 checkpoint 写镜像相当（每 MiB 0.34～0.47 ms）。补丁 0004 用硬件脏位把它降到每 MiB 0.08～0.11 ms，checkpoint 与 restore 不变。</li>
 <li>差 3 ms 以内的读数不解释；压测墙钟和调试内核上的耗时都不能当性能依据。</li>
 </ol><nav class="pager" data-n="17"></nav></article><article id="v18" class="doc" hidden><h1 id="d18-测试体系与调试内核">测试体系与调试内核</h1>
 <h2 id="d18-本章目标">本章目标</h2>
@@ -9985,7 +10131,8 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>查到单棵 192 MiB 进程树连续 restore 的分段，以及一、二、三棵树的分段；</li>
 <li>说清楚本章几种口径的负载和统计方式，知道为什么同名指标不能跨口径比较；</li>
 <li>解释早期六档结果为什么各档 restore 都接近 90 ms，而分档结果随负载增长；</li>
-<li>查到回收、可写打开文件、层栈上限、容量预检、鉴权和进程扫描的专项数字。</li>
+<li>查到回收、可写打开文件、层栈上限、容量预检、鉴权和进程扫描的专项数字；</li>
+<li>查到 soft-dirty 改用硬件脏位前后，同一负载的改写、checkpoint 与 restore 耗时。</li>
 </ol>
 <p>各段成本的来源在 <a href="#d17">17</a>，脚本和判据在 <a href="#d18">18</a>，测试条件在 <a href="#d19">19</a> §1。950 的结果在 <a href="#d22">22</a>。</p>
 <p>本章所有耗时都是 gsd 自报的服务端分段（<a href="#d28">28</a> 的计时键），不含客户端到 gsd 的网络往返，单位 ms。负载的形状、统计的方式、进程树的棵数在各节之间都不一样，<strong>同名指标不能跨节比较，更不能相减</strong>。</p>
@@ -9996,6 +10143,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li><strong>restore 随进程大小增长。</strong> 分档结果里进程大小与改动量同时变化。固定 192 MiB 进程的早期六档里，restore 基本不随改动量变化（§4）。</li>
 <li><strong>单棵 192 MiB 全脏。</strong> 连续 8 次 restore 的 <code>total_ms</code> p50 为 83.3 ms（2026-10-08）和 85.3 ms（2026-11-06），时间几乎全在 CRIU 恢复与杀进程上，overlay 切层不到 1 ms（§2）。</li>
 <li><strong>多棵树。</strong> 耗时随树数近似线性增长，两棵以上时先 dump 完的树要停着等后面的树（§3）。</li>
+<li><strong>soft-dirty 用硬件脏位（2026-11-23）。</strong> 补丁 0004 开着时，常驻进程在 checkpoint 之后改写内存的耗时降到原来的 1/4～1/5（256 MiB 从 87.6 ms 降到 20.1 ms），checkpoint 与 restore 不变（§5.5）。</li>
 <li><strong>边界。</strong> 这些数字来自一台机器、一种 guest 规格和人造负载。分档每档只有三个样本。</li>
 </ul>
 <hr />
@@ -10650,6 +10798,133 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 </tr>
 </tbody>
 </table></div>
+<h3 id="d20-55-soft-dirty-用硬件脏位同一负载的-ab2026-11-23">5.5 soft-dirty 用硬件脏位：同一负载的 A/B（2026-11-23）</h3>
+<p>补丁 0004（<a href="#d03">03</a> §3.4）带一个运行时开关 <code>soft_dirty_dbm</code>。<code>test950.sh dbm</code> 用它在同一部署、同一模板上做 A/B：
+先跑一遍进程级验收，再用 <code>benchmark/ckpt_same_workload.py</code> 把同一组负载跑两轮，一轮在每个沙箱里把开关写成 0（原来的写保护方式），一轮写成 1，最后把两轮并排输出。两轮开测前都清过网络命名空间。</p>
+<p><strong>条件。</strong> 新 920B，运行 <code>20261123-114920-dbm</code>；脚本与部署包是 e2b-infra <code>f3ab5f1</code> 提交的内容。guest 内核 <code>35b25505…</code>（构建标识 <code>#2 SMP Mon Nov 23 11:39:42 CST 2026</code>），
+gsd <code>8bc5dc49…</code>，orchestrator <code>fbe72d14…</code>，模板 <code>base-criu</code>，2 vCPU / 2048 MB。每个测点每轮 20 次，单位 ms，取中位数。
+"改写"是常驻进程自己计的写内存耗时，取紧跟在一次 checkpoint 之后的那次改写；checkpoint 与 restore 是客户端墙钟。</p>
+<p><strong>负载。</strong> mix 一组是对外分档表的负载：进程大小等于内存改动量 d MiB，每次改写 d MiB 内存、写 f MiB 文件。
+dirty 一组的进程固定 256 MiB，每次连续改写 d MiB。layout 一组的进程也是 256 MiB，改写的是散开的页（scatter）。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>测点</th>
+<th style="text-align: right;">改写：关 / 开</th>
+<th style="text-align: right;">连续 checkpoint：关 / 开</th>
+<th style="text-align: right;">restore：关 / 开</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mix d=0</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">9.4 / 9.5</td>
+<td style="text-align: right;">10.8 / 11.1</td>
+</tr>
+<tr>
+<td>mix d=12 f=4</td>
+<td style="text-align: right;">4.9 / 1.1</td>
+<td style="text-align: right;">15.3 / 15.3</td>
+<td style="text-align: right;">16.9 / 17.0</td>
+</tr>
+<tr>
+<td>mix d=24 f=8</td>
+<td style="text-align: right;">9.2 / 1.8</td>
+<td style="text-align: right;">19.8 / 19.3</td>
+<td style="text-align: right;">21.8 / 21.0</td>
+</tr>
+<tr>
+<td>mix d=48 f=16</td>
+<td style="text-align: right;">17.6 / 3.7</td>
+<td style="text-align: right;">28.1 / 28.6</td>
+<td style="text-align: right;">31.4 / 31.8</td>
+</tr>
+<tr>
+<td>mix d=70 f=0.001</td>
+<td style="text-align: right;">27.9 / 5.3</td>
+<td style="text-align: right;">41.3 / 36.6</td>
+<td style="text-align: right;">48.3 / 40.6</td>
+</tr>
+<tr>
+<td>mix d=96 f=32</td>
+<td style="text-align: right;">34.8 / 7.5</td>
+<td style="text-align: right;">47.3 / 46.5</td>
+<td style="text-align: right;">53.6 / 53.0</td>
+</tr>
+<tr>
+<td>mix d=192 f=64</td>
+<td style="text-align: right;">65.7 / 15.5</td>
+<td style="text-align: right;">82.1 / 79.8</td>
+<td style="text-align: right;">97.8 / 92.5</td>
+</tr>
+<tr>
+<td>dirty d=0</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">14.3 / 13.9</td>
+<td style="text-align: right;">114.0 / 112.8</td>
+</tr>
+<tr>
+<td>dirty d=16</td>
+<td style="text-align: right;">6.6 / 1.4</td>
+<td style="text-align: right;">20.5 / 20.2</td>
+<td style="text-align: right;">114.9 / 113.5</td>
+</tr>
+<tr>
+<td>dirty d=32</td>
+<td style="text-align: right;">12.6 / 2.6</td>
+<td style="text-align: right;">25.6 / 25.2</td>
+<td style="text-align: right;">121.2 / 113.1</td>
+</tr>
+<tr>
+<td>dirty d=64</td>
+<td style="text-align: right;">23.4 / 5.4</td>
+<td style="text-align: right;">37.9 / 36.0</td>
+<td style="text-align: right;">115.5 / 113.1</td>
+</tr>
+<tr>
+<td>dirty d=128</td>
+<td style="text-align: right;">45.2 / 11.2</td>
+<td style="text-align: right;">57.2 / 58.4</td>
+<td style="text-align: right;">115.4 / 112.3</td>
+</tr>
+<tr>
+<td>dirty d=256</td>
+<td style="text-align: right;">87.6 / 20.1</td>
+<td style="text-align: right;">98.5 / 99.4</td>
+<td style="text-align: right;">114.2 / 114.5</td>
+</tr>
+<tr>
+<td>layout d=16</td>
+<td style="text-align: right;">6.6 / 1.4</td>
+<td style="text-align: right;">46.8 / 46.9</td>
+<td style="text-align: right;">113.1 / 114.4</td>
+</tr>
+<tr>
+<td>layout d=64</td>
+<td style="text-align: right;">23.5 / 4.7</td>
+<td style="text-align: right;">118.6 / 119.4</td>
+<td style="text-align: right;">115.1 / 123.2</td>
+</tr>
+<tr>
+<td>layout d=256</td>
+<td style="text-align: right;">91.4 / 18.6</td>
+<td style="text-align: right;">110.1 / 103.2</td>
+<td style="text-align: right;">129.2 / 119.0</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>改写降到原来的 1/4～1/5。</strong> 连续改写每 MiB 从约 0.34 ms 降到约 0.08 ms，省约 0.26 ms，与在沙箱里直接量的每页缺页代价一致（<a href="#d03">03</a> §3.4）。
+    散页改写也一样：256 MiB 从 91.4 ms 降到 18.6 ms。d=0 的两档不改写内存，没有这一列。</li>
+<li><strong>checkpoint 与 restore 不变。</strong> 差值两个方向都有，多数在 3 ms 以内；差得最多的是 layout d=256 的 restore（−10.2 ms）和 layout d=64 的 restore（+8.2 ms），不当作 0004 的效果。
+    原理上也不应有变化：两种方式标出的脏页相同，CRIU 写出、读回的页数相同。</li>
+<li><strong>正确性。</strong> 两轮每次 restore 之后，内存与文件的校验都一致。同一天在这个内核上跑的 <code>test950.sh standard --stack criu</code>（运行 <code>20261123-120437-standard</code>）验收九步、压测五组全部 PASS；
+    压测计数与 950 第三轮相同（all 300 轮：create 134 / restore 153 / delete 13，<a href="#d22">22</a> §10.2）。</li>
+<li><strong>第一次跑 <code>dbm</code> 档时验收失败了。</strong> 原因是部署自检脚本写死了旧内核的构建标识。这反过来说明模板里确实换上了新内核。
+    自检改为从部署包的 <code>manifest.json</code> 读构建标识之后，重跑通过（<a href="#d30">30</a> §3）。</li>
+</ul>
+<p>原始终端输出存于工作区 <code>rollback-reports/920b-dbm-ab-20261123/</code>。§1～§4 的数是在没有 0004 的内核（<code>b81306e7…</code>）上量的，0004 不改变 checkpoint 与 restore，那些数照样有效。</p>
 <hr />
 <h2 id="d20-本章要点">本章要点</h2>
 <ul>
@@ -10659,6 +10934,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>单棵 192 MiB 全脏时 restore 的 <code>total_ms</code> p50 为 83.3 ms（2026-10-08），其中 CRIU 恢复 71.0、杀进程 11.1，overlay 切层不到 1 ms。</li>
 <li>多棵树的耗时随树数近似线性增长；两棵以上时，先 dump 完的树要停着等后面的树，冻结时长与其余各棵的 dump 时间同量级。</li>
 <li>各节口径独立，同名指标不能跨节比较。两份本应相同的东西逐轮交错测出来会差 1 ms 上下，小于这个量级的差别不要解读。</li>
+<li>补丁 0004 开着时，checkpoint 之后改写内存的耗时降到 1/4～1/5（256 MiB 从 87.6 ms 降到 20.1 ms），checkpoint 与 restore 不变；新内核上验收与压测全部 PASS（§5.5）。</li>
 <li>回收之后被占着的磁盘斜率为 0；可写打开的文件约 0.8 ms/MiB，这个系数在最终内核上没有直接读数；层栈上限是 190 层；鉴权每个请求约 0.6 ms。</li>
 </ul><nav class="pager" data-n="20"></nav></article><article id="v21" class="doc" hidden><h1 id="d21-920b-压测结果">920B 压测结果</h1>
 <h2 id="d21-本章目标">本章目标</h2>
@@ -11159,7 +11435,7 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>未查清的记录有一处：候选内核上两次 checkpoint 返回 <code>internal</code>（U-02），之后没有再出现。</li>
 </ul><nav class="pager" data-n="21"></nav></article><article id="v22" class="doc" hidden><h1 id="d22-950-结果">950 结果</h1>
 <blockquote>
-<p><strong>状态：三轮已填（2026-11-17、11-18）。</strong> 第一轮是 <code>criu-rollback/deploy/950.sh all</code>，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 <code>analyze_stress.py</code> 相同）。第二轮是同一天 <code>test950.sh standard</code> 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 <code>test950.sh</code> extended、native、compare 三档里的进程级各步，全部 PASS（§10）。原始文件留在 950 上。这是填写 950 结果的唯一位置。</p>
+<p><strong>状态：四轮已填（2026-11-17、11-18、11-23）。</strong> 第一轮是 <code>criu-rollback/deploy/950.sh all</code>，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 <code>bash criu-rollback/deploy/950.sh report handbook</code> 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 <code>analyze_stress.py</code> 相同）。第二轮是同一天 <code>test950.sh standard</code> 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 <code>test950.sh</code> extended、native、compare 三档里的进程级各步，全部 PASS（§10）。第四轮是 2026-11-23 的 <code>test950.sh dbm</code>：换上带补丁 0004 的 guest 内核之后的验收与 soft-dirty 开关 A/B，全部 PASS（§11）。原始文件留在 950 上。这是填写 950 结果的唯一位置。</p>
 </blockquote>
 <h2 id="d22-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -12704,12 +12980,199 @@ ODEBUG  blocked for more than  hung_task  soft lockup  rcu.*stall  detected stal
 <li>本轮的偏高样本：全量基点 0 档第 3 轮 22.8 ms、64 档第 3 轮 46.6 ms，增量 checkpoint 256 档第 2 轮偏低（78.7 ms）。每个都只出现一次，三轮中位数不受影响，原因没有查。</li>
 </ul>
 <hr />
+<h2 id="d22-11-第四轮test950-dbm2026-11-23">11. 第四轮：test950 dbm（2026-11-23）</h2>
+<p>e2b-infra <code>f3ab5f1</code> 起，部署包里进程级的 guest 内核换成带补丁 0004 的版本（<a href="#d03">03</a> §3.4），开关 <code>soft_dirty_dbm</code> 默认开。
+950 上 <code>git pull</code> 之后跑了 <code>bash test950.sh dbm</code>。切到进程级栈时，<code>950.sh</code> 发现内核变了，重建了模板 <code>base-criu</code>（<a href="#d06">06</a> §5）。</p>
+<h3 id="d22-111-条件与判定">11.1 条件与判定</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库提交</td>
+<td>e2b-infra <code>f3ab5f1</code>（950 上工作区里多出来的仍是用 LFS 拉下来的包）</td>
+</tr>
+<tr>
+<td>被测文件</td>
+<td>guest 内核 <code>35b25505…</code>（前三轮是 <code>b81306e7…</code>），gsd <code>8bc5dc49…</code>，orchestrator <code>fbe72d14…</code>，Firecracker v1.13.1 <code>18f3faa7…</code>；宿主内核 <code>6.6.0-159.4.3.154.oe2403sp4.aarch64</code></td>
+</tr>
+<tr>
+<td>结果目录</td>
+<td><code>test950/results/20261123-140916-dbm/</code></td>
+</tr>
+<tr>
+<td>验收 <code>criu/acceptance</code></td>
+<td>14:10:31 起，3 分 51 秒，<strong>PASS</strong>：guest-check、verify_gsd、verify_fixes、verify_multitree、clear_refs_race、restore_incremental、perf-run1..3 全部 PASS。guest-check 核对了模板里的内核构建标识与 <code>soft_dirty_dbm</code> 的默认值</td>
+</tr>
+<tr>
+<td>A/B <code>criu/dbm-off</code>、<code>criu/dbm-on</code></td>
+<td>4 分 37 秒、3 分 50 秒，都 PASS；每轮测量 352 次、失败 0，每次 restore 之后内存与文件校验一致</td>
+</tr>
+<tr>
+<td>回切冒烟 <code>sandbox/smoke-after</code></td>
+<td>PASS 5 / FAIL 0 / SKIP 0</td>
+</tr>
+</tbody>
+</table></div>
+<p>做法与 920B 上相同（<a href="#d20">20</a> §5.5）：同一部署、同一模板，一轮在每个沙箱里把开关写成 0，一轮写成 1，两轮开测前都清过网络命名空间。</p>
+<h3 id="d22-112-宿主上同时有别的负载">11.2 宿主上同时有别的负载</h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>轮</th>
+<th>开始时 firecracker 个数 · loadavg（1 分钟）</th>
+<th>结束时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>关（<code>dbm-off</code>）</td>
+<td>2 · 14.52</td>
+<td>102 · 43.90</td>
+</tr>
+<tr>
+<td>开（<code>dbm-on</code>）</td>
+<td>98 · 97.62</td>
+<td>101 · 126.31</td>
+</tr>
+</tbody>
+</table></div>
+<p>两轮期间 e2b 下的沙箱 cgroup 最多 12 个，多出来的约 100 个 Firecracker 进程不是这个测试起的，机器上另有负载。
+开的那一轮全程在更重的宿主负载下跑。§8 第 11 条（运行期间机器上没有别的沙箱）这一轮不满足，所以下表 checkpoint、restore 两列的差不判读。
+改写一列在更重的负载下反而快了四倍以上，方向与宿主负载的影响相反，这一列的结论不受影响。</p>
+<h3 id="d22-113-ab-表">11.3 A/B 表</h3>
+<p>每个测点每轮 20 次，单位 ms，取中位数。"改写"是常驻进程自己计的写内存耗时，取紧跟在一次 checkpoint 之后的那次改写；checkpoint 与 restore 是客户端墙钟。负载的含义同 <a href="#d20">20</a> §5.5。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>测点</th>
+<th style="text-align: right;">改写：关 / 开</th>
+<th style="text-align: right;">连续 checkpoint：关 / 开</th>
+<th style="text-align: right;">restore：关 / 开</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mix d=0</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">9.0 / 8.4</td>
+<td style="text-align: right;">11.1 / 9.9</td>
+</tr>
+<tr>
+<td>mix d=12 f=4</td>
+<td style="text-align: right;">6.4 / 1.4</td>
+<td style="text-align: right;">16.6 / 12.9</td>
+<td style="text-align: right;">17.3 / 14.5</td>
+</tr>
+<tr>
+<td>mix d=24 f=8</td>
+<td style="text-align: right;">11.7 / 2.9</td>
+<td style="text-align: right;">20.8 / 19.7</td>
+<td style="text-align: right;">20.8 / 19.8</td>
+</tr>
+<tr>
+<td>mix d=48 f=16</td>
+<td style="text-align: right;">24.0 / 6.0</td>
+<td style="text-align: right;">30.3 / 29.0</td>
+<td style="text-align: right;">33.6 / 27.9</td>
+</tr>
+<tr>
+<td>mix d=70 f=0.001</td>
+<td style="text-align: right;">51.4 / 7.7</td>
+<td style="text-align: right;">38.4 / 32.2</td>
+<td style="text-align: right;">38.8 / 35.5</td>
+</tr>
+<tr>
+<td>mix d=96 f=32</td>
+<td style="text-align: right;">49.4 / 10.7</td>
+<td style="text-align: right;">55.1 / 47.1</td>
+<td style="text-align: right;">55.0 / 43.8</td>
+</tr>
+<tr>
+<td>mix d=192 f=64</td>
+<td style="text-align: right;">105.2 / 21.5</td>
+<td style="text-align: right;">79.2 / 84.4</td>
+<td style="text-align: right;">80.1 / 77.5</td>
+</tr>
+<tr>
+<td>dirty d=0</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">12.0 / 14.5</td>
+<td style="text-align: right;">95.6 / 100.9</td>
+</tr>
+<tr>
+<td>dirty d=16</td>
+<td style="text-align: right;">9.1 / 2.0</td>
+<td style="text-align: right;">22.1 / 18.0</td>
+<td style="text-align: right;">111.7 / 93.5</td>
+</tr>
+<tr>
+<td>dirty d=32</td>
+<td style="text-align: right;">18.3 / 3.9</td>
+<td style="text-align: right;">29.7 / 26.6</td>
+<td style="text-align: right;">130.9 / 97.3</td>
+</tr>
+<tr>
+<td>dirty d=64</td>
+<td style="text-align: right;">29.7 / 7.5</td>
+<td style="text-align: right;">36.5 / 37.9</td>
+<td style="text-align: right;">98.5 / 97.1</td>
+</tr>
+<tr>
+<td>dirty d=128</td>
+<td style="text-align: right;">61.1 / 14.3</td>
+<td style="text-align: right;">58.8 / 59.9</td>
+<td style="text-align: right;">100.5 / 98.3</td>
+</tr>
+<tr>
+<td>dirty d=256</td>
+<td style="text-align: right;">119.1 / 28.5</td>
+<td style="text-align: right;">112.9 / 102.5</td>
+<td style="text-align: right;">103.8 / 95.0</td>
+</tr>
+<tr>
+<td>layout d=16</td>
+<td style="text-align: right;">9.3 / 1.4</td>
+<td style="text-align: right;">48.7 / 43.1</td>
+<td style="text-align: right;">113.2 / 100.0</td>
+</tr>
+<tr>
+<td>layout d=64</td>
+<td style="text-align: right;">31.9 / 3.5</td>
+<td style="text-align: right;">116.3 / 97.2</td>
+<td style="text-align: right;">131.8 / 92.2</td>
+</tr>
+<tr>
+<td>layout d=256</td>
+<td style="text-align: right;">112.7 / 12.8</td>
+<td style="text-align: right;">119.4 / 103.5</td>
+<td style="text-align: right;">103.7 / 94.9</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>950 的 guest 有 DBM。</strong> 没有 DBM 时开关不起作用，两轮的改写耗时应当相同；实测开的一轮降到原来的 1/4～1/9。</li>
+<li><strong>省下的比 920B 多。</strong> 连续改写每 MiB 关时约 0.47 ms、开时约 0.11 ms，省约 0.35 ms；920B 上是从 0.34 ms 降到 0.08 ms，省约 0.26 ms。
+    950 上每次缺页本身更贵，0004 去掉的正是这一部分。散页改写降得最多：256 MiB 从 112.7 ms 降到 12.8 ms。</li>
+<li><strong>checkpoint 与 restore 不判读。</strong> 开的一轮多数测点略快，差几到十几 ms，也有变慢的（mix d=192 的 checkpoint +5.2 ms）。
+    关的一轮里有几档 restore 偏高：dirty d=16、d=32 是 111.7、130.9 ms，layout d=16、d=64 是 113.2、131.8 ms，而同一轮其余 256 MiB 进程的档在 95.6～103.8 ms。
+    开的一轮里没有这样的值，差得最多的也正是这几档。原理上 0004 不改变 CRIU 写出和读回的页数，checkpoint 与 restore 不应变化；
+    920B 上在没有别的负载时量的结果也是这样，差值两个方向都有、多数在 3 ms 以内。</li>
+<li><strong>一个周期的效果。</strong> "改写 256 MiB 再 checkpoint 一次"从 232.0 ms 降到 131.0 ms（<a href="#d17">17</a> §7）。</li>
+</ul>
+<p>原始终端输出存于工作区 <code>rollback-reports/950-dbm-20261123/</code>。</p>
+<hr />
 <h2 id="d22-本章要点">本章要点</h2>
 <ul>
 <li>950 上第一轮 <code>950.sh all</code> 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。</li>
 <li>同一天 <code>test950.sh standard</code> 的第二轮在独占机器上跑，验收与四组压测全部 PASS，功能计数、压测计数与第一轮相同；分档的增量 checkpoint 与 restore 中位数相差不超过 5.7 ms（§9）。</li>
 <li>分档性能三轮的服务端中位数从 0 档的 8.2 / 8.5 ms（增量 checkpoint / restore）到 256 档的 88.7 / 83.6 ms；128 档第 2 轮明显偏高（全量基点 78.8、restore 68.8 ms），三轮中位数不受它影响。</li>
 <li>2026-11-18 的第三轮（gsd <code>1a0a3b67…</code>）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 <code>resource_exhausted</code> 从五十多次降到 0（§10）；分档性能三轮中位数与第二轮相差不超过 3.7 ms（§10.5）。</li>
+<li>2026-11-23 的第四轮（guest 内核 <code>35b25505…</code>，带补丁 0004）验收与 A/B 全部 PASS。950 的 guest 有 DBM，checkpoint 之后改写内存的耗时降到原来的 1/4～1/9，每 MiB 省约 0.35 ms；两轮期间宿主上另有约 100 个 Firecracker 进程，checkpoint 与 restore 的差不判读（§11）。</li>
 <li>结果由 <code>criu-rollback/deploy/950.sh all</code> 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。</li>
 <li>表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。</li>
 <li>950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。</li>
@@ -15953,7 +16416,7 @@ gsd 检查不出来的一种情况是树之间共享的匿名共享内存（只�
 <td>guest 内核</td>
 <td><code>fc-kernels/</code>（构建脚本、config、补丁）</td>
 <td>宿主 <code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
-<td>上游 6.1.158 的固定基线加三个补丁。arm64 的 <code>Image</code>，文件名按 orchestrator 的约定叫 <code>vmlinux.bin</code></td>
+<td>上游 6.1.158 的固定基线加四个补丁。arm64 的 <code>Image</code>，文件名按 orchestrator 的约定叫 <code>vmlinux.bin</code></td>
 </tr>
 <tr>
 <td>guest 基础镜像</td>
@@ -16025,7 +16488,7 @@ install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </sp
 <p>内核的三样输入都在代码仓的 <code>fc-kernels/</code> 下：</p>
 <ul>
 <li><strong>基线</strong>：<code>kernel_base_tags.txt</code> 把 6.1.158 固定在上游 amazonlinux/linux 的 tag <code>microvm-kernel-6.1.158-15.288.amzn2023</code>。补丁是对着这个 tag 做的；不固定的话，上游出一个新 tag 就会悄悄换掉补丁脚下的基线。</li>
-<li><strong>补丁</strong>：<code>patches/6.1.158/</code> 下按文件名顺序应用的三个——<code>0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch</code>（上游带来的，与 gsd 无关）、<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（文件系统热切层与 arm64 脏页跟踪）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（对 0002 的全部修复）。</li>
+<li><strong>补丁</strong>：<code>patches/6.1.158/</code> 下按文件名顺序应用的四个——<code>0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch</code>（上游带来的，与 gsd 无关）、<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（文件系统热切层与 arm64 脏页跟踪）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（对 0002 的全部修复）、<code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>（arm64 上用硬件脏位记录写入，2026-11-23 加入，开关默认开，<a href="#d03">03</a> §3.4）。</li>
 <li><strong>config</strong>：<code>configs/arm64/6.1.158.config</code>，其中 <code>CONFIG_CHECKPOINT_RESTORE=y</code>、<code>CONFIG_MEM_SOFT_DIRTY=y</code>、<code>CONFIG_OVERLAY_FS=y</code>。</li>
 </ul>
 <p>联网的 Debian / Ubuntu 机器上直接用仓库里的脚本：</p>
@@ -16034,7 +16497,7 @@ install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </sp
 <span class="c1"># 产物：builds/vmlinux-6.1.158/arm64/vmlinux.bin</span>
 </code></pre></div>
 
-<p>脚本会装依赖、克隆内核源码、检出固定的 tag、依次 <code>git apply</code> 三个补丁、<code>make olddefconfig</code>、编出 <code>Image</code>。</p>
+<p>脚本会装依赖、克隆内核源码、检出固定的 tag、依次 <code>git apply</code> 四个补丁、<code>make olddefconfig</code>、编出 <code>Image</code>。</p>
 <p>不联网的机器（新 920B 就是这种情况）手工做同样的几步。前提是本机已有一份带这个 tag 的内核源码克隆和 arm64 的编译环境：</p>
 <div class="hl"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>&lt;内核源码克隆&gt;
 git<span class="w"> </span>checkout<span class="w"> </span>-f<span class="w"> </span>microvm-kernel-6.1.158-15.288.amzn2023
@@ -16055,20 +16518,21 @@ sha256sum<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 
 <p>同时把这次用的 <code>.config</code> 留一份在旁边备查。这样编出的内核版本串是 <code>6.1.158+</code>。</p>
 <h3 id="d27-23-核对补丁能从基线重放">2.3 核对补丁能从基线重放</h3>
-<p>仓库里的三个补丁文件是内核改动的唯一正本。要确认"手上这个内核的源码树"确实等于"基线加这三个补丁"，不靠比对补丁文本，而是从基线重放一遍、比较 git 的树哈希：</p>
+<p>仓库里的四个补丁文件是内核改动的唯一正本。要确认"手上这个内核的源码树"确实等于"基线加这四个补丁"，不靠比对补丁文本，而是从基线重放一遍、比较 git 的树哈希：</p>
 <div class="hl"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>&lt;内核源码克隆&gt;
 git<span class="w"> </span>worktree<span class="w"> </span>add<span class="w"> </span>--detach<span class="w"> </span>/tmp/applycheck<span class="w"> </span>microvm-kernel-6.1.158-15.288.amzn2023
 <span class="nb">cd</span><span class="w"> </span>/tmp/applycheck
-<span class="k">for</span><span class="w"> </span>p<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nv">$W</span>/fc-kernels/patches/6.1.158/000<span class="o">[</span><span class="m">123</span><span class="o">]</span>-*.patch<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="k">for</span><span class="w"> </span>p<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nv">$W</span>/fc-kernels/patches/6.1.158/000<span class="o">[</span><span class="m">1</span>-4<span class="o">]</span>-*.patch<span class="p">;</span><span class="w"> </span><span class="k">do</span>
 <span class="w">  </span>sha256sum<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$p</span><span class="s2">&quot;</span><span class="p">;</span><span class="w"> </span>git<span class="w"> </span>apply<span class="w"> </span>--index<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$p</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  apply OK&quot;</span>
 <span class="k">done</span>
 git<span class="w"> </span>write-tree
 <span class="nb">cd</span><span class="w"> </span>-<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>worktree<span class="w"> </span>remove<span class="w"> </span>/tmp/applycheck
 </code></pre></div>
 
-<p><code>git write-tree</code> 输出的是应用完三个补丁之后整棵源码树的哈希，它只取决于文件内容，与提交历史、提交说明无关。
+<p><code>git write-tree</code> 输出的是应用完全部补丁之后整棵源码树的哈希，它只取决于文件内容，与提交历史、提交说明无关。
 2026-10-08 在新 920B 上对 <code>259f1a25c</code> 里的三个补丁做这一步（<code>bc3cce913</code> 里的这三个文件没有变化），三个都 <code>apply OK</code>，得到的树哈希是 <code>744cbce67cef413e4838035c8a2788f97e5e9d3a</code>，与编出发布内核的那棵源码树相同。
-以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。三个补丁文件各自的 sha256 记在 <a href="#d19">19</a>。</p>
+2026-11-23 加入 0004 之后（代码仓 <code>criu-rollback-dev</code> 分支 <code>b3668b6</code>）在新 920B 上重做了这一步：四个都 <code>apply OK</code>，树哈希是 <code>9117988d010b4dcb8230fd767f1a337382474b3e</code>，与编出部署包里 guest 内核 <code>35b25505…</code> 的那棵源码树相同；只打前三个时仍得到上面的 <code>744cbce6…</code>。
+以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。前三个补丁文件各自的 sha256 记在 <a href="#d19">19</a>，0004 的 sha256 是 <code>c2cd24607871370f4deec8efcc9192af407b549945e5d1c2d387645cf1421aed</code>。</p>
 <p>调试用的内核（打开 KASAN、lockdep 等检查）用同一棵源码树、另一份 config 编，做法与注意事项在 <a href="#d18">18</a>，config 片段随手册附带在 <code>scripts/kernel/</code>。</p>
 <h3 id="d27-24-guest-基础镜像">2.4 guest 基础镜像</h3>
 <p>模板从一个容器镜像建出来。gsd 要求镜像里有 4.x 的 CRIU，并且位置固定在 <code>/usr/sbin/criu</code>（gsd 写死了这个路径）。仓库里的 <code>Dockerfile.criu421</code> 在 <code>ubuntu:22.04-custom</code> 之上从源码编译 CRIU 4.2.1：</p>
@@ -16470,9 +16934,9 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <hr />
 <h2 id="d27-本章要点">本章要点</h2>
 <ul>
-<li>要部署的是 gsd、进程级版 orchestrator、打了三个补丁的 guest 内核、带 CRIU 4.2.1 的基础镜像和 Python SDK，必须来自同一个提交；Firecracker 和宿主内核不动；只支持 arm64 的 guest。</li>
+<li>要部署的是 gsd、进程级版 orchestrator、打了补丁的 guest 内核、带 CRIU 4.2.1 的基础镜像和 Python SDK，必须来自同一个提交；Firecracker 和宿主内核不动；只支持 arm64 的 guest。</li>
 <li>离线构建靠 <code>GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly</code> 加预先备好的模块缓存；提交号用 <code>-ldflags</code> 嵌进二进制，先 vet 和单测再编。</li>
-<li>内核从 <code>kernel_base_tags.txt</code> 固定的 tag 出发按顺序打三个补丁；用"从基线重放、比较 <code>git write-tree</code>"核对源码树，而不是比对补丁文本。</li>
+<li>内核从 <code>kernel_base_tags.txt</code> 固定的 tag 出发按顺序打四个补丁；用"从基线重放、比较 <code>git write-tree</code>"核对源码树，而不是比对补丁文本。</li>
 <li>运行时只有三个文件：<code>/fc-criu/gsd</code>、<code>/fc-criu/orchestrator</code>、<code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code>。job 里显式设 <code>HOST_GSD_PATH</code> 指向这个 gsd（内置默认 <code>/fc-gsd/gsd</code> 是旧布局）；与别的栈共用的机器用 <code>HOST_KERNELS_DIR</code> 指向补丁内核，只跑进程级的机器把内核直接放 <code>/fc-kernels</code>。</li>
 <li>切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；<code>950.sh</code> 切换前先删掉全部 e2b 沙箱（不碰 AgentENV 的），开发用的 <code>switch-gsd-new920b.sh</code> 则在还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。</li>
 <li>模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。</li>
@@ -16517,8 +16981,8 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 </tr>
 <tr>
 <td><strong>guest 内核</strong></td>
-<td>模块参数 <code>overlay.ckpt_move_open</code>（§2.3）</td>
-<td>每次 checkpoint 时读当前值</td>
+<td>模块参数 <code>overlay.ckpt_move_open</code>、内核参数 <code>soft_dirty_dbm</code>（§2.3）</td>
+<td>前者每次 checkpoint 时读当前值，后者每次清 soft-dirty 时读</td>
 <td>在沙箱里写 sysfs 立即生效，只影响这一个沙箱</td>
 </tr>
 <tr>
@@ -16727,8 +17191,8 @@ systemctl<span class="w"> </span>daemon-reload<span class="w"> </span><span clas
 tr<span class="w"> </span><span class="s1">&#39;\0&#39;</span><span class="w"> </span><span class="s1">&#39;\n&#39;</span><span class="w"> </span>&lt;<span class="w"> </span>/proc/<span class="nv">$p</span>/environ<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-E<span class="w"> </span><span class="s1">&#39;^HOST_(GSD_PATH|KERNELS_DIR)=&#39;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;两个都没设，用默认值&quot;</span>
 </code></pre></div>
 
-<h3 id="d28-23-内核模块参数-overlayckpt_move_open">2.3 内核模块参数 <code>overlay.ckpt_move_open</code></h3>
-<p>由 <code>0003-overlayfs-hot-switch-fixes.patch</code> 加入，决定 checkpoint 时怎样对待"正被以写方式打开着"的 overlay 文件。背景是：这样的文件在 checkpoint 之后还会被原来的文件描述符继续写，如果不处理，这些写入会改到已经保存下来的那一层里（<a href="#d08">08</a>）。
+<h3 id="d28-23-内核参数-overlayckpt_move_open-与-soft_dirty_dbm">2.3 内核参数 <code>overlay.ckpt_move_open</code> 与 <code>soft_dirty_dbm</code></h3>
+<p><strong><code>overlay.ckpt_move_open</code></strong> 由 <code>0003-overlayfs-hot-switch-fixes.patch</code> 加入，决定 checkpoint 时怎样对待"正被以写方式打开着"的 overlay 文件。背景是：这样的文件在 checkpoint 之后还会被原来的文件描述符继续写，如果不处理，这些写入会改到已经保存下来的那一层里（<a href="#d08">08</a>）。
 处理办法是把原文件留在新的可写层、在保存下来的层里放一份拷贝，代价是拷贝的时间。</p>
 <div class="tw"><table>
 <thead>
@@ -16758,6 +17222,33 @@ tr<span class="w"> </span><span class="s1">&#39;\0&#39;</span><span class="w"> <
 </code></pre></div>
 
 <p>默认值 2 是正确性优先的选择。只有在确认沙箱里长期以写方式打开的大文件不需要被 checkpoint 精确保存时，才考虑调低；代价的量级见 <a href="#d26">26</a> 与 <a href="#d20">20</a>。无论取哪个值，有多个硬链接的文件都不搬，内核会打一条限速告警（§4.3）。</p>
+<p><strong><code>soft_dirty_dbm</code></strong> 由补丁 <code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code> 加入，决定清 soft-dirty 时怎样对待可写的页（原理在 <a href="#d03">03</a> §3.4）：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>值</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Y</code>（默认）</td>
+<td>可写的页不写保护，只设回"可写但干净"；之后的写由处理器的硬件脏位记录，不缺页</td>
+</tr>
+<tr>
+<td><code>N</code></td>
+<td>原来的方式：去掉写权限，之后每页第一次写缺页一次</td>
+</tr>
+</tbody>
+</table></div>
+<p>读写位置是 <code>/sys/module/kernel/parameters/soft_dirty_dbm</code>（权限 0644，读出来是 <code>Y</code> 或 <code>N</code>，写 <code>0</code>、<code>1</code> 都可以；也可以在内核命令行上写 <code>soft_dirty_dbm=0</code>）。
+在沙箱里写立即生效，只影响这一个沙箱之后的清标记：</p>
+<div class="hl"><pre><span></span><code>cat<span class="w"> </span>/sys/module/kernel/parameters/soft_dirty_dbm
+<span class="nb">echo</span><span class="w"> </span><span class="m">0</span><span class="w"> </span>&gt;<span class="w"> </span>/sys/module/kernel/parameters/soft_dirty_dbm
+</code></pre></div>
+
+<p>两个值下增量 checkpoint 与 restore 都正确，差别只在业务进程写内存的快慢（<a href="#d17">17</a> §7）。关掉它只用于对照测量（<code>benchmark/ckpt_same_workload.py --soft-dirty-dbm 0</code>）。
+处理器没有 DBM 时，取哪个值都等于原来的方式。沙箱里没有这个文件，说明模板里的内核没有打 0004。</p>
 <h3 id="d28-24-sdk-的连接参数与环境变量">2.4 SDK 的连接参数与环境变量</h3>
 <p>SDK 一侧与 gsd 有关的配置都在 <code>py-sdk/e2b/connection_config.py</code>。每一项既可以作为连接参数传给 <code>Sandbox.create()</code> / <code>Sandbox.connect()</code>，也可以用环境变量给默认值；参数优先。</p>
 <div class="tw"><table>
@@ -17526,6 +18017,10 @@ systemctl<span class="w"> </span>daemon-reload<span class="w"> </span><span clas
 <td>补丁 <code>0003-overlayfs-hot-switch-fixes.patch</code> 的 <code>module_param_named(ckpt_move_open, …)</code> 与 <code>ovl_ckpt_want_move</code></td>
 </tr>
 <tr>
+<td><code>soft_dirty_dbm</code></td>
+<td>补丁 <code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code> 的 <code>core_param(soft_dirty_dbm, …)</code> 与 <code>clear_soft_dirty</code>（<code>fs/proc/task_mmu.c</code>）</td>
+</tr>
+<tr>
 <td>SDK 的连接配置</td>
 <td><code>py-sdk/e2b/connection_config.py</code>（<code>get_checkpointd_url</code> 在 <code>:168</code>）</td>
 </tr>
@@ -17566,10 +18061,11 @@ systemctl<span class="w"> </span>daemon-reload<span class="w"> </span><span clas
 <hr />
 <h2 id="d28-本章要点">本章要点</h2>
 <ul>
-<li>开关分四处：guest 里 gsd 的参数、宿主 orchestrator 的两个环境变量、guest 内核的一个模块参数、客户端 SDK 的连接配置。前两处的值在建模板时固化进模板，改了之后要重建模板才对新沙箱生效。</li>
+<li>开关分四处：guest 里 gsd 的参数、宿主 orchestrator 的两个环境变量、guest 内核的两个参数、客户端 SDK 的连接配置。前两处的值在建模板时固化进模板，改了之后要重建模板才对新沙箱生效。</li>
 <li>gsd 的五个路径参数在模板里总是显式传入并与启动脚本一致，编译进去的前两个默认值不可用；两个 CRIU 时限默认各 60 秒、针对单棵树，全部树合计 3 倍。</li>
 <li><code>HOST_GSD_PATH</code> 默认 <code>/fc-gsd/gsd</code>、默认注入；只有小写 <code>off</code> 才关闭注入；开着而文件读不到时建模板失败。</li>
 <li><code>overlay.ckpt_move_open</code> 默认 2：checkpoint 时为以写方式打开的文件留拷贝，保证之后的写入不改到 checkpoint；可在沙箱里写 sysfs 调低，以正确性换时间。</li>
+<li><code>soft_dirty_dbm</code> 默认开：清 soft-dirty 时不写保护，写入由硬件脏位记录；写 0 回到写保护方式，结果相同、只是写内存变慢，只用于对照测量。</li>
 <li>计时键都是 gsd 自己计的毫秒数：<code>total_ms</code> 不含排队与网络；<code>criu_dump_ms</code>、<code>criu_restore_ms</code> 是各棵树之和；<code>stopped_ms</code> 从第一棵树保存完算起；没发生的阶段不出现。每棵树的明细和杀进程的细分只在日志里。</li>
 <li>gsd 的 JSON 日志与 CRIU restore 的原始输出在 <code>journalctl -u gsd</code> 里；保存失败时镜像目录里的 <code>criu-dump.log</code> 已被删除，完整一份在 <code>&lt;snapshot-store&gt;/last-failed-criu-dump.log</code>。</li>
 <li>journal 在单独挂出的 <code>/var/log</code> 上，不随 restore 回滚（2026-10-09 在新 920B 上确认）；它会因 CRIU 的详细输出持续增长，journald 的限流还可能丢掉 gsd 的日志，需要完整日志时先关限流。</li>
@@ -18360,7 +18856,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;im
 <tr>
 <td><code>/proc/version</code> 的内核版本串与构建时间</td>
 <td>等于要验收的那个内核的版本串（<a href="#d19">19</a> 的条件标签）</td>
-<td>模板是换内核之前建的，或 orchestrator 取内核的目录不对（<a href="#d27">27</a>）</td>
+<td>模板是换内核之前建的，或 orchestrator 取内核的目录不对（<a href="#d27">27</a>）。部署包的 <code>ops/guest_check.py</code> 从 <code>manifest.json</code> 读期望的构建标识（2026-11-23 起是 <code>#2 SMP Mon Nov 23 11:39:42 CST 2026</code>），并核对 <code>soft_dirty_dbm</code> 的默认值为 <code>Y</code></td>
 </tr>
 <tr>
 <td>THP</td>
@@ -18667,6 +19163,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 </tr>
 </tbody>
 </table></div>
+<p><code>test950.sh dbm</code> 是这些入口之上的一档：先跑 <code>950.sh acceptance</code>，再用 <code>benchmark/ckpt_same_workload.py</code> 把同一组负载跑两轮，每个沙箱里分别把 <code>soft_dirty_dbm</code> 写成 0 和 1，最后打印 A/B 表（<code>bash test950.sh report criu/dbm-table</code>）。判据只有功能性的：两轮每次 restore 之后内存与文件校验一致；耗时只留档。结果的读法见 <a href="#d20">20</a> §5.5、<a href="#d22">22</a> §11。</p>
 <p>两点与本章的做法不同：SDK 用进程级 conda 环境里的解释器（入口自动选用，不需要激活），不设 <code>PYTHONPATH</code>；四组压测顺序跑，不并行。调试内核不在这一轮的范围内。</p>
 <p>单独执行时输出目录默认是 <code>criu-rollback/deploy/results/&lt;时间&gt;-acceptance/</code> 和 <code>…-stress/</code>，可以用 <code>--out</code> 指定，目录必须尚不存在。回传时按 §7 的项目记录条件，不带 <code>criu-rollback/scripts/.env</code>、保存的基线和 job 定义，它们含凭据。每个结果落在哪个文件、填进哪张表，见 <a href="#d22">22</a>。</p>
 <hr />
@@ -18674,7 +19171,7 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <ul>
 <li>在运行进程级栈的宿主机上、用装好 SDK 依赖的 conda 环境加代码仓的 <code>py-sdk</code>、对模板 <code>base-criu</code> 跑；开始前确认三个文件的 sha256、确认机器上没有别人的沙箱。</li>
 <li>顺序固定：部署自检 → <code>verify_gsd.py</code> → <code>verify_fixes.py</code> → <code>verify_multitree.py</code> → <code>verify_clear_refs_race.py</code> → <code>demo_checkpoint_perf.py</code> 三次 → 可选的探针与压测。前一步不过就停下来查。</li>
-<li>部署自检查的是"模板里装的是不是要验的那一套"：guest 内 gsd 的提交号与 sha256、内核版本串、THP、<code>rcu_expedited</code>、<code>/health</code>、criu 版本、<code>/</code> 与 <code>/tmp</code>。换过内核、gsd、overlay-init 而没有重建模板，是最常见的白跑原因。</li>
+<li>部署自检查的是"模板里装的是不是要验的那一套"：guest 内 gsd 的提交号与 sha256、内核版本串（期望的构建标识从部署包的 <code>manifest.json</code> 读）、<code>soft_dirty_dbm</code>、THP、<code>rcu_expedited</code>、<code>/health</code>、criu 版本、<code>/</code> 与 <code>/tmp</code>。换过内核、gsd、overlay-init 而没有重建模板，是最常见的白跑原因。</li>
 <li><code>verify_gsd.py</code>、<code>verify_clear_refs_race.py</code> 与 <code>stress_overlay_ckpt.py</code> 的退出码不是判定，分别看末行的根盘判定、漏页轮数、以及按判据表核对汇总 JSON。</li>
 <li><code>verify_fixes.py</code> 通过的样子是 PASS 26 / FAIL 0 / SKIP 2；它和 <code>verify_multitree.py</code> 都把 dmesg 的可疑行只记作证据，要另外搜一遍。</li>
 <li>压测在首次部署、换内核、改补丁时跑，一律带看门狗；判据是 <code>RESULT</code> 为 <code>DONE rc=0</code>、dmesg 与串口关键词零命中、worker 只有允许的 errno、没有心跳过期、gsd 侧只有 <code>resource_exhausted</code>。改过内核补丁还要在调试内核上再跑一遍并确认 <code>debug_locks</code> 为 1。</li>
@@ -18970,7 +19467,13 @@ worker 的操作总数和 <code>ENOENT</code>、<code>ESTALE</code> 的次数随
 <tr>
 <td><strong>soft-dirty</strong></td>
 <td><code>PTE_SOFT_DIRTY</code></td>
-<td>页表项上的"上次清零之后被写过"标志，增量 dump 靠它；arm64 上由补丁 0002 提供</td>
+<td>页表项上的"上次清零之后被写过"标志，增量 dump 靠它；arm64 上由补丁 0002 提供，补丁 0004 改由硬件脏位记录写入</td>
+<td><a href="#d03">03</a></td>
+</tr>
+<tr>
+<td><strong>DBM</strong></td>
+<td><code>PTE_DBM</code>（即 <code>PTE_WRITE</code>）</td>
+<td>arm64 的硬件脏位管理：可写而干净的页被写时，处理器自己把它记成脏，不缺页；补丁 0004 让 soft-dirty 用上它，开关 <code>soft_dirty_dbm</code></td>
 <td><a href="#d03">03</a></td>
 </tr>
 <tr>
@@ -19216,6 +19719,10 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 <td><code>patches/6.1.158/0003-overlayfs-hot-switch-fixes.patch</code></td>
 <td>全部修复，合并成一个；文件头的提交说明按主题列出</td>
 </tr>
+<tr>
+<td><code>patches/6.1.158/0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code></td>
+<td>2026-11-23 加入：清 soft-dirty 时可写的页不写保护，写入由硬件脏位（DBM）记录；<code>pte_soft_dirty</code> 把硬件脏也算作写过；开关 <code>soft_dirty_dbm</code> 默认开</td>
+</tr>
 </tbody>
 </table></div>
 <p>补丁 0003 按主题到函数（主题名与提交说明的六组一一对应，机制都在 <a href="#d08">08</a>、<a href="#d09">09</a>）：</p>
@@ -19303,7 +19810,7 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 <tr>
 <td>宿主</td>
 <td><code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
-<td>打过三个补丁的 guest 内核（与沙箱级共用的机器用 <code>HOST_KERNELS_DIR=/fc-criu/kernels</code> 指过来）</td>
+<td>打过补丁的 guest 内核（与沙箱级共用的机器用 <code>HOST_KERNELS_DIR=/fc-criu/kernels</code> 指过来）</td>
 </tr>
 <tr>
 <td>guest</td>
@@ -20176,7 +20683,7 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 </tr>
 <tr>
 <td>guest 内核补丁</td>
-<td><code>fc-kernels/patches/6.1.158/</code>（三个补丁）、<code>fc-kernels/build.sh</code>、<code>kernel_base_tags.txt</code></td>
+<td><code>fc-kernels/patches/6.1.158/</code>（四个补丁）、<code>fc-kernels/build.sh</code>、<code>kernel_base_tags.txt</code></td>
 <td>无单测，靠调试内核压测（§4.3）</td>
 <td><a href="#d27">27</a></td>
 </tr>
@@ -20219,7 +20726,7 @@ Go 侧和 Python 侧的生成代码都要重新生成；SDK 的 <code>Checkpoint
 <h3 id="dB-24-改内核补丁">2.4 改内核补丁</h3>
 <ul>
 <li>在内核源码树的开发分支上按主题一个提交一个提交地做，验证通过后再压成一个补丁替换仓库里的 0003，并更新它文件头的提交说明。0002 保持不动。</li>
-<li>替换后做可重放性核对：从 <code>kernel_base_tags.txt</code> 里的基线 tag 依次 <code>git apply</code> 三个补丁，<code>git write-tree</code> 的结果必须与开发分支末端的树相同（<a href="#d27">27</a>）。</li>
+<li>替换后做可重放性核对：从 <code>kernel_base_tags.txt</code> 里的基线 tag 依次 <code>git apply</code> 全部补丁，<code>git write-tree</code> 的结果必须与开发分支末端的树相同（<a href="#d27">27</a>）。</li>
 <li>发布版和调试版两种配置都要编过，不引入新的告警。</li>
 <li>必须满足 §3.2 的四条内核不变量，并通过 §4.3 的调试内核压测。</li>
 </ul>

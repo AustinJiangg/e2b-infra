@@ -317,6 +317,8 @@ work 目录只有内核使用，固定 0755。
 
 `0003` 补丁在这一半上只做了一件事：删掉 `fs/proc/task_mmu.c` 里遗留的调试计数与调试输出。
 
+`0004` 补丁（2026-11-23 加入）改了这一半的做法：清标记时不再去掉可写页的写权限，改由处理器的硬件脏位（DBM）记录之后的写，省掉每页第一次写的缺页；pagemap 把硬件脏的页也报成 soft-dirty。它与 overlayfs 无关，原理、正确性验证和开关在 [03](03-criu-and-incremental-memory.md) §3.4。
+
 ---
 
 ## 代码位置
@@ -331,6 +333,7 @@ work 目录只有内核使用，固定 0755。
 | 内存映射 | 同上 — `ovl_mmap` |
 | 缓存 inode 的接纳与复活 | 同上 — `ovl_get_inode`、`ovl_refresh_reused_inode` |
 | arm64 soft-dirty | `0002-overlayfs-hot-switch-checkpoint.patch` 对 `arch/arm64/` 的修改 |
+| arm64 soft-dirty 用硬件脏位 | `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch` |
 | gsd 的切换封装 | `ckpt/overlay.go` — `SinkUpper`、`PrepareRestore`、`CommitRestore`、`AbortRestore`、`switchLayers`、`applyOverlaySwitch` |
 | 选项串与长度预检 | `ckpt/overlay.go` — `overlayOptions`、`checkOverlayOptionsLen`、`maxOverlayOptionsLen` |
 | 目录的建立与命名 | `ckpt/overlay.go` — `makeUpperWork`、`allocLayerPath`、`layerName`、`restoreDirs`、`nextRestoreSeq` |
