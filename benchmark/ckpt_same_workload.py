@@ -100,6 +100,9 @@ fork、恢复各段耗时与页数），把 criu_dump / criu_restore 再拆开�
     --print a.json [b.json ...]     不跑测试，把已有结果（同一套的多轮可合并）的汇总重新打印一遍
     --compare a.json b.json ...     不跑测试，把两套的结果（每套可多轮）按测点并列，出代价分解表
     --compare-siblings              与 --out 合用：取 --out 所在目录的上一级里其他各步的 result.json 做 --compare
+    --soft-dirty-dbm 0|1            进程级：每个沙箱先设 guest 的 soft_dirty_dbm（硬件 DBM 标脏的 A/B）
+    --no-native                     不测原生 pause / resume
+    --dbm-siblings                  与 --out 合用：上一级目录里 soft_dirty_dbm=0、=1 两轮并列成 A/B 表
 结果写 JSON，stdout 打印汇总表；校验失败退出码非零。
 """
 import argparse
@@ -240,18 +243,20 @@ def handle(signum, frame):
                 blk = hashlib.md5(nonce.encode()).digest() * 4096
                 for j in range(16):
                     chunk[j << 16:(j + 1) << 16] = blk
+            t = time.perf_counter()
             for i in range(n):
                 buf[i << 20:(i + 1) << 20] = chunk
-            out = "ok"
+            out = "ok %.3f" % ((time.perf_counter() - t) * 1000)
         elif op == "sdirty":
             n = int(arg)
             if (n << 20) > size:
                 raise ValueError("dirty exceeds payload")
             small[:] = hashlib.md5(nonce.encode()).digest() * 4
+            t = time.perf_counter()
             for p in perm[:n << 8]:
                 o = p << 12
                 buf[o:o + 64] = small
-            out = "ok"
+            out = "ok %.3f" % ((time.perf_counter() - t) * 1000)
         elif op == "sha":
             out = hashlib.sha256(buf).hexdigest()
         elif op == "shat":
@@ -505,8 +510,14 @@ class Hog:
             raise RuntimeError("常驻进程没有全部起来")
 
     def dirty(self, mb, layout="seq"):
-        if mb and set(self.ask("sdirty" if layout == "scatter" else "dirty", "%d" % (mb // len(self.dirs)))) != {"ok"}:
-            raise RuntimeError("改写失败")
+        """改写 mb MiB；返回常驻进程自己量的改写耗时 ms（多棵树取最大），不改写时返回 None。
+        进程级上清过 soft-dirty 之后的第一次写要缺页（不用 DBM 时），这个耗时里就含这部分代价。"""
+        if not mb:
+            return None
+        got = [x.split() for x in self.ask("sdirty" if layout == "scatter" else "dirty", "%d" % (mb // len(self.dirs)))]
+        if any(not g or g[0] != "ok" for g in got):
+            raise RuntimeError("改写失败：%s" % got)
+        return max(float(g[1]) for g in got) if all(len(g) > 1 for g in got) else None
 
     def write_file(self, mb, sync="fsync"):
         if not mb:
@@ -779,11 +790,35 @@ def native_sandbox(Sandbox, ctx, point, series, pass_no, reps, rows, lock):
             remove_builds(ctx.storage, builds)
 
 
+SD_DBM = "/sys/module/kernel/parameters/soft_dirty_dbm"
+
+
+def set_soft_dirty_dbm(sb, ctx):
+    """进程级：guest 内核的 soft-dirty 是否用硬件 DBM 标脏（2026-11-23 起的 guest 内核有这个开关，默认开）。
+    给了 --soft-dirty-dbm 就先设上；返回实际值 "Y" / "N"，内核没有这个开关时返回 None。"""
+    if ctx.stack != "criu":
+        return None
+    want = ctx.args.soft_dirty_dbm
+    cmd = "cat %s 2>/dev/null; true" % SD_DBM
+    if want is not None:
+        cmd = "echo %s > %s && cat %s" % (want, SD_DBM, SD_DBM)
+    try:
+        got = sb.commands.run(cmd, user="root", timeout=30).stdout.strip() or None
+    except Exception as exc:
+        if want is not None:
+            raise RuntimeError("设不了 %s（guest 内核没有这个开关？）：%s" % (SD_DBM, exc))
+        return None
+    if want is not None and got != ("Y" if want == "1" else "N"):
+        raise RuntimeError("%s 设成 %s 后读回 %r" % (SD_DBM, want, got))
+    return got
+
+
 def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
     point = norm(point)
     d, f = point["d"], point["f"]
     sb = Sandbox.create(template=ctx.args.template, timeout=SBX_TIMEOUT)
     try:
+        sd_dbm = set_soft_dirty_dbm(sb, ctx)
         hog, lazy_s = prepare_sandbox(sb, ctx, point, lock)
         want = hog.state(f)
         t0 = time.perf_counter()
@@ -797,18 +832,19 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
                          "lazyinit_wait_s": lazy_s})
 
         def change_and_checkpoint(name):
-            hog.dirty(d, point["layout"])
+            dms = hog.dirty(d, point["layout"])
             hog.write_file(f, point["sync"])
             if point["wait"]:
                 time.sleep(point["wait"])
             t0 = time.perf_counter()
             cp = sb.checkpoint.create(name=name)
             ms = (time.perf_counter() - t0) * 1000
-            return cp, ms, ctx.server(sb, cp.checkpoint_id, "create", getattr(cp, "timings", None)), ctx.artifact(sb, cp)
+            return (cp, ms, ctx.server(sb, cp.checkpoint_id, "create", getattr(cp, "timings", None)), ctx.artifact(sb, cp),
+                    dms)
 
         for rep in range(reps):
-            cp, ck_ms, ck_server, art = change_and_checkpoint("r%da" % rep)
-            cp2, ck2_ms, ck2_server, art2 = change_and_checkpoint("r%db" % rep)
+            cp, ck_ms, ck_server, art, dirty_ms = change_and_checkpoint("r%da" % rep)
+            cp2, ck2_ms, ck2_server, art2, dirty2_ms = change_and_checkpoint("r%db" % rep)
             t0 = time.perf_counter()
             sb.checkpoint.restore(base.checkpoint_id)
             rs_ms = (time.perf_counter() - t0) * 1000
@@ -829,6 +865,7 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
                    "kind": "warmup" if rep < warmup else "sample", "ckpt_ms": ck_ms, "restore_ms": rs_ms,
                    "ckpt_server": ck_server, "restore_server": rs_server, "artifact": art,
                    "ckpt2_ms": ck2_ms, "ckpt2_server": ck2_server, "artifact2": art2,
+                   "dirty_ms": dirty_ms, "dirty2_ms": dirty2_ms, "sd_dbm": sd_dbm,
                    "mem_mode": getattr(cp, "mem_mode", None), "sandbox_id": sb.sandbox_id, "ok": ok, **stats}
             with lock:
                 rows.append(row)
@@ -872,7 +909,9 @@ STAT_KEYS = (("ckpt_ms", lambda r: r["ckpt_ms"]),
              ("restore_ms", lambda r: r["restore_ms"]),
              ("ckpt_server_ms", lambda r: server_total(r, "ckpt_server")),
              ("restore_server_ms", lambda r: server_total(r, "restore_server")),
-             ("artifact_mib", lambda r: artifact_mib(r)))
+             ("artifact_mib", lambda r: artifact_mib(r)),
+             ("dirty_ms", lambda r: r.get("dirty_ms")),
+             ("dirty2_ms", lambda r: r.get("dirty2_ms")))
 
 
 def stat(vals):
@@ -1485,6 +1524,68 @@ def print_compare(merged, table):
     print_mix_table(merged, table)
 
 
+# ------------------------------------------------------------ soft-dirty 用不用硬件 DBM 的 A/B
+
+DBM_NOTES = (
+    "进程级 checkpoint 清 soft-dirty 时，原来把页写保护（连 DBM 一起清掉），之后每页第一次写都缺页一次；"
+    "用 DBM 时只把页设回硬件干净，写由硬件记录，不缺页。改写一列是常驻进程自己量的写内存耗时"
+    "（第二次改写，紧跟在一次 checkpoint 之后），这部分代价在负载一侧，checkpoint / restore 的耗时里没有。",
+    "checkpoint 与 restore 两列看的是 DBM 对快照本身有没有影响；两轮各自开测前都清过 netns，"
+    "同一部署、同一模板，只差 guest 里 soft_dirty_dbm 这一个开关。",
+)
+
+
+def print_dbm_ab(results):
+    """把 soft_dirty_dbm=0 与 =1 两轮按测点并列：改写、连续 checkpoint、restore 的 p50 与差值。返回表（列表）。"""
+    side = {}
+    for res in results:
+        if res.get("stack") != "criu":
+            continue
+        v = (res.get("provenance") or {}).get("args", {}).get("soft_dirty_dbm")
+        if v in ("0", "1"):
+            side.setdefault(v, []).append(res)
+    if set(side) != {"0", "1"}:
+        print("找不到 soft_dirty_dbm=0 与 =1 两轮的结果（有 %s）" % sorted(side))
+        return []
+    a, b = (merge(side[k]) if len(side[k]) > 1 else side[k][0] for k in ("0", "1"))
+    idx = {}
+    for tag, res in (("off", a), ("on", b)):
+        for e in res["summary"]:
+            k = (e["series"], e["N"], e["name"]) + tuple(e[dd] for dd in DIMS)
+            idx.setdefault(k, {})[tag] = e
+    print("\n---- 进程级 soft-dirty：写保护（off）对 硬件 DBM（on）----")
+    for tag, res in (("off", a), ("on", b)):
+        prov = res["provenance"]
+        print("%-3s %s · orchestrator %s · 判定 %s" % (tag, prov.get("hostname"), (prov.get("orchestrator_sha256") or "?")[:16],
+                                               res.get("verdict")))
+    print("单位 ms，p50；改写 = 常驻进程自己量的写内存耗时；差 = on - off")
+    print("%-34s %5s | %-24s | %-24s | %-24s" % ("测点", "n", "改写 off / on（差）", "连续 ckpt off / on（差）",
+                                               "restore off / on（差）"))
+    table = []
+    order = series_order(a["summary"])
+    keys = sorted(idx, key=lambda k: (order.index(k[0]) if k[0] in order else 99, k))
+    for k in keys:
+        if set(idx[k]) != {"off", "on"}:
+            continue
+        x, y = idx[k]["off"], idx[k]["on"]
+
+        def col(key):
+            p, q = (x.get(key) or {}).get("p50"), (y.get(key) or {}).get("p50")
+            if p is None or q is None:
+                return "%24s" % "—", None, None
+            return "%7.1f / %7.1f（%+6.1f）" % (p, q, q - p), p, q
+        cd, d0, d1 = col("dirty2_ms")
+        cc, c0, c1 = col("ckpt2_ms")
+        cr, r0, r1 = col("restore_ms")
+        print("%-34s %2d/%-2d | %s | %s | %s" % ("%s %s" % (k[0], point_label(x)), x["n"], y["n"], cd, cc, cr))
+        table.append({"series": k[0], "label": point_label(x), "n": [x["n"], y["n"]], "dirty2_ms": [d0, d1],
+                      "ckpt2_ms": [c0, c1], "restore_ms": [r0, r1]})
+    print("\n说明：")
+    for i, note in enumerate(DBM_NOTES, 1):
+        print("%d. %s" % (i, note))
+    return table
+
+
 # ------------------------------------------------------------ 主流程
 
 E2B_CGROUP = "/sys/fs/cgroup/e2b"     # orchestrator 给每个沙箱建 sbx-<id>（只在 cgroup v2 上）
@@ -1600,6 +1701,11 @@ def main():
                     help="进程级：guest 里给 criu 套包装脚本，dump/restore 都改用 -vN（测日志级别本身的代价）")
     ap.add_argument("--out", default="same-workload-%s.json" % time.strftime("%Y%m%d-%H%M%S"))
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--soft-dirty-dbm", choices=("0", "1"),
+                    help="进程级：每个沙箱先把 guest 的 soft_dirty_dbm 设成这个值（A/B 对比硬件 DBM 标脏）")
+    ap.add_argument("--no-native", action="store_true", help="不测原生 pause / resume（mix、big 组默认在进程级栈上测）")
+    ap.add_argument("--dbm-siblings", action="store_true",
+                    help="与 --out 合用：取上一级目录里 soft_dirty_dbm=0 与 =1 两轮的 result.json，打 A/B 表")
     ap.add_argument("--print", dest="reprint", nargs="+", metavar="RESULT_JSON",
                     help="只重新打印已有结果的汇总；同一套的多个文件合并成一份")
     ap.add_argument("--compare", nargs="+", metavar="RESULT_JSON", help="两套的结果按测点并列（每套可多轮）")
@@ -1613,6 +1719,16 @@ def main():
             raise SystemExit("--print 的文件要是同一套的结果；两套并列用 --compare")
         print_summary(merge(results) if len(results) > 1 else results[0])
         return 0
+    if args.dbm_siblings:
+        mine = os.path.abspath(args.out)
+        parent = os.path.dirname(os.path.dirname(mine))
+        paths = sorted(p for p in glob.glob(os.path.join(parent, "*", "result.json")) if os.path.abspath(p) != mine)
+        table = print_dbm_ab(load_results(paths))
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump({"verdict": "PASS" if table else "FAIL", "sources": paths, "dbm_ab": table}, f,
+                      ensure_ascii=False, indent=1)
+        print("\n结果文件: %s" % os.path.abspath(args.out))
+        return 0 if table else 1
     if args.compare or args.compare_siblings:
         paths = args.compare or []
         if args.compare_siblings:
@@ -1658,7 +1774,7 @@ def main():
         storage = env.get("LOCAL_TEMPLATE_STORAGE_BASE_PATH") or "/tmp/templates"
     ctx = Ctx(args, stack, store, cache, storage)
     ctx.prov = result["provenance"]
-    if stack == NATIVE_STACK and any(x in NATIVE_SERIES for x in series_list):
+    if stack == NATIVE_STACK and any(x in NATIVE_SERIES for x in series_list) and not args.no_native:
         ctx.pause_log = PauseLog()
         result["provenance"]["pause_log_dir"] = ctx.pause_log.dir
         if not ctx.pause_log.dir:
@@ -1689,7 +1805,7 @@ def main():
             for point in points:
                 for pass_no in range(passes):
                     one_sandbox(Sandbox, ctx, point, series, pass_no, reps, args.warmup, result["rows"], lock)
-                    if series in NATIVE_SERIES and stack == NATIVE_STACK:
+                    if series in NATIVE_SERIES and stack == NATIVE_STACK and not args.no_native:
                         native_sandbox(Sandbox, ctx, point, series, pass_no, reps - args.warmup, result["rows"], lock)
         result["verdict"] = "PASS"
     except Exception as exc:

@@ -68,6 +68,17 @@ class RunnerTests(unittest.TestCase):
             finally:
                 runner.DEPLOY, runner.stack.hfc = old
 
+    def test_dbm_level(self):
+        # dbm 只在进程级栈：先验收（新内核默认开 DBM），再同一负载 off / on 各一轮，最后 A/B 表，回沙箱级冒烟
+        self.assertEqual(self.ids("dbm", ["sandbox", "criu"]),
+                         ["criu/acceptance", "criu/dbm-off", "criu/dbm-on", "criu/dbm-table", "sandbox/smoke-after"])
+        steps = {s["id"]: s for s in runner.plan("dbm", ["criu"], 4)}
+        self.assertEqual(steps["criu/dbm-off"]["args"][-2:], ["--soft-dirty-dbm", "0"])
+        self.assertEqual(steps["criu/dbm-on"]["args"][-2:], ["--soft-dirty-dbm", "1"])
+        self.assertIn("--no-native", steps["criu/dbm-on"]["args"])
+        self.assertIn(runner.DBM_SERIES, steps["criu/dbm-on"]["args"])
+        self.assertEqual({k for k, s in steps.items() if s.get("clean_netns")}, {"criu/dbm-off", "criu/dbm-on"})
+
     def test_fcexit_and_clean_netns(self):
         # fcexit 只在进程级栈上，测完回沙箱级冒烟；不管 --stack 给的是什么
         self.assertEqual(self.ids("fcexit", ["sandbox", "criu"]), ["criu/fcexit", "sandbox/smoke-after"])

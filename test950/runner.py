@@ -61,7 +61,9 @@ LEVELS = ("quick", "standard", "extended", "long")
 #   native   e2b 原生 pause / resume 分档（benchmark/native_snapshot_tiers.py），在所选栈上各跑一遍
 #   compare  同一负载下的 checkpoint / restore（benchmark/ckpt_same_workload.py），两套各跑一遍
 #   fcexit   原生 pause 里“停 Firecracker 到进程退出”的内核拆分（benchmark/fc_exit_trace.py），只在进程级栈
-EXTRA = ("native", "compare", "fcexit")
+#   dbm      进程级 soft-dirty 用不用硬件 DBM：进程级验收（新内核默认开 DBM）+ 同一负载 A/B（只在进程级栈）
+EXTRA = ("native", "compare", "fcexit", "dbm")
+DBM_SERIES = "dirty,layout,mix"
 CLEAN_NETNS = os.environ.get("TEST950_CLEAN_NETNS", "1") != "0"
 PERF_STEPS = ("perf", "perf-full")     # 沙箱级 run.sh 里测性能的档，开测前也清 netns
 TEMPLATES = {"sandbox": os.environ.get("SANDBOX_TEMPLATE", "base"),
@@ -123,6 +125,17 @@ def plan(level, stacks, hours, rounds=1, series=None):
     if level in EXTRA:
         if level == "compare":
             steps = compare_steps(stacks, rounds, series)
+        elif level == "dbm":
+            base = ["benchmark/ckpt_same_workload.py", "--stack", "criu", "--template", TEMPLATES["criu"],
+                    "--series", series or DBM_SERIES, "--no-native"]
+            steps = [{"id": "criu/acceptance", "stack": "criu", "kind": "criu", "args": ["acceptance"],
+                      "est_min": 4, "status": "待跑"}]
+            for v, name in (("0", "dbm-off"), ("1", "dbm-on")):
+                steps.append({"id": "criu/" + name, "stack": "criu", "kind": "py", "args": base + ["--soft-dirty-dbm", v],
+                              "est_min": 8, "status": "待跑", "clean_netns": True})
+            steps.append({"id": "criu/dbm-table", "stack": "criu", "kind": "py",
+                          "args": ["benchmark/ckpt_same_workload.py", "--dbm-siblings"], "est_min": 1, "status": "待跑"})
+            stacks = ["criu"]
         elif level == "fcexit":   # ARM 版 E2B 原生 pause 在进程级那套的 orchestrator 上测，只在它上面测
             steps = [{"id": "criu/fcexit", "stack": "criu", "kind": "py", "args": ["benchmark/fc_exit_trace.py"],
                       "est_min": 5, "status": "待跑", "clean_netns": True}]
@@ -615,7 +628,7 @@ def print_perf(run, step, indent=""):
         print(indent + "（没有日志）")
         return
     text = logf.read_text(errors="replace").splitlines()
-    start = next((i for i, l in enumerate(text) if l.startswith(("---- 汇总 ----", "---- 两套并列"))), None)
+    start = next((i for i, l in enumerate(text) if l.startswith(("---- 汇总 ----", "---- 两套并列", "---- 进程级 soft-dirty"))), None)
     if start is None:
         print(indent + "（没有汇总，日志末尾如下）")
         for line in text[-15:]:

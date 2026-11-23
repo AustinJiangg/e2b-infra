@@ -156,6 +156,7 @@ bash test950.sh report --file criu-stress-ext/deldense-capacity/RESULT --lines 0
 |---|---|---|---|
 | `bash test950.sh native` | e2b 原生 pause / resume，以及 `create_snapshot` → 从快照新建沙箱（snapshot 模式）。在沙箱级、进程级两套代码上各跑一遍 | `benchmark/native_snapshot_tiers.py --mode both --passes 3 --iters 8` | 六档（0～256 MiB，内存:文件 = 3:1），每档每种模式 24 个增量样本 + 3 个首次样本 |
 | `bash test950.sh compare [--rounds N] [--series 组]` | 同一种负载下的 checkpoint / restore：两套用同一个常驻进程（P MiB 的内存，改写其中 d MiB）和同一个文件负载 | `benchmark/ckpt_same_workload.py` | 默认六组测点，每点每轮 20 个样本（见下） |
+| `bash test950.sh dbm` | 进程级 soft-dirty 用不用硬件 DBM（2026-11-23 起的 guest 内核默认用）：只在进程级栈上，先跑一遍进程级验收（`950.sh acceptance`，这时 DBM 是开的），再在同一负载（`--series dirty,layout,mix`，不测原生）上把 guest 的 `soft_dirty_dbm` 设成 0、1 各跑一轮，最后 `criu/dbm-table` 并列成 A/B 表：常驻进程自己量的改写耗时（负载一侧，紧跟在一次 checkpoint 之后的那次改写）、连续 checkpoint、restore 的 p50 和差值。`--series` 可换测点组。结果打印：`bash test950.sh report criu/dbm-table`。约 25 分钟 |
 | `bash test950.sh fcexit` | 原生 pause 里"停 Firecracker 到进程退出"那一段在内核里花在哪：只在进程级栈上（原生路径与上游相同），对这个 Firecracker 的线程开 ftrace | `benchmark/fc_exit_trace.py` | 进程 0、192 MiB 两个测点，每点 5 次 pause（另加第 0 次不计） |
 
 **为什么原生 pause / resume 要在两套代码上各跑一遍。** 沙箱级为了 checkpoint / restore 改过原生路径（4 KiB 写跟踪的精确增量差分，以及脏页跟踪本身）；进程级的 orchestrator 不含这些改动，但也不是纯上游：它来自 KASandbox 一脉，pause 要等快照上传完才返回（上游不等），模板注入了 gsd、guest 内核打了补丁。两套各跑一遍，差值就是"我们的改动对原生路径的影响"，对外引用原生数字时要写明是哪一套上测的。与 checkpoint / restore 语义对应的是 snapshot 模式（可以对同一个点反复恢复）；pause 模式只能回到最近一次 pause。

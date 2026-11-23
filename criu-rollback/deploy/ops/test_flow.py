@@ -7,6 +7,12 @@ import envs
 import flow
 
 
+def kernel(fc, data):
+    p = fc / flow.TEMPLATE_INPUTS["kernel"]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+
+
 class FlowTests(unittest.TestCase):
     def test_netdiff_reports_only_changes(self):
         before = {"links": ["eth0", "veth-1"], "routes": ["default via 1.1.1.1"]}
@@ -25,6 +31,7 @@ class FlowTests(unittest.TestCase):
             fc.mkdir()
             (fc / "gsd").write_bytes(b"gsd v1")
             (fc / "orchestrator").write_bytes(b"orch v1")
+            kernel(fc, b"kernel v1")
             with patch.dict("os.environ", {"CRIU_FC": str(fc), "CRIU_STATE_DIR": str(state)}):
                 self.assertIn("未记录的旧版", flow.template_gsd_stale())
                 with patch.object(flow, "build_template"):
@@ -37,6 +44,11 @@ class FlowTests(unittest.TestCase):
                     flow.build_template_marked(Path(tmp))
                 (fc / "orchestrator").write_bytes(b"orch v2")
                 self.assertIn("orchestrator 是", flow.template_gsd_stale())
+                with patch.object(flow, "build_template"):
+                    flow.build_template_marked(Path(tmp))
+                kernel(fc, b"kernel v2")
+                self.assertIn("kernel 是", flow.template_gsd_stale())
+                self.assertNotIn("gsd 是", flow.template_gsd_stale())
 
     def test_old_gsd_only_mark_rebuilds_once(self):
         # 2026-11-19 以前的记录只有一行 gsd 的 sha256：算没记 orchestrator，重建一次。
@@ -45,6 +57,7 @@ class FlowTests(unittest.TestCase):
             fc.mkdir()
             (fc / "gsd").write_bytes(b"gsd v1")
             (fc / "orchestrator").write_bytes(b"orch v1")
+            kernel(fc, b"kernel v1")
             with patch.dict("os.environ", {"CRIU_FC": str(fc), "CRIU_STATE_DIR": str(state)}):
                 flow.template_gsd_mark().parent.mkdir(parents=True)
                 flow.template_gsd_mark().write_text(flow.stack.sha(fc / "gsd") + "\n")

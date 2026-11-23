@@ -364,6 +364,13 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 
 ## 14. 更新记录与 920B 实测
 
+### 2026-11-23：guest 内核的 soft-dirty 用硬件 DBM 标脏（guest 内核换版本，`0004`）
+
+- **为什么。** 进程级每次 checkpoint 让 CRIU 清 soft-dirty（`clear_refs` 写 4），内核把每个页写保护；arm64 上写保护同时清掉 DBM 位，之后每页第一次写都要缺页一次。920B 上实测这一次缺页约 1.0～1.2 µs，即负载每写 1 MiB 多花 0.25～0.31 ms，与进程级 checkpoint 写页的代价同一量级；这部分花在负载自己的写路径上，checkpoint / restore 的耗时里看不到。
+- **改了什么。** guest 内核加补丁 `0004`（源码见 `provenance/guest-kernel-0004-soft-dirty-hw-dbm.patch`，fc-kernels-arm `patches/6.1.158/0004-*`）：清 soft-dirty 时可写的页不再写保护，只设回“硬件干净”并保留 DBM，之后的写由硬件记录、不缺页；`pte_soft_dirty()` 把硬件脏也算作写过（pagemap、换出、页迁移都经过它），`pte_mkclean()` 清硬件脏之前先置 soft-dirty。开关 `/sys/module/kernel/parameters/soft_dirty_dbm`，**默认开**，guest 里写 0 即回到原来的写保护方式。CPU 没有 DBM 时写这种页仍会缺页，行为同原来。
+- **验证（920B）。** 独立 Firecracker 虚机里逐页比对“写过的页”与 pagemap：普通写、fork（子进程退出 / COW）、mprotect、MADV_FREE、线程、mremap、换出 / 换入、内存规整（迁移 1629 页）、200 轮随机，漏记 0；清标记后第一次写多花的时间降到 0.009～0.023 ms/MiB。KSM 合并会丢 soft-dirty，加不加这个补丁都一样（`replace_page()` 新建页表项时不带 soft-dirty），guest 默认不开 KSM。进程级验收与同一负载的 A/B 见 `bash test950.sh dbm`。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`（`test950.sh` 切到进程级时会自动做）：内核是上一版（`b81306e7…`）时直接换掉；模板记录里从这一版起也记 guest 内核，`base-criu` 重建一次（原来只看 gsd 和 orchestrator，换内核不会重建）。
+
 ### 2026-11-20（四）：停 Firecracker 前查进程状态改读 /proc（orchestrator 换版本，`f66dbe2c1`）
 
 - **为什么。** 上一版（`237b9ac62`）的分段表明，原生 pause 在发 SIGTERM 之前执行的那次 `ps -o stat= -p <pid>` 在 950 上约 106 ms、920B 上约 85 ms，而它只用于在日志里提示 Firecracker 是否处于 D 状态。

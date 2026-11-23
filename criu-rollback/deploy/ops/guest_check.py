@@ -26,6 +26,7 @@ print(json.dumps({
     "commit": sh("/usr/bin/gsd -commit"),
     "gsd_sha256": hashlib.sha256(open("/usr/bin/gsd", "rb").read()).hexdigest(),
     "kernel": sh("cat /proc/version"),
+    "soft_dirty_dbm": sh("cat /sys/module/kernel/parameters/soft_dirty_dbm 2>/dev/null || echo none"),
     "thp": sh("cat /sys/kernel/mm/transparent_hugepage/enabled"),
     "rcu": sh("cat /sys/kernel/rcu_expedited"),
     "service": sh("systemctl is-active gsd"),
@@ -41,10 +42,13 @@ print(json.dumps({
     data = json.loads(result.stdout)
     print(json.dumps(data, ensure_ascii=False, indent=2))
     expected = json.loads((ROOT / "manifest.json").read_text())
+    kernel = expected["artifacts"]["kernel"]
     checks = {
         "commit": data["commit"] == expected["artifacts"]["gsd"].get("commit", "259f1a25c"),
         "gsd_sha256": data["gsd_sha256"] == expected["artifacts"]["gsd"]["sha256"],
-        "kernel": "6.1.158+" in data["kernel"] and "#4 SMP Thu Oct  8 20:06:40 CST 2026" in data["kernel"],
+        # 模板快照里的内核就是建模板时那一个：编译戳对得上，才说明模板是用这一版内核重建的
+        "kernel": "6.1.158+" in data["kernel"] and kernel.get("build", "#4 SMP Thu Oct  8 20:06:40 CST 2026") in data["kernel"],
+        "soft_dirty_dbm": data["soft_dirty_dbm"] == kernel.get("soft_dirty_dbm", "none"),
         "thp": "[never]" in data["thp"], "rcu": data["rcu"] == "1",
         "service": data["service"] == "active", "health": data["health"].get("status") == "ok",
         "criu": data["criu"] == "Version: 4.2.1",

@@ -1,6 +1,7 @@
 """ckpt_same_workload.py 的本地单测：测点补全、汇总、多轮合并、两套并列、guest 里跑的几段脚本。
 不建沙箱、不需要 e2b SDK：python3 -m unittest benchmark/test_ckpt_same_workload.py"""
 import io
+from contextlib import redirect_stdout
 import json
 import os
 import random
@@ -366,6 +367,30 @@ class SummaryTests(unittest.TestCase):
             self.assertEqual(json.load(open(me))["verdict"], "PASS")
 
 
+class DbmTests(unittest.TestCase):
+    def test_dbm_ab_table(self):
+        res = []
+        for v, extra in (("0", 3.0), ("1", 0.2)):
+            rows = []
+            for d in (16, 64):
+                rr = fake_rows("criu", "dirty", {"P": 256, "d": d}, rnd=d)
+                for r in rr:
+                    if r["kind"] != "base":
+                        r["dirty2_ms"] = d * extra
+                rows += rr
+            r_ = fake_result("criu", rows)
+            r_["provenance"]["args"] = {"soft_dirty_dbm": v}
+            res.append(r_)
+        with redirect_stdout(io.StringIO()) as out:
+            table = csw.print_dbm_ab(res)
+        self.assertEqual(len(table), 2)
+        t = [x for x in table if x["label"].endswith("d=64")][0]
+        self.assertEqual(t["dirty2_ms"], [192.0, 12.8])
+        self.assertIn("硬件 DBM", out.getvalue())
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(csw.print_dbm_ab(res[:1]), [])
+
+
 class GuestScriptTests(unittest.TestCase):
     def test_resident_process(self):
         with tempfile.TemporaryDirectory() as wd:
@@ -392,6 +417,15 @@ class GuestScriptTests(unittest.TestCase):
                 h1 = ask("n3", "sha")
                 self.assertNotEqual(h0, h1)
                 self.assertEqual(ask("n4", "dirty", "4"), "ok")
+                open(os.path.join(wd, "cmd"), "w").write("n4b dirty 2")
+                os.kill(proc.pid, signal.SIGUSR1)
+                for _ in range(100):
+                    out = open(os.path.join(wd, "rsp")).read().split()
+                    if out and out[0] == "n4b":
+                        break
+                    time.sleep(0.02)
+                self.assertEqual(out[1], "ok")
+                self.assertGreaterEqual(float(out[2]), 0)    # 改写耗时 ms
                 self.assertTrue(ask("n5", "sdirty", "8").startswith("ERR"))
                 h2, ms = ask("n6", "shat")
                 self.assertEqual(h2, ask("n7", "sha"))

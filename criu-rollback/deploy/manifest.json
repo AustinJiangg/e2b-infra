@@ -1,6 +1,6 @@
 {
   "name": "criu-rollback deploy",
-  "updated_at": "2026-11-20",
+  "updated_at": "2026-11-23",
   "release_commit": "9728cef733b39218473404ce42515cc3a2c30477",
   "orchestrator_commit": "f66dbe2c1",
   "orchestrator_note": "criu-rollback-dev f66dbe2c1：259f1a25c 之上六处 orchestrator 改动——bc3cce9 宿主侧网卡前缀 e2bv-（与 provenance/orchestrator-e2bv-veth-prefix.patch 相同）、9cdd806 建根盘时把 ext4 inode 表清零、7e0a6a462 原生 Pause 打一行分段计时日志、6a60dec6f 原生 pause / resume 各步完成时刻、237b9ac62 停 Firecracker 时查状态与发 SIGTERM 两个时刻（这三处只加日志）、f66dbe2c1 停 Firecracker 前查进程状态由执行 ps 改为读 /proc/<pid>/stat（原生 pause 每次少约 100 ms，与上游不同）",
@@ -43,7 +43,13 @@
       "path": "kernels/vmlinux-6.1.158/vmlinux.bin",
       "mode": "644",
       "size": 23054848,
-      "sha256": "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+      "sha256": "35b25505b83b216ec682d711e6a74120bffe7336d0ca52f394988d4edc677080",
+      "replaces": [
+        "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+      ],
+      "source": "fc-kernels-arm jll-gsd-6.1.158 + patches/6.1.158/0004（provenance/guest-kernel-0004-soft-dirty-hw-dbm.patch）",
+      "build": "#2 SMP Mon Nov 23 11:39:42 CST 2026",
+      "soft_dirty_dbm": "Y"
     }
   },
   "image": {

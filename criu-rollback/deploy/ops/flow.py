@@ -180,23 +180,24 @@ def build_template(logdir):
         raise RuntimeError("建模板失败，见 %s；先查镜像引用、Harbor 认证、gsd health（README 第 11 节）" % out)
 
 
-# 建模板用到、之后不再读的两个运行文件：gsd 在建模板时注入 guest；orchestrator 建根盘的文件系统
-# （mkfs、resize2fs 的参数，2026-11-19 起把 inode 表清零）。换了任何一个不重建，模板就还是旧的。
-TEMPLATE_INPUTS = ("gsd", "orchestrator")
+# 建模板用到、之后不再读的三个运行文件：gsd 在建模板时注入 guest；orchestrator 建根盘的文件系统
+# （mkfs、resize2fs 的参数，2026-11-19 起把 inode 表清零）；guest 内核在建模板时启动，模板快照里存的就是
+# 这个内核（2026-11-23 起 soft-dirty 用 DBM）。换了任何一个不重建，模板就还是旧的。
+TEMPLATE_INPUTS = {"gsd": "gsd", "orchestrator": "orchestrator", "kernel": stack.FILES[2]}
 
 
 def template_gsd_mark():
-    """记录模板是用哪个 gsd、哪个 orchestrator 建的（文件名沿用只记 gsd 时的名字）。"""
+    """记录模板是用哪个 gsd、orchestrator、guest 内核建的（文件名沿用只记 gsd 时的名字）。"""
     return paths.state_dir() / ("template-gsd-%s.sha256" % CRIU_TEMPLATE)
 
 
 def template_inputs():
-    return {name: stack.sha(paths.host_fc() / name) for name in TEMPLATE_INPUTS}
+    return {name: stack.sha(paths.host_fc() / rel) for name, rel in TEMPLATE_INPUTS.items()}
 
 
 def template_gsd_stale():
-    """模板不是用 /fc-criu 下这一版 gsd 和 orchestrator 建的（或没有记录）时返回原因，否则 None。
-    只记了一行 gsd 的旧记录算没记 orchestrator，重建一次。"""
+    """模板不是用 /fc-criu 下这一版 gsd、orchestrator、guest 内核建的（或没有记录）时返回原因，否则 None。
+    只记了一行 gsd 的旧记录算没记 orchestrator，重建一次；没记内核的旧记录同样重建一次。"""
     mark = template_gsd_mark()
     built = {}
     for line in (mark.read_text().splitlines() if mark.is_file() else []):
