@@ -116,7 +116,7 @@
   checkpoint 时把当前可写层原地变成只读层、换上一个新的空可写层；restore 时把整个层栈切回 checkpoint 时的样子。
   切换通过一个自定义的内核 ioctl 完成，根文件系统不卸载，也不搬数据（机制见 [07](07-overlay-hot-switch.md)）。
 
-所以这套方案由四块组成，同在一个代码仓库里：guest 内的 **gsd 守护进程**、打了三个补丁的 **guest 内核**、
+所以这套方案由四块组成，同在一个代码仓库里：guest 内的 **gsd 守护进程**、打了补丁的 **guest 内核**、
 建模板时把 gsd 装进沙箱的 **orchestrator 注入逻辑**，以及 **Python SDK**。Firecracker 本身没有改动。
 
 ### 3.2 它解决什么问题

@@ -32,7 +32,7 @@
 
 | 位置 | 做了什么 | 在哪一章 |
 |---|---|---|
-| guest 内核 | 三个补丁：`0002-overlayfs-hot-switch-checkpoint.patch`（热切层 ioctl 与 arm64 的 soft-dirty）、`0003-overlayfs-hot-switch-fixes.patch`（在它之上的全部修复），以及 2026-11-23 加入的 `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch`（arm64 上用硬件脏位记录写入，省掉 checkpoint 之后第一次写的缺页） | [03](03-criu-and-incremental-memory.md)、[07](07-overlay-hot-switch.md)、[08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) |
+| guest 内核 | 四个补丁：`0002-overlayfs-hot-switch-checkpoint.patch`（热切层 ioctl 与 arm64 的 soft-dirty）、`0003-overlayfs-hot-switch-fixes.patch`（在它之上的全部修复），以及 2026-11-23 加入的 `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch`（arm64 上用硬件脏位记录写入，省掉 checkpoint 之后第一次写的缺页）、`0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch`（回移上游修复：KSM 合并时保留 soft-dirty） | [03](03-criu-and-incremental-memory.md)、[07](07-overlay-hot-switch.md)、[08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md) |
 | guest 守护进程 | gsd 本身：进程发现、调用 CRIU、驱动层切换、状态管理 | [10](10-process-trees.md)–[15](15-state-concurrency-capacity.md) |
 | 模板构建 | orchestrator 建模板时把 gsd、它的 systemd 单元和开机脚本放进模板，换掉启动入口，并做一次自检 | [06](06-guest-boot-and-injection.md) |
 | SDK | `sandbox.checkpoint` 的四个方法、连接配置、错误映射 | [25](25-quickstart.md)、[14](14-failure-semantics.md) |

@@ -147,6 +147,7 @@ gsd 的启动参数取值在 `template/build/core/rootfs/templates.go:57-61`。
 | `patches/6.1.158/0002-overlayfs-hot-switch-checkpoint.patch` | 初始实现的补丁：热切层 ioctl、arm64 soft-dirty。未改动 |
 | `patches/6.1.158/0003-overlayfs-hot-switch-fixes.patch` | 全部修复，合并成一个；文件头的提交说明按主题列出 |
 | `patches/6.1.158/0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch` | 2026-11-23 加入：清 soft-dirty 时可写的页不写保护，写入由硬件脏位（DBM）记录；`pte_soft_dirty` 把硬件脏也算作写过；开关 `soft_dirty_dbm` 默认开 |
+| `patches/6.1.158/0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch` | 2026-11-23 加入：回移上游 `2efc6332f18b`，KSM 合并页时 `replace_page` 把原页表项的 soft-dirty 带到新页表项上 |
 
 补丁 0003 按主题到函数（主题名与提交说明的六组一一对应，机制都在 [08](08-overlay-switch-consistency.md)、[09](09-overlay-cache-and-reclaim.md)）：
 

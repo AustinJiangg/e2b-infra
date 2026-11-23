@@ -271,7 +271,7 @@ guest 里进程自己的页表没有这样的硬件，进程级用不上。
   `mremap` 和内存规整之后会多报一些页，这是内核搬页时把整段都标脏造成的，基线内核同样如此；多报只会多写一些镜像，不影响正确性。
 - **端到端**：920B 和 950 上进程级验收全部通过；同一负载开关为 0、1 各跑一轮，每次 restore 之后内存与文件的校验都一致（[20](20-920b-performance.md) §5.5、[22](22-950-results.md) §11）。
 
-KSM（内核同页合并）合并页时会丢掉 soft-dirty 标记。这一点与 0004 无关，没有 0004 的内核也一样，见 [16](16-known-limits.md) 的 K-05。
+KSM（内核同页合并）合并页时曾经会丢掉 soft-dirty 标记：`replace_page` 为合并后的页新建页表项，不带原页表项上的 soft-dirty 位。这一点与 0004 无关，从 soft-dirty 引入起就有，上游到 2026-11-03 才合入修复（`2efc6332f18b`）。补丁 `0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch` 把这个修复回移到 6.1，独立虚机里 KSM 用例的漏报从 1585 / 1590 页降到 0（[16](16-known-limits.md) 的 K-05）。
 
 **省下多少。** 独立虚机里，写过 `clear_refs` 之后第一遍写比第二遍多出的时间从每 MiB 0.25～0.31 ms 降到 0.009～0.023 ms，每页缺页次数从 1 降到 0；
 256 MiB 整页写满，第一遍从 85.1 ms 降到 11.1 ms。端到端，常驻进程在 checkpoint 之后改写 256 MiB 内存，920B 上从 87.6 ms 降到 20.1 ms，950 上从 119.1 ms 降到 28.5 ms。
@@ -465,6 +465,7 @@ dump 结束后只给"dump 之前不是停着的"进程发 `SIGCONT`（`resumable
 | 透明大页的兜底检查 | `ensureTHPNever`（`packages/gsd/main.go:196`） |
 | 开机时关闭透明大页 | `overlay-init.sh.tpl` 的 Step 6（`packages/orchestrator/internal/template/build/core/rootfs/gsdfiles/`） |
 | arm64 的 soft-dirty | `0002-overlayfs-hot-switch-checkpoint.patch` 中 `arch/arm64/` 下的改动：`PTE_SOFT_DIRTY`、`pte_mksoft_dirty`、`pte_mkdirty`、`ptep_set_access_flags` |
+| KSM 合并保留 soft-dirty | `0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch`：`replace_page` |
 | 清标记不写保护、硬件脏算作写过 | `0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch`：`clear_soft_dirty`、`pte_clear_soft_dirty_keep_write`、`pte_soft_dirty`、`pte_mkclean`，参数 `soft_dirty_dbm` |
 | 内核配置 | `fc-kernels/configs/arm64/6.1.158.config`（`:196`、`:930`、`:3359`） |
 

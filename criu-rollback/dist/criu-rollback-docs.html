@@ -982,7 +982,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     checkpoint 时把当前可写层原地变成只读层、换上一个新的空可写层；restore 时把整个层栈切回 checkpoint 时的样子。
     切换通过一个自定义的内核 ioctl 完成，根文件系统不卸载，也不搬数据（机制见 <a href="#d07">07</a>）。</li>
 </ul>
-<p>所以这套方案由四块组成，同在一个代码仓库里：guest 内的 <strong>gsd 守护进程</strong>、打了三个补丁的 <strong>guest 内核</strong>、
+<p>所以这套方案由四块组成，同在一个代码仓库里：guest 内的 <strong>gsd 守护进程</strong>、打了补丁的 <strong>guest 内核</strong>、
 建模板时把 gsd 装进沙箱的 <strong>orchestrator 注入逻辑</strong>，以及 <strong>Python SDK</strong>。Firecracker 本身没有改动。</p>
 <h3 id="d01-32-它解决什么问题">3.2 它解决什么问题</h3>
 <p>一个 AI Agent 在沙箱里执行多步任务：装依赖、改配置、跑构建、跑测试。某一步把环境搞坏了，它想回到上一步结束时的状态，
@@ -1887,7 +1887,7 @@ guest 里进程自己的页表没有这样的硬件，进程级用不上。</p>
     <code>mremap</code> 和内存规整之后会多报一些页，这是内核搬页时把整段都标脏造成的，基线内核同样如此；多报只会多写一些镜像，不影响正确性。</li>
 <li><strong>端到端</strong>：920B 和 950 上进程级验收全部通过；同一负载开关为 0、1 各跑一轮，每次 restore 之后内存与文件的校验都一致（<a href="#d20">20</a> §5.5、<a href="#d22">22</a> §11）。</li>
 </ul>
-<p>KSM（内核同页合并）合并页时会丢掉 soft-dirty 标记。这一点与 0004 无关，没有 0004 的内核也一样，见 <a href="#d16">16</a> 的 K-05。</p>
+<p>KSM（内核同页合并）合并页时曾经会丢掉 soft-dirty 标记：<code>replace_page</code> 为合并后的页新建页表项，不带原页表项上的 soft-dirty 位。这一点与 0004 无关，从 soft-dirty 引入起就有，上游到 2026-11-03 才合入修复（<code>2efc6332f18b</code>）。补丁 <code>0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch</code> 把这个修复回移到 6.1，独立虚机里 KSM 用例的漏报从 1585 / 1590 页降到 0（<a href="#d16">16</a> 的 K-05）。</p>
 <p><strong>省下多少。</strong> 独立虚机里，写过 <code>clear_refs</code> 之后第一遍写比第二遍多出的时间从每 MiB 0.25～0.31 ms 降到 0.009～0.023 ms，每页缺页次数从 1 降到 0；
 256 MiB 整页写满，第一遍从 85.1 ms 降到 11.1 ms。端到端，常驻进程在 checkpoint 之后改写 256 MiB 内存，920B 上从 87.6 ms 降到 20.1 ms，950 上从 119.1 ms 降到 28.5 ms。
 checkpoint 与 restore 本身不变：两种方式标出的脏页相同，CRIU 要写出和读回的页数也就相同。这项代价怎么计入"改写加 checkpoint"的一个周期，见 <a href="#d17">17</a> §7。</p>
@@ -2123,6 +2123,10 @@ dump 结束后只给"dump 之前不是停着的"进程发 <code>SIGCONT</code>�
 <td><code>0002-overlayfs-hot-switch-checkpoint.patch</code> 中 <code>arch/arm64/</code> 下的改动：<code>PTE_SOFT_DIRTY</code>、<code>pte_mksoft_dirty</code>、<code>pte_mkdirty</code>、<code>ptep_set_access_flags</code></td>
 </tr>
 <tr>
+<td>KSM 合并保留 soft-dirty</td>
+<td><code>0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch</code>：<code>replace_page</code></td>
+</tr>
+<tr>
 <td>清标记不写保护、硬件脏算作写过</td>
 <td><code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>：<code>clear_soft_dirty</code>、<code>pte_clear_soft_dirty_keep_write</code>、<code>pte_soft_dirty</code>、<code>pte_mkclean</code>，参数 <code>soft_dirty_dbm</code></td>
 </tr>
@@ -2203,7 +2207,7 @@ dump 结束后只给"dump 之前不是停着的"进程发 <code>SIGCONT</code>�
 <tbody>
 <tr>
 <td>guest 内核</td>
-<td>三个补丁：<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（热切层 ioctl 与 arm64 的 soft-dirty）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（在它之上的全部修复），以及 2026-11-23 加入的 <code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>（arm64 上用硬件脏位记录写入，省掉 checkpoint 之后第一次写的缺页）</td>
+<td>四个补丁：<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（热切层 ioctl 与 arm64 的 soft-dirty）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（在它之上的全部修复），以及 2026-11-23 加入的 <code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>（arm64 上用硬件脏位记录写入，省掉 checkpoint 之后第一次写的缺页）、<code>0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch</code>（回移上游修复：KSM 合并时保留 soft-dirty）</td>
 <td><a href="#d03">03</a>、<a href="#d07">07</a>、<a href="#d08">08</a>、<a href="#d09">09</a></td>
 </tr>
 <tr>
@@ -8146,7 +8150,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li><strong>见过但没查清的 3 项</strong>（§2）：新沙箱首个请求偶发约 5 秒、一组压测里 checkpoint 返回过 2 次 <code>internal</code>（同一个沙箱的第 174、177 轮）、极低概率的单发 <code>ENOTEMPTY</code>。
     三项都不损坏数据，都没有稳定的复现办法。</li>
 <li><strong>没有在真机上走到的分支 9 项</strong>（§3）：集中在多棵树的异常路径和注入开关的关闭态。除 T-09 只有代码注释的论证外，其余都<strong>只有单测、没有在新 920B 上走过</strong>。</li>
-<li><strong>内核里记录在案的 5 项</strong>（§4）：<code>/proc/mounts</code> 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留、KSM 合并会丢掉 soft-dirty 标记（guest 默认不开 KSM），以及一条已在最后一轮处理、为对照旧结果而保留的记录。</li>
+<li><strong>内核里记录在案的 5 项</strong>（§4）：<code>/proc/mounts</code> 的显示、不检查 lower 所在的文件系统、被丢弃时间线的有界残留、KSM 合并曾经会丢掉 soft-dirty 标记（2026-11-23 起由补丁 0005 修复），以及一条已在最后一轮处理、为对照旧结果而保留的记录。</li>
 <li>950：只跑了首轮验收和四组压测（全部 PASS，<a href="#d22">22</a>）。本章的实测都在新 920B 上完成。</li>
 </ul>
 <p>表里"状态"一列的取值：<strong>设计如此</strong>（是取舍的结果，不计划改）、<strong>未查</strong>（见过现象，原因不明）、<strong>未测</strong>（有代码、有单测，没有新 920B 上的结果）、<strong>未处理</strong>（知道问题在哪，没有改）、<strong>已修</strong>（这一版起不再出现）、<strong>已减轻</strong>（主要来源已去掉，仍可能遇到）。</p>
@@ -8494,8 +8498,8 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <tr>
 <td>K-05</td>
 <td>KSM（内核同页合并）把内容相同的两页合成一页时，<code>replace_page</code> 为合并后的共享页新建一个只读页表项，不带原页表项上的 soft-dirty 位，也不是硬件脏。合并之前写进这一页的那次写，因此在 pagemap 里不再报为写过</td>
-<td>某一页在 checkpoint 之后被写过、又在下一次 checkpoint 之前被 KSM 合并，这次写就从下一次增量里漏掉，restore 之后这一页是旧内容。只影响用 <code>madvise(MADV_MERGEABLE)</code> 标记过、而且 guest 里开着 KSM 的内存。guest 内核编进了 KSM（<code>CONFIG_KSM=y</code>），但内核默认不运行它（<code>/sys/kernel/mm/ksm/run</code> 为 0），gsd 与模板都不打开它。2026-11-23 在独立虚机里检查过，没有补丁 0004 的内核同样漏报，不是 0004 引入的（<a href="#d03">03</a> §3.4）。用 checkpoint 的沙箱里不要打开 KSM</td>
-<td>未处理</td>
+<td>某一页在 checkpoint 之后被写过、又在下一次 checkpoint 之前被 KSM 合并，这次写就从下一次增量里漏掉，restore 之后这一页是旧内容。只影响用 <code>madvise(MADV_MERGEABLE)</code> 标记过、而且 guest 里开着 KSM 的内存。guest 内核编进了 KSM（<code>CONFIG_KSM=y</code>），但内核默认不运行它（<code>/sys/kernel/mm/ksm/run</code> 为 0），gsd 与模板都不打开它。2026-11-23 在独立虚机里检查过，没有补丁 0004 的内核同样漏报，不是 0004 引入的（<a href="#d03">03</a> §3.4）。上游已修：<code>2efc6332f18b</code>（2026-11-03 合入主线）（mm/ksm: keep soft-dirty when merging a page，<code>Fixes: 0f8975ec4db2</code>，<code>Cc: stable</code>），原页表项带 soft-dirty 时给新页表项也置上。补丁 <code>0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch</code> 原样回移，独立虚机里 KSM 合并的漏报 1585 / 1590 → 0、合并后再写 1508 / 2380 → 0，开关 <code>soft_dirty_dbm</code> 为 0、1 都是</td>
+<td>已修（0005）</td>
 </tr>
 </tbody>
 </table></div>
@@ -8573,7 +8577,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 </tr>
 <tr>
 <td>K-05</td>
-<td>2026-11-23 独立 Firecracker 虚机的逐路径检查（<code>sdcheck.c</code> 的两项 KSM 用例，基线内核与带 0004 的内核各一份输出），存 <code>rollback-reports/920b-softdirty-dbm-proto-20261123/</code></td>
+<td>2026-11-23 独立 Firecracker 虚机的逐路径检查（<code>sdcheck.c</code> 的两项 KSM 用例，基线内核与带 0004 的内核各一份输出），存 <code>rollback-reports/920b-softdirty-dbm-proto-20261123/</code>；修复后的复测存 <code>rollback-reports/920b-ksm-softdirty-20261123/</code></td>
 </tr>
 </tbody>
 </table></div>
@@ -8638,7 +8642,7 @@ upper 为空时 checkpoint 也不会新增一层（<a href="#d07">07</a>）。�
 <li>三个没查清的现象（首个请求约 5 秒、同一沙箱上 2 次 checkpoint 返回 <code>internal</code>、单发 <code>ENOTEMPTY</code>）都不损坏数据，都没有稳定复现。</li>
 <li>没有新 920B 上的结果的分支集中在<strong>多棵树的异常路径</strong>和<strong>注入开关的关闭态</strong>；它们只有单测、没有在新 920B 上走过，评审时应当把它们算作未验证。默认路径建模板已于 2026-10-09 在新 920B 上确认；建模板的自检不验证内核是否带补丁（L-16）。</li>
 <li>950 只跑了首轮验收和四组压测；本章的全部实测依据来自新 920B。</li>
-<li>KSM 合并会让 soft-dirty 漏记写入（K-05），与补丁 0004 无关；guest 默认不开 KSM，用 checkpoint 的沙箱里不要打开它。</li>
+<li>KSM 合并曾让 soft-dirty 漏记写入（K-05），从 soft-dirty 引入起就有；补丁 0005 回移上游修复 <code>2efc6332f18b</code> 后已修。</li>
 </ol><nav class="pager" data-n="16"></nav></article><article id="v17" class="doc" hidden><h1 id="d17-性能原理代价模型">性能原理：代价模型</h1>
 <h2 id="d17-本章目标">本章目标</h2>
 <p>读完本章，你应该能：</p>
@@ -16427,7 +16431,7 @@ gsd 检查不出来的一种情况是树之间共享的匿名共享内存（只�
 <td>guest 内核</td>
 <td><code>fc-kernels/</code>（构建脚本、config、补丁）</td>
 <td>宿主 <code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code></td>
-<td>上游 6.1.158 的固定基线加四个补丁。arm64 的 <code>Image</code>，文件名按 orchestrator 的约定叫 <code>vmlinux.bin</code></td>
+<td>上游 6.1.158 的固定基线加五个补丁。arm64 的 <code>Image</code>，文件名按 orchestrator 的约定叫 <code>vmlinux.bin</code></td>
 </tr>
 <tr>
 <td>guest 基础镜像</td>
@@ -16499,7 +16503,7 @@ install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </sp
 <p>内核的三样输入都在代码仓的 <code>fc-kernels/</code> 下：</p>
 <ul>
 <li><strong>基线</strong>：<code>kernel_base_tags.txt</code> 把 6.1.158 固定在上游 amazonlinux/linux 的 tag <code>microvm-kernel-6.1.158-15.288.amzn2023</code>。补丁是对着这个 tag 做的；不固定的话，上游出一个新 tag 就会悄悄换掉补丁脚下的基线。</li>
-<li><strong>补丁</strong>：<code>patches/6.1.158/</code> 下按文件名顺序应用的四个——<code>0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch</code>（上游带来的，与 gsd 无关）、<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（文件系统热切层与 arm64 脏页跟踪）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（对 0002 的全部修复）、<code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>（arm64 上用硬件脏位记录写入，2026-11-23 加入，开关默认开，<a href="#d03">03</a> §3.4）。</li>
+<li><strong>补丁</strong>：<code>patches/6.1.158/</code> 下按文件名顺序应用的五个——<code>0001-virtio_balloon-Support-wait-on-ACK-for-hinting.patch</code>（上游带来的，与 gsd 无关）、<code>0002-overlayfs-hot-switch-checkpoint.patch</code>（文件系统热切层与 arm64 脏页跟踪）、<code>0003-overlayfs-hot-switch-fixes.patch</code>（对 0002 的全部修复）、<code>0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code>（arm64 上用硬件脏位记录写入，2026-11-23 加入，开关默认开，<a href="#d03">03</a> §3.4）、<code>0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch</code>（回移上游 <code>2efc6332f18b</code>：KSM 合并时保留 soft-dirty，2026-11-23 加入，<a href="#d16">16</a> 的 K-05）。</li>
 <li><strong>config</strong>：<code>configs/arm64/6.1.158.config</code>，其中 <code>CONFIG_CHECKPOINT_RESTORE=y</code>、<code>CONFIG_MEM_SOFT_DIRTY=y</code>、<code>CONFIG_OVERLAY_FS=y</code>。</li>
 </ul>
 <p>联网的 Debian / Ubuntu 机器上直接用仓库里的脚本：</p>
@@ -16508,7 +16512,7 @@ install<span class="w"> </span>-D<span class="w"> </span>-m<span class="w"> </sp
 <span class="c1"># 产物：builds/vmlinux-6.1.158/arm64/vmlinux.bin</span>
 </code></pre></div>
 
-<p>脚本会装依赖、克隆内核源码、检出固定的 tag、依次 <code>git apply</code> 四个补丁、<code>make olddefconfig</code>、编出 <code>Image</code>。</p>
+<p>脚本会装依赖、克隆内核源码、检出固定的 tag、依次 <code>git apply</code> 五个补丁、<code>make olddefconfig</code>、编出 <code>Image</code>。</p>
 <p>不联网的机器（新 920B 就是这种情况）手工做同样的几步。前提是本机已有一份带这个 tag 的内核源码克隆和 arm64 的编译环境：</p>
 <div class="hl"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>&lt;内核源码克隆&gt;
 git<span class="w"> </span>checkout<span class="w"> </span>-f<span class="w"> </span>microvm-kernel-6.1.158-15.288.amzn2023
@@ -16529,11 +16533,11 @@ sha256sum<span class="w"> </span>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin
 
 <p>同时把这次用的 <code>.config</code> 留一份在旁边备查。这样编出的内核版本串是 <code>6.1.158+</code>。</p>
 <h3 id="d27-23-核对补丁能从基线重放">2.3 核对补丁能从基线重放</h3>
-<p>仓库里的四个补丁文件是内核改动的唯一正本。要确认"手上这个内核的源码树"确实等于"基线加这四个补丁"，不靠比对补丁文本，而是从基线重放一遍、比较 git 的树哈希：</p>
+<p>仓库里的五个补丁文件是内核改动的唯一正本。要确认"手上这个内核的源码树"确实等于"基线加这五个补丁"，不靠比对补丁文本，而是从基线重放一遍、比较 git 的树哈希：</p>
 <div class="hl"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>&lt;内核源码克隆&gt;
 git<span class="w"> </span>worktree<span class="w"> </span>add<span class="w"> </span>--detach<span class="w"> </span>/tmp/applycheck<span class="w"> </span>microvm-kernel-6.1.158-15.288.amzn2023
 <span class="nb">cd</span><span class="w"> </span>/tmp/applycheck
-<span class="k">for</span><span class="w"> </span>p<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nv">$W</span>/fc-kernels/patches/6.1.158/000<span class="o">[</span><span class="m">1</span>-4<span class="o">]</span>-*.patch<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="k">for</span><span class="w"> </span>p<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nv">$W</span>/fc-kernels/patches/6.1.158/000<span class="o">[</span><span class="m">1</span>-5<span class="o">]</span>-*.patch<span class="p">;</span><span class="w"> </span><span class="k">do</span>
 <span class="w">  </span>sha256sum<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$p</span><span class="s2">&quot;</span><span class="p">;</span><span class="w"> </span>git<span class="w"> </span>apply<span class="w"> </span>--index<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$p</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  apply OK&quot;</span>
 <span class="k">done</span>
 git<span class="w"> </span>write-tree
@@ -16543,7 +16547,8 @@ git<span class="w"> </span>write-tree
 <p><code>git write-tree</code> 输出的是应用完全部补丁之后整棵源码树的哈希，它只取决于文件内容，与提交历史、提交说明无关。
 2026-10-08 在新 920B 上对 <code>259f1a25c</code> 里的三个补丁做这一步（<code>bc3cce913</code> 里的这三个文件没有变化），三个都 <code>apply OK</code>，得到的树哈希是 <code>744cbce67cef413e4838035c8a2788f97e5e9d3a</code>，与编出发布内核的那棵源码树相同。
 2026-11-23 加入 0004 之后（代码仓 <code>criu-rollback-dev</code> 分支 <code>b3668b6</code>）在新 920B 上重做了这一步：四个都 <code>apply OK</code>，树哈希是 <code>9117988d010b4dcb8230fd767f1a337382474b3e</code>，与编出部署包里 guest 内核 <code>35b25505…</code> 的那棵源码树相同；只打前三个时仍得到上面的 <code>744cbce6…</code>。
-以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。前三个补丁文件各自的 sha256 记在 <a href="#d19">19</a>，0004 的 sha256 是 <code>c2cd24607871370f4deec8efcc9192af407b549945e5d1c2d387645cf1421aed</code>。</p>
+同一天加入 0005 之后（<code>criu-rollback-dev</code> 分支 <code>9c721b1</code>）再做一次：五个都 <code>apply OK</code>，树哈希是 <code>195148ba08e096ade6a0dfac5201b64977b94199</code>，与编出部署包里现在的 guest 内核 <code>6fdcd2d6…</code>（构建标识 <code>#2 SMP Mon Nov 23 15:55:37 CST 2026</code>）的源码树相同，config 与上一版相同。
+以后只要补丁文件没变，任何人在任何机器上重放都应当得到同一个哈希；得到别的值，说明基线 tag 不对，或者补丁文件被改过。前三个补丁文件各自的 sha256 记在 <a href="#d19">19</a>，0004 的 sha256 是 <code>c2cd24607871370f4deec8efcc9192af407b549945e5d1c2d387645cf1421aed</code>，0005 的是 <code>bee02ee63e54246ea76e46f0c357f01f1dc21a1b2d9757c1e3a8a9f96e949f27</code>。</p>
 <p>调试用的内核（打开 KASAN、lockdep 等检查）用同一棵源码树、另一份 config 编，做法与注意事项在 <a href="#d18">18</a>，config 片段随手册附带在 <code>scripts/kernel/</code>。</p>
 <h3 id="d27-24-guest-基础镜像">2.4 guest 基础镜像</h3>
 <p>模板从一个容器镜像建出来。gsd 要求镜像里有 4.x 的 CRIU，并且位置固定在 <code>/usr/sbin/criu</code>（gsd 写死了这个路径）。仓库里的 <code>Dockerfile.criu421</code> 在 <code>ubuntu:22.04-custom</code> 之上从源码编译 CRIU 4.2.1：</p>
@@ -16947,7 +16952,7 @@ guest 内 <code>/usr/bin/gsd</code> 的 sha256 与它相同、<code>gsd -commit<
 <ul>
 <li>要部署的是 gsd、进程级版 orchestrator、打了补丁的 guest 内核、带 CRIU 4.2.1 的基础镜像和 Python SDK，必须来自同一个提交；Firecracker 和宿主内核不动；只支持 arm64 的 guest。</li>
 <li>离线构建靠 <code>GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly</code> 加预先备好的模块缓存；提交号用 <code>-ldflags</code> 嵌进二进制，先 vet 和单测再编。</li>
-<li>内核从 <code>kernel_base_tags.txt</code> 固定的 tag 出发按顺序打四个补丁；用"从基线重放、比较 <code>git write-tree</code>"核对源码树，而不是比对补丁文本。</li>
+<li>内核从 <code>kernel_base_tags.txt</code> 固定的 tag 出发按顺序打五个补丁；用"从基线重放、比较 <code>git write-tree</code>"核对源码树，而不是比对补丁文本。</li>
 <li>运行时只有三个文件：<code>/fc-criu/gsd</code>、<code>/fc-criu/orchestrator</code>、<code>/fc-criu/kernels/vmlinux-6.1.158/vmlinux.bin</code>。job 里显式设 <code>HOST_GSD_PATH</code> 指向这个 gsd（内置默认 <code>/fc-gsd/gsd</code> 是旧布局）；与别的栈共用的机器用 <code>HOST_KERNELS_DIR</code> 指向补丁内核，只跑进程级的机器把内核直接放 <code>/fc-kernels</code>。</li>
 <li>切栈脚本从基线 job 重新生成定义、提交、并等到新进程的环境变量确实生效才算完成；<code>950.sh</code> 切换前先删掉全部 e2b 沙箱（不碰 AgentENV 的），开发用的 <code>switch-gsd-new920b.sh</code> 则在还有 firecracker 在跑时拒绝切换。进程级栈运行期间建的所有模板都会被注入。</li>
 <li>模板固化建模板时的内核、gsd 和启动脚本：换任何一样都要不用缓存地重建模板，已有模板不受宿主文件更换的影响；旧一代模板不要再用。</li>
@@ -18867,7 +18872,7 @@ python<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;im
 <tr>
 <td><code>/proc/version</code> 的内核版本串与构建时间</td>
 <td>等于要验收的那个内核的版本串（<a href="#d19">19</a> 的条件标签）</td>
-<td>模板是换内核之前建的，或 orchestrator 取内核的目录不对（<a href="#d27">27</a>）。部署包的 <code>ops/guest_check.py</code> 从 <code>manifest.json</code> 读期望的构建标识（2026-11-23 起是 <code>#2 SMP Mon Nov 23 11:39:42 CST 2026</code>），并核对 <code>soft_dirty_dbm</code> 的默认值为 <code>Y</code></td>
+<td>模板是换内核之前建的，或 orchestrator 取内核的目录不对（<a href="#d27">27</a>）。部署包的 <code>ops/guest_check.py</code> 从 <code>manifest.json</code> 读期望的构建标识（当前是 <code>#2 SMP Mon Nov 23 15:55:37 CST 2026</code>），并核对 <code>soft_dirty_dbm</code> 的默认值为 <code>Y</code></td>
 </tr>
 <tr>
 <td>THP</td>
@@ -19733,6 +19738,10 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 <tr>
 <td><code>patches/6.1.158/0004-arm64-soft-dirty-record-writes-with-hardware-DBM-ins.patch</code></td>
 <td>2026-11-23 加入：清 soft-dirty 时可写的页不写保护，写入由硬件脏位（DBM）记录；<code>pte_soft_dirty</code> 把硬件脏也算作写过；开关 <code>soft_dirty_dbm</code> 默认开</td>
+</tr>
+<tr>
+<td><code>patches/6.1.158/0005-mm-ksm-keep-soft-dirty-when-merging-a-page.patch</code></td>
+<td>2026-11-23 加入：回移上游 <code>2efc6332f18b</code>，KSM 合并页时 <code>replace_page</code> 把原页表项的 soft-dirty 带到新页表项上</td>
 </tr>
 </tbody>
 </table></div>
@@ -20694,7 +20703,7 @@ gsd 的启动参数取值在 <code>template/build/core/rootfs/templates.go:57-61
 </tr>
 <tr>
 <td>guest 内核补丁</td>
-<td><code>fc-kernels/patches/6.1.158/</code>（四个补丁）、<code>fc-kernels/build.sh</code>、<code>kernel_base_tags.txt</code></td>
+<td><code>fc-kernels/patches/6.1.158/</code>（五个补丁）、<code>fc-kernels/build.sh</code>、<code>kernel_base_tags.txt</code></td>
 <td>无单测，靠调试内核压测（§4.3）</td>
 <td><a href="#d27">27</a></td>
 </tr>

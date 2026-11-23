@@ -116,7 +116,7 @@ EOF
 |---|---|---|
 | guest 内 `gsd -commit` | 等于宿主上 `/fc-criu/gsd -commit` 的输出 | 模板是换 gsd 之前建的，要重建模板 |
 | guest 内 `/usr/bin/gsd` 的 sha256 | 等于宿主上 `/fc-criu/gsd` 的 sha256 | 同上 |
-| `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[27](27-deployment.md)）。部署包的 `ops/guest_check.py` 从 `manifest.json` 读期望的构建标识（2026-11-23 起是 `#2 SMP Mon Nov 23 11:39:42 CST 2026`），并核对 `soft_dirty_dbm` 的默认值为 `Y` |
+| `/proc/version` 的内核版本串与构建时间 | 等于要验收的那个内核的版本串（[19](19-920b-functional.md) 的条件标签） | 模板是换内核之前建的，或 orchestrator 取内核的目录不对（[27](27-deployment.md)）。部署包的 `ops/guest_check.py` 从 `manifest.json` 读期望的构建标识（当前是 `#2 SMP Mon Nov 23 15:55:37 CST 2026`），并核对 `soft_dirty_dbm` 的默认值为 `Y` |
 | THP | `always madvise [never]` | overlay-init 不是当前版本；增量会退化成接近全量（[03](03-criu-and-incremental-memory.md)） |
 | `rcu_expedited` | `1` | gsd 不是当前版本或没有正常启动（[12](12-restore.md)） |
 | `gsd.service` | `active` | 见 [29](29-troubleshooting.md) |

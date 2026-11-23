@@ -1,0 +1,52 @@
+From 2ea6f7f439219c9cfab4e53d08ec5946854d60ea Mon Sep 17 00:00:00 2001
+From: Samarth Narang <samarth.colleges@gmail.com>
+Date: Wed, 21 Oct 2026 11:21:57 -0700
+Subject: [PATCH] mm/ksm: keep soft-dirty when merging a page
+
+commit 2efc6332f18bfd848f74f3d5ba45b31450601faa upstream.
+
+replace_page() maps the KSM page with a PTE built from scratch, so the
+soft-dirty bit of the PTE it replaces is lost.  A page written since
+"clear_refs 4" then no longer shows as soft-dirty once it is merged, and a
+soft-dirty based dumper treats it as unchanged.
+
+Copy the soft-dirty bit from the original PTE to the new PTE.
+
+Link: https://lore.kernel.org/20261021182157.1873726-1-samarth.colleges@gmail.com
+Fixes: 0f8975ec4db2 ("mm: soft-dirty bits for user memory changes tracking")
+Signed-off-by: Samarth Narang <samarth.colleges@gmail.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+Reviewed-by: Lance Yang <lance.yang@linux.dev>
+Acked-by: David Hildenbrand (Arm) <david@kernel.org>
+Cc: <stable@vger.kernel.org>
+
+[ backport to 6.1.158: same hunk; 6.1 reads *ptep directly in the
+  following flush_cache_page() line.  Tested in a standalone Firecracker
+  guest with sdcheck: a 64 MiB region merged by KSM (16320 pages sharing)
+  missed 1585 of 1590 pages written since clear_refs before this change
+  and 0 after, with soft_dirty_dbm 0 and 1; the other 13 paths and 200
+  random cycles stay at 0 missed. ]
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ mm/ksm.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/mm/ksm.c b/mm/ksm.c
+index cb272b6fd..906dddadc 100644
+--- a/mm/ksm.c
++++ b/mm/ksm.c
+@@ -1176,6 +1176,10 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
+ 		dec_mm_counter(mm, MM_ANONPAGES);
+ 	}
+ 
++	/* Preserve soft-dirty when replacing the page. */
++	if (pte_soft_dirty(orig_pte))
++		newpte = pte_mksoft_dirty(newpte);
++
+ 	flush_cache_page(vma, addr, pte_pfn(*ptep));
+ 	/*
+ 	 * No need to notify as we are replacing a read only page with another
+-- 
+2.54.0
+

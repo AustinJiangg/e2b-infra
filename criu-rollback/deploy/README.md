@@ -364,6 +364,13 @@ bash criu-rollback/deploy/950.sh report --file stress/all/RESULT --lines 0
 
 ## 14. 更新记录与 920B 实测
 
+### 2026-11-23（二）：KSM 合并不再丢 soft-dirty（guest 内核换版本，`0005`）
+
+- **为什么。** guest 里开着 KSM、而且进程用 `madvise(MADV_MERGEABLE)` 标了可合并内存时，KSM 合并页的 `replace_page()` 新建页表项，不带原页表项上的 soft-dirty 位：checkpoint 之后写过、又在下一次 checkpoint 之前被合并的页，pagemap 报“没写过”，增量 checkpoint 漏掉它，restore 后这一页是更早的内容。从 soft-dirty 引入起就有，与 `0004` 无关。guest 默认不开 KSM（`/sys/kernel/mm/ksm/run` 为 0），默认部署触发不了。
+- **改了什么。** guest 内核加补丁 `0005`（`provenance/guest-kernel-0005-ksm-keep-soft-dirty.patch`，fc-kernels-arm `patches/6.1.158/0005-*`）：回移上游 `2efc6332f18b`（mm/ksm: keep soft-dirty when merging a page，`Fixes: 0f8975ec4db2`，`Cc: stable`），原页表项带 soft-dirty 时给新页表项也置上，4 行。上游 tag 加 `0001`～`0005` 重放的源码树哈希为 `195148ba08e096ade6a0dfac5201b64977b94199`。config 与上一版相同。
+- **验证（920B）。** 独立 Firecracker 虚机 `sdcheck`：KSM 合并（16320 页共享）漏记从 1585 / 1590 降到 0，合并后再写从 1508 / 2380 降到 0；其余路径与 200 轮随机仍为 0；`soft_dirty_dbm` 为 0、1 都通过。进程级验收与压测见下一次 `test950.sh`。
+- **升级。** `git pull` 之后执行一次 `bash criu-rollback/deploy/950.sh criu`（`test950.sh` 切到进程级时会自动做）：内核是 `35b25505…` 或 `b81306e7…` 时直接换掉，`base-criu` 重建一次。
+
 ### 2026-11-23：guest 内核的 soft-dirty 用硬件 DBM 标脏（guest 内核换版本，`0004`）
 
 - **为什么。** 进程级每次 checkpoint 让 CRIU 清 soft-dirty（`clear_refs` 写 4），内核把每个页写保护；arm64 上写保护同时清掉 DBM 位，之后每页第一次写都要缺页一次。920B 上实测这一次缺页约 1.0～1.2 µs，即负载每写 1 MiB 多花 0.25～0.31 ms，与进程级 checkpoint 写页的代价同一量级；这部分花在负载自己的写路径上，checkpoint / restore 的耗时里看不到。

@@ -43,12 +43,13 @@
       "path": "kernels/vmlinux-6.1.158/vmlinux.bin",
       "mode": "644",
       "size": 23054848,
-      "sha256": "35b25505b83b216ec682d711e6a74120bffe7336d0ca52f394988d4edc677080",
+      "sha256": "6fdcd2d625ad5cc78e86f6afdb14cb484daa366909e4520816049fe958c971fe",
       "replaces": [
-        "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c"
+        "b81306e76540a0e69a4cc1b9e943137deb317054e74809894754e8cd5e75d66c",
+        "35b25505b83b216ec682d711e6a74120bffe7336d0ca52f394988d4edc677080"
       ],
-      "source": "fc-kernels-arm jll-gsd-6.1.158 + patches/6.1.158/0004（provenance/guest-kernel-0004-soft-dirty-hw-dbm.patch）",
-      "build": "#2 SMP Mon Nov 23 11:39:42 CST 2026",
+      "source": "fc-kernels-arm jll-gsd-6.1.158 + patches/6.1.158/0004（provenance/guest-kernel-0004-soft-dirty-hw-dbm.patch）+ 0005（provenance/guest-kernel-0005-ksm-keep-soft-dirty.patch，回移上游 2efc6332f18b）",
+      "build": "#2 SMP Mon Nov 23 15:55:37 CST 2026",
       "soft_dirty_dbm": "Y"
     }
   },
