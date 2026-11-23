@@ -246,6 +246,20 @@ guest 启动日志里有 `CPU features: detected: Hardware dirty bit management`
 
 gsd 和 CRIU 都不用改：CRIU 仍然往 `clear_refs` 写 `4`、读 pagemap 的第 55 位，变的只是内核在这两处背后的做法。
 
+**用了 DBM，仍然要扫页表。** DBM 记下的"写过"不在别处，就在每一页自己的页表项里：页被写之后，处理器清掉的是这个页表项上的只读位。
+处理器不会另外维护一份"哪些页被写过"的清单，也没有存放脏页地址的缓冲区，所以要知道哪些页写过，只能逐个看页表项。
+checkpoint 时的流程与原来相同：CRIU 读 `/proc/<pid>/pagemap`，内核逐个走这个进程的页表项、每页给出一个 64 位的描述，CRIU 只保存第 55 位为 1 的页；
+写 `clear_refs` 清标记时，内核同样走一遍全部页表项。0004 只改了每个页表项上的判断：原来只看 soft-dirty 位，现在 soft-dirty 位为 1 或者页是硬件脏都算写过。
+扫描的范围和次数不变，每个页表项上多一次位运算。
+
+要做到不扫页表，处理器得在写的时候把被写的地址记进一个缓冲区，软件直接读这个缓冲区。950 上的 HDBSS 就是这样做的，但它只作用于宿主给虚机建的那一层页表（沙箱级用的就是它），
+guest 里进程自己的页表没有这样的硬件，进程级用不上。
+
+扫页表本身花的时间不多。950 上一个 256 MiB 的进程一页不改时，CRIU 的统计是扫描 70747 页，"导出内存"一段 1.7 ms（扫描包含在内），整个 checkpoint 服务端约 10 ms；
+改写 256 MiB 时，checkpoint 的大头是把 65905 页写进镜像（写镜像 87.7 ms），扫描只占几毫秒（[22](22-950-results.md) §11 那一轮关 DBM 时的数据）。
+写 `clear_refs` 更少，920B 上 256 MiB 约 0.9 ms。所以即使能把扫描完全去掉，checkpoint 也只省几毫秒；
+这也是改用 DBM 之后 checkpoint 与 restore 耗时不变的原因：DBM 去掉的缺页代价在业务写内存的时间里，checkpoint 里的扫描和写镜像都没有变。
+
 **开关。** 0004 加了一个内核参数 `soft_dirty_dbm`，默认开。在沙箱里往 `/sys/module/kernel/parameters/soft_dirty_dbm` 写 `0` 或 `1` 立即生效，
 只影响这一个沙箱之后的清标记；写 `0` 就回到 §3.1 的写保护方式（[28](28-configuration-and-observability.md) §2.3）。
 

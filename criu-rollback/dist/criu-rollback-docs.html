@@ -1866,6 +1866,17 @@ guest 启动日志里有 <code>CPU features: detected: Hardware dirty bit manage
 本来就不可写的页（例如 fork 之后写时复制的共享页）仍按原来的方式处理，写的时候照旧缺页。
 处理器没有 DBM 时，"可写但干净"的页一写就缺页，缺页处理经 <code>pte_mkdirty</code> 把它标脏并置上 soft-dirty，结果与原来的方式相同。</p>
 <p>gsd 和 CRIU 都不用改：CRIU 仍然往 <code>clear_refs</code> 写 <code>4</code>、读 pagemap 的第 55 位，变的只是内核在这两处背后的做法。</p>
+<p><strong>用了 DBM，仍然要扫页表。</strong> DBM 记下的"写过"不在别处，就在每一页自己的页表项里：页被写之后，处理器清掉的是这个页表项上的只读位。
+处理器不会另外维护一份"哪些页被写过"的清单，也没有存放脏页地址的缓冲区，所以要知道哪些页写过，只能逐个看页表项。
+checkpoint 时的流程与原来相同：CRIU 读 <code>/proc/&lt;pid&gt;/pagemap</code>，内核逐个走这个进程的页表项、每页给出一个 64 位的描述，CRIU 只保存第 55 位为 1 的页；
+写 <code>clear_refs</code> 清标记时，内核同样走一遍全部页表项。0004 只改了每个页表项上的判断：原来只看 soft-dirty 位，现在 soft-dirty 位为 1 或者页是硬件脏都算写过。
+扫描的范围和次数不变，每个页表项上多一次位运算。</p>
+<p>要做到不扫页表，处理器得在写的时候把被写的地址记进一个缓冲区，软件直接读这个缓冲区。950 上的 HDBSS 就是这样做的，但它只作用于宿主给虚机建的那一层页表（沙箱级用的就是它），
+guest 里进程自己的页表没有这样的硬件，进程级用不上。</p>
+<p>扫页表本身花的时间不多。950 上一个 256 MiB 的进程一页不改时，CRIU 的统计是扫描 70747 页，"导出内存"一段 1.7 ms（扫描包含在内），整个 checkpoint 服务端约 10 ms；
+改写 256 MiB 时，checkpoint 的大头是把 65905 页写进镜像（写镜像 87.7 ms），扫描只占几毫秒（<a href="#d22">22</a> §11 那一轮关 DBM 时的数据）。
+写 <code>clear_refs</code> 更少，920B 上 256 MiB 约 0.9 ms。所以即使能把扫描完全去掉，checkpoint 也只省几毫秒；
+这也是改用 DBM 之后 checkpoint 与 restore 耗时不变的原因：DBM 去掉的缺页代价在业务写内存的时间里，checkpoint 里的扫描和写镜像都没有变。</p>
 <p><strong>开关。</strong> 0004 加了一个内核参数 <code>soft_dirty_dbm</code>，默认开。在沙箱里往 <code>/sys/module/kernel/parameters/soft_dirty_dbm</code> 写 <code>0</code> 或 <code>1</code> 立即生效，
 只影响这一个沙箱之后的清标记；写 <code>0</code> 就回到 §3.1 的写保护方式（<a href="#d28">28</a> §2.3）。</p>
 <p><strong>正确性。</strong> 这项改动只要漏掉一条路径，后果就是某次写没有被标脏、从下一次增量里静默漏掉，restore 之后这一页回到旧内容。所以分两层验证：</p>
