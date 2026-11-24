@@ -336,6 +336,12 @@ def recycle():
     before = logdir / "net-before.json"
     before.write_text(json.dumps(netsnap(), indent=1))
     clear_e2b_sandboxes()
+    # 沙箱级重新部署过（RPM 升级、build.sh 重装）而之后没切过进程级时，基线里记的还是旧二进制，
+    # recycle_netns 按基线核对会停下；与 criu 切换一样，先按现在的沙箱级 job 重存基线。
+    if target == "sandbox":
+        redeployed = stack.baseline_redeployed()
+        if redeployed:
+            stack.refresh_baseline(redeployed)
     stack.recycle_netns()
     after = logdir / "net-after.json"
     after.write_text(json.dumps(netsnap(), indent=1))
