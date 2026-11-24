@@ -79,25 +79,27 @@ mmap 在这里的具体作用是：把 host 上的层文件映射进 orchestrato
 
 ### 2.2 暂停期间具体做什么
 
-`NBDProvider.SealLayer`（`rootfs/nbd.go:141`）在同一个 Overlay 上另开一条路径，在虚机暂停期间做三步：
+`NBDProvider.SealLayer`（`rootfs/nbd.go:142`）在同一个 Overlay 上另开一条路径，在虚机暂停期间做三步：
 
 ```go
-o.sync(ctx)                                                             // ① 刷屏障：ioctl(BLKFLSBUF) + flush
-newCache, _ := block.NewCache(size, o.blockSize, newCachePath, false)   // ② 新空写层：open + truncate（稀疏）+ mmap
-sealed, _ := o.overlay.Seal(newCache)                                   // ③ 旧写层进层栈，接替为当前活写层
+flush(ctx, nbdPath)                                                     // ① 刷屏障：对 NBD 设备 fsync（计时 seal_fsync）
+newCache, _ := block.NewCache(size, o.blockSize, newCachePath, false)   // ② 新空写层：open + truncate（稀疏）+ mmap（seal_new_layer）
+sealed, _ := o.overlay.Seal(newCache)                                   // ③ 旧写层进层栈，接替为当前活写层（seal_swap）
 ```
 
 这三步不逐块复制旧写层的数据来生成新层，但同步仍可能产生 I/O，登记块归属也需要计算。封存文件移入 store 在恢复运行之后进行。
 
 ### 2.3 为什么先暂停，再做同步
 
-`BLKFLSBUF` 让内核把这个块设备上缓冲的写全部推下去，经 NBD dispatcher 落进写层的 mmap。
+对设备 `fsync` 让内核把这个块设备上缓冲的写全部推下去，经 NBD dispatcher 落进写层的 mmap。NBD 设备没有声明支持刷盘命令，`fsync` 就是"把脏页作为 NBD 写请求全部发下去并等应答"；dispatcher 在 `WriteAt` 成功之后才应答，所以 `fsync` 返回时数据已在写层里（[第 30 章 §2.2](30-status-and-directions.md#22-读代码发现的待验证项)）。
 
 - 它**保证**：内核块层已经接受的每一个写，都到了写层里；
 - 它**不保证**：guest 停止产生新的写。
 
 所以调用契约里明确写着**虚机必须已经暂停**：刷屏障处理内核块层已接受、尚未下发的写，暂停处理 guest 之后还要发出的写，两者缺一不可。
 `SealLayer` 与 `ResetView` 的注释都以这个前置条件开头 —— 它是调用方的责任，不是这个函数能自己保证的事。
+
+**封层保留宿主页缓存，换视图丢掉。** 宿主内核为 `/dev/nbdX` 缓存着 guest 读写过的块。封层只改变一个块存放在哪个文件里，不改变磁盘读出来的内容：Overlay 先读新的空写层，再读刚封存的那一层，所以缓存里的每一页仍等于经 NBD 读出来的内容，留着是对的。restore 的 `ResetView` 换掉整个视图，内容变了，它照旧先做 `ioctl(BLKFLSBUF)`（写回并作废这个设备的全部页缓存）再 `fsync`；关闭沙箱时也一样。2026-11-24 之前封层也做 `BLKFLSBUF`，在 920B 上每次有写盘的 checkpoint 要在暂停窗口里多花 10～13 ms（约 0.17 ms / 缓存 MiB），guest 下一次读这些块还要重新经 NBD 取；改成只 `fsync` 后 `seal` 约 0.3 ms，数据见 [第 18 章 §5.4](18-950-performance.md#54-写文件的代价由什么决定)。`CHECKPOINT_SEAL_DROP_CACHE=true` 恢复旧行为（[第 26 章](26-configuration-and-capacity.md)）。
 
 ### 2.4 代码怎样接替活写层
 

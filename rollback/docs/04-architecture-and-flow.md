@@ -286,6 +286,10 @@ diff := fc.TrackDirtyPagesEnabled() && !broken && !rooting
 `CheckpointToFiles`（`internal/sandbox/checkpoint.go:207`）的骨架：
 
 ```go
+if flusher, ok := provider.(rootfs.PreFlusher); ok && Preflush() {             // 暂停之前：根盘先写回一次
+    timings.Timed("preflush", func() error { return flusher.PreFlush(ctx) })  // 失败只告警，checkpoint 照常
+}
+
 pausedAt := time.Now()
 if err := pauseVM(ctx, sandboxID, process, timings); err != nil { ... }        // pause，超时会补一次 resume
 
@@ -306,9 +310,11 @@ timings.Timed("snapshot", func() error {
 epoch.afterSnapshot(...)                                                        // 本代侧车并入「开机以来写过的页」
 
 sealStart := time.Now()
-sealed, err := sealer.SealLayer(ctx, newCachePath)
+sealed, err := sealer.SealLayer(ctx, newCachePath, dropCache, timings.Mark)  // 内部逐步打 seal_* 计时
 timings.Mark("seal", sealStart)
 ```
+
+**暂停之前的预刷（`preflush`）。** guest 写回根盘的数据可能还停在宿主上 NBD 设备的页缓存里，第 15 步的快照会让 Firecracker 在暂停窗口里把它们全部推进写层。暂停之前先对设备 `fsync` 一次（`NBDProvider.PreFlush`），这段推送就挪到窗口外，虚机照常运行；窗口里只剩预刷期间 guest 新写的部分。它不丢缓存、也不是屏障，正确性仍由窗口里的那一遍保证，所以失败只记一条告警，checkpoint 照常进行。开关 `CHECKPOINT_PREFLUSH`，默认开（[第 26 章](26-configuration-and-capacity.md)）；效果见 [第 18 章 §5.4](18-950-performance.md#54-写文件的代价由什么决定)。
 
 两个 `defer` 的登记顺序决定了执行顺序：后登记的先执行，所以 resume 先于 seal_move —— 跨文件系统时 seal_move 是一次拷贝，
 它必须落在窗口外，冻结时长才不随"上次 checkpoint 以来 guest 写了多少"增长。
@@ -318,7 +324,7 @@ timings.Mark("seal", sealStart)
 | 13 | **暂停虚机** | `pause` | 常数 |
 | 14 | （仅全量）`save-dirty-bitmap` 导出活跃脏页，折进「开机以来写过的页」集合 | `save_live_bitmap` | 内存 / 64 的位图导出 |
 | 15 | 写快照：vmstate + 稀疏内存差分 + 位图侧车，**一次调用** | `snapshot` | 本代脏页数（全量时是整份内存） |
-| 16 | 封存写层：刷屏障（NBD `BLKFLSBUF`）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针 | `seal` | 不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（[第 7 章](07-disk-layering.md)） |
+| 16 | 封存写层：刷屏障（对 NBD 设备 `fsync`，保留宿主页缓存）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针 | `seal`（分步 `seal_fsync`、`seal_new_layer`、`seal_swap`） | 不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（[第 7 章](07-disk-layering.md)） |
 | 17 | **恢复虚机**（`defer`，无条件） | `resume` | 常数 |
 | 18 | 封存层文件移入 store 的 layers 目录（`defer`，登记在 resume 之前，所以在它之后执行） | `seal_move` | 同一文件系统是一次 rename；跨文件系统是一次拷贝，所以放到窗口外 |
 

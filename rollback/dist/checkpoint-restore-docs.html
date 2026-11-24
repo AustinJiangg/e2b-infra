@@ -2685,7 +2685,11 @@ orchestrator 把它翻译成"this firecracker does not support in-place rollback
 <p>这一段的失败都是干净的：<code>Discard(entry)</code> 删掉目录，虚机没被碰过。</p>
 <h3 id="d04-73-冻结窗口">7.3 冻结窗口</h3>
 <p><code>CheckpointToFiles</code>（<code>internal/sandbox/checkpoint.go:207</code>）的骨架：</p>
-<div class="hl"><pre><span></span><code><span class="nx">pausedAt</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Now</span><span class="p">()</span>
+<div class="hl"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="nx">flusher</span><span class="p">,</span><span class="w"> </span><span class="nx">ok</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">provider</span><span class="p">.(</span><span class="nx">rootfs</span><span class="p">.</span><span class="nx">PreFlusher</span><span class="p">);</span><span class="w"> </span><span class="nx">ok</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">Preflush</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">             </span><span class="c1">// 暂停之前：根盘先写回一次</span>
+<span class="w">    </span><span class="nx">timings</span><span class="p">.</span><span class="nx">Timed</span><span class="p">(</span><span class="s">&quot;preflush&quot;</span><span class="p">,</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="kt">error</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">flusher</span><span class="p">.</span><span class="nx">PreFlush</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">})</span><span class="w">  </span><span class="c1">// 失败只告警，checkpoint 照常</span>
+<span class="p">}</span>
+
+<span class="nx">pausedAt</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Now</span><span class="p">()</span>
 <span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">pauseVM</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">sandboxID</span><span class="p">,</span><span class="w"> </span><span class="nx">process</span><span class="p">,</span><span class="w"> </span><span class="nx">timings</span><span class="p">);</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">...</span><span class="w"> </span><span class="p">}</span><span class="w">        </span><span class="c1">// pause，超时会补一次 resume</span>
 
 <span class="k">defer</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* seal_move：封存层文件移入 store（登记在 resume 之前，所以在它之后执行） */</span><span class="w"> </span><span class="p">}()</span>
@@ -2705,10 +2709,11 @@ orchestrator 把它翻译成"this firecracker does not support in-place rollback
 <span class="nx">epoch</span><span class="p">.</span><span class="nx">afterSnapshot</span><span class="p">(</span><span class="o">...</span><span class="p">)</span><span class="w">                                                        </span><span class="c1">// 本代侧车并入「开机以来写过的页」</span>
 
 <span class="nx">sealStart</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Now</span><span class="p">()</span>
-<span class="nx">sealed</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sealer</span><span class="p">.</span><span class="nx">SealLayer</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">newCachePath</span><span class="p">)</span>
+<span class="nx">sealed</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sealer</span><span class="p">.</span><span class="nx">SealLayer</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">newCachePath</span><span class="p">,</span><span class="w"> </span><span class="nx">dropCache</span><span class="p">,</span><span class="w"> </span><span class="nx">timings</span><span class="p">.</span><span class="nx">Mark</span><span class="p">)</span><span class="w">  </span><span class="c1">// 内部逐步打 seal_* 计时</span>
 <span class="nx">timings</span><span class="p">.</span><span class="nx">Mark</span><span class="p">(</span><span class="s">&quot;seal&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">sealStart</span><span class="p">)</span>
 </code></pre></div>
 
+<p><strong>暂停之前的预刷（<code>preflush</code>）。</strong> guest 写回根盘的数据可能还停在宿主上 NBD 设备的页缓存里，第 15 步的快照会让 Firecracker 在暂停窗口里把它们全部推进写层。暂停之前先对设备 <code>fsync</code> 一次（<code>NBDProvider.PreFlush</code>），这段推送就挪到窗口外，虚机照常运行；窗口里只剩预刷期间 guest 新写的部分。它不丢缓存、也不是屏障，正确性仍由窗口里的那一遍保证，所以失败只记一条告警，checkpoint 照常进行。开关 <code>CHECKPOINT_PREFLUSH</code>，默认开（<a href="#d26">第 26 章</a>）；效果见 <a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a>。</p>
 <p>两个 <code>defer</code> 的登记顺序决定了执行顺序：后登记的先执行，所以 resume 先于 seal_move —— 跨文件系统时 seal_move 是一次拷贝，
 它必须落在窗口外，冻结时长才不随"上次 checkpoint 以来 guest 写了多少"增长。</p>
 <div class="tw"><table>
@@ -2741,8 +2746,8 @@ orchestrator 把它翻译成"this firecracker does not support in-place rollback
 </tr>
 <tr>
 <td>16</td>
-<td>封存写层：刷屏障（NBD <code>BLKFLSBUF</code>）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针</td>
-<td><code>seal</code></td>
+<td>封存写层：刷屏障（对 NBD 设备 <code>fsync</code>，保留宿主页缓存）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针</td>
+<td><code>seal</code>（分步 <code>seal_fsync</code>、<code>seal_new_layer</code>、<code>seal_swap</code>）</td>
 <td>不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（<a href="#d07">第 7 章</a>）</td>
 </tr>
 <tr>
@@ -4691,21 +4696,22 @@ host 内核的 NBD 驱动再把读请求转发给 orchestrator。orchestrator �
 <figure class="paper"><img loading="lazy" alt="checkpoint、restore、删除时层栈怎么变" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAwIiBoZWlnaHQ9IjE0MjYiIHZpZXdCb3g9IjAgMCAxNjAwIDE0MjYiIGZvbnQtZmFtaWx5PSInUGluZ0ZhbmcgU0MnLCdIaXJhZ2lubyBTYW5zIEdCJywnTWljcm9zb2Z0IFlhSGVpJywnTm90byBTYW5zIENKSyBTQycsJ05vdG8gU2FucyBTQycsJ1NvdXJjZSBIYW4gU2FucyBTQycsc2Fucy1zZXJpZiI+CjxkZWZzPgo8bWFya2VyIGlkPSJhci1mbG93IiB2aWV3Qm94PSIwIDAgMTAgMTAiIHJlZlg9IjguNSIgcmVmWT0iNSIgbWFya2VyV2lkdGg9IjciIG1hcmtlckhlaWdodD0iNyIgb3JpZW50PSJhdXRvLXN0YXJ0LXJldmVyc2UiPjxwYXRoIGQ9Ik0xLjUgMUw4LjUgNUwxLjUgOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNUY1RTVBIiBzdHJva2Utd2lkdGg9IjEuNyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9tYXJrZXI+CjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjE2MDAiIGhlaWdodD0iMTQyNiIgZmlsbD0iI0ZGRkZGRiIvPgo8dGV4dCB4PSI0OC4wIiB5PSI2Mi4wIiBmb250LXNpemU9IjMwIiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuWxguagiOaAjuS5iOWPmO+8mmNoZWNrcG9pbnQg5bCB5a2Y5bm25o6l5pu/77yMcmVzdG9yZSDmlLnmjIflkJHvvIzliKDpmaTnnIvlvJXnlKjorqHmlbA8L3RleHQ+Cjx0ZXh0IHg9IjQ4LjAiIHk9Ijk2LjAiIGZvbnQtc2l6ZT0iMTUuNSIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5PdmVybGF5IOWPquacieS4pOS4quaMh+mSiO+8mm8uY2FjaGUg5oyH5ZCR5b2T5YmN5rS75YaZ5bGC77yMby5kZXZpY2Ug5oyH5ZCR5rS75YaZ5bGC5rKh5pyJ6K+l5Z2X5pe25L2/55So55qE5Y+q6K+75p2l5rqQ44CCY2hlY2twb2ludCDkuI4gcmVzdG9yZSDpg73lj6rmlLnov5nkuKTkuKrmjIfpkojvvIzkuI3pgJDlnZflpI3liLbmlbDmja7vvJvlsYLmlofku7bkvZXml7bliKDpmaTnlLHlvJXnlKjorqHmlbDlhrPlrprvvIzkuI3mjIk8L3RleHQ+Cjx0ZXh0IHg9IjQ4LjAiIHk9IjEyMC4wIiBmb250LXNpemU9IjE1LjUiIGZpbGw9IiM1RjVFNUEiIHRleHQtYW5jaG9yPSJzdGFydCI+Y2hlY2twb2ludCDmoJHlhrPlrprjgII8L3RleHQ+CjxsaW5lIHgxPSI0OC4wIiB5MT0iMTQ5LjAiIHgyPSI4OC4wIiB5Mj0iMTQ5LjAiIHN0cm9rZT0iIzVGNUU1QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG1hcmtlci1lbmQ9InVybCgjYXItZmxvdykiLz4KPHRleHQgeD0iOTguMCIgeT0iMTU0LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9InN0YXJ0Ij7mk43kvZznmoTlhYjlkI48L3RleHQ+CjxjaXJjbGUgY3g9IjYzIiBjeT0iMjAyIiByPSIxNSIgZmlsbD0iIzJDMkMyQSIvPgo8dGV4dCB4PSI2My4wIiB5PSIyMDcuNSIgZm9udC1zaXplPSIxNiIgZmlsbD0iI0ZGRkZGRiIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTwvdGV4dD4KPHRleHQgeD0iOTAuMCIgeT0iMjA5LjAiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+Y2hlY2twb2ludCDkuI4gcmVzdG9yZe+8mk92ZXJsYXkg55qE5Lik5Liq5oyH6ZKI5oCO5LmI5Y+YPC90ZXh0Pgo8cmVjdCB4PSI2MDguNCIgeT0iMTkyLjAiIHdpZHRoPSI3NC4wIiBoZWlnaHQ9IjI0LjAiIHJ4PSIxMiIgZmlsbD0iI0ZDRUJFQiIgc3Ryb2tlPSIjRTI0QjRBIiBzdHJva2Utd2lkdGg9IjAuOCIvPgo8dGV4dCB4PSI2NDUuNCIgeT0iMjA4LjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiNBMzJEMkQiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuacrOWbvumHjeeCuTwvdGV4dD4KPHRleHQgeD0iNjk4LjQiIHk9IjIwOC4wIiBmb250LXNpemU9IjE0LjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJzdGFydCI+5Lul5Z2XIDEwMCDkuLrkvovvvJrmqKHmnb/kuK3mmK8gQTwvdGV4dD4KPHJlY3QgeD0iNDguMCIgeT0iMjQ0LjAiIHdpZHRoPSI0MzQuNyIgaGVpZ2h0PSI1NjAuMCIgcng9IjE0IiBmaWxsPSIjRkJGQkY5IiBzdHJva2U9IiNEM0QxQzciIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI2OC4wIiB5PSIyNzYuMCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuKRoCDov5DooYzkuK3vvIzov5jmsqHkv53lrZjov4c8L3RleHQ+Cjx0ZXh0IHg9IjY4LjAiIHk9IjI5OC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuWdlyAxMDAg5pS55oiQIELvvIzlhpnov5sgVzE8L3RleHQ+CjxyZWN0IHg9IjU4Mi43IiB5PSIyNDQuMCIgd2lkdGg9IjQzNC43IiBoZWlnaHQ9IjU2MC4wIiByeD0iMTQiIGZpbGw9IiNGQkZCRjkiIHN0cm9rZT0iI0QzRDFDNyIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjYwMi43IiB5PSIyNzYuMCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuKRoSBjaGVja3BvaW50IGMxIOS5i+WQju+8jOWPiOaUueaIkCBDPC90ZXh0Pgo8dGV4dCB4PSI2MDIuNyIgeT0iMjk4LjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJzdGFydCI+VzEg5bCB5a2Y6L+b5bGC5qCI77yMVzIg5o6l5pu/5Li65rS75YaZ5bGCPC90ZXh0Pgo8cmVjdCB4PSIxMTE3LjMiIHk9IjI0NC4wIiB3aWR0aD0iNDM0LjciIGhlaWdodD0iNTYwLjAiIHJ4PSIxNCIgZmlsbD0iI0ZCRkJGOSIgc3Ryb2tlPSIjRDNEMUM3IiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iMTEzNy4zIiB5PSIyNzYuMCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuKRoiByZXN0b3JlIGMxIOS5i+WQjjwvdGV4dD4KPHRleHQgeD0iMTEzNy4zIiB5PSIyOTguMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9InN0YXJ0Ij7mlLnnlKggYzEg55qE5bGC5riF5Y2V77yM5paw5bu656m65YaZ5bGCIFczPC90ZXh0Pgo8bGluZSB4MT0iNDg2LjciIHkxPSIzOTQuMCIgeDI9IjU3Ni43IiB5Mj0iMzk0LjAiIHN0cm9rZT0iIzVGNUU1QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG1hcmtlci1lbmQ9InVybCgjYXItZmxvdykiLz4KPHRleHQgeD0iNTMxLjciIHk9IjM4MC4wIiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmNoZWNrcG9pbnQ8L3RleHQ+Cjx0ZXh0IHg9IjUzMS43IiB5PSI0MjAuMCIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjNUY1RTVBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jMTwvdGV4dD4KPGxpbmUgeDE9IjEwMjEuMyIgeTE9IjM5NC4wIiB4Mj0iMTExMS4zIiB5Mj0iMzk0LjAiIHN0cm9rZT0iIzVGNUU1QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG1hcmtlci1lbmQ9InVybCgjYXItZmxvdykiLz4KPHRleHQgeD0iMTA2Ni4zIiB5PSIzODAuMCIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjNUY1RTVBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5yZXN0b3JlPC90ZXh0Pgo8dGV4dCB4PSIxMDY2LjMiIHk9IjQyMC4wIiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmMxPC90ZXh0Pgo8dGV4dCB4PSI2OC4wIiB5PSIzMjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjNUY1RTVBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPm8uY2FjaGUg4oaSIOW9k+WJjea0u+WGmeWxgjwvdGV4dD4KPHJlY3QgeD0iNjguMCIgeT0iMzQwLjAiIHdpZHRoPSIzOTQuNyIgaGVpZ2h0PSI2NC4wIiByeD0iMTAiIGZpbGw9IiNGN0Y2RjIiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHRleHQgeD0iMjY1LjMiIHk9IjM2NC40IiBmb250LXNpemU9IjE2LjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlcxPC90ZXh0Pgo8dGV4dCB4PSIyNjUuMyIgeT0iMzkyLjMiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM1RjVFNUEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWdlyAxMDAgPSBC77yb5omA5pyJ5YaZ5YWl6YO96L+b6L+Z6YeMPC90ZXh0Pgo8dGV4dCB4PSI2OC4wIiB5PSI0NDQuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjNUY1RTVBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPm8uZGV2aWNlIOKGkiDlj6ror7vmnaXmupA8L3RleHQ+CjxyZWN0IHg9IjY4LjAiIHk9IjQ1Ni4wIiB3aWR0aD0iMzk0LjciIGhlaWdodD0iNjQuMCIgcng9IjEwIiBmaWxsPSIjRjdGNkYyIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMS4yIi8+Cjx0ZXh0IHg9IjI2NS4zIiB5PSI0ODAuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7mqKHmnb8gcm9vdGZzPC90ZXh0Pgo8dGV4dCB4PSIyNjUuMyIgeT0iNTA4LjMiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM1RjVFNUEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWdlyAxMDAgPSBBPC90ZXh0Pgo8dGV4dCB4PSI2OC4wIiB5PSI1NTAuMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij7or7vlnZcgMTAw77yaVzEg5L2N5Zu+5Li6IDEg4oaSIEI8L3RleHQ+CjxyZWN0IHg9IjY4LjAiIHk9IjU3NC4wIiB3aWR0aD0iMzk0LjciIGhlaWdodD0iMTIwLjAiIHJ4PSIxMCIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjQjRCMkE5IiBzdHJva2Utd2lkdGg9IjEuMiIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0Ii8+Cjx0ZXh0IHg9IjI2NS4zIiB5PSI2MjYuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7ov5jmsqHmnIkgTGF5ZXJTdGFjazwvdGV4dD4KPHRleHQgeD0iMjY1LjMiIHk9IjY1NC4zIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7mtLvlhpnlsYLmsqHmnInor6XlnZflsLHnm7TmjqXor7vmqKHmnb88L3RleHQ+Cjx0ZXh0IHg9IjYwMi43IiB5PSIzMjguMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjNUY1RTVBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPm8uY2FjaGUg4oaSIOW9k+WJjea0u+WGmeWxgjwvdGV4dD4KPHJlY3QgeD0iNjAyLjciIHk9IjM0MC4wIiB3aWR0aD0iMzk0LjciIGhlaWdodD0iNjQuMCIgcng9IjEwIiBmaWxsPSIjRjdGNkYyIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMS4yIi8+Cjx0ZXh0IHg9IjgwMC4wIiB5PSIzNjQuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XMu+8iOaOpeabv+aXtuaYr+aWsOW7uueahOepuuaWh+S7tu+8iTwvdGV4dD4KPHRleHQgeD0iODAwLjAiIHk9IjM5Mi4zIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7kuYvlkI7lhpnlhaXvvJrlnZcgMTAwID0gQzwvdGV4dD4KPHRleHQgeD0iNjAyLjciIHk9IjQ0NC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+by5kZXZpY2Ug4oaSIExheWVyU3RhY2vvvIhjMSDnmoTlsYLmuIXljZXvvIk8L3RleHQ+CjxyZWN0IHg9IjYwMi43IiB5PSI0NTYuMCIgd2lkdGg9IjM5NC43IiBoZWlnaHQ9IjE2Mi4wIiByeD0iMTAiIGZpbGw9IiNGRkZGRkYiIHN0cm9rZT0iIzFEOUU3NSIgc3Ryb2tlLXdpZHRoPSIxLjQiLz4KPHJlY3QgeD0iNjE0LjciIHk9IjQ2OC4wIiB3aWR0aD0iMzcwLjciIGhlaWdodD0iNTguMCIgcng9IjEwIiBmaWxsPSIjRTFGNUVFIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMS4yIi8+Cjx0ZXh0IHg9IjgwMC4wIiB5PSI0ODkuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XMe+8iOWwgeWtmOWxgu+8iTwvdGV4dD4KPHRleHQgeD0iODAwLjAiIHk9IjUxNy4zIiBmb250LXNpemU9IjE0IiBmaWxsPSIjMEY2RTU2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lnZcgMTAwID0gQu+8m+S4jeWGjeaOpeaUtuato+W4uOWGmeWFpTwvdGV4dD4KPHJlY3QgeD0iNjE0LjciIHk9IjUzNi4wIiB3aWR0aD0iMzcwLjciIGhlaWdodD0iNTguMCIgcng9IjEwIiBmaWxsPSIjRjdGNkYyIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMS4yIi8+Cjx0ZXh0IHg9IjgwMC4wIiB5PSI1NTcuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7mqKHmnb8gcm9vdGZzPC90ZXh0Pgo8dGV4dCB4PSI4MDAuMCIgeT0iNTg1LjMiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM1RjVFNUEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWdlyAxMDAgPSBBPC90ZXh0Pgo8dGV4dCB4PSI2MDIuNyIgeT0iNjQ4LjAiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+6K+75Z2XIDEwMO+8mlcyIOaciSDihpIgQ++8iOaUueaIkCBDIOS5i+WJjeS7jiBXMSDor7sgQu+8iTwvdGV4dD4KPHJlY3QgeD0iNjAyLjciIHk9IjY3Mi4wIiB3aWR0aD0iMzk0LjciIGhlaWdodD0iMTIwLjAiIHJ4PSIxMCIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjEuMiIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0Ii8+Cjx0ZXh0IHg9IjgwMC4wIiB5PSI3MTMuOSIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lsIHlrZjmlofku7bnp7vov5sgbGF5ZXJzLzwvdGV4dD4KPHRleHQgeD0iODAwLjAiIHk9Ijc0MS44IiBmb250LXNpemU9IjE0IiBmaWxsPSIjMEY2RTU2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5yZXN1bWUg5LmL5ZCOIHJlbmFtZe+8m+WQjOS4gOaWh+S7tuezu+e7n+WGhSBpbm9kZSDkuI3lj5jvvIzmtLs8L3RleHQ+Cjx0ZXh0IHg9IjgwMC4wIiB5PSI3NjIuOCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzBGNkU1NiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+552A55qEIG1tYXAg57un57ut5pyJ5pWIPC90ZXh0Pgo8dGV4dCB4PSIxMTM3LjMiIHk9IjMyOC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+by5jYWNoZSDihpIg5b2T5YmN5rS75YaZ5bGCPC90ZXh0Pgo8cmVjdCB4PSIxMTM3LjMiIHk9IjM0MC4wIiB3aWR0aD0iMzk0LjciIGhlaWdodD0iNjQuMCIgcng9IjEwIiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMS4yIiBzdHJva2UtZGFzaGFycmF5PSI2IDQiLz4KPHRleHQgeD0iMTMzNC43IiB5PSIzNjQuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XM++8iOaWsOW7uueahOepuuaWh+S7tu+8iTwvdGV4dD4KPHRleHQgeD0iMTMzNC43IiB5PSIzOTIuMyIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5ZCO57ut5paw5YaZ5YWl55qE5L2N572uPC90ZXh0Pgo8dGV4dCB4PSIxMTM3LjMiIHk9IjQ0NC4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+by5kZXZpY2Ug4oaSIExheWVyU3RhY2vvvIhjMSDnmoTlsYLmuIXljZXvvIk8L3RleHQ+CjxyZWN0IHg9IjExMzcuMyIgeT0iNDU2LjAiIHdpZHRoPSIzOTQuNyIgaGVpZ2h0PSIxNjIuMCIgcng9IjEwIiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMS40Ii8+CjxyZWN0IHg9IjExNDkuMyIgeT0iNDY4LjAiIHdpZHRoPSIzNzAuNyIgaGVpZ2h0PSI1OC4wIiByeD0iMTAiIGZpbGw9IiNFMUY1RUUiIHN0cm9rZT0iIzFEOUU3NSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHRleHQgeD0iMTMzNC43IiB5PSI0ODkuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XMe+8iOWwgeWtmOWxgu+8iTwvdGV4dD4KPHRleHQgeD0iMTMzNC43IiB5PSI1MTcuMyIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzBGNkU1NiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5Z2XIDEwMCA9IELvvJvkuI3lho3mjqXmlLbmraPluLjlhpnlhaU8L3RleHQ+CjxyZWN0IHg9IjExNDkuMyIgeT0iNTM2LjAiIHdpZHRoPSIzNzAuNyIgaGVpZ2h0PSI1OC4wIiByeD0iMTAiIGZpbGw9IiNGN0Y2RjIiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHRleHQgeD0iMTMzNC43IiB5PSI1NTcuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7mqKHmnb8gcm9vdGZzPC90ZXh0Pgo8dGV4dCB4PSIxMzM0LjciIHk9IjU4NS4zIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lnZcgMTAwID0gQTwvdGV4dD4KPHRleHQgeD0iMTEzNy4zIiB5PSI2NDguMCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij7or7vlnZcgMTAw77yaVzMg5rKh5pyJIOKGkiDku44gVzEg6K+7IEI8L3RleHQ+CjxyZWN0IHg9IjExMzcuMyIgeT0iNjcyLjAiIHdpZHRoPSIxOTEuMyIgaGVpZ2h0PSIxMjAuMCIgcng9IjEwIiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNEODVBMzAiIHN0cm9rZS13aWR0aD0iMS4yIiBzdHJva2UtZGFzaGFycmF5PSI2IDQiLz4KPHRleHQgeD0iMTIzMy4wIiB5PSI3MTMuOSIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjNzEyQjEzIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7ml6flhpnlsYIgVzI8L3RleHQ+Cjx0ZXh0IHg9IjEyMzMuMCIgeT0iNzQxLjgiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTNDMUQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkNsb3NlKCnvvJrop6PmmKDlsITvvIzov57mloc8L3RleHQ+Cjx0ZXh0IHg9IjEyMzMuMCIgeT0iNzYyLjgiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTNDMUQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuS7tuS4gOi1t+WIoDwvdGV4dD4KPHJlY3QgeD0iMTM0MC43IiB5PSI2NzIuMCIgd2lkdGg9IjE5MS4zIiBoZWlnaHQ9IjEyMC4wIiByeD0iMTAiIGZpbGw9IiNGRkZGRkYiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiIHN0cm9rZS1kYXNoYXJyYXk9IjYgNCIvPgo8dGV4dCB4PSIxNDM2LjMiIHk9IjcxMy45IiBmb250LXNpemU9IjE2LjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuaXp+WxguagiDwvdGV4dD4KPHRleHQgeD0iMTQzNi4zIiB5PSI3NDEuOCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Q2xvc2UoKe+8muWPquino+aYoOWwhO+8jOaWhzwvdGV4dD4KPHRleHQgeD0iMTQzNi4zIiB5PSI3NjIuOCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5Lu255WZ57uZIHN0b3JlPC90ZXh0Pgo8cmVjdCB4PSI0OC4wIiB5PSI4MjAuMCIgd2lkdGg9IjE1MDQuMCIgaGVpZ2h0PSI0MC4wIiByeD0iOCIgZmlsbD0iI0Y3RjZGMiIgc3Ryb2tlPSIjQjRCMkE5IiBzdHJva2Utd2lkdGg9IjAuOCIvPgo8dGV4dCB4PSI4MDAuMCIgeT0iODQ2LjAiIGZvbnQtc2l6ZT0iMTQuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5Lik5Liq5pON5L2c6YO95Zyo6Jma5py65pqC5YGc5pyf6Ze05YWI5Yi35bGP6Zqc77yIQkxLRkxTQlVG77yJ5YaN5o2i5oyH6ZKI77ybTkJEIGRpc3BhdGNoZXIg5omL6YeM55qEICpPdmVybGF5IOaMh+mSiOOAgS9kZXYvdmRh44CBL2Rldi9uYmRYIOmDveS4jeWPmDwvdGV4dD4KPGNpcmNsZSBjeD0iNjMiIGN5PSI5MDYiIHI9IjE1IiBmaWxsPSIjMkMyQzJBIi8+Cjx0ZXh0IHg9IjYzLjAiIHk9IjkxMS41IiBmb250LXNpemU9IjE2IiBmaWxsPSIjRkZGRkZGIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yPC90ZXh0Pgo8dGV4dCB4PSI5MC4wIiB5PSI5MTMuMCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij7liKDpmaQgY2hlY2twb2ludO+8muWFiOeci+WTquS6m+WxguS7jeiiq+W8leeUqDwvdGV4dD4KPHRleHQgeD0iNDcxLjgiIHk9IjkxMi4wIiBmb250LXNpemU9IjE0LjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJzdGFydCI+wqc0LjIg55qE5L6L5a2Q77yM5bCa5pyq5Y+R55Sf5bGC5ZCI5bm2PC90ZXh0Pgo8cmVjdCB4PSI0OC4wIiB5PSI5NDguMCIgd2lkdGg9IjYwMC4wIiBoZWlnaHQ9IjI1MC4wIiByeD0iMTQiIGZpbGw9IiNGQkZCRjkiIHN0cm9rZT0iI0QzRDFDNyIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjY4LjAiIHk9Ijk3Ni4wIiBmb250LXNpemU9IjE2IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuWIoOmZpOWJjTwvdGV4dD4KPHRleHQgeD0iNDEwLjUiIHk9Ijk3Ni4wIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XMTwvdGV4dD4KPHRleHQgeD0iNTU1LjUiIHk9Ijk3Ni4wIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XMjwvdGV4dD4KPHRleHQgeD0iNjguMCIgeT0iMTAxMC4wIiBmb250LXNpemU9IjE0LjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+YzEg55qE6KeG5Zu+PC90ZXh0Pgo8dGV4dCB4PSIxNDMuMSIgeT0iMTAxMC4wIiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJzdGFydCI+RW50cnkuUm9vdGZzPC90ZXh0Pgo8cmVjdCB4PSIzNDguMCIgeT0iOTkyLjAiIHdpZHRoPSIxMjUuMCIgaGVpZ2h0PSIzNC4wIiByeD0iNiIgZmlsbD0iI0UxRjVFRSIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iNDEwLjUiIHk9IjEwMTUuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7liJflh7o8L3RleHQ+Cjx0ZXh0IHg9IjU1NS41IiB5PSIxMDE1LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+4oCUPC90ZXh0Pgo8dGV4dCB4PSI2OC4wIiB5PSIxMDU2LjAiIGZvbnQtc2l6ZT0iMTQuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5jMiDnmoTop4blm748L3RleHQ+Cjx0ZXh0IHg9IjE0My4xIiB5PSIxMDU2LjAiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5FbnRyeS5Sb290ZnM8L3RleHQ+CjxyZWN0IHg9IjM0OC4wIiB5PSIxMDM4LjAiIHdpZHRoPSIxMjUuMCIgaGVpZ2h0PSIzNC4wIiByeD0iNiIgZmlsbD0iI0UxRjVFRSIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iNDEwLjUiIHk9IjEwNjEuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7liJflh7o8L3RleHQ+CjxyZWN0IHg9IjQ5My4wIiB5PSIxMDM4LjAiIHdpZHRoPSIxMjUuMCIgaGVpZ2h0PSIzNC4wIiByeD0iNiIgZmlsbD0iI0UxRjVFRSIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iNTU1LjUiIHk9IjEwNjEuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7liJflh7o8L3RleHQ+Cjx0ZXh0IHg9IjY4LjAiIHk9IjExMDIuMCIgZm9udC1zaXplPSIxNC41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPua0u+i0puacrDwvdGV4dD4KPHRleHQgeD0iMTIxLjUiIHk9IjExMDIuMCIgZm9udC1zaXplPSIxMi41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPnJvb3Rmc1N0YXRlLmxheWVyczwvdGV4dD4KPHJlY3QgeD0iMzQ4LjAiIHk9IjEwODQuMCIgd2lkdGg9IjEyNS4wIiBoZWlnaHQ9IjM0LjAiIHJ4PSI2IiBmaWxsPSIjRTFGNUVFIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI0MTAuNSIgeT0iMTEwNy4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWIl+WHujwvdGV4dD4KPHJlY3QgeD0iNDkzLjAiIHk9IjEwODQuMCIgd2lkdGg9IjEyNS4wIiBoZWlnaHQ9IjM0LjAiIHJ4PSI2IiBmaWxsPSIjRTFGNUVFIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI1NTUuNSIgeT0iMTEwNy4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWIl+WHujwvdGV4dD4KPGxpbmUgeDE9IjY0IiB5MT0iMTEyOCIgeDI9IjYzMiIgeTI9IjExMjgiIHN0cm9rZT0iI0QzRDFDNyIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjY4LjAiIHk9IjExNTYuMCIgZm9udC1zaXplPSIxNC41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuW8leeUqOaVsDwvdGV4dD4KPHRleHQgeD0iNDEwLjUiIHk9IjExNTcuMCIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MzwvdGV4dD4KPHRleHQgeD0iNTU1LjUiIHk9IjExNTcuMCIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MjwvdGV4dD4KPHJlY3QgeD0iOTUyLjAiIHk9Ijk0OC4wIiB3aWR0aD0iNjAwLjAiIGhlaWdodD0iMjUwLjAiIHJ4PSIxNCIgZmlsbD0iI0ZCRkJGOSIgc3Ryb2tlPSIjRDNEMUM3IiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iOTcyLjAiIHk9Ijk3Ni4wIiBmb250LXNpemU9IjE2IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuWIoOmZpCBjMSDkuYvlkI48L3RleHQ+Cjx0ZXh0IHg9IjEzMTQuNSIgeT0iOTc2LjAiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlcxPC90ZXh0Pgo8dGV4dCB4PSIxNDU5LjUiIHk9Ijk3Ni4wIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XMjwvdGV4dD4KPHRleHQgeD0iOTcyLjAiIHk9IjEwMTAuMCIgZm9udC1zaXplPSIxNC41IiBmaWxsPSIjODg4NzgwIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPmMxIOeahOinhuWbvjwvdGV4dD4KPHRleHQgeD0iMTA0Ny4xIiB5PSIxMDEwLjAiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5FbnRyeS5Sb290ZnM8L3RleHQ+CjxyZWN0IHg9IjEyNTIuMCIgeT0iOTkyLjAiIHdpZHRoPSIxMjUuMCIgaGVpZ2h0PSIzNC4wIiByeD0iNiIgZmlsbD0iI0ZGRkZGRiIgc3Ryb2tlPSIjRDg1QTMwIiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1kYXNoYXJyYXk9IjQgNCIvPgo8dGV4dCB4PSIxMzE0LjUiIHk9IjEwMTUuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjNzEyQjEzIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7iiJIxPC90ZXh0Pgo8dGV4dCB4PSIxNDU5LjUiIHk9IjEwMTUuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7igJQ8L3RleHQ+Cjx0ZXh0IHg9Ijk3Mi4wIiB5PSIxMDU2LjAiIGZvbnQtc2l6ZT0iMTQuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5jMiDnmoTop4blm748L3RleHQ+Cjx0ZXh0IHg9IjEwNDcuMSIgeT0iMTA1Ni4wIiBmb250LXNpemU9IjEyLjUiIGZpbGw9IiM4ODg3ODAiIHRleHQtYW5jaG9yPSJzdGFydCI+RW50cnkuUm9vdGZzPC90ZXh0Pgo8cmVjdCB4PSIxMjUyLjAiIHk9IjEwMzguMCIgd2lkdGg9IjEyNS4wIiBoZWlnaHQ9IjM0LjAiIHJ4PSI2IiBmaWxsPSIjRTFGNUVFIiBzdHJva2U9IiMxRDlFNzUiIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSIxMzE0LjUiIHk9IjEwNjEuMCIgZm9udC1zaXplPSIxMy41IiBmaWxsPSIjMDg1MDQxIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7liJflh7o8L3RleHQ+CjxyZWN0IHg9IjEzOTcuMCIgeT0iMTAzOC4wIiB3aWR0aD0iMTI1LjAiIGhlaWdodD0iMzQuMCIgcng9IjYiIGZpbGw9IiNFMUY1RUUiIHN0cm9rZT0iIzFEOUU3NSIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjE0NTkuNSIgeT0iMTA2MS4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWIl+WHujwvdGV4dD4KPHRleHQgeD0iOTcyLjAiIHk9IjExMDIuMCIgZm9udC1zaXplPSIxNC41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPua0u+i0puacrDwvdGV4dD4KPHRleHQgeD0iMTAyNS41IiB5PSIxMTAyLjAiIGZvbnQtc2l6ZT0iMTIuNSIgZmlsbD0iIzg4ODc4MCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5yb290ZnNTdGF0ZS5sYXllcnM8L3RleHQ+CjxyZWN0IHg9IjEyNTIuMCIgeT0iMTA4NC4wIiB3aWR0aD0iMTI1LjAiIGhlaWdodD0iMzQuMCIgcng9IjYiIGZpbGw9IiNFMUY1RUUiIHN0cm9rZT0iIzFEOUU3NSIgc3Ryb2tlLXdpZHRoPSIxIi8+Cjx0ZXh0IHg9IjEzMTQuNSIgeT0iMTEwNy4wIiBmb250LXNpemU9IjEzLjUiIGZpbGw9IiMwODUwNDEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuWIl+WHujwvdGV4dD4KPHJlY3QgeD0iMTM5Ny4wIiB5PSIxMDg0LjAiIHdpZHRoPSIxMjUuMCIgaGVpZ2h0PSIzNC4wIiByeD0iNiIgZmlsbD0iI0UxRjVFRSIgc3Ryb2tlPSIjMUQ5RTc1IiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iMTQ1OS41IiB5PSIxMTA3LjAiIGZvbnQtc2l6ZT0iMTMuNSIgZmlsbD0iIzA4NTA0MSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5YiX5Ye6PC90ZXh0Pgo8bGluZSB4MT0iOTY4IiB5MT0iMTEyOCIgeDI9IjE1MzYiIHkyPSIxMTI4IiBzdHJva2U9IiNEM0QxQzciIHN0cm9rZS13aWR0aD0iMSIvPgo8dGV4dCB4PSI5NzIuMCIgeT0iMTE1Ni4wIiBmb250LXNpemU9IjE0LjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJzdGFydCI+5byV55So5pWwPC90ZXh0Pgo8dGV4dCB4PSIxMzE0LjUiIHk9IjExNTcuMCIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MjwvdGV4dD4KPHRleHQgeD0iMTQ1OS41IiB5PSIxMTU3LjAiIGZvbnQtc2l6ZT0iMTgiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjI8L3RleHQ+CjxsaW5lIHgxPSI2NTYuMCIgeTE9IjEwNzMuMCIgeDI9Ijk0Mi4wIiB5Mj0iMTA3My4wIiBzdHJva2U9IiM1RjVFNUEiIHN0cm9rZS13aWR0aD0iMS44IiBtYXJrZXItZW5kPSJ1cmwoI2FyLWZsb3cpIi8+Cjx0ZXh0IHg9Ijc5OS4wIiB5PSIxMDQzLjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmRlbGV0ZUxvY2tlZDwvdGV4dD4KPHRleHQgeD0iNzk5LjAiIHk9IjEwNjEuMCIgZm9udC1zaXplPSIxMyIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5p2h55uu6KeG5Zu+5q+P5bGCIOKIkjE8L3RleHQ+Cjx0ZXh0IHg9Ijc5OS4wIiB5PSIxMDk5LjAiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlcxIOS7jiAzIOWHj+WIsCAyPC90ZXh0Pgo8dGV4dCB4PSI3OTkuMCIgeT0iMTExNy4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jMiDku43opoHku44gVzEg6K+7IEI8L3RleHQ+CjxyZWN0IHg9IjQ4LjAiIHk9IjEyMjIuMCIgd2lkdGg9IjQ2OS4zIiBoZWlnaHQ9IjExMC4wIiByeD0iMTAiIGZpbGw9IiNGN0Y2RjIiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHJlY3QgeD0iNjAuMCIgeT0iMTIzMy4wIiB3aWR0aD0iMTIyLjYiIGhlaWdodD0iMjIuMCIgcng9IjExIiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMC44Ii8+Cjx0ZXh0IHg9IjEyMS4zIiB5PSIxMjQ4LjUiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI1MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlN0b3JlLmxheWVyUmVmczwvdGV4dD4KPHRleHQgeD0iMjgyLjciIHk9IjEyODQuNCIgZm9udC1zaXplPSIxNi41IiBmaWxsPSIjMkMyQzJBIiBmb250LXdlaWdodD0iNjAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lvJXnlKjmlbDlvZLpm7Y8L3RleHQ+Cjx0ZXh0IHg9IjI4Mi43IiB5PSIxMzEyLjMiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM1RjVFNUEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuayoeacieS7u+S9leinhuWbvuWSjOa0u+i0puacrOWGjeWIl+WHuui/meS4gOWxgjwvdGV4dD4KPGxpbmUgeDE9IjUyMS4zIiB5MT0iMTI3Ny4wIiB4Mj0iNTU5LjMiIHkyPSIxMjc3LjAiIHN0cm9rZT0iIzVGNUU1QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG1hcmtlci1lbmQ9InVybCgjYXItZmxvdykiLz4KPHJlY3QgeD0iNTY1LjMiIHk9IjEyMjIuMCIgd2lkdGg9IjQ2OS4zIiBoZWlnaHQ9IjExMC4wIiByeD0iMTAiIGZpbGw9IiNGN0Y2RjIiIHN0cm9rZT0iI0I0QjJBOSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KPHJlY3QgeD0iNTc3LjMiIHk9IjEyMzMuMCIgd2lkdGg9IjUyLjciIGhlaWdodD0iMjIuMCIgcng9IjExIiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMC44Ii8+Cjx0ZXh0IHg9IjYwMy43IiB5PSIxMjQ4LjUiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM1RjVFNUEiIGZvbnQtd2VpZ2h0PSI1MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnN0b3JlPC90ZXh0Pgo8dGV4dCB4PSI4MDAuMCIgeT0iMTI4NC40IiBmb250LXNpemU9IjE2LjUiIGZpbGw9IiMyQzJDMkEiIGZvbnQtd2VpZ2h0PSI2MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPui/myByZWNsYWlt77yM6ZSB5aSW5Yig6ZmkPC90ZXh0Pgo8dGV4dCB4PSI4MDAuMCIgeT0iMTMxMi4zIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNUY1RTVBIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7lsYLmlofku7bov57lkIwgLm1ldGEg5LiA6LW3PC90ZXh0Pgo8bGluZSB4MT0iMTAzOC43IiB5MT0iMTI3Ny4wIiB4Mj0iMTA3Ni43IiB5Mj0iMTI3Ny4wIiBzdHJva2U9IiM1RjVFNUEiIHN0cm9rZS13aWR0aD0iMS44IiBtYXJrZXItZW5kPSJ1cmwoI2FyLWZsb3cpIi8+CjxyZWN0IHg9IjEwODIuNyIgeT0iMTIyMi4wIiB3aWR0aD0iNDY5LjMiIGhlaWdodD0iMTEwLjAiIHJ4PSIxMCIgZmlsbD0iI0Y3RjZGMiIgc3Ryb2tlPSIjQjRCMkE5IiBzdHJva2Utd2lkdGg9IjEuMiIvPgo8cmVjdCB4PSIxMDk0LjciIHk9IjEyMzMuMCIgd2lkdGg9Ijk3LjUiIGhlaWdodD0iMjIuMCIgcng9IjExIiBmaWxsPSIjRkZGRkZGIiBzdHJva2U9IiNCNEIyQTkiIHN0cm9rZS13aWR0aD0iMC44Ii8+Cjx0ZXh0IHg9IjExNDMuNCIgeT0iMTI0OC41IiBmb250LXNpemU9IjEyIiBmaWxsPSIjNUY1RTVBIiBmb250LXdlaWdodD0iNTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ob3N0IOaWh+S7tuezu+e7nzwvdGV4dD4KPHRleHQgeD0iMTMxNy4zIiB5PSIxMjg0LjQiIGZvbnQtc2l6ZT0iMTYuNSIgZmlsbD0iIzJDMkMyQSIgZm9udC13ZWlnaHQ9IjYwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5pWw5o2u5Z2X55yf5q2j6YeK5pS+PC90ZXh0Pgo8dGV4dCB4PSIxMzE3LjMiIHk9IjEzMTIuMyIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzVGNUU1QSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+6L+Q6KGM5Lit55qE5penIExheWVyU3RhY2sg6Iul5LuN5pyJIG1tYXDvvIzopoHnrYnmmKDlsITop6PpmaQ8L3RleHQ+CjxsaW5lIHgxPSI0OCIgeTE9IjEzNjgiIHgyPSIxNTUyIiB5Mj0iMTM2OCIgc3Ryb2tlPSIjRTVFM0RCIiBzdHJva2Utd2lkdGg9IjEiLz4KPHRleHQgeD0iNDguMCIgeT0iMTM5NC4wIiBmb250LXNpemU9IjEzIiBmaWxsPSIjODg4NzgwIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuazqO+8muWxguagiOS4jeaYryBjaGVja3BvaW50IOagke+8jOaJgOS7peS4jeiDveKAnOWIoOS4gOS4quWPtuWtkOWwseWIoOWug+WwgeWtmOeahOmCo+S4gOWxguKAne+8mmFwcGVuZExvY2tlZCDkuI3nnIsgUGFyZW50SUTvvIzlhajph4/moLnnmoTop4blm77kuZ/lj6DlnKjmraTliY3mr4/kuIDlsYLkuIrjgILot5/ouKrlhbPpl63ml7blsYLmlofku7bpmo8gY2hlY2twb2ludCDmrKHmlbDntK/np6/vvIznm7TliLAgcmVzdG9yZSDmm7/mjaLmtLvmoIjmiJbmspnnrrHplIDmr4HvvJvlsYLlkIjlubbop4Egwqc144CCPC90ZXh0Pgo8L3N2Zz4="><figcaption><b>图 7-2</b>checkpoint、restore、删除时层栈怎么变</figcaption></figure>
 
 <h3 id="d07-22-暂停期间具体做什么">2.2 暂停期间具体做什么</h3>
-<p><code>NBDProvider.SealLayer</code>（<code>rootfs/nbd.go:141</code>）在同一个 Overlay 上另开一条路径，在虚机暂停期间做三步：</p>
-<div class="hl"><pre><span></span><code><span class="nx">o</span><span class="p">.</span><span class="nx">sync</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span><span class="w">                                                             </span><span class="c1">// ① 刷屏障：ioctl(BLKFLSBUF) + flush</span>
-<span class="nx">newCache</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">block</span><span class="p">.</span><span class="nx">NewCache</span><span class="p">(</span><span class="nx">size</span><span class="p">,</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">blockSize</span><span class="p">,</span><span class="w"> </span><span class="nx">newCachePath</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">)</span><span class="w">   </span><span class="c1">// ② 新空写层：open + truncate（稀疏）+ mmap</span>
-<span class="nx">sealed</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">overlay</span><span class="p">.</span><span class="nx">Seal</span><span class="p">(</span><span class="nx">newCache</span><span class="p">)</span><span class="w">                                   </span><span class="c1">// ③ 旧写层进层栈，接替为当前活写层</span>
+<p><code>NBDProvider.SealLayer</code>（<code>rootfs/nbd.go:142</code>）在同一个 Overlay 上另开一条路径，在虚机暂停期间做三步：</p>
+<div class="hl"><pre><span></span><code><span class="nx">flush</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">nbdPath</span><span class="p">)</span><span class="w">                                                     </span><span class="c1">// ① 刷屏障：对 NBD 设备 fsync（计时 seal_fsync）</span>
+<span class="nx">newCache</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">block</span><span class="p">.</span><span class="nx">NewCache</span><span class="p">(</span><span class="nx">size</span><span class="p">,</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">blockSize</span><span class="p">,</span><span class="w"> </span><span class="nx">newCachePath</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">)</span><span class="w">   </span><span class="c1">// ② 新空写层：open + truncate（稀疏）+ mmap（seal_new_layer）</span>
+<span class="nx">sealed</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">overlay</span><span class="p">.</span><span class="nx">Seal</span><span class="p">(</span><span class="nx">newCache</span><span class="p">)</span><span class="w">                                   </span><span class="c1">// ③ 旧写层进层栈，接替为当前活写层（seal_swap）</span>
 </code></pre></div>
 
 <p>这三步不逐块复制旧写层的数据来生成新层，但同步仍可能产生 I/O，登记块归属也需要计算。封存文件移入 store 在恢复运行之后进行。</p>
 <h3 id="d07-23-为什么先暂停再做同步">2.3 为什么先暂停，再做同步</h3>
-<p><code>BLKFLSBUF</code> 让内核把这个块设备上缓冲的写全部推下去，经 NBD dispatcher 落进写层的 mmap。</p>
+<p>对设备 <code>fsync</code> 让内核把这个块设备上缓冲的写全部推下去，经 NBD dispatcher 落进写层的 mmap。NBD 设备没有声明支持刷盘命令，<code>fsync</code> 就是"把脏页作为 NBD 写请求全部发下去并等应答"；dispatcher 在 <code>WriteAt</code> 成功之后才应答，所以 <code>fsync</code> 返回时数据已在写层里（<a href="#d30-22-读代码发现的待验证项">第 30 章 §2.2</a>）。</p>
 <ul>
 <li>它<strong>保证</strong>：内核块层已经接受的每一个写，都到了写层里；</li>
 <li>它<strong>不保证</strong>：guest 停止产生新的写。</li>
 </ul>
 <p>所以调用契约里明确写着<strong>虚机必须已经暂停</strong>：刷屏障处理内核块层已接受、尚未下发的写，暂停处理 guest 之后还要发出的写，两者缺一不可。
 <code>SealLayer</code> 与 <code>ResetView</code> 的注释都以这个前置条件开头 —— 它是调用方的责任，不是这个函数能自己保证的事。</p>
+<p><strong>封层保留宿主页缓存，换视图丢掉。</strong> 宿主内核为 <code>/dev/nbdX</code> 缓存着 guest 读写过的块。封层只改变一个块存放在哪个文件里，不改变磁盘读出来的内容：Overlay 先读新的空写层，再读刚封存的那一层，所以缓存里的每一页仍等于经 NBD 读出来的内容，留着是对的。restore 的 <code>ResetView</code> 换掉整个视图，内容变了，它照旧先做 <code>ioctl(BLKFLSBUF)</code>（写回并作废这个设备的全部页缓存）再 <code>fsync</code>；关闭沙箱时也一样。2026-11-24 之前封层也做 <code>BLKFLSBUF</code>，在 920B 上每次有写盘的 checkpoint 要在暂停窗口里多花 10～13 ms（约 0.17 ms / 缓存 MiB），guest 下一次读这些块还要重新经 NBD 取；改成只 <code>fsync</code> 后 <code>seal</code> 约 0.3 ms，数据见 <a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a>。<code>CHECKPOINT_SEAL_DROP_CACHE=true</code> 恢复旧行为（<a href="#d26">第 26 章</a>）。</p>
 <h3 id="d07-24-代码怎样接替活写层">2.4 代码怎样接替活写层</h3>
 <p>下面的 <code>o.cache</code> 指向当前活写层的 Cache，<code>o.device</code> 指向活写层没有该块时使用的只读数据来源。首次封存前，后者是模板；首次封存后，它是包含模板和 W1 的 LayerStack。</p>
 <p><code>Overlay.Seal</code>（<code>block/overlay.go:128</code>）持 Overlay 的独占锁：</p>
@@ -7308,12 +7314,12 @@ Store.mu           ← 短时间持有（一次 map 读写）
 <tbody>
 <tr>
 <td><code>SealLayer</code></td>
-<td>虚机暂停 + NBD <code>BLKFLSBUF</code> 刷屏障</td>
+<td>虚机暂停 + 对 NBD 设备 <code>fsync</code> 的刷屏障（保留宿主页缓存）</td>
 <td>调用方（<code>CheckpointToFiles</code>）+ 函数自己刷屏障</td>
 </tr>
 <tr>
 <td><code>ResetView</code></td>
-<td>同上</td>
+<td>虚机暂停 + NBD <code>BLKFLSBUF</code> 刷屏障（写回并作废宿主页缓存，视图内容变了）</td>
 <td>调用方（<code>RollbackInPlace</code>）+ 函数自己刷屏障</td>
 </tr>
 <tr>
@@ -12451,7 +12457,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li><strong>宿主上这个块设备的页缓存。</strong> guest 调 <code>fsync</code> / <code>sync</code>，或者 guest 内核按自己的写回周期写回时，数据经 virtio-blk 交给 Firecracker。Firecracker 用普通方式打开这个块设备（<code>DiskProperties::open_file</code> 只设读写，没有 <code>O_DIRECT</code>），所以数据写进宿主内核里这个设备的页缓存就算完成。orchestrator 配置根盘时没有设 <code>cache_type</code>（<code>setRootfsDrive</code>），按 Firecracker 默认的 <code>Unsafe</code>，不向 guest 提供 FLUSH，guest 的 <code>sync</code> 不会传到宿主。</li>
 <li><strong>写层。</strong> 宿主内核按自己的写回周期，或者有人对这个设备做 <code>fsync</code> 时，才把这些脏页经 NBD 送给 orchestrator。</li>
 </ol>
-<p><strong>checkpoint 要求第 3 步做完。</strong> checkpoint 在 vCPU 暂停之后调 Firecracker 的快照接口；Firecracker 保存块设备状态前做 <code>drain_and_flush</code>，同步引擎下就是对这个设备 <code>sync_all</code>（<code>io/sync_io.rs</code> 的 <code>flush</code>），把第 2 处还没写回的脏页全部经 NBD 推进写层。这一步计入 <code>snapshot</code> 段，发生在暂停窗口里。随后 <code>seal</code> 再做一次 <code>BLKFLSBUF</code> 和刷盘屏障，换上新的写层（<code>rootfs/nbd.go</code> 的 <code>SealLayer</code>）。这样写层和内存快照对应同一时刻。</p>
+<p><strong>checkpoint 要求第 3 步做完。</strong> checkpoint 在 vCPU 暂停之后调 Firecracker 的快照接口；Firecracker 保存块设备状态前做 <code>drain_and_flush</code>，同步引擎下就是对这个设备 <code>sync_all</code>（<code>io/sync_io.rs</code> 的 <code>flush</code>），把第 2 处还没写回的脏页全部经 NBD 推进写层。这一步计入 <code>snapshot</code> 段，发生在暂停窗口里。随后 <code>seal</code> 再做一次刷盘屏障，换上新的写层（<code>rootfs/nbd.go</code> 的 <code>SealLayer</code>）。这样写层和内存快照对应同一时刻。本节 950 数据与下面 2026-11-18 的 920B 实验用的都是改进前的 orchestrator：没有暂停前预刷，<code>seal</code> 的屏障是 <code>BLKFLSBUF</code>（写回并作废设备页缓存）加 <code>fsync</code>。2026-11-24 的两处改进见本节末尾。</p>
 <p>所以，一份文件数据在 checkpoint 时处在哪一处，决定了它在 checkpoint 里花多少时间：</p>
 <div class="tw"><table>
 <thead>
@@ -12597,6 +12603,74 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li>宿主内核写回的时机：数据进入宿主页缓存后约 30 s（<code>dirty_expire_centisecs</code> = 3000）。不 <code>sync</code> 的数据先在 guest 里停约 30 s，再进宿主页缓存。所以写完 40 s 时，<code>fsync</code> 过的数据已经写回；没 <code>fsync</code> 的数据按这两个周期应当还在宿主页缓存里，但 F 组实测 NBD 写出也是 0，提前写回的原因本轮没有查。</li>
 </ul>
 <p><strong>对测量的含义。</strong> 分档测试的“写完 <code>sync</code> 立刻 checkpoint”是 B 组，文件代价最高；同一个文件，换成 A 组或 E、G 组的时机，checkpoint 时几乎不再为它推送数据。真实负载里两种情况都有：显式 <code>fsync</code> 的程序（包管理器、数据库）写完马上 checkpoint 时接近 B 组；普通写文件、过几十秒才 checkpoint 时接近 A、G 组。所以 §4 的纯文件、混合档给的是文件代价的上界；按典型使用估算时，要按写完是否 <code>fsync</code>、隔多久 checkpoint 选用这张表里对应的组。</p>
+<p><strong>冻结窗口的两处改进（2026-11-23～24，920B）。</strong> 上面的实验指出两笔花在暂停窗口里的时间：B 组那次经 NBD 的推送，和每次 <code>seal</code> 约 9～20 ms。orchestrator 据此改了两处（KASandbox deltabox-dev <code>cecdc67</code>、<code>0ce35c8</code>，已进部署包）：</p>
+<ul>
+<li><strong>暂停之前先预刷根盘</strong>（<code>preflush</code>，开关 <code>CHECKPOINT_PREFLUSH</code>，默认开）：虚机还在运行时对 NBD 设备 <code>fsync</code> 一次，把宿主页缓存里的脏页推进写层，就是把 C 组的宿主 <code>sync</code> 做进 checkpoint 本身。窗口里的快照只需推送预刷期间 guest 新写的部分。</li>
+<li><strong>封层只 <code>fsync</code>，不再 <code>BLKFLSBUF</code></strong>（开关 <code>CHECKPOINT_SEAL_DROP_CACHE</code>，默认关）：把 <code>seal</code> 拆开计时后，它的时间几乎全在 <code>BLKFLSBUF</code> 作废页缓存上，<code>fsync</code>、建新层、换层三步合计不到 0.3 ms。封层不改变磁盘内容，缓存不必丢，理由见 <a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>。</li>
+</ul>
+<p>同一台 920B、同样的方法（64 MiB 文件，每组 5 次另加 1 次预热，p50，单位 ms），依次只差一个开关：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>组</th>
+<th>改进前 frozen</th>
+<th>加预刷 frozen</th>
+<th>再加封层留缓存 frozen</th>
+<th>预刷耗时</th>
+<th><code>seal</code> 改进前 → 留缓存</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>对照：不写文件</td>
+<td>8.7</td>
+<td>8.5</td>
+<td>9.6</td>
+<td>0.0</td>
+<td>0.1 → 0.1</td>
+</tr>
+<tr>
+<td>B <code>fsync</code> + <code>sync</code>，立刻</td>
+<td><strong>86.5</strong></td>
+<td>23.7</td>
+<td><strong>15.1</strong></td>
+<td>43.3～58.2</td>
+<td>12.8 → 0.3</td>
+</tr>
+<tr>
+<td>E <code>fsync</code> + <code>sync</code>，等 40 s</td>
+<td>31.2</td>
+<td>28.8</td>
+<td>32.9</td>
+<td>0.2～1.0</td>
+<td>10.7 → 0.3</td>
+</tr>
+<tr>
+<td>A 不 <code>sync</code>，立刻</td>
+<td>13.9</td>
+<td>13.7</td>
+<td>13.9</td>
+<td>0.0</td>
+<td>0.1 → 0.1</td>
+</tr>
+<tr>
+<td>F 不 <code>sync</code>，等 40 s</td>
+<td>32.3</td>
+<td>29.3</td>
+<td>18.3</td>
+<td>1.2～9.0</td>
+<td>11.7 → 0.4</td>
+</tr>
+</tbody>
+</table></div>
+<p>前两列与后一列分属两轮 A/B（11-23：预刷关 / 开，封层都丢缓存；11-24：预刷都开，封层丢 / 留缓存），<code>seal</code> 一列取自 11-24 那轮。</p>
+<ul>
+<li><strong>B 组冻结窗口从 86.5 ms 降到 15.1 ms。</strong> 推送挪到了窗口外（预刷 43～58 ms，虚机照常运行），<code>seal</code> 不再作废页缓存。客户端墙钟 88.7 → 68.2 ms（11-23 那轮），窗口外的预刷比窗口里同量的推送短约 20 ms，原因本轮没有拆开。</li>
+<li><strong>数据不在宿主页缓存里时，预刷几乎为零</strong>（A、E 组 0～1 ms），这两组的冻结窗口不变。等 40 s 的组 <code>snapshot</code> 两轮都有 40～55 ms 的离群值，frozen 的 p50 跟着跳，要看 <code>seal</code> 一列：凡是写过盘的组都从 10～13 ms 降到 0.3 ms。</li>
+<li><strong>正确性。</strong> 封层留缓存另做了针对性检查：随机写段，checkpoint，guest 丢掉自己的页缓存后读回（这次读走宿主上留下的缓存），再随机 restore 读回、restore 之后再 checkpoint 读回，两轮各 24 次校验，0 次不一致；这个版本在 920B 上跑沙箱级 standard（20261124-101825）全部通过。</li>
+<li><strong>代价。</strong> 根盘的宿主页缓存不再随每次 checkpoint 清掉，留到内核回收或下一次 restore；这是可回收的干净页。预刷让 checkpoint 多一次 <code>fsync</code> 系统调用，没有脏页时几乎为零（对照组 0.0 ms）。</li>
+<li>950 上尚未用改进后的版本重测；本章 §4、§5 的 950 数字都是改进前的。原始输出在工作区 <code>rollback-reports/920b-o1o3-20261123/</code>。</li>
+</ul>
 <h3 id="d18-55-缓存与漂移">5.5 缓存与漂移</h3>
 <p><code>materialize_disk_read_mb</code>、<code>fc_rollback_disk_read_mb</code> 在 1040 次迭代里都没有非零值。三遍 checkpoint 冻结窗口 p50 的末遍 / 首遍比值在 0.91～1.12 之间，没有随遍数变慢的大档；混合 128 MiB 第 2 遍偏低（51.5 ms，另两遍 64.4 / 65.0 ms）。单次 <code>frozen</code> 超过本档中位数两倍的离群点为零。</p>
 <h2 id="d18-6-拟合是趋势不是-p50-保证">6. 拟合是趋势，不是 p50 保证</h2>
@@ -20192,6 +20266,20 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 <td><code>compact_max_per_op</code>、<code>compact_max_per_op_source</code></td>
 </tr>
 <tr>
+<td><code>CHECKPOINT_PREFLUSH</code></td>
+<td>开</td>
+<td><code>strconv.ParseBool</code>；未设为开；解析不了 → WARN，按开</td>
+<td>开：暂停虚机之前先对根盘的 NBD 设备 <code>fsync</code> 一次，把宿主页缓存里的脏页推进写层，暂停窗口里只剩预刷期间新写的部分（计时键 <code>preflush</code>）。失败只打 WARN，checkpoint 照常；关：这段推送全部落在暂停窗口里（<a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a>）</td>
+<td><code>preflush</code>、<code>preflush_source</code></td>
+</tr>
+<tr>
+<td><code>CHECKPOINT_SEAL_DROP_CACHE</code></td>
+<td>关</td>
+<td><code>strconv.ParseBool</code>；未设为关；解析不了 → WARN，按关</td>
+<td>开：封层时对根盘做 <code>BLKFLSBUF</code>，作废宿主页缓存（2026-11-24 之前的行为，暂停窗口里多约 0.17 ms / 缓存 MiB）。关：封层只 <code>fsync</code>，缓存保留；封层不改变磁盘内容，缓存仍然有效（<a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>）。restore 换视图始终作废缓存，不受这个开关影响</td>
+<td><code>seal_drop_cache</code>、<code>seal_drop_cache_source</code></td>
+</tr>
+<tr>
 <td><code>CHECKPOINT_DEBUG_INDEX</code></td>
 <td>关</td>
 <td><code>strconv.ParseBool</code>；未设为关；解析不了 → WARN，按关</td>
@@ -20343,6 +20431,14 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 <tr>
 <td><code>compact_max_per_op</code>、<code>compact_max_per_op_source</code></td>
 <td><code>CHECKPOINT_COMPACT_MAX_PER_OP</code></td>
+</tr>
+<tr>
+<td><code>preflush</code>、<code>preflush_source</code></td>
+<td><code>CHECKPOINT_PREFLUSH</code></td>
+</tr>
+<tr>
+<td><code>seal_drop_cache</code>、<code>seal_drop_cache_source</code></td>
+<td><code>CHECKPOINT_SEAL_DROP_CACHE</code></td>
 </tr>
 <tr>
 <td><code>fault_inject</code></td>
@@ -20568,8 +20664,10 @@ ls<span class="w"> </span>-1v<span class="w"> </span><span class="s2">&quot;</sp
 <p>阶段关系（缩进表示包含，<code>≈</code> 表示另有零碎开销）：</p>
 <div class="hl"><pre><span></span><code>total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
   prepare               ⊃ prepare_lock_wait, prepare_manifest
+  [preflush]                                   （暂停之前，在冻结窗口外）
   checkpoint_to_files   = frozen + seal_move
     frozen              ≈ pause + [save_live_bitmap] + snapshot + seal + resume
+      seal              ≈ seal_fsync + [seal_blkflsbuf] + seal_new_layer + seal_swap
   append_layer          ≈ append_lock_wait + append_merge + append_meta_write + append_serialize + append_header_write
   commit                ≈ commit_files + commit_manifest + commit_lock_wait + commit_index
 </code></pre></div>
@@ -20627,6 +20725,12 @@ ls<span class="w"> </span>-1v<span class="w"> </span><span class="s2">&quot;</sp
 <td>同一值也记入 metrics <code>orchestrator.sandbox.checkpoint.paused.duration</code></td>
 </tr>
 <tr>
+<td><code>preflush</code></td>
+<td>暂停之前对根盘 NBD 设备 <code>fsync</code>，把宿主页缓存里的脏页推进写层</td>
+<td><strong>外</strong>（pause 之前）</td>
+<td><code>CHECKPOINT_PREFLUSH</code> 关时不出现；有多少脏页就推多少，没有脏页时几乎为零</td>
+</tr>
+<tr>
 <td><code>pause</code></td>
 <td>暂停虚机的 FC 调用</td>
 <td>内</td>
@@ -20649,6 +20753,30 @@ ls<span class="w"> </span>-1v<span class="w"> </span><span class="s2">&quot;</sp
 <td>封存 rootfs 写层（换层，不搬数据）</td>
 <td>内</td>
 <td></td>
+</tr>
+<tr>
+<td><code>seal_fsync</code></td>
+<td>封层的刷屏障：对 NBD 设备 <code>fsync</code></td>
+<td>内</td>
+<td>快照已把脏页推完，这里通常不到 0.1 ms</td>
+</tr>
+<tr>
+<td><code>seal_blkflsbuf</code></td>
+<td>作废根盘的宿主页缓存</td>
+<td>内</td>
+<td><strong>只在 <code>CHECKPOINT_SEAL_DROP_CACHE</code> 开时出现</strong>；与缓存页数成正比，920B 约 0.17 ms / MiB</td>
+</tr>
+<tr>
+<td><code>seal_new_layer</code></td>
+<td>建新的空写层（open + truncate + mmap）</td>
+<td>内</td>
+<td></td>
+</tr>
+<tr>
+<td><code>seal_swap</code></td>
+<td>旧写层进层栈、换指针</td>
+<td>内</td>
+<td>与本层块数成正比</td>
 </tr>
 <tr>
 <td><code>resume</code></td>
@@ -22566,7 +22694,7 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 </tbody>
 </table></div>
 <h3 id="d30-22-读代码发现的待验证项">2.2 读代码发现的待验证项</h3>
-<p>下面三项是读代码时发现、还没有量过也没有动过的点。量过之后要么改代码，要么把结论写回对应章节。这些测量任务尚未形成确定的优化结论，先确认运行内核行为并测量耗时与读请求，再决定是否改代码。</p>
+<p>下面三项是读代码时发现的点，2026-11-24 已有结论：V1 改了代码，V2、V3 量过后不改。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -22581,23 +22709,23 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 <tr>
 <td>V1</td>
 <td><strong>checkpoint 封层的刷屏障去掉 <code>BLKFLSBUF</code>，只留 <code>fsync</code></strong></td>
-<td><code>SealLayer</code> 第一步调 <code>sync</code>，先 <code>ioctl(BLKFLSBUF)</code> 再 <code>fsync</code>（<code>rootfs/nbd.go</code> 的 <code>sync</code>）。<code>BLKFLSBUF</code> 除了把缓冲的写推下去，还会丢弃宿主为这个块设备缓存的已读内容。封层前后设备内容不变，这份缓存本来仍然有效；丢掉之后客户机再读这些块，要重新经 NBD 向 orchestrator 取。restore 的视图切换内容确实变了，那里必须丢，不在本项范围</td>
+<td>改前 <code>SealLayer</code> 第一步调 <code>sync</code>，先 <code>ioctl(BLKFLSBUF)</code> 再 <code>fsync</code>（<code>rootfs/nbd.go</code> 的 <code>sync</code>）。<code>BLKFLSBUF</code> 除了把缓冲的写推下去，还会丢弃宿主为这个块设备缓存的已读内容。封层前后设备内容不变，这份缓存本来仍然有效；丢掉之后客户机再读这些块，要重新经 NBD 向 orchestrator 取。restore 的视图切换内容确实变了，那里必须丢，不在本项范围</td>
 <td>① 在运行内核上确认 <code>BLKFLSBUF</code> 是否丢弃读缓存；② 同一沙箱 checkpoint 前后重复读同一批文件，对比读耗时与 NBD 读请求数；③ 改成只 <code>fsync</code> 后重跑，并跑一遍正确性用例</td>
-<td>未验证</td>
+<td><strong>已做（2026-11-24）</strong>：<code>SealLayer</code> 只 <code>fsync</code>、保留宿主页缓存（KASandbox deltabox-dev <code>0ce35c8</code>，已进部署包；<code>CHECKPOINT_SEAL_DROP_CACHE=true</code> 恢复旧行为）。920B 上 <code>seal</code> 10～13 → 0.3 ms，针对性读回校验 0 不一致，沙箱级 standard 通过；见 <a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>、<a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a></td>
 </tr>
 <tr>
 <td>V2</td>
 <td><strong><code>flush</code> 里对同一个描述符连做两次 <code>fsync</code></strong></td>
 <td><code>rootfs/rootfs.go</code> 的 <code>flush</code> 先 <code>syscall.Fsync(fd)</code> 再 <code>file.Sync()</code>，后者也是 <code>fsync</code>，第二次面对的是已经刷空的缓存。上游原有代码，原生 pause 也走这里</td>
 <td><code>seal</code> 段里这一次调用的耗时；预期是固定的系统调用开销，量级很小，不值得单独改，随 V1 一起处理</td>
-<td>未验证</td>
+<td><strong>已量，不改</strong>：封层拆开计时后，这次调用（<code>seal_fsync</code>）在 920B 上 0.02～0.06 ms，两次 <code>fsync</code> 的差别在这个量级以内</td>
 </tr>
 <tr>
 <td>V3</td>
 <td><strong>一次 checkpoint 对 NBD 设备刷两遍</strong></td>
 <td>先是 Firecracker 保存块设备状态前的 <code>prepare_save</code>（同步引擎下是对设备文件 <code>sync_all</code>，<code>devices/virtio/block/virtio/io/mod.rs</code> 的 <code>drain_and_flush</code>），后是 orchestrator 的 <code>SealLayer</code>。两次之间 vCPU 停着、同步引擎没有在途请求、设备只有 Firecracker 一个写入方，所以第二遍没有数据可刷，正确性上一遍就够</td>
 <td>第二遍的耗时。<strong>结论倾向保留</strong>：Firecracker 那一遍失败只打一行日志（<code>device.rs</code> 的 <code>drain_and_flush</code>：<code>Failed to drain ops and flush block data</code>），快照照常继续；orchestrator 这一遍失败会让 checkpoint 报错返回，是唯一带错误检查的一遍，也不依赖 Firecracker 用哪种读写引擎</td>
-<td>未验证</td>
+<td><strong>已量，保留</strong>：第二遍即 <code>seal_fsync</code>，920B 上 0.02～0.06 ms；保留的理由同左</td>
 </tr>
 </tbody>
 </table></div>
@@ -22685,7 +22813,7 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 <ul>
 <li>delete 同步合并、conntrack 清扫长尾是成本问题；空闲后变慢、首个增量的两种形态待定位；950 上的 restore 应答丢失已查实是客户端 SDK 连接池问题并修复。</li>
 <li>950 的小时级长跑、滚动保留、资源收敛和重启 / 注入 / 配额专项尚未覆盖，920B 的结果不能替代。</li>
-<li>V1–V3 没有测量结论，先量再改。</li>
+<li>V1 已做（封层保留页缓存），V2、V3 已量，代价在 0.1 ms 以内，不改。</li>
 <li>候选方向按需要启动，实施前验证收益、调用契约与失败语义。</li>
 </ul><nav class="pager" data-n="30"></nav></article><article id="vA" class="doc" hidden><h1 id="dA-术语协议与文件格式参考">术语、协议与文件格式参考</h1>
 <h2 id="dA-本章目标">本章目标</h2>

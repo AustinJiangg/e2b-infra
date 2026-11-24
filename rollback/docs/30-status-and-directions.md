@@ -31,13 +31,13 @@
 
 ### 2.2 读代码发现的待验证项
 
-下面三项是读代码时发现、还没有量过也没有动过的点。量过之后要么改代码，要么把结论写回对应章节。这些测量任务尚未形成确定的优化结论，先确认运行内核行为并测量耗时与读请求，再决定是否改代码。
+下面三项是读代码时发现的点，2026-11-24 已有结论：V1 改了代码，V2、V3 量过后不改。
 
 | # | 项 | 现状与依据 | 先量什么 | 状态 |
 |---|---|---|---|---|
-| V1 | **checkpoint 封层的刷屏障去掉 `BLKFLSBUF`，只留 `fsync`** | `SealLayer` 第一步调 `sync`，先 `ioctl(BLKFLSBUF)` 再 `fsync`（`rootfs/nbd.go` 的 `sync`）。`BLKFLSBUF` 除了把缓冲的写推下去，还会丢弃宿主为这个块设备缓存的已读内容。封层前后设备内容不变，这份缓存本来仍然有效；丢掉之后客户机再读这些块，要重新经 NBD 向 orchestrator 取。restore 的视图切换内容确实变了，那里必须丢，不在本项范围 | ① 在运行内核上确认 `BLKFLSBUF` 是否丢弃读缓存；② 同一沙箱 checkpoint 前后重复读同一批文件，对比读耗时与 NBD 读请求数；③ 改成只 `fsync` 后重跑，并跑一遍正确性用例 | 未验证 |
-| V2 | **`flush` 里对同一个描述符连做两次 `fsync`** | `rootfs/rootfs.go` 的 `flush` 先 `syscall.Fsync(fd)` 再 `file.Sync()`，后者也是 `fsync`，第二次面对的是已经刷空的缓存。上游原有代码，原生 pause 也走这里 | `seal` 段里这一次调用的耗时；预期是固定的系统调用开销，量级很小，不值得单独改，随 V1 一起处理 | 未验证 |
-| V3 | **一次 checkpoint 对 NBD 设备刷两遍** | 先是 Firecracker 保存块设备状态前的 `prepare_save`（同步引擎下是对设备文件 `sync_all`，`devices/virtio/block/virtio/io/mod.rs` 的 `drain_and_flush`），后是 orchestrator 的 `SealLayer`。两次之间 vCPU 停着、同步引擎没有在途请求、设备只有 Firecracker 一个写入方，所以第二遍没有数据可刷，正确性上一遍就够 | 第二遍的耗时。**结论倾向保留**：Firecracker 那一遍失败只打一行日志（`device.rs` 的 `drain_and_flush`：`Failed to drain ops and flush block data`），快照照常继续；orchestrator 这一遍失败会让 checkpoint 报错返回，是唯一带错误检查的一遍，也不依赖 Firecracker 用哪种读写引擎 | 未验证 |
+| V1 | **checkpoint 封层的刷屏障去掉 `BLKFLSBUF`，只留 `fsync`** | 改前 `SealLayer` 第一步调 `sync`，先 `ioctl(BLKFLSBUF)` 再 `fsync`（`rootfs/nbd.go` 的 `sync`）。`BLKFLSBUF` 除了把缓冲的写推下去，还会丢弃宿主为这个块设备缓存的已读内容。封层前后设备内容不变，这份缓存本来仍然有效；丢掉之后客户机再读这些块，要重新经 NBD 向 orchestrator 取。restore 的视图切换内容确实变了，那里必须丢，不在本项范围 | ① 在运行内核上确认 `BLKFLSBUF` 是否丢弃读缓存；② 同一沙箱 checkpoint 前后重复读同一批文件，对比读耗时与 NBD 读请求数；③ 改成只 `fsync` 后重跑，并跑一遍正确性用例 | **已做（2026-11-24）**：`SealLayer` 只 `fsync`、保留宿主页缓存（KASandbox deltabox-dev `0ce35c8`，已进部署包；`CHECKPOINT_SEAL_DROP_CACHE=true` 恢复旧行为）。920B 上 `seal` 10～13 → 0.3 ms，针对性读回校验 0 不一致，沙箱级 standard 通过；见 [第 7 章 §2.3](07-disk-layering.md#23-为什么先暂停再做同步)、[第 18 章 §5.4](18-950-performance.md#54-写文件的代价由什么决定) |
+| V2 | **`flush` 里对同一个描述符连做两次 `fsync`** | `rootfs/rootfs.go` 的 `flush` 先 `syscall.Fsync(fd)` 再 `file.Sync()`，后者也是 `fsync`，第二次面对的是已经刷空的缓存。上游原有代码，原生 pause 也走这里 | `seal` 段里这一次调用的耗时；预期是固定的系统调用开销，量级很小，不值得单独改，随 V1 一起处理 | **已量，不改**：封层拆开计时后，这次调用（`seal_fsync`）在 920B 上 0.02～0.06 ms，两次 `fsync` 的差别在这个量级以内 |
+| V3 | **一次 checkpoint 对 NBD 设备刷两遍** | 先是 Firecracker 保存块设备状态前的 `prepare_save`（同步引擎下是对设备文件 `sync_all`，`devices/virtio/block/virtio/io/mod.rs` 的 `drain_and_flush`），后是 orchestrator 的 `SealLayer`。两次之间 vCPU 停着、同步引擎没有在途请求、设备只有 Firecracker 一个写入方，所以第二遍没有数据可刷，正确性上一遍就够 | 第二遍的耗时。**结论倾向保留**：Firecracker 那一遍失败只打一行日志（`device.rs` 的 `drain_and_flush`：`Failed to drain ops and flush block data`），快照照常继续；orchestrator 这一遍失败会让 checkpoint 报错返回，是唯一带错误检查的一遍，也不依赖 Firecracker 用哪种读写引擎 | **已量，保留**：第二遍即 `seal_fsync`，920B 上 0.02～0.06 ms；保留的理由同左 |
 
 与这三项有关的两个事实：
 
@@ -67,5 +67,5 @@
 
 - delete 同步合并、conntrack 清扫长尾是成本问题；空闲后变慢、首个增量的两种形态待定位；950 上的 restore 应答丢失已查实是客户端 SDK 连接池问题并修复。
 - 950 的小时级长跑、滚动保留、资源收敛和重启 / 注入 / 配额专项尚未覆盖，920B 的结果不能替代。
-- V1–V3 没有测量结论，先量再改。
+- V1 已做（封层保留页缓存），V2、V3 已量，代价在 0.1 ms 以内，不改。
 - 候选方向按需要启动，实施前验证收益、调用契约与失败语义。

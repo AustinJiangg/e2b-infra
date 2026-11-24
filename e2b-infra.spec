@@ -166,6 +166,14 @@ chmod -R a+rX %{buildroot}/opt/e2b-infra/helm
 /opt/e2b-infra/dep/.env
 
 %changelog
+* Tue Nov 24 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
+- orchestrator: shorten the freeze of a sandbox-level checkpoint. The root
+  disk is written back before the pause (CHECKPOINT_PREFLUSH, default on),
+  and sealing the write layer keeps the root disk's host page cache instead
+  of dropping it (CHECKPOINT_SEAL_DROP_CACHE, default off); seal is timed
+  step by step (seal_fsync / seal_blkflsbuf / seal_new_layer / seal_swap,
+  preflush) in timings.json
+
 * Thu Nov 19 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
 - orchestrator: zero the ext4 inode tables when building a template rootfs
   (mkfs.ext4 -E lazy_itable_init=0,lazy_journal_init=0, and

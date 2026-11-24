@@ -58,8 +58,10 @@ ls -1v "$A"/logs/start.stdout.* | xargs grep -ah 'restored checkpoint' | tail -3
 ```
 total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
   prepare               ⊃ prepare_lock_wait, prepare_manifest
+  [preflush]                                   （暂停之前，在冻结窗口外）
   checkpoint_to_files   = frozen + seal_move
     frozen              ≈ pause + [save_live_bitmap] + snapshot + seal + resume
+      seal              ≈ seal_fsync + [seal_blkflsbuf] + seal_new_layer + seal_swap
   append_layer          ≈ append_lock_wait + append_merge + append_meta_write + append_serialize + append_header_write
   commit                ≈ commit_files + commit_manifest + commit_lock_wait + commit_index
 ```
@@ -73,10 +75,15 @@ total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
 | `rootfs_header` | 取沙箱当前的 rootfs header | 外 | |
 | `checkpoint_to_files` | 暂停、写快照、封层、恢复、把封好的层移进 store | 大部分在内 | |
 | `frozen` | **pause → resume，guest 停住的时间** | 就是窗口 | 同一值也记入 metrics `orchestrator.sandbox.checkpoint.paused.duration` |
+| `preflush` | 暂停之前对根盘 NBD 设备 `fsync`，把宿主页缓存里的脏页推进写层 | **外**（pause 之前） | `CHECKPOINT_PREFLUSH` 关时不出现；有多少脏页就推多少，没有脏页时几乎为零 |
 | `pause` | 暂停虚机的 FC 调用 | 内 | |
 | `save_live_bitmap` | 全量捕获前导出活跃脏图 | 内 | **只在 `mem_mode=full` 时出现** |
 | `snapshot` | Firecracker 写快照（内存差分 + 位图侧车 + snapfile） | 内 | checkpoint 的大头，随本代脏页量线性增长 |
 | `seal` | 封存 rootfs 写层（换层，不搬数据） | 内 | |
+| `seal_fsync` | 封层的刷屏障：对 NBD 设备 `fsync` | 内 | 快照已把脏页推完，这里通常不到 0.1 ms |
+| `seal_blkflsbuf` | 作废根盘的宿主页缓存 | 内 | **只在 `CHECKPOINT_SEAL_DROP_CACHE` 开时出现**；与缓存页数成正比，920B 约 0.17 ms / MiB |
+| `seal_new_layer` | 建新的空写层（open + truncate + mmap） | 内 | |
+| `seal_swap` | 旧写层进层栈、换指针 | 内 | 与本层块数成正比 |
 | `resume` | 恢复虚机的 FC 调用 | 内 | |
 | `seal_move` | 把封好的层文件移进 store（同文件系统是 rename） | **外**（resume 之后） | 产物盘与缓存盘不同源时变成拷贝，这里变大 |
 | `append_layer` | 把新层记进磁盘账本、写层侧车和 header | 外 | |

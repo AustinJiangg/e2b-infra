@@ -7840,10 +7840,10 @@ index 000000000..1c38b6a8c
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/capabilities.go b/packages/orchestrator/internal/checkpoint/capabilities.go
 new file mode 100644
-index 000000000..4d4b958ee
+index 0000000..60c0385
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/capabilities.go
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,160 @@
 +package checkpoint
 +
 +import (
@@ -7916,6 +7916,17 @@ index 000000000..4d4b958ee
 +	CompactMaxPerOp       int
 +	CompactMaxPerOpSource string
 +
++	// Preflush says whether a checkpoint writes the root disk back before it
++	// pauses the VM; PreflushSource is sourceEnv or sourceDefault.
++	Preflush       bool
++	PreflushSource string
++
++	// SealDropCache says whether sealing the write layer drops the root
++	// disk's host page cache; SealDropCacheSource is sourceEnv or
++	// sourceDefault.
++	SealDropCache       bool
++	SealDropCacheSource string
++
 +	// FaultInject is the armed fault list, empty on every node that is not
 +	// running a failure test.
 +	FaultInject []string
@@ -7933,6 +7944,8 @@ index 000000000..4d4b958ee
 +	debugIndex, debugIndexSource := DebugIndex()
 +	compact, compactSource := Compaction()
 +	compactMaxPerOp, compactMaxPerOpSource := CompactMaxPerOp()
++	preflush, preflushSource := sandbox.Preflush()
++	sealDropCache, sealDropCacheSource := sandbox.SealDropCache()
 +
 +	return Capabilities{
 +		Store:                    storeDir,
@@ -7954,6 +7967,10 @@ index 000000000..4d4b958ee
 +		CompactSource:            compactSource,
 +		CompactMaxPerOp:          compactMaxPerOp,
 +		CompactMaxPerOpSource:    compactMaxPerOpSource,
++		Preflush:                 preflush,
++		PreflushSource:           preflushSource,
++		SealDropCache:            sealDropCache,
++		SealDropCacheSource:      sealDropCacheSource,
 +		FaultInject:              faultsEnabled().armed(),
 +	}
 +}
@@ -7980,6 +7997,10 @@ index 000000000..4d4b958ee
 +		zap.String("compact_source", c.CompactSource),
 +		zap.Int("compact_max_per_op", c.CompactMaxPerOp),
 +		zap.String("compact_max_per_op_source", c.CompactMaxPerOpSource),
++		zap.Bool("preflush", c.Preflush),
++		zap.String("preflush_source", c.PreflushSource),
++		zap.Bool("seal_drop_cache", c.SealDropCache),
++		zap.String("seal_drop_cache_source", c.SealDropCacheSource),
 +		zap.Strings("fault_inject", c.FaultInject),
 +	}
 +}
@@ -17135,10 +17156,10 @@ index 0df559681..a6dc64b56 100644
  
 diff --git a/packages/orchestrator/internal/sandbox/checkpoint.go b/packages/orchestrator/internal/sandbox/checkpoint.go
 new file mode 100644
-index 000000000..84e0af59b
+index 0000000..3907e31
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/checkpoint.go
-@@ -0,0 +1,710 @@
+@@ -0,0 +1,781 @@
 +package sandbox
 +
 +import (
@@ -17147,6 +17168,7 @@ index 000000000..84e0af59b
 +	"fmt"
 +	"os"
 +	"path/filepath"
++	"strconv"
 +	"time"
 +
 +	"github.com/google/uuid"
@@ -17168,12 +17190,63 @@ index 000000000..84e0af59b
 +	// operation lock forever.
 +	fcCallEnv     = "CHECKPOINT_FC_CALL_TIMEOUT"
 +	defaultFCCall = 2 * time.Minute
++
++	// preflushEnv turns off writing the root disk back before the pause
++	// (CheckpointToFiles). On by default; read with strconv.ParseBool.
++	preflushEnv = "CHECKPOINT_PREFLUSH"
++
++	// sealDropCacheEnv turns on dropping the root disk's host page cache when
++	// the write layer is sealed, as before. Off by default; read with
++	// strconv.ParseBool.
++	sealDropCacheEnv = "CHECKPOINT_SEAL_DROP_CACHE"
 +)
 +
 +func fcCallTimeout() time.Duration {
 +	d, _ := FCCallTimeout()
 +
 +	return d
++}
++
++// SealDropCache reports whether sealing the write layer also drops the root
++// disk's host page cache, with the value's provenance ("env" or "default").
++// Each checkpoint reads it again.
++func SealDropCache() (bool, string) {
++	raw, set := os.LookupEnv(sealDropCacheEnv)
++	if !set {
++		return false, "default"
++	}
++
++	enabled, err := strconv.ParseBool(raw)
++	if err != nil {
++		logger.L().Warn(context.Background(), "ignoring a seal cache setting that is not a boolean",
++			zap.String("env", sealDropCacheEnv),
++			zap.String("value", raw))
++
++		return false, "default"
++	}
++
++	return enabled, "env"
++}
++
++// Preflush reports whether a checkpoint writes the root disk back before it
++// pauses the VM, with the value's provenance ("env" or "default"), for the
++// capabilities line at startup. Each checkpoint reads it again.
++func Preflush() (bool, string) {
++	raw, set := os.LookupEnv(preflushEnv)
++	if !set {
++		return true, "default"
++	}
++
++	enabled, err := strconv.ParseBool(raw)
++	if err != nil {
++		logger.L().Warn(context.Background(), "ignoring a pre-pause flush setting that is not a boolean",
++			zap.String("env", preflushEnv),
++			zap.String("value", raw))
++
++		return true, "default"
++	}
++
++	return enabled, "env"
 +}
 +
 +// FCCallTimeout is fcCallTimeout with the value's provenance attached
@@ -17358,6 +17431,24 @@ index 000000000..84e0af59b
 +
 +	process := s.process
 +
++	// What the guest has written to its root disk may still sit in the host
++	// page cache of the NBD device, and the snapshot below has Firecracker
++	// push all of it into the write layer inside the freeze (about 0.74 ms
++	// per MiB on 920B). Writing it back first, with the guest still running,
++	// leaves the snapshot only what the guest wrote during this write-back.
++	// The call takes as long as before; the sandbox is frozen for less of it.
++	// Not a correctness step: the flush inside the pause still settles
++	// everything, so a failure here is reported and the checkpoint goes on.
++	if flusher, ok := provider.(rootfs.PreFlusher); ok {
++		if enabled, _ := Preflush(); enabled {
++			if err := timings.Timed("preflush", func() error { return flusher.PreFlush(ctx) }); err != nil {
++				logger.L().Warn(ctx, "failed to write the root disk back before pausing; the snapshot will push it inside the freeze",
++					logger.WithSandboxID(s.Runtime.SandboxID),
++					zap.Error(err))
++			}
++		}
++	}
++
 +	// How long the sandbox is frozen is the cost that matters here — not how
 +	// long the whole operation takes — so it is measured on its own.
 +	pausedAt := time.Now()
@@ -17440,7 +17531,8 @@ index 000000000..84e0af59b
 +	)
 +
 +	sealStart := time.Now()
-+	sealed, err := sealer.SealLayer(ctx, newCachePath)
++	dropCache, _ := SealDropCache()
++	sealed, err := sealer.SealLayer(ctx, newCachePath, dropCache, timings.Mark)
 +	timings.Mark("seal", sealStart)
 +	if err != nil {
 +		// The snapshot exists, so the epoch has advanced regardless.
@@ -20694,10 +20786,18 @@ index 000000000..44fa4b6a7
 +	return err
 +}
 diff --git a/packages/orchestrator/internal/sandbox/rootfs/nbd.go b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
-index 61b574e82..da6548212 100644
+index 61b574e..07cbe2f 100644
 --- a/packages/orchestrator/internal/sandbox/rootfs/nbd.go
 +++ b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
-@@ -77,10 +77,15 @@ func (o *NBDProvider) ExportDiff(
+@@ -6,6 +6,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"os"
++	"time"
+ 
+ 	"go.uber.org/zap"
+ 	"golang.org/x/sys/unix"
+@@ -77,10 +78,15 @@ func (o *NBDProvider) ExportDiff(
  	ctx, span := tracer.Start(ctx, "cow-export")
  	defer span.End()
  
@@ -20714,7 +20814,7 @@ index 61b574e82..da6548212 100644
  
  	// the error is already logged in go routine in SandboxCreate handler
  	go func() {
-@@ -97,7 +102,13 @@ func (o *NBDProvider) ExportDiff(
+@@ -97,7 +103,13 @@ func (o *NBDProvider) ExportDiff(
  	}
  	telemetry.ReportEvent(ctx, "sandbox stopped")
  
@@ -20729,7 +20829,7 @@ index 61b574e82..da6548212 100644
  	if err != nil {
  		return nil, fmt.Errorf("error exporting cache: %w", err)
  	}
-@@ -109,9 +120,105 @@ func (o *NBDProvider) ExportDiff(
+@@ -109,9 +121,140 @@ func (o *NBDProvider) ExportDiff(
  		return nil, fmt.Errorf("error closing cache: %w", err)
  	}
  
@@ -20751,27 +20851,62 @@ index 61b574e82..da6548212 100644
 +//
 +// The sealed file stays in the cache directory; the caller moves it into the
 +// checkpoint store after resuming the VM (SealedLayer.MoveInto).
-+func (o *NBDProvider) SealLayer(ctx context.Context, newCachePath string) (*SealedLayer, error) {
++func (o *NBDProvider) SealLayer(ctx context.Context, newCachePath string, dropCache bool, mark func(name string, start time.Time)) (*SealedLayer, error) {
 +	ctx, span := tracer.Start(ctx, "seal-layer")
 +	defer span.End()
 +
++	if mark == nil {
++		mark = func(string, time.Time) {}
++	}
++
 +	// Flush barrier: push every write the kernel NBD device holds through the
-+	// dispatchers into the cache before freezing it.
-+	if err := o.sync(ctx); err != nil {
++	// dispatchers into the cache before freezing it. An fsync of the block
++	// device is the whole barrier: it writes back every dirty page and waits
++	// for the NBD server to answer each write, and the server answers only
++	// once the write is in the write layer.
++	//
++	// The host page cache of the device is kept. Sealing changes which file
++	// holds a block, never what the disk reads: the overlay reads the new
++	// empty write layer first and the sealed one right below it, so every
++	// cached page still equals what a read through the NBD device returns.
++	// Only ResetView changes the disk's content, and it drops the cache.
++	// Dropping it here cost about 0.17 ms per cached MiB inside the freeze
++	// (measured on 920B), and made the guest's next reads of those blocks go
++	// through the NBD server again. dropCache restores the old behaviour.
++	start := time.Now()
++	nbdPath, err := o.Path()
++	if err == nil {
++		err = flush(ctx, nbdPath)
++	}
++	mark("seal_fsync", start)
++	if err != nil {
 +		return nil, fmt.Errorf("error flushing nbd device before seal: %w", err)
 +	}
 +
++	if dropCache {
++		start = time.Now()
++		err = dropBlockCache(ctx, nbdPath)
++		mark("seal_blkflsbuf", start)
++		if err != nil {
++			return nil, fmt.Errorf("error flushing nbd device before seal: %w", err)
++		}
++	}
++
++	start = time.Now()
 +	size, err := o.overlay.Size(ctx)
 +	if err != nil {
 +		return nil, fmt.Errorf("error getting overlay size: %w", err)
 +	}
 +
 +	newCache, err := block.NewCache(size, o.blockSize, newCachePath, false)
++	mark("seal_new_layer", start)
 +	if err != nil {
 +		return nil, fmt.Errorf("error creating new write layer: %w", err)
 +	}
 +
++	start = time.Now()
 +	sealed, err := o.overlay.Seal(newCache)
++	mark("seal_swap", start)
 +	if err != nil {
 +		closeErr := newCache.Close()
 +
@@ -20835,20 +20970,68 @@ index 61b574e82..da6548212 100644
  func (o *NBDProvider) Close(ctx context.Context) error {
  	ctx, span := tracer.Start(ctx, "cow-close")
  	defer span.End()
+@@ -144,6 +287,22 @@ func (o *NBDProvider) Path() (string, error) {
+ 	return o.ready.Wait()
+ }
+ 
++// PreFlush writes back the dirty pages the NBD device holds in the host page
++// cache into the write layer while the VM is running (see PreFlusher). It is
++// an fsync of the block device and nothing more: the cache is kept, since the
++// guest goes on reading through it.
++func (o *NBDProvider) PreFlush(ctx context.Context) error {
++	ctx, span := tracer.Start(ctx, "pre-flush")
++	defer span.End()
++
++	nbdPath, err := o.Path()
++	if err != nil {
++		return fmt.Errorf("failed to get cow path: %w", err)
++	}
++
++	return flush(ctx, nbdPath)
++}
++
+ func (o *NBDProvider) sync(ctx context.Context) error {
+ 	ctx, span := tracer.Start(ctx, "sync")
+ 	defer span.End()
+@@ -153,6 +312,16 @@ func (o *NBDProvider) sync(ctx context.Context) error {
+ 		return fmt.Errorf("failed to get cow path: %w", err)
+ 	}
+ 
++	if err := dropBlockCache(ctx, nbdPath); err != nil {
++		return err
++	}
++
++	return flush(ctx, nbdPath)
++}
++
++// dropBlockCache issues BLKFLSBUF on the block device: its dirty pages are
++// written back and then its page cache is invalidated.
++func dropBlockCache(ctx context.Context, nbdPath string) error {
+ 	file, err := os.Open(nbdPath)
+ 	if err != nil {
+ 		return fmt.Errorf("failed to open path: %w", err)
+@@ -168,5 +337,5 @@ func (o *NBDProvider) sync(ctx context.Context) error {
+ 		return fmt.Errorf("ioctl BLKFLSBUF failed: %w", err)
+ 	}
+ 
+-	return flush(ctx, nbdPath)
++	return nil
+ }
 diff --git a/packages/orchestrator/internal/sandbox/rootfs/rootfs.go b/packages/orchestrator/internal/sandbox/rootfs/rootfs.go
-index 48a4c3da4..38ad7f8c1 100644
+index 48a4c3d..88b2191 100644
 --- a/packages/orchestrator/internal/sandbox/rootfs/rootfs.go
 +++ b/packages/orchestrator/internal/sandbox/rootfs/rootfs.go
-@@ -7,6 +7,8 @@ import (
+@@ -6,6 +6,9 @@ import (
+ 	"io"
  	"os"
  	"syscall"
- 
-+	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/block"
++	"time"
 +
++	"github.com/e2b-dev/infra/packages/orchestrator/internal/sandbox/block"
+ 
  	"go.opentelemetry.io/otel"
  	"go.opentelemetry.io/otel/attribute"
- 	"go.opentelemetry.io/otel/trace"
-@@ -25,6 +27,68 @@ type Provider interface {
+@@ -25,6 +28,84 @@ type Provider interface {
  	ExportDiff(ctx context.Context, out io.Writer, closeSandbox func(context.Context) error) (*header.DiffMetadata, error)
  }
  
@@ -20910,8 +21093,24 @@ index 48a4c3da4..38ad7f8c1 100644
 +// into a read-only layer file while the VM stays up, installing a fresh
 +// empty write layer in its place. The caller must hold the VM paused across
 +// the call so the layer is an image of the disk at one instant.
++//
++// dropCache asks for the host page cache of the device to be invalidated as
++// well; sealing does not need it (see NBDProvider.SealLayer).
++//
++// mark, when not nil, is called once per step of the seal with the step's
++// name and start time, so the caller can say where the time inside the
++// freeze went.
 +type LayerSealer interface {
-+	SealLayer(ctx context.Context, newCachePath string) (*SealedLayer, error)
++	SealLayer(ctx context.Context, newCachePath string, dropCache bool, mark func(name string, start time.Time)) (*SealedLayer, error)
++}
++
++// PreFlusher is implemented by providers whose disk writes can sit in a host
++// page cache on their way to the write layer. PreFlush writes them back while
++// the VM keeps running, so the pass inside the freeze has less left to push.
++// It drops no cache and is not a barrier: the guest may write again right
++// after it, and those writes are what the flush inside the pause is for.
++type PreFlusher interface {
++	PreFlush(ctx context.Context) error
 +}
 +
  // flush flushes the data to the operating system's buffer.

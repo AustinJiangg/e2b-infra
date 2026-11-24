@@ -222,7 +222,7 @@ restore 侧文件的代价主要是 guest 页缓存里那些页按内存回滚�
 2. **宿主上这个块设备的页缓存。** guest 调 `fsync` / `sync`，或者 guest 内核按自己的写回周期写回时，数据经 virtio-blk 交给 Firecracker。Firecracker 用普通方式打开这个块设备（`DiskProperties::open_file` 只设读写，没有 `O_DIRECT`），所以数据写进宿主内核里这个设备的页缓存就算完成。orchestrator 配置根盘时没有设 `cache_type`（`setRootfsDrive`），按 Firecracker 默认的 `Unsafe`，不向 guest 提供 FLUSH，guest 的 `sync` 不会传到宿主。
 3. **写层。** 宿主内核按自己的写回周期，或者有人对这个设备做 `fsync` 时，才把这些脏页经 NBD 送给 orchestrator。
 
-**checkpoint 要求第 3 步做完。** checkpoint 在 vCPU 暂停之后调 Firecracker 的快照接口；Firecracker 保存块设备状态前做 `drain_and_flush`，同步引擎下就是对这个设备 `sync_all`（`io/sync_io.rs` 的 `flush`），把第 2 处还没写回的脏页全部经 NBD 推进写层。这一步计入 `snapshot` 段，发生在暂停窗口里。随后 `seal` 再做一次 `BLKFLSBUF` 和刷盘屏障，换上新的写层（`rootfs/nbd.go` 的 `SealLayer`）。这样写层和内存快照对应同一时刻。
+**checkpoint 要求第 3 步做完。** checkpoint 在 vCPU 暂停之后调 Firecracker 的快照接口；Firecracker 保存块设备状态前做 `drain_and_flush`，同步引擎下就是对这个设备 `sync_all`（`io/sync_io.rs` 的 `flush`），把第 2 处还没写回的脏页全部经 NBD 推进写层。这一步计入 `snapshot` 段，发生在暂停窗口里。随后 `seal` 再做一次刷盘屏障，换上新的写层（`rootfs/nbd.go` 的 `SealLayer`）。这样写层和内存快照对应同一时刻。本节 950 数据与下面 2026-11-18 的 920B 实验用的都是改进前的 orchestrator：没有暂停前预刷，`seal` 的屏障是 `BLKFLSBUF`（写回并作废设备页缓存）加 `fsync`。2026-11-24 的两处改进见本节末尾。
 
 所以，一份文件数据在 checkpoint 时处在哪一处，决定了它在 checkpoint 里花多少时间：
 
@@ -260,6 +260,29 @@ restore 侧文件的代价主要是 guest 页缓存里那些页按内存回滚�
 - 宿主内核写回的时机：数据进入宿主页缓存后约 30 s（`dirty_expire_centisecs` = 3000）。不 `sync` 的数据先在 guest 里停约 30 s，再进宿主页缓存。所以写完 40 s 时，`fsync` 过的数据已经写回；没 `fsync` 的数据按这两个周期应当还在宿主页缓存里，但 F 组实测 NBD 写出也是 0，提前写回的原因本轮没有查。
 
 **对测量的含义。** 分档测试的“写完 `sync` 立刻 checkpoint”是 B 组，文件代价最高；同一个文件，换成 A 组或 E、G 组的时机，checkpoint 时几乎不再为它推送数据。真实负载里两种情况都有：显式 `fsync` 的程序（包管理器、数据库）写完马上 checkpoint 时接近 B 组；普通写文件、过几十秒才 checkpoint 时接近 A、G 组。所以 §4 的纯文件、混合档给的是文件代价的上界；按典型使用估算时，要按写完是否 `fsync`、隔多久 checkpoint 选用这张表里对应的组。
+
+**冻结窗口的两处改进（2026-11-23～24，920B）。** 上面的实验指出两笔花在暂停窗口里的时间：B 组那次经 NBD 的推送，和每次 `seal` 约 9～20 ms。orchestrator 据此改了两处（KASandbox deltabox-dev `cecdc67`、`0ce35c8`，已进部署包）：
+
+- **暂停之前先预刷根盘**（`preflush`，开关 `CHECKPOINT_PREFLUSH`，默认开）：虚机还在运行时对 NBD 设备 `fsync` 一次，把宿主页缓存里的脏页推进写层，就是把 C 组的宿主 `sync` 做进 checkpoint 本身。窗口里的快照只需推送预刷期间 guest 新写的部分。
+- **封层只 `fsync`，不再 `BLKFLSBUF`**（开关 `CHECKPOINT_SEAL_DROP_CACHE`，默认关）：把 `seal` 拆开计时后，它的时间几乎全在 `BLKFLSBUF` 作废页缓存上，`fsync`、建新层、换层三步合计不到 0.3 ms。封层不改变磁盘内容，缓存不必丢，理由见 [第 7 章 §2.3](07-disk-layering.md#23-为什么先暂停再做同步)。
+
+同一台 920B、同样的方法（64 MiB 文件，每组 5 次另加 1 次预热，p50，单位 ms），依次只差一个开关：
+
+| 组 | 改进前 frozen | 加预刷 frozen | 再加封层留缓存 frozen | 预刷耗时 | `seal` 改进前 → 留缓存 |
+|---|---|---|---|---|---|
+| 对照：不写文件 | 8.7 | 8.5 | 9.6 | 0.0 | 0.1 → 0.1 |
+| B `fsync` + `sync`，立刻 | **86.5** | 23.7 | **15.1** | 43.3～58.2 | 12.8 → 0.3 |
+| E `fsync` + `sync`，等 40 s | 31.2 | 28.8 | 32.9 | 0.2～1.0 | 10.7 → 0.3 |
+| A 不 `sync`，立刻 | 13.9 | 13.7 | 13.9 | 0.0 | 0.1 → 0.1 |
+| F 不 `sync`，等 40 s | 32.3 | 29.3 | 18.3 | 1.2～9.0 | 11.7 → 0.4 |
+
+前两列与后一列分属两轮 A/B（11-23：预刷关 / 开，封层都丢缓存；11-24：预刷都开，封层丢 / 留缓存），`seal` 一列取自 11-24 那轮。
+
+- **B 组冻结窗口从 86.5 ms 降到 15.1 ms。** 推送挪到了窗口外（预刷 43～58 ms，虚机照常运行），`seal` 不再作废页缓存。客户端墙钟 88.7 → 68.2 ms（11-23 那轮），窗口外的预刷比窗口里同量的推送短约 20 ms，原因本轮没有拆开。
+- **数据不在宿主页缓存里时，预刷几乎为零**（A、E 组 0～1 ms），这两组的冻结窗口不变。等 40 s 的组 `snapshot` 两轮都有 40～55 ms 的离群值，frozen 的 p50 跟着跳，要看 `seal` 一列：凡是写过盘的组都从 10～13 ms 降到 0.3 ms。
+- **正确性。** 封层留缓存另做了针对性检查：随机写段，checkpoint，guest 丢掉自己的页缓存后读回（这次读走宿主上留下的缓存），再随机 restore 读回、restore 之后再 checkpoint 读回，两轮各 24 次校验，0 次不一致；这个版本在 920B 上跑沙箱级 standard（20261124-101825）全部通过。
+- **代价。** 根盘的宿主页缓存不再随每次 checkpoint 清掉，留到内核回收或下一次 restore；这是可回收的干净页。预刷让 checkpoint 多一次 `fsync` 系统调用，没有脏页时几乎为零（对照组 0.0 ms）。
+- 950 上尚未用改进后的版本重测；本章 §4、§5 的 950 数字都是改进前的。原始输出在工作区 `rollback-reports/920b-o1o3-20261123/`。
 
 ### 5.5 缓存与漂移
 
