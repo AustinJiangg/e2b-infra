@@ -281,8 +281,21 @@ restore 侧文件的代价主要是 guest 页缓存里那些页按内存回滚�
 - **B 组冻结窗口从 86.5 ms 降到 15.1 ms。** 推送挪到了窗口外（预刷 43～58 ms，虚机照常运行），`seal` 不再作废页缓存。客户端墙钟 88.7 → 68.2 ms（11-23 那轮），窗口外的预刷比窗口里同量的推送短约 20 ms，原因本轮没有拆开。
 - **数据不在宿主页缓存里时，预刷几乎为零**（A、E 组 0～1 ms），这两组的冻结窗口不变。等 40 s 的组 `snapshot` 两轮都有 40～55 ms 的离群值，frozen 的 p50 跟着跳，要看 `seal` 一列：凡是写过盘的组都从 10～13 ms 降到 0.3 ms。
 - **正确性。** 封层留缓存另做了针对性检查：随机写段，checkpoint，guest 丢掉自己的页缓存后读回（这次读走宿主上留下的缓存），再随机 restore 读回、restore 之后再 checkpoint 读回，两轮各 24 次校验，0 次不一致；这个版本在 920B 上跑沙箱级 standard（20261124-101825）全部通过。
-- **代价。** 根盘的宿主页缓存不再随每次 checkpoint 清掉，留到内核回收或下一次 restore；这是可回收的干净页。预刷让 checkpoint 多一次 `fsync` 系统调用，没有脏页时几乎为零（对照组 0.0 ms）。
-- 950 上尚未用改进后的版本重测；本章 §4、§5 的 950 数字都是改进前的。原始输出在工作区 `rollback-reports/920b-o1o3-20261123/`。
+- **代价。** 预刷让 checkpoint 多一次 `fsync` 系统调用，没有脏页时几乎为零（对照组 0.0 ms）。封层留下的缓存的代价见下一段。
+
+**封层留缓存的副作用与修正（2026-11-24）。** 封层不丢的缓存，下一次 restore 的 `ResetView` 还要作废，代价从 checkpoint 的暂停窗口搬进了 restore 的暂停窗口。950 上用只预刷、封层留缓存的版本（orchestrator `82333684…`）跑的 compare 先暴露了这一点：只写文件 64 MiB 的测点，checkpoint 冻结窗口从 71.9 ms 降到 15.6 ms（`seal` 10.5 → 不足 0.3 ms，服务端合计 72.7 → 71.8 ms，与 920B 一致），restore 却从 40.5 ms 变成 59.7 ms；不写文件的测点 restore 不变（进程固定 256 MiB、改 256 MiB：85.1 → 80.2 ms）。在 920B 上只切开关复现并确认后，改为 checkpoint 恢复虚机之后在后台作废缓存（KASandbox deltabox-dev `acba578`，开关 `CHECKPOINT_BACKGROUND_DROP_CACHE`，默认开；机制见 [第 7 章 §2.3](07-disk-layering.md#23-为什么先暂停再做同步)）。920B 三种做法对照（只写文件 64 MiB，`fsync` 后立刻 checkpoint，p50，单位 ms）：
+
+| 做法 | n | checkpoint frozen | checkpoint 墙钟 | restore 墙钟 | restore 里的 `reset_view` |
+|---|---|---|---|---|---|
+| 封层时作废（`CHECKPOINT_SEAL_DROP_CACHE=true`，旧行为） | 20 | 25.1 | 84.3 | 34.7 | 不足 6.4 |
+| 封层留缓存，不作废（`CHECKPOINT_BACKGROUND_DROP_CACHE=false`） | 20 | 16.4 | 80.9 | **53.2** | 16.9 |
+| **封层留缓存，恢复后后台作废（默认）** | 40 | **14.0** | **74.4** | **38.2** | 不足 6.6 |
+
+- 后台作废同时拿到了两头：冻结窗口与留缓存相当，restore 与封层时作废相当（多 3.5 ms，本轮没有拆开）。
+- 下一次封层一次也没有等后台作废（`seal_wait_cache_drop` 没有出现）。
+- 不写文件的测点（进程固定 256 MiB，改 0～256 MiB）三种做法的 checkpoint 与 restore 没有可分辨的差别。
+- 正确性：后台作废版本上 `verify_keep.py` 24 次校验 0 次不一致，四段测量各 176 次全部成功。原始输出在工作区 `rollback-reports/920b-o1o3-20261123/`（`restore-ab/` 是开关复现，`restore-ab3/` 是三种做法对照）。
+- 950 上尚未用带后台作废的版本重测；本章 §4、§5 的 950 分档数字都是 2026-11-18 改进前的。
 
 ### 5.5 缓存与漂移
 
@@ -552,6 +565,7 @@ n = 3 的中位数，单位 ms，差分为 MiB；o1 / o9 是 order 1 / order 9�
 - 2026-11-18（没有配置 UB）perf-full 十八档：混合负载下 checkpoint、restore 的 p50 与 p99 全部达标的最高已测档是 128 MiB；192 MiB 档 restore 60 个样本里只有 1 个超线（109.0 ms）；256 MiB 档 restore p50 99.8 ms，正好在线上，p99 123.2 ms；512 MiB 档两项超线。这是已测档位的结论，不是连续区间的保证；p99 的取法不同，线附近的判定会变（§3）。
 - checkpoint 随改动量的增长主要来自文件改动：每 MiB 内存 0.087 ms、每 MiB 文件 1.29 ms，混合档的增长有 83% 来自那 1/4 的文件。多出来的时间在 `snapshot` 段里把宿主块设备页缓存中还没写回的根盘数据经 NBD 推进写层（§5.4）。
 - 写文件的代价落在 checkpoint 里还是之前，取决于 checkpoint 时数据处在 guest 页缓存、宿主页缓存还是写层；分档测试“写完 `sync` 立刻 checkpoint”测到的是最贵的情况（§5.4）。920B 上同一个 64 MiB 文件：不 `sync` 立刻 checkpoint 墙钟 15.4 ms，`sync` 后立刻 72.8 ms，`sync` 后等 40 s 为 49.6 ms 且不再推送。
+- 2026-11-23～24 据此改了冻结窗口（§5.4）：暂停前预刷根盘、封层只 `fsync`、恢复运行后在后台作废根盘页缓存。920B 上写 64 MiB 文件并 `fsync` 后立刻 checkpoint，冻结窗口从 86.5 ms 降到 15 ms 左右（探针 15.1 ms，compare 14.0 ms），restore 与改前相当；只做到封层留缓存的中间版本在 950 上把 restore 拖慢了（40.5 → 59.7 ms），已由后台作废修正，950 待重测。
 - 同一实验发现：模板 guest 的 ext4 lazy itable init 没有在模板快照前完成，新沙箱和 restore 到它之前的 checkpoint 都会在几秒后多写约 60 MiB 根盘数据（§5.4）。2026-11-19 已在 orchestrator 里修复，重建模板后生效。
 - 拟合直线描述平均趋势，交点 466.2 / 260.1 MiB 不是实测上限；混合档的斜率取决于内存与文件的比例。
 - 同一 checkpoint 串行 restore 100 次的墙钟 p50 / p99 / max 为 9.62 / 16.2 / 17.6 ms（perf），这个负载不含新改动，不能代替分档回滚成本。

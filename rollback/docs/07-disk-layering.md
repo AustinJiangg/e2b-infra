@@ -101,6 +101,8 @@ sealed, _ := o.overlay.Seal(newCache)                                   // ③ �
 
 **封层保留宿主页缓存，换视图丢掉。** 宿主内核为 `/dev/nbdX` 缓存着 guest 读写过的块。封层只改变一个块存放在哪个文件里，不改变磁盘读出来的内容：Overlay 先读新的空写层，再读刚封存的那一层，所以缓存里的每一页仍等于经 NBD 读出来的内容，留着是对的。restore 的 `ResetView` 换掉整个视图，内容变了，它照旧先做 `ioctl(BLKFLSBUF)`（写回并作废这个设备的全部页缓存）再 `fsync`；关闭沙箱时也一样。2026-11-24 之前封层也做 `BLKFLSBUF`，在 920B 上每次有写盘的 checkpoint 要在暂停窗口里多花 10～13 ms（约 0.17 ms / 缓存 MiB），guest 下一次读这些块还要重新经 NBD 取；改成只 `fsync` 后 `seal` 约 0.3 ms，数据见 [第 18 章 §5.4](18-950-performance.md#54-写文件的代价由什么决定)。`CHECKPOINT_SEAL_DROP_CACHE=true` 恢复旧行为（[第 26 章](26-configuration-and-capacity.md)）。
 
+**留下的缓存在恢复运行之后作废。** 只是不在封层时丢，这份缓存就留到下一次 restore：`ResetView` 的 `BLKFLSBUF` 要把它们一页页作废，代价原样搬进了 restore 的暂停窗口。920B 上写 64 MiB 文件并 `fsync` 后，restore 从 36.7 ms 变成 51.0 ms，其中 `reset_view` 17 ms；950 上同样的测点 40.5 → 59.7 ms，不写文件的测点不变。所以 checkpoint 恢复虚机之后，orchestrator 另起一个 goroutine 对设备做一次 `BLKFLSBUF`（`NBDProvider.DropCacheInBackground`），这时 guest 已经在运行。这样做是安全的：`BLKFLSBUF` 先写回脏页，只丢没有人持有的干净页，丢掉的页下次经 NBD 从层栈读回，内容不变。下一次 `SealLayer`、`ResetView` 和关闭沙箱都先等它做完；关闭必须等，卸载之后同一个 `/dev/nbdX` 可能已经分给别的沙箱。`SealLayer` 真等了的话，记一段 `seal_wait_cache_drop`。920B 上 checkpoint 冻结窗口 14.0 ms、restore 38.2 ms，两头都没有这笔开销（[第 18 章 §5.4](18-950-performance.md#54-写文件的代价由什么决定)）。开关 `CHECKPOINT_BACKGROUND_DROP_CACHE`，默认开。
+
 ### 2.4 代码怎样接替活写层
 
 下面的 `o.cache` 指向当前活写层的 Cache，`o.device` 指向活写层没有该块时使用的只读数据来源。首次封存前，后者是模板；首次封存后，它是包含模板和 W1 的 LayerStack。

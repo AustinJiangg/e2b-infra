@@ -61,7 +61,7 @@ total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
   [preflush]                                   （暂停之前，在冻结窗口外）
   checkpoint_to_files   = frozen + seal_move
     frozen              ≈ pause + [save_live_bitmap] + snapshot + seal + resume
-      seal              ≈ seal_fsync + [seal_blkflsbuf] + seal_new_layer + seal_swap
+      seal              ≈ [seal_wait_cache_drop] + seal_fsync + [seal_blkflsbuf] + seal_new_layer + seal_swap
   append_layer          ≈ append_lock_wait + append_merge + append_meta_write + append_serialize + append_header_write
   commit                ≈ commit_files + commit_manifest + commit_lock_wait + commit_index
 ```
@@ -80,6 +80,7 @@ total ≈ prepare + rootfs_header + checkpoint_to_files + append_layer + commit
 | `save_live_bitmap` | 全量捕获前导出活跃脏图 | 内 | **只在 `mem_mode=full` 时出现** |
 | `snapshot` | Firecracker 写快照（内存差分 + 位图侧车 + snapfile） | 内 | checkpoint 的大头，随本代脏页量线性增长 |
 | `seal` | 封存 rootfs 写层（换层，不搬数据） | 内 | |
+| `seal_wait_cache_drop` | 封层前等上一次 checkpoint 的后台缓存作废做完 | 内 | **只在真等了时出现**；两次 checkpoint 间隔很短、上一次留下的缓存很多时才会有，920B 的对照测试里一次也没出现 |
 | `seal_fsync` | 封层的刷屏障：对 NBD 设备 `fsync` | 内 | 快照已把脏页推完，这里通常不到 0.1 ms |
 | `seal_blkflsbuf` | 作废根盘的宿主页缓存 | 内 | **只在 `CHECKPOINT_SEAL_DROP_CACHE` 开时出现**；与缓存页数成正比，920B 约 0.17 ms / MiB |
 | `seal_new_layer` | 建新的空写层（open + truncate + mmap） | 内 | |

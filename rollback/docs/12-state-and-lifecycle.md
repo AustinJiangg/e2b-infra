@@ -161,7 +161,8 @@ NBD dispatcher 手里那个 `*Overlay` 指针**从头到尾没变过**，它不�
 | 操作 | 前置条件 | 谁保证 |
 |---|---|---|
 | `SealLayer` | 虚机暂停 + 对 NBD 设备 `fsync` 的刷屏障（保留宿主页缓存） | 调用方（`CheckpointToFiles`）+ 函数自己刷屏障 |
-| `ResetView` | 虚机暂停 + NBD `BLKFLSBUF` 刷屏障（写回并作废宿主页缓存，视图内容变了） | 调用方（`RollbackInPlace`）+ 函数自己刷屏障 |
+| `ResetView` | 虚机暂停 + 后台缓存作废已做完 + NBD `BLKFLSBUF` 刷屏障（写回并作废宿主页缓存，视图内容变了） | 调用方（`RollbackInPlace`）+ 函数自己先等后台作废、再刷屏障 |
+| 后台缓存作废（`DropCacheInBackground`） | 不需要暂停；前一次未完成的作废先做完 | checkpoint 恢复虚机之后由调用方启动；下一次 `SealLayer`、`ResetView`、关闭沙箱都先等它（关闭必须等：卸载后同一个 `/dev/nbdX` 可能已分给别的沙箱） |
 | `save-dirty-bitmap`、`rollback` | 虚机暂停 | Firecracker 端点自己检查 `VmState::Paused` |
 | 清 conntrack | 虚机暂停（没有 guest 流量） | 调用方 |
 

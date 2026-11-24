@@ -2746,7 +2746,7 @@ orchestrator 把它翻译成"this firecracker does not support in-place rollback
 </tr>
 <tr>
 <td>16</td>
-<td>封存写层：刷屏障（对 NBD 设备 <code>fsync</code>，保留宿主页缓存）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针</td>
+<td>封存写层：先等上一次 checkpoint 的后台缓存作废做完（通常早已做完）→ 刷屏障（对 NBD 设备 <code>fsync</code>，保留宿主页缓存，恢复运行后再在后台作废，见 <a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针</td>
 <td><code>seal</code>（分步 <code>seal_fsync</code>、<code>seal_new_layer</code>、<code>seal_swap</code>）</td>
 <td>不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（<a href="#d07">第 7 章</a>）</td>
 </tr>
@@ -4712,6 +4712,7 @@ host 内核的 NBD 驱动再把读请求转发给 orchestrator。orchestrator �
 <p>所以调用契约里明确写着<strong>虚机必须已经暂停</strong>：刷屏障处理内核块层已接受、尚未下发的写，暂停处理 guest 之后还要发出的写，两者缺一不可。
 <code>SealLayer</code> 与 <code>ResetView</code> 的注释都以这个前置条件开头 —— 它是调用方的责任，不是这个函数能自己保证的事。</p>
 <p><strong>封层保留宿主页缓存，换视图丢掉。</strong> 宿主内核为 <code>/dev/nbdX</code> 缓存着 guest 读写过的块。封层只改变一个块存放在哪个文件里，不改变磁盘读出来的内容：Overlay 先读新的空写层，再读刚封存的那一层，所以缓存里的每一页仍等于经 NBD 读出来的内容，留着是对的。restore 的 <code>ResetView</code> 换掉整个视图，内容变了，它照旧先做 <code>ioctl(BLKFLSBUF)</code>（写回并作废这个设备的全部页缓存）再 <code>fsync</code>；关闭沙箱时也一样。2026-11-24 之前封层也做 <code>BLKFLSBUF</code>，在 920B 上每次有写盘的 checkpoint 要在暂停窗口里多花 10～13 ms（约 0.17 ms / 缓存 MiB），guest 下一次读这些块还要重新经 NBD 取；改成只 <code>fsync</code> 后 <code>seal</code> 约 0.3 ms，数据见 <a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a>。<code>CHECKPOINT_SEAL_DROP_CACHE=true</code> 恢复旧行为（<a href="#d26">第 26 章</a>）。</p>
+<p><strong>留下的缓存在恢复运行之后作废。</strong> 只是不在封层时丢，这份缓存就留到下一次 restore：<code>ResetView</code> 的 <code>BLKFLSBUF</code> 要把它们一页页作废，代价原样搬进了 restore 的暂停窗口。920B 上写 64 MiB 文件并 <code>fsync</code> 后，restore 从 36.7 ms 变成 51.0 ms，其中 <code>reset_view</code> 17 ms；950 上同样的测点 40.5 → 59.7 ms，不写文件的测点不变。所以 checkpoint 恢复虚机之后，orchestrator 另起一个 goroutine 对设备做一次 <code>BLKFLSBUF</code>（<code>NBDProvider.DropCacheInBackground</code>），这时 guest 已经在运行。这样做是安全的：<code>BLKFLSBUF</code> 先写回脏页，只丢没有人持有的干净页，丢掉的页下次经 NBD 从层栈读回，内容不变。下一次 <code>SealLayer</code>、<code>ResetView</code> 和关闭沙箱都先等它做完；关闭必须等，卸载之后同一个 <code>/dev/nbdX</code> 可能已经分给别的沙箱。<code>SealLayer</code> 真等了的话，记一段 <code>seal_wait_cache_drop</code>。920B 上 checkpoint 冻结窗口 14.0 ms、restore 38.2 ms，两头都没有这笔开销（<a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a>）。开关 <code>CHECKPOINT_BACKGROUND_DROP_CACHE</code>，默认开。</p>
 <h3 id="d07-24-代码怎样接替活写层">2.4 代码怎样接替活写层</h3>
 <p>下面的 <code>o.cache</code> 指向当前活写层的 Cache，<code>o.device</code> 指向活写层没有该块时使用的只读数据来源。首次封存前，后者是模板；首次封存后，它是包含模板和 W1 的 LayerStack。</p>
 <p><code>Overlay.Seal</code>（<code>block/overlay.go:128</code>）持 Overlay 的独占锁：</p>
@@ -7319,8 +7320,13 @@ Store.mu           ← 短时间持有（一次 map 读写）
 </tr>
 <tr>
 <td><code>ResetView</code></td>
-<td>虚机暂停 + NBD <code>BLKFLSBUF</code> 刷屏障（写回并作废宿主页缓存，视图内容变了）</td>
-<td>调用方（<code>RollbackInPlace</code>）+ 函数自己刷屏障</td>
+<td>虚机暂停 + 后台缓存作废已做完 + NBD <code>BLKFLSBUF</code> 刷屏障（写回并作废宿主页缓存，视图内容变了）</td>
+<td>调用方（<code>RollbackInPlace</code>）+ 函数自己先等后台作废、再刷屏障</td>
+</tr>
+<tr>
+<td>后台缓存作废（<code>DropCacheInBackground</code>）</td>
+<td>不需要暂停；前一次未完成的作废先做完</td>
+<td>checkpoint 恢复虚机之后由调用方启动；下一次 <code>SealLayer</code>、<code>ResetView</code>、关闭沙箱都先等它（关闭必须等：卸载后同一个 <code>/dev/nbdX</code> 可能已分给别的沙箱）</td>
 </tr>
 <tr>
 <td><code>save-dirty-bitmap</code>、<code>rollback</code></td>
@@ -12668,8 +12674,53 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li><strong>B 组冻结窗口从 86.5 ms 降到 15.1 ms。</strong> 推送挪到了窗口外（预刷 43～58 ms，虚机照常运行），<code>seal</code> 不再作废页缓存。客户端墙钟 88.7 → 68.2 ms（11-23 那轮），窗口外的预刷比窗口里同量的推送短约 20 ms，原因本轮没有拆开。</li>
 <li><strong>数据不在宿主页缓存里时，预刷几乎为零</strong>（A、E 组 0～1 ms），这两组的冻结窗口不变。等 40 s 的组 <code>snapshot</code> 两轮都有 40～55 ms 的离群值，frozen 的 p50 跟着跳，要看 <code>seal</code> 一列：凡是写过盘的组都从 10～13 ms 降到 0.3 ms。</li>
 <li><strong>正确性。</strong> 封层留缓存另做了针对性检查：随机写段，checkpoint，guest 丢掉自己的页缓存后读回（这次读走宿主上留下的缓存），再随机 restore 读回、restore 之后再 checkpoint 读回，两轮各 24 次校验，0 次不一致；这个版本在 920B 上跑沙箱级 standard（20261124-101825）全部通过。</li>
-<li><strong>代价。</strong> 根盘的宿主页缓存不再随每次 checkpoint 清掉，留到内核回收或下一次 restore；这是可回收的干净页。预刷让 checkpoint 多一次 <code>fsync</code> 系统调用，没有脏页时几乎为零（对照组 0.0 ms）。</li>
-<li>950 上尚未用改进后的版本重测；本章 §4、§5 的 950 数字都是改进前的。原始输出在工作区 <code>rollback-reports/920b-o1o3-20261123/</code>。</li>
+<li><strong>代价。</strong> 预刷让 checkpoint 多一次 <code>fsync</code> 系统调用，没有脏页时几乎为零（对照组 0.0 ms）。封层留下的缓存的代价见下一段。</li>
+</ul>
+<p><strong>封层留缓存的副作用与修正（2026-11-24）。</strong> 封层不丢的缓存，下一次 restore 的 <code>ResetView</code> 还要作废，代价从 checkpoint 的暂停窗口搬进了 restore 的暂停窗口。950 上用只预刷、封层留缓存的版本（orchestrator <code>82333684…</code>）跑的 compare 先暴露了这一点：只写文件 64 MiB 的测点，checkpoint 冻结窗口从 71.9 ms 降到 15.6 ms（<code>seal</code> 10.5 → 不足 0.3 ms，服务端合计 72.7 → 71.8 ms，与 920B 一致），restore 却从 40.5 ms 变成 59.7 ms；不写文件的测点 restore 不变（进程固定 256 MiB、改 256 MiB：85.1 → 80.2 ms）。在 920B 上只切开关复现并确认后，改为 checkpoint 恢复虚机之后在后台作废缓存（KASandbox deltabox-dev <code>acba578</code>，开关 <code>CHECKPOINT_BACKGROUND_DROP_CACHE</code>，默认开；机制见 <a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>）。920B 三种做法对照（只写文件 64 MiB，<code>fsync</code> 后立刻 checkpoint，p50，单位 ms）：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>做法</th>
+<th>n</th>
+<th>checkpoint frozen</th>
+<th>checkpoint 墙钟</th>
+<th>restore 墙钟</th>
+<th>restore 里的 <code>reset_view</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>封层时作废（<code>CHECKPOINT_SEAL_DROP_CACHE=true</code>，旧行为）</td>
+<td>20</td>
+<td>25.1</td>
+<td>84.3</td>
+<td>34.7</td>
+<td>不足 6.4</td>
+</tr>
+<tr>
+<td>封层留缓存，不作废（<code>CHECKPOINT_BACKGROUND_DROP_CACHE=false</code>）</td>
+<td>20</td>
+<td>16.4</td>
+<td>80.9</td>
+<td><strong>53.2</strong></td>
+<td>16.9</td>
+</tr>
+<tr>
+<td><strong>封层留缓存，恢复后后台作废（默认）</strong></td>
+<td>40</td>
+<td><strong>14.0</strong></td>
+<td><strong>74.4</strong></td>
+<td><strong>38.2</strong></td>
+<td>不足 6.6</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>后台作废同时拿到了两头：冻结窗口与留缓存相当，restore 与封层时作废相当（多 3.5 ms，本轮没有拆开）。</li>
+<li>下一次封层一次也没有等后台作废（<code>seal_wait_cache_drop</code> 没有出现）。</li>
+<li>不写文件的测点（进程固定 256 MiB，改 0～256 MiB）三种做法的 checkpoint 与 restore 没有可分辨的差别。</li>
+<li>正确性：后台作废版本上 <code>verify_keep.py</code> 24 次校验 0 次不一致，四段测量各 176 次全部成功。原始输出在工作区 <code>rollback-reports/920b-o1o3-20261123/</code>（<code>restore-ab/</code> 是开关复现，<code>restore-ab3/</code> 是三种做法对照）。</li>
+<li>950 上尚未用带后台作废的版本重测；本章 §4、§5 的 950 分档数字都是 2026-11-18 改进前的。</li>
 </ul>
 <h3 id="d18-55-缓存与漂移">5.5 缓存与漂移</h3>
 <p><code>materialize_disk_read_mb</code>、<code>fc_rollback_disk_read_mb</code> 在 1040 次迭代里都没有非零值。三遍 checkpoint 冻结窗口 p50 的末遍 / 首遍比值在 0.91～1.12 之间，没有随遍数变慢的大档；混合 128 MiB 第 2 遍偏低（51.5 ms，另两遍 64.4 / 65.0 ms）。单次 <code>frozen</code> 超过本档中位数两倍的离群点为零。</p>
@@ -13756,6 +13807,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li>2026-11-18（没有配置 UB）perf-full 十八档：混合负载下 checkpoint、restore 的 p50 与 p99 全部达标的最高已测档是 128 MiB；192 MiB 档 restore 60 个样本里只有 1 个超线（109.0 ms）；256 MiB 档 restore p50 99.8 ms，正好在线上，p99 123.2 ms；512 MiB 档两项超线。这是已测档位的结论，不是连续区间的保证；p99 的取法不同，线附近的判定会变（§3）。</li>
 <li>checkpoint 随改动量的增长主要来自文件改动：每 MiB 内存 0.087 ms、每 MiB 文件 1.29 ms，混合档的增长有 83% 来自那 1/4 的文件。多出来的时间在 <code>snapshot</code> 段里把宿主块设备页缓存中还没写回的根盘数据经 NBD 推进写层（§5.4）。</li>
 <li>写文件的代价落在 checkpoint 里还是之前，取决于 checkpoint 时数据处在 guest 页缓存、宿主页缓存还是写层；分档测试“写完 <code>sync</code> 立刻 checkpoint”测到的是最贵的情况（§5.4）。920B 上同一个 64 MiB 文件：不 <code>sync</code> 立刻 checkpoint 墙钟 15.4 ms，<code>sync</code> 后立刻 72.8 ms，<code>sync</code> 后等 40 s 为 49.6 ms 且不再推送。</li>
+<li>2026-11-23～24 据此改了冻结窗口（§5.4）：暂停前预刷根盘、封层只 <code>fsync</code>、恢复运行后在后台作废根盘页缓存。920B 上写 64 MiB 文件并 <code>fsync</code> 后立刻 checkpoint，冻结窗口从 86.5 ms 降到 15 ms 左右（探针 15.1 ms，compare 14.0 ms），restore 与改前相当；只做到封层留缓存的中间版本在 950 上把 restore 拖慢了（40.5 → 59.7 ms），已由后台作废修正，950 待重测。</li>
 <li>同一实验发现：模板 guest 的 ext4 lazy itable init 没有在模板快照前完成，新沙箱和 restore 到它之前的 checkpoint 都会在几秒后多写约 60 MiB 根盘数据（§5.4）。2026-11-19 已在 orchestrator 里修复，重建模板后生效。</li>
 <li>拟合直线描述平均趋势，交点 466.2 / 260.1 MiB 不是实测上限；混合档的斜率取决于内存与文件的比例。</li>
 <li>同一 checkpoint 串行 restore 100 次的墙钟 p50 / p99 / max 为 9.62 / 16.2 / 17.6 ms（perf），这个负载不含新改动，不能代替分档回滚成本。</li>
@@ -20276,8 +20328,15 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 <td><code>CHECKPOINT_SEAL_DROP_CACHE</code></td>
 <td>关</td>
 <td><code>strconv.ParseBool</code>；未设为关；解析不了 → WARN，按关</td>
-<td>开：封层时对根盘做 <code>BLKFLSBUF</code>，作废宿主页缓存（2026-11-24 之前的行为，暂停窗口里多约 0.17 ms / 缓存 MiB）。关：封层只 <code>fsync</code>，缓存保留；封层不改变磁盘内容，缓存仍然有效（<a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>）。restore 换视图始终作废缓存，不受这个开关影响</td>
+<td>开：封层时对根盘做 <code>BLKFLSBUF</code>，作废宿主页缓存（2026-11-24 之前的行为，暂停窗口里多约 0.17 ms / 缓存 MiB）。关：封层只 <code>fsync</code>，缓存留到恢复运行之后，由下一行的后台作废处理（<a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>）。restore 换视图始终作废缓存，不受这个开关影响</td>
 <td><code>seal_drop_cache</code>、<code>seal_drop_cache_source</code></td>
+</tr>
+<tr>
+<td><code>CHECKPOINT_BACKGROUND_DROP_CACHE</code></td>
+<td>开</td>
+<td><code>strconv.ParseBool</code>；未设为开；解析不了 → WARN，按开</td>
+<td>开：checkpoint 恢复虚机之后，在后台对根盘做一次 <code>BLKFLSBUF</code>，作废封层时留下的宿主页缓存；下一次封层、restore 换视图和关闭沙箱都先等它做完。关：缓存留到下一次 restore，由 <code>ResetView</code> 在暂停窗口里作废（920B 上写 64 MiB 文件后 restore 慢约 14 ms，只供对照）。<code>CHECKPOINT_SEAL_DROP_CACHE</code> 开时不起作用</td>
+<td><code>background_drop_cache</code>、<code>background_drop_cache_source</code></td>
 </tr>
 <tr>
 <td><code>CHECKPOINT_DEBUG_INDEX</code></td>
@@ -20439,6 +20498,10 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 <tr>
 <td><code>seal_drop_cache</code>、<code>seal_drop_cache_source</code></td>
 <td><code>CHECKPOINT_SEAL_DROP_CACHE</code></td>
+</tr>
+<tr>
+<td><code>background_drop_cache</code>、<code>background_drop_cache_source</code></td>
+<td><code>CHECKPOINT_BACKGROUND_DROP_CACHE</code></td>
 </tr>
 <tr>
 <td><code>fault_inject</code></td>
@@ -20667,7 +20730,7 @@ ls<span class="w"> </span>-1v<span class="w"> </span><span class="s2">&quot;</sp
   [preflush]                                   （暂停之前，在冻结窗口外）
   checkpoint_to_files   = frozen + seal_move
     frozen              ≈ pause + [save_live_bitmap] + snapshot + seal + resume
-      seal              ≈ seal_fsync + [seal_blkflsbuf] + seal_new_layer + seal_swap
+      seal              ≈ [seal_wait_cache_drop] + seal_fsync + [seal_blkflsbuf] + seal_new_layer + seal_swap
   append_layer          ≈ append_lock_wait + append_merge + append_meta_write + append_serialize + append_header_write
   commit                ≈ commit_files + commit_manifest + commit_lock_wait + commit_index
 </code></pre></div>
@@ -20753,6 +20816,12 @@ ls<span class="w"> </span>-1v<span class="w"> </span><span class="s2">&quot;</sp
 <td>封存 rootfs 写层（换层，不搬数据）</td>
 <td>内</td>
 <td></td>
+</tr>
+<tr>
+<td><code>seal_wait_cache_drop</code></td>
+<td>封层前等上一次 checkpoint 的后台缓存作废做完</td>
+<td>内</td>
+<td><strong>只在真等了时出现</strong>；两次 checkpoint 间隔很短、上一次留下的缓存很多时才会有，920B 的对照测试里一次也没出现</td>
 </tr>
 <tr>
 <td><code>seal_fsync</code></td>
@@ -22711,7 +22780,7 @@ orchestrator 依赖 FC 的 <code>PUT /snapshot/rollback</code> 与 <code>PUT /sn
 <td><strong>checkpoint 封层的刷屏障去掉 <code>BLKFLSBUF</code>，只留 <code>fsync</code></strong></td>
 <td>改前 <code>SealLayer</code> 第一步调 <code>sync</code>，先 <code>ioctl(BLKFLSBUF)</code> 再 <code>fsync</code>（<code>rootfs/nbd.go</code> 的 <code>sync</code>）。<code>BLKFLSBUF</code> 除了把缓冲的写推下去，还会丢弃宿主为这个块设备缓存的已读内容。封层前后设备内容不变，这份缓存本来仍然有效；丢掉之后客户机再读这些块，要重新经 NBD 向 orchestrator 取。restore 的视图切换内容确实变了，那里必须丢，不在本项范围</td>
 <td>① 在运行内核上确认 <code>BLKFLSBUF</code> 是否丢弃读缓存；② 同一沙箱 checkpoint 前后重复读同一批文件，对比读耗时与 NBD 读请求数；③ 改成只 <code>fsync</code> 后重跑，并跑一遍正确性用例</td>
-<td><strong>已做（2026-11-24）</strong>：<code>SealLayer</code> 只 <code>fsync</code>、保留宿主页缓存（KASandbox deltabox-dev <code>0ce35c8</code>，已进部署包；<code>CHECKPOINT_SEAL_DROP_CACHE=true</code> 恢复旧行为）。920B 上 <code>seal</code> 10～13 → 0.3 ms，针对性读回校验 0 不一致，沙箱级 standard 通过；见 <a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>、<a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a></td>
+<td><strong>已做（2026-11-24）</strong>：<code>SealLayer</code> 只 <code>fsync</code>、保留宿主页缓存（KASandbox deltabox-dev <code>0ce35c8</code>，已进部署包；<code>CHECKPOINT_SEAL_DROP_CACHE=true</code> 恢复旧行为）。920B 上 <code>seal</code> 10～13 → 0.3 ms，针对性读回校验 0 不一致，沙箱级 standard 通过。随后发现留下的缓存要由下一次 restore 的 <code>ResetView</code> 作废，代价搬进了 restore（写 64 MiB 文件后 restore 36.7 → 51.0 ms），改为 checkpoint 恢复运行后在后台作废（<code>acba578</code>，<code>CHECKPOINT_BACKGROUND_DROP_CACHE</code>），920B 上 restore 回到 38.2 ms；见 <a href="#d07-23-为什么先暂停再做同步">第 7 章 §2.3</a>、<a href="#d18-54-写文件的代价由什么决定">第 18 章 §5.4</a></td>
 </tr>
 <tr>
 <td>V2</td>

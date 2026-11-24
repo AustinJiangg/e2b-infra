@@ -167,6 +167,13 @@ chmod -R a+rX %{buildroot}/opt/e2b-infra/helm
 
 %changelog
 * Tue Nov 24 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
+- orchestrator: drop the root disk's host page cache in the background
+  after a checkpoint resumes the VM (CHECKPOINT_BACKGROUND_DROP_CACHE,
+  default on). Keeping it through the seal had moved the BLKFLSBUF into
+  the next restore's freeze; the next seal, view reset and close wait for
+  the background drop
+
+* Tue Nov 24 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
 - orchestrator: shorten the freeze of a sandbox-level checkpoint. The root
   disk is written back before the pause (CHECKPOINT_PREFLUSH, default on),
   and sealing the write layer keeps the root disk's host page cache instead

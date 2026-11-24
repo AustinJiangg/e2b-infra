@@ -7840,10 +7840,10 @@ index 000000000..1c38b6a8c
 +}
 diff --git a/packages/orchestrator/internal/checkpoint/capabilities.go b/packages/orchestrator/internal/checkpoint/capabilities.go
 new file mode 100644
-index 0000000..60c0385
+index 0000000..a69601d
 --- /dev/null
 +++ b/packages/orchestrator/internal/checkpoint/capabilities.go
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,171 @@
 +package checkpoint
 +
 +import (
@@ -7927,6 +7927,12 @@ index 0000000..60c0385
 +	SealDropCache       bool
 +	SealDropCacheSource string
 +
++	// BackgroundDropCache says whether a checkpoint that kept the cache
++	// through the seal drops it in the background after resuming;
++	// BackgroundDropCacheSource is sourceEnv or sourceDefault.
++	BackgroundDropCache       bool
++	BackgroundDropCacheSource string
++
 +	// FaultInject is the armed fault list, empty on every node that is not
 +	// running a failure test.
 +	FaultInject []string
@@ -7946,32 +7952,35 @@ index 0000000..60c0385
 +	compactMaxPerOp, compactMaxPerOpSource := CompactMaxPerOp()
 +	preflush, preflushSource := sandbox.Preflush()
 +	sealDropCache, sealDropCacheSource := sandbox.SealDropCache()
++	backgroundDropCache, backgroundDropCacheSource := sandbox.BackgroundDropCache()
 +
 +	return Capabilities{
-+		Store:                    storeDir,
-+		TrackDirtyPages:          fc.TrackDirtyPagesEnabled(),
-+		TrackDirtyPagesReason:    fc.TrackDirtyPagesReason(),
-+		LockWaitTimeout:          lockWait,
-+		LockWaitSource:           lockWaitSource,
-+		FCCallTimeout:            fcCall,
-+		FCCallSource:             fcCallSource,
-+		MinFreeBytes:             minFree,
-+		MinFreeSource:            minFreeSource,
-+		MaxPerSandbox:            maxPerSandbox,
-+		MaxPerSandboxSource:      maxPerSandboxSource,
-+		MaxBytesPerSandbox:       maxBytesPerSandbox,
-+		MaxBytesPerSandboxSource: maxBytesPerSandboxSource,
-+		DebugIndex:               debugIndex,
-+		DebugIndexSource:         debugIndexSource,
-+		Compact:                  compact,
-+		CompactSource:            compactSource,
-+		CompactMaxPerOp:          compactMaxPerOp,
-+		CompactMaxPerOpSource:    compactMaxPerOpSource,
-+		Preflush:                 preflush,
-+		PreflushSource:           preflushSource,
-+		SealDropCache:            sealDropCache,
-+		SealDropCacheSource:      sealDropCacheSource,
-+		FaultInject:              faultsEnabled().armed(),
++		Store:                     storeDir,
++		TrackDirtyPages:           fc.TrackDirtyPagesEnabled(),
++		TrackDirtyPagesReason:     fc.TrackDirtyPagesReason(),
++		LockWaitTimeout:           lockWait,
++		LockWaitSource:            lockWaitSource,
++		FCCallTimeout:             fcCall,
++		FCCallSource:              fcCallSource,
++		MinFreeBytes:              minFree,
++		MinFreeSource:             minFreeSource,
++		MaxPerSandbox:             maxPerSandbox,
++		MaxPerSandboxSource:       maxPerSandboxSource,
++		MaxBytesPerSandbox:        maxBytesPerSandbox,
++		MaxBytesPerSandboxSource:  maxBytesPerSandboxSource,
++		DebugIndex:                debugIndex,
++		DebugIndexSource:          debugIndexSource,
++		Compact:                   compact,
++		CompactSource:             compactSource,
++		CompactMaxPerOp:           compactMaxPerOp,
++		CompactMaxPerOpSource:     compactMaxPerOpSource,
++		Preflush:                  preflush,
++		PreflushSource:            preflushSource,
++		SealDropCache:             sealDropCache,
++		SealDropCacheSource:       sealDropCacheSource,
++		BackgroundDropCache:       backgroundDropCache,
++		BackgroundDropCacheSource: backgroundDropCacheSource,
++		FaultInject:               faultsEnabled().armed(),
 +	}
 +}
 +
@@ -8001,6 +8010,8 @@ index 0000000..60c0385
 +		zap.String("preflush_source", c.PreflushSource),
 +		zap.Bool("seal_drop_cache", c.SealDropCache),
 +		zap.String("seal_drop_cache_source", c.SealDropCacheSource),
++		zap.Bool("background_drop_cache", c.BackgroundDropCache),
++		zap.String("background_drop_cache_source", c.BackgroundDropCacheSource),
 +		zap.Strings("fault_inject", c.FaultInject),
 +	}
 +}
@@ -17156,10 +17167,10 @@ index 0df559681..a6dc64b56 100644
  
 diff --git a/packages/orchestrator/internal/sandbox/checkpoint.go b/packages/orchestrator/internal/sandbox/checkpoint.go
 new file mode 100644
-index 0000000..3907e31
+index 0000000..0718b4f
 --- /dev/null
 +++ b/packages/orchestrator/internal/sandbox/checkpoint.go
-@@ -0,0 +1,781 @@
+@@ -0,0 +1,833 @@
 +package sandbox
 +
 +import (
@@ -17199,6 +17210,12 @@ index 0000000..3907e31
 +	// the write layer is sealed, as before. Off by default; read with
 +	// strconv.ParseBool.
 +	sealDropCacheEnv = "CHECKPOINT_SEAL_DROP_CACHE"
++
++	// backgroundDropCacheEnv turns off dropping the root disk's host page
++	// cache in the background after a checkpoint has resumed the VM. On by
++	// default; read with strconv.ParseBool. Ignored when sealDropCacheEnv
++	// drops the cache inside the freeze instead.
++	backgroundDropCacheEnv = "CHECKPOINT_BACKGROUND_DROP_CACHE"
 +)
 +
 +func fcCallTimeout() time.Duration {
@@ -17223,6 +17240,28 @@ index 0000000..3907e31
 +			zap.String("value", raw))
 +
 +		return false, "default"
++	}
++
++	return enabled, "env"
++}
++
++// BackgroundDropCache reports whether a checkpoint that kept the root disk's
++// host page cache through the seal drops it in the background once the VM
++// runs again, with the value's provenance ("env" or "default"). Each
++// checkpoint reads it again.
++func BackgroundDropCache() (bool, string) {
++	raw, set := os.LookupEnv(backgroundDropCacheEnv)
++	if !set {
++		return true, "default"
++	}
++
++	enabled, err := strconv.ParseBool(raw)
++	if err != nil {
++		logger.L().Warn(context.Background(), "ignoring a background cache drop setting that is not a boolean",
++			zap.String("env", backgroundDropCacheEnv),
++			zap.String("value", raw))
++
++		return true, "default"
 +	}
 +
 +	return enabled, "env"
@@ -17457,6 +17496,31 @@ index 0000000..3907e31
 +		return false, nil, fmt.Errorf("failed to pause VM: %w", err)
 +	}
 +
++	// Sealing keeps the root disk's host page cache (NBDProvider.SealLayer),
++	// but the next restore has to drop it, and dropping it costs about
++	// 0.2 ms per cached MiB inside that restore's freeze -- the same cost
++	// the seal used to pay inside this one (measured on 920B: restore after
++	// 64 MiB of fsynced file writes 36.7 ms when the seal drops the cache,
++	// 51.0 ms when it keeps it). So the cache is dropped here instead, in
++	// the background once the guest runs again: registered first, this runs
++	// after the resume and the move below. The provider makes the next seal,
++	// view reset and close wait for it, so it never overlaps a freeze it
++	// could have finished before.
++	dropCache, _ := SealDropCache()
++	defer func() {
++		if layer == nil || dropCache {
++			return
++		}
++
++		if enabled, _ := BackgroundDropCache(); !enabled {
++			return
++		}
++
++		if dropper, ok := provider.(rootfs.BackgroundCacheDropper); ok {
++			dropper.DropCacheInBackground(ctx)
++		}
++	}()
++
 +	// Registered before the resume below, so it runs after it: the sealed
 +	// layer file is moved into the checkpoint store with the guest already
 +	// running again. Within one filesystem that is a rename, but across two
@@ -17531,7 +17595,6 @@ index 0000000..3907e31
 +	)
 +
 +	sealStart := time.Now()
-+	dropCache, _ := SealDropCache()
 +	sealed, err := sealer.SealLayer(ctx, newCachePath, dropCache, timings.Mark)
 +	timings.Mark("seal", sealStart)
 +	if err != nil {
@@ -20786,18 +20849,31 @@ index 000000000..44fa4b6a7
 +	return err
 +}
 diff --git a/packages/orchestrator/internal/sandbox/rootfs/nbd.go b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
-index 61b574e..07cbe2f 100644
+index 61b574e..7bd2070 100644
 --- a/packages/orchestrator/internal/sandbox/rootfs/nbd.go
 +++ b/packages/orchestrator/internal/sandbox/rootfs/nbd.go
-@@ -6,6 +6,7 @@ import (
+@@ -6,6 +6,8 @@ import (
  	"fmt"
  	"io"
  	"os"
++	"sync"
 +	"time"
  
  	"go.uber.org/zap"
  	"golang.org/x/sys/unix"
-@@ -77,10 +78,15 @@ func (o *NBDProvider) ExportDiff(
+@@ -30,6 +32,11 @@ type NBDProvider struct {
+ 
+ 	finishedOperations chan struct{}
+ 	devicePool         *nbd.DevicePool
++
++	// cacheDropDone is closed when the background cache drop started last
++	// by DropCacheInBackground has finished; nil when none was started.
++	cacheDropMu   sync.Mutex
++	cacheDropDone chan struct{}
+ }
+ 
+ func NewNBDProvider(ctx context.Context, rootfs block.ReadonlyDevice, cachePath string, devicePool *nbd.DevicePool, featureFlags *featureflags.Client) (Provider, error) {
+@@ -77,10 +84,15 @@ func (o *NBDProvider) ExportDiff(
  	ctx, span := tracer.Start(ctx, "cow-export")
  	defer span.End()
  
@@ -20814,7 +20890,7 @@ index 61b574e..07cbe2f 100644
  
  	// the error is already logged in go routine in SandboxCreate handler
  	go func() {
-@@ -97,7 +103,13 @@ func (o *NBDProvider) ExportDiff(
+@@ -97,7 +109,13 @@ func (o *NBDProvider) ExportDiff(
  	}
  	telemetry.ReportEvent(ctx, "sandbox stopped")
  
@@ -20829,7 +20905,7 @@ index 61b574e..07cbe2f 100644
  	if err != nil {
  		return nil, fmt.Errorf("error exporting cache: %w", err)
  	}
-@@ -109,9 +121,140 @@ func (o *NBDProvider) ExportDiff(
+@@ -109,13 +127,157 @@ func (o *NBDProvider) ExportDiff(
  		return nil, fmt.Errorf("error closing cache: %w", err)
  	}
  
@@ -20871,9 +20947,16 @@ index 61b574e..07cbe2f 100644
 +	// cached page still equals what a read through the NBD device returns.
 +	// Only ResetView changes the disk's content, and it drops the cache.
 +	// Dropping it here cost about 0.17 ms per cached MiB inside the freeze
-+	// (measured on 920B), and made the guest's next reads of those blocks go
-+	// through the NBD server again. dropCache restores the old behaviour.
++	// (measured on 920B). Not dropping it at all moves that cost into the
++	// next ResetView's freeze, so the caller drops it in the background
++	// after resuming (DropCacheInBackground). dropCache restores the old
++	// behaviour.
 +	start := time.Now()
++	if o.waitCacheDrop() {
++		mark("seal_wait_cache_drop", start)
++	}
++
++	start = time.Now()
 +	nbdPath, err := o.Path()
 +	if err == nil {
 +		err = flush(ctx, nbdPath)
@@ -20943,6 +21026,8 @@ index 61b574e..07cbe2f 100644
 +	ctx, span := tracer.Start(ctx, "reset-view")
 +	defer span.End()
 +
++	o.waitCacheDrop()
++
 +	if err := o.sync(ctx); err != nil {
 +		return fmt.Errorf("error flushing nbd device before view reset: %w", err)
 +	}
@@ -20970,10 +21055,77 @@ index 61b574e..07cbe2f 100644
  func (o *NBDProvider) Close(ctx context.Context) error {
  	ctx, span := tracer.Start(ctx, "cow-close")
  	defer span.End()
-@@ -144,6 +287,22 @@ func (o *NBDProvider) Path() (string, error) {
+ 
++	// A background drop must not outlive the device: after the unmount the
++	// same /dev/nbdX may already serve another sandbox.
++	o.waitCacheDrop()
++
+ 	var errs []error
+ 
+ 	err := o.sync(ctx)
+@@ -144,6 +306,81 @@ func (o *NBDProvider) Path() (string, error) {
  	return o.ready.Wait()
  }
  
++// DropCacheInBackground invalidates the device's host page cache (BLKFLSBUF)
++// on a goroutine and returns at once; see BackgroundCacheDropper. It is safe
++// while the guest runs: BLKFLSBUF writes the dirty pages back and drops only
++// the clean ones nobody holds, and every dropped page is read again from the
++// layer stack, which holds the same data. Drops started back to back run one
++// after another.
++func (o *NBDProvider) DropCacheInBackground(ctx context.Context) {
++	ctx = context.WithoutCancel(ctx)
++
++	o.cacheDropMu.Lock()
++	defer o.cacheDropMu.Unlock()
++
++	prev := o.cacheDropDone
++	done := make(chan struct{})
++	o.cacheDropDone = done
++
++	go func() {
++		defer close(done)
++
++		if prev != nil {
++			<-prev
++		}
++
++		start := time.Now()
++		nbdPath, err := o.Path()
++		if err == nil {
++			err = dropBlockCache(ctx, nbdPath)
++		}
++		if err != nil {
++			logger.L().Warn(ctx, "failed to drop the root disk's page cache after a checkpoint; the next restore drops it", zap.Error(err))
++
++			return
++		}
++
++		logger.L().Debug(ctx, "dropped the root disk's page cache after a checkpoint", zap.Duration("took", time.Since(start)))
++	}()
++}
++
++// waitCacheDrop blocks until the last background cache drop has finished and
++// reports whether it had to wait.
++func (o *NBDProvider) waitCacheDrop() bool {
++	o.cacheDropMu.Lock()
++	done := o.cacheDropDone
++	o.cacheDropMu.Unlock()
++
++	if done == nil {
++		return false
++	}
++
++	select {
++	case <-done:
++		return false
++	default:
++		<-done
++
++		return true
++	}
++}
++
 +// PreFlush writes back the dirty pages the NBD device holds in the host page
 +// cache into the write layer while the VM is running (see PreFlusher). It is
 +// an fsync of the block device and nothing more: the cache is kept, since the
@@ -20993,7 +21145,7 @@ index 61b574e..07cbe2f 100644
  func (o *NBDProvider) sync(ctx context.Context) error {
  	ctx, span := tracer.Start(ctx, "sync")
  	defer span.End()
-@@ -153,6 +312,16 @@ func (o *NBDProvider) sync(ctx context.Context) error {
+@@ -153,6 +390,16 @@ func (o *NBDProvider) sync(ctx context.Context) error {
  		return fmt.Errorf("failed to get cow path: %w", err)
  	}
  
@@ -21010,7 +21162,7 @@ index 61b574e..07cbe2f 100644
  	file, err := os.Open(nbdPath)
  	if err != nil {
  		return fmt.Errorf("failed to open path: %w", err)
-@@ -168,5 +337,5 @@ func (o *NBDProvider) sync(ctx context.Context) error {
+@@ -168,5 +415,5 @@ func (o *NBDProvider) sync(ctx context.Context) error {
  		return fmt.Errorf("ioctl BLKFLSBUF failed: %w", err)
  	}
  
@@ -21018,7 +21170,7 @@ index 61b574e..07cbe2f 100644
 +	return nil
  }
 diff --git a/packages/orchestrator/internal/sandbox/rootfs/rootfs.go b/packages/orchestrator/internal/sandbox/rootfs/rootfs.go
-index 48a4c3d..88b2191 100644
+index 48a4c3d..27af2d3 100644
 --- a/packages/orchestrator/internal/sandbox/rootfs/rootfs.go
 +++ b/packages/orchestrator/internal/sandbox/rootfs/rootfs.go
 @@ -6,6 +6,9 @@ import (
@@ -21031,7 +21183,7 @@ index 48a4c3d..88b2191 100644
  
  	"go.opentelemetry.io/otel"
  	"go.opentelemetry.io/otel/attribute"
-@@ -25,6 +28,84 @@ type Provider interface {
+@@ -25,6 +28,93 @@ type Provider interface {
  	ExportDiff(ctx context.Context, out io.Writer, closeSandbox func(context.Context) error) (*header.DiffMetadata, error)
  }
  
@@ -21102,6 +21254,15 @@ index 48a4c3d..88b2191 100644
 +// freeze went.
 +type LayerSealer interface {
 +	SealLayer(ctx context.Context, newCachePath string, dropCache bool, mark func(name string, start time.Time)) (*SealedLayer, error)
++}
++
++// BackgroundCacheDropper is implemented by providers whose device keeps a
++// host page cache that a later view reset has to invalidate. DropCacheInBackground
++// starts that invalidation without waiting for it, for the caller to run once
++// the VM is up again; the provider's next SealLayer, ResetView and Close wait
++// for it to finish.
++type BackgroundCacheDropper interface {
++	DropCacheInBackground(ctx context.Context)
 +}
 +
 +// PreFlusher is implemented by providers whose disk writes can sit in a host

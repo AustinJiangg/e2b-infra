@@ -44,7 +44,8 @@ SDK 对 checkpoint / restore / delete 的默认请求超时是 300 s，大于锁
 | `CHECKPOINT_COMPACT` | 开 | `strconv.ParseBool`；未设为开；解析不了 → WARN，按开 | 开：删除操作结尾把"隐藏、非基准、恰有一个子节点"的条目**并入它的子节点**（内存与 rootfs 层成对合并），使条目数有上界 2V+1（机制与证明见 [第 6 章 §10](06-memory-diff-tree.md#10-删除隐藏与合并)）。关：隐藏条目无界积累，只供对照测试 | `compact`、`compact_source` |
 | `CHECKPOINT_COMPACT_MAX_PER_OP` | `8` | 十进制整数，**须 ≥ 1**（关合并用上一行）；否则 WARN，用 `8` | 一次 delete 最多做几次合并。合并在 delete 调用里同步做，这个数越大单次 delete 越可能变长，越小则积压越慢消化（每个未处理候选让上界多 1） | `compact_max_per_op`、`compact_max_per_op_source` |
 | `CHECKPOINT_PREFLUSH` | 开 | `strconv.ParseBool`；未设为开；解析不了 → WARN，按开 | 开：暂停虚机之前先对根盘的 NBD 设备 `fsync` 一次，把宿主页缓存里的脏页推进写层，暂停窗口里只剩预刷期间新写的部分（计时键 `preflush`）。失败只打 WARN，checkpoint 照常；关：这段推送全部落在暂停窗口里（[第 18 章 §5.4](18-950-performance.md#54-写文件的代价由什么决定)） | `preflush`、`preflush_source` |
-| `CHECKPOINT_SEAL_DROP_CACHE` | 关 | `strconv.ParseBool`；未设为关；解析不了 → WARN，按关 | 开：封层时对根盘做 `BLKFLSBUF`，作废宿主页缓存（2026-11-24 之前的行为，暂停窗口里多约 0.17 ms / 缓存 MiB）。关：封层只 `fsync`，缓存保留；封层不改变磁盘内容，缓存仍然有效（[第 7 章 §2.3](07-disk-layering.md#23-为什么先暂停再做同步)）。restore 换视图始终作废缓存，不受这个开关影响 | `seal_drop_cache`、`seal_drop_cache_source` |
+| `CHECKPOINT_SEAL_DROP_CACHE` | 关 | `strconv.ParseBool`；未设为关；解析不了 → WARN，按关 | 开：封层时对根盘做 `BLKFLSBUF`，作废宿主页缓存（2026-11-24 之前的行为，暂停窗口里多约 0.17 ms / 缓存 MiB）。关：封层只 `fsync`，缓存留到恢复运行之后，由下一行的后台作废处理（[第 7 章 §2.3](07-disk-layering.md#23-为什么先暂停再做同步)）。restore 换视图始终作废缓存，不受这个开关影响 | `seal_drop_cache`、`seal_drop_cache_source` |
+| `CHECKPOINT_BACKGROUND_DROP_CACHE` | 开 | `strconv.ParseBool`；未设为开；解析不了 → WARN，按开 | 开：checkpoint 恢复虚机之后，在后台对根盘做一次 `BLKFLSBUF`，作废封层时留下的宿主页缓存；下一次封层、restore 换视图和关闭沙箱都先等它做完。关：缓存留到下一次 restore，由 `ResetView` 在暂停窗口里作废（920B 上写 64 MiB 文件后 restore 慢约 14 ms，只供对照）。`CHECKPOINT_SEAL_DROP_CACHE` 开时不起作用 | `background_drop_cache`、`background_drop_cache_source` |
 | `CHECKPOINT_DEBUG_INDEX` | 关 | `strconv.ParseBool`；未设为关；解析不了 → WARN，按关 | 开：后台写者每沙箱最多每 5 s 重写一次 `<store>/<sandbox>/index.json`，进程退出时再写一次。**只供事后查看，没有任何代码读它**；正确性不依赖它 | `debug_index`、`debug_index_source` |
 
 ### 2.4 调试与取证（用完即关）
@@ -94,6 +95,7 @@ orchestrator 启动时打一行 INFO `checkpoint capabilities`，同样的键和
 | `compact_max_per_op`、`compact_max_per_op_source` | `CHECKPOINT_COMPACT_MAX_PER_OP` |
 | `preflush`、`preflush_source` | `CHECKPOINT_PREFLUSH` |
 | `seal_drop_cache`、`seal_drop_cache_source` | `CHECKPOINT_SEAL_DROP_CACHE` |
+| `background_drop_cache`、`background_drop_cache_source` | `CHECKPOINT_BACKGROUND_DROP_CACHE` |
 | `fault_inject` | 已武装的注入点（带 `:once` 的原样写出）；生产节点应为 `[]` |
 
 `_source` 为 `env` 表示环境变量被读到并采用；为 `default` 表示没设、或设了但无效（那时另有一条 WARN）。

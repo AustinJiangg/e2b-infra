@@ -324,7 +324,7 @@ timings.Mark("seal", sealStart)
 | 13 | **暂停虚机** | `pause` | 常数 |
 | 14 | （仅全量）`save-dirty-bitmap` 导出活跃脏页，折进「开机以来写过的页」集合 | `save_live_bitmap` | 内存 / 64 的位图导出 |
 | 15 | 写快照：vmstate + 稀疏内存差分 + 位图侧车，**一次调用** | `snapshot` | 本代脏页数（全量时是整份内存） |
-| 16 | 封存写层：刷屏障（对 NBD 设备 `fsync`，保留宿主页缓存）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针 | `seal`（分步 `seal_fsync`、`seal_new_layer`、`seal_swap`） | 不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（[第 7 章](07-disk-layering.md)） |
+| 16 | 封存写层：先等上一次 checkpoint 的后台缓存作废做完（通常早已做完）→ 刷屏障（对 NBD 设备 `fsync`，保留宿主页缓存，恢复运行后再在后台作废，见 [第 7 章 §2.3](07-disk-layering.md#23-为什么先暂停再做同步)）→ 新空写层 → 把旧写层追加进活的层栈 → 换指针 | `seal`（分步 `seal_fsync`、`seal_new_layer`、`seal_swap`） | 不搬运数据、不等落盘；在归属索引里登记本层块，与本层块数成正比，首次封存还要为整个磁盘建索引（[第 7 章](07-disk-layering.md)） |
 | 17 | **恢复虚机**（`defer`，无条件） | `resume` | 常数 |
 | 18 | 封存层文件移入 store 的 layers 目录（`defer`，登记在 resume 之前，所以在它之后执行） | `seal_move` | 同一文件系统是一次 rename；跨文件系统是一次拷贝，所以放到窗口外 |
 
