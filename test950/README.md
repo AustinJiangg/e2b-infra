@@ -9,6 +9,7 @@
 - 每段开头记录身份：orchestrator、Firecracker、进程级运行文件的 sha256，宿主内核，仓库提交。
 - 默认转到后台运行，断开 ssh 不影响。中途停下，再执行同一条命令会从停下的那一步继续。
 - e2b 网络命名空间超过 1500 个时，在下一步之前自动清理（`950.sh recycle-netns`）。
+- 开测前、每一步前后查宿主上的 smap，有 smap 活动就不开测或停下，见 1.1 节。
 - 结果用 `bash test950.sh report` 打印到终端，复制终端内容即可，不打包、不需要拷文件。
 
 测什么、不测什么，以及分档的理由，见工作区的《950 测试方案》。下面只讲怎么用。
@@ -21,6 +22,26 @@
 - 两个 conda 环境与 `950.sh` 用的相同：沙箱级 `jll-e2b`，进程级 `jll-e2b-criu`（`950.sh all` 克隆出来的）。如果不在默认位置，在 `criu-rollback/deploy/ops/site.env` 里写明。
 - 进度文件和后台日志在 `/var/lib/test950/`，结果在仓库里的 `test950/results/`。
 - 凭据和 `950.sh` 一样，从 `~/.e2b/config.json` 与 `/opt/e2b-infra/.env` 读取，不需要另外准备。
+- 宿主上没有 smap 活动（见 1.1 节）。
+
+### 1.1 smap 检查
+
+smap 是 UB 内存分层：`ubturbo` 服务按请求，经 smap 内核模块把进程内存迁到远端节点。2026-11 在 950 上查实，它迁移 firecracker 内存时会算错页的引用计数，或者把大页迁进 4 KB 页，写坏内核内存，几小时后宿主崩溃。被迁的是同机别人的 firecracker，但整台宿主都受影响，这段时间测出的数据不能用。
+
+test950 在三个时刻各查一次：开测前（转到后台之前先查，不能开测就直接在终端上说）、每一步开始前、每一步结束后。下面任一条成立就算有 smap 活动：
+
+| 条件 | 怎么查 |
+|---|---|
+| `ubturbo` 服务在运行 | `systemctl is-active ubturbo` |
+| 加载着 smap 内核模块（`smap_tiering`、`smapexp`、`smap_haft_exp` 等，名字以 `smap` 或 `haft` 开头） | `/proc/modules` |
+| 本次开机以来 `ubturbo` 收到过迁出请求 | `journalctl -b -u ubturbo` 里的 `ubturbo_smap_migrate_out` |
+| 本次开机以来内核做过 smap 迁移（含不经 `ubturbo` 的实验模块） | `journalctl -b -k` 里的 `[smap-mig]`、`SMAP_migrate` |
+
+- 开测前、某一步开始前有 smap 活动：不开测、停下，这一步留着“待跑”。
+- 某一步结束后才发现：这一步记为“作废”，原来的判定写在摘要里，然后停下。
+- 后两条按“本次开机以来”算，因为迁移造成的内核内存损坏会一直留到重启。所以只停服务不够，要 `systemctl stop ubturbo`、确认没人再加载 smap 模块，然后重启宿主。重启后 smap 模块不会自动加载，但 `ubturbo` 是开机自启的，要再停一次。处理好以后，再执行同一条命令，从停下的那一步继续。
+- 查到的结果写在 `report` 的“smap 检查”一行和 `SUMMARY.md` 的“smap”一节。
+- 确实要在 smap 活动下测，设 `TEST950_CHECK_SMAP=0` 关掉检查。没有 `ubturbo` 的机器（如 920B）上，检查总是通过。
 
 ## 2. 命令
 

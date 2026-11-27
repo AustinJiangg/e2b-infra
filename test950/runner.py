@@ -13,6 +13,9 @@ e2b 的网络命名空间超过 TEST950_NETNS_LIMIT（默认 1500）时，在下
 （TEST950_CLEAN_NETNS=0 关掉）：每次重启 orchestrator 都会留下一池 netns，每个 netns 在 /run/netns 下有
 挂载点，Firecracker 启动时新建 mount 命名空间要复制整张挂载表，netns 积得越多 resume 越慢；清掉之后只剩
 当前 orchestrator 自己的一池，与不频繁重启的生产节点一致。
+开测前、每一步前后查宿主上的 smap（UB 内存分层）：ubturbo 服务在运行、加载着 smap 内核模块、或者本次开机
+以来做过 smap 迁移，就不开测；测试中出现，就把刚跑完的那一步记为“作废”并停下（TEST950_CHECK_SMAP=0 关掉）。
+950 上 smap 迁移 firecracker 内存时会写坏内核内存、几小时后宿主崩溃（2026-11 多次），这期间的数据不可用。
 """
 import argparse
 from datetime import datetime
@@ -65,6 +68,7 @@ LEVELS = ("quick", "standard", "extended", "long")
 EXTRA = ("native", "compare", "fcexit", "dbm")
 DBM_SERIES = "dirty,layout,mix"
 CLEAN_NETNS = os.environ.get("TEST950_CLEAN_NETNS", "1") != "0"
+CHECK_SMAP = os.environ.get("TEST950_CHECK_SMAP", "1") != "0"
 PERF_STEPS = ("perf", "perf-full")     # 沙箱级 run.sh 里测性能的档，开测前也清 netns
 TEMPLATES = {"sandbox": os.environ.get("SANDBOX_TEMPLATE", "base"),
              "criu": os.environ.get("CRIU_TEMPLATE", "base-criu")}
@@ -409,6 +413,95 @@ def maybe_recycle(data, run_dir, force=None):
                                                     m0, rec["mounts_after"], dur(rec["seconds"])))
 
 
+SMAP_SERVICE = "ubturbo"
+# smap 的内核模块：smap_tiering、smap_access_tracking、smap_histogram_tracking，实验变体 smapexp、smap_haft_exp
+SMAP_MODULE_PREFIXES = ("smap", "haft")
+# 迁移的痕迹：ubturbo 收到迁出请求时记 “Receive ubturbo_smap_migrate_out msg”；
+# 内核模块迁移时打印 “[smap-mig] …” 或 “SMAP_migrate …”（不经 ubturbo 的 smapexp 也打印后者）
+SMAP_SERVICE_MARK = "ubturbo_smap_migrate_out"
+SMAP_KERNEL_MARKS = ("[smap-mig]", "SMAP_migrate")
+
+
+def count_marks(cmd, marks):
+    """数命令输出里含任一标记的行；命令不存在、超时或出错返回 None（查不到不当成有问题）。"""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0 and not r.stdout:
+        return None
+    return sum(1 for line in r.stdout.splitlines() if any(m in line for m in marks))
+
+
+def smap_modules(modules_text=None):
+    """/proc/modules 里 smap 的模块名。"""
+    if modules_text is None:
+        try:
+            modules_text = Path("/proc/modules").read_text()
+        except OSError:
+            return []
+    names = [line.split()[0] for line in modules_text.splitlines() if line.strip()]
+    return [n for n in names if n.startswith(SMAP_MODULE_PREFIXES)]
+
+
+def smap_state():
+    """宿主上 smap 的当前状态与本次开机以来的迁移次数。"""
+    active = sh("systemctl is-active %s 2>/dev/null" % SMAP_SERVICE) or "unknown"
+    return {"time": datetime.now().isoformat(), "service": active, "modules": smap_modules(),
+            "service_migrations": count_marks(["journalctl", "-b", "-u", SMAP_SERVICE, "--no-pager", "-o", "cat"],
+                                              (SMAP_SERVICE_MARK,)),
+            "kernel_migrations": count_marks(["journalctl", "-b", "-k", "--no-pager", "-o", "cat"], SMAP_KERNEL_MARKS)}
+
+
+def smap_problems(st):
+    """返回不能开测（或这一步要作废）的原因，空表示没有 smap 活动。"""
+    out = []
+    if st["service"] in ("active", "activating", "reloading"):
+        out.append("%s 服务在运行（systemctl stop %s）" % (SMAP_SERVICE, SMAP_SERVICE))
+    if st["modules"]:
+        out.append("加载着 smap 内核模块 %s" % "、".join(st["modules"]))
+    if st["service_migrations"]:
+        out.append("本次开机以来 %s 收到过 %d 次迁出请求" % (SMAP_SERVICE, st["service_migrations"]))
+    if st["kernel_migrations"]:
+        out.append("本次开机以来内核日志里有 %d 行 smap 迁移记录" % st["kernel_migrations"])
+    return out
+
+
+SMAP_ADVICE = ("smap 迁移 firecracker 内存时会写坏内核内存，几小时后宿主崩溃，这段时间的数据不能用。"
+               "先 systemctl stop %s，确认没人再加载 smap 模块，重启一次宿主再测（有迁移记录说明内核里可能已有损坏，"
+               "只停服务不够）。确实要在 smap 活动下测，设 TEST950_CHECK_SMAP=0" % SMAP_SERVICE)
+
+
+def check_smap(data, when):
+    """查一次 smap；有问题返回原因列表。结果记进 data["smap"]：开测前那次全记，之后只记次数和出问题的那次。"""
+    if not CHECK_SMAP:
+        return []
+    st = smap_state()
+    problems = smap_problems(st)
+    rec = data.setdefault("smap", {"checks": 0, "violations": []})
+    rec["checks"] += 1
+    rec.setdefault("first", dict(st, when=when))
+    if problems:
+        rec["violations"].append(dict(st, when=when, problems=problems))
+    return problems
+
+
+def smap_lines(data):
+    """汇报里的 smap 检查结果。"""
+    rec = data.get("smap")
+    if not rec:
+        return ["smap 检查：未做（TEST950_CHECK_SMAP=0，或这一轮是加检查之前开始的）"]
+    first = rec.get("first") or {}
+    lines = ["smap 检查：%d 次，%s；开测前 %s 服务 %s，smap 模块 %s，本次开机迁出请求 %s 次、内核迁移记录 %s 行" % (
+        rec["checks"], "全部正常" if not rec["violations"] else "%d 次有 smap 活动" % len(rec["violations"]),
+        SMAP_SERVICE, first.get("service"), "、".join(first.get("modules") or []) or "无",
+        "?" if first.get("service_migrations") is None else first["service_migrations"],
+        "?" if first.get("kernel_migrations") is None else first["kernel_migrations"])]
+    for v in rec["violations"]:
+        lines.append("  %s %s：%s" % (v["time"][11:19], v["when"], "；".join(v["problems"])))
+    return lines
+
+
 def write_summary(data, run_dir):
     lines = ["# 950 测试 · %s 档" % data["level"], "",
              "| 项 | 值 |", "|---|---|",
@@ -420,6 +513,7 @@ def write_summary(data, run_dir):
         lines.append("| %s | %s | %s | %s |" % (s["id"], s["status"],
                                                 dur(s["seconds"]) if "seconds" in s else "-",
                                                 s.get("detail", "")))
+    lines += ["", "## smap", ""] + ["- " + l.strip() for l in smap_lines(data)]
     if data.get("recycles"):
         lines += ["", "## 自动清理 netns", "", "| 时刻 | 原因 | netns 清理前 | 清理后 | 挂载点 清理前 | 清理后 | 用时 | 结果 |",
                   "|---|---|---|---|---|---|---|---|"]
@@ -482,6 +576,10 @@ def execute(args):
     total, switches = estimate(data["steps"])
     log("共 %d 步，预计约 %d 分钟（含 %d 次切栈；中途清理 netns 每次另加约 2 分钟）。进度：bash test950.sh status"
         % (len(data["steps"]), total, switches))
+    problems = check_smap(data, "开测前")
+    if problems:
+        save(data)
+        raise RuntimeError("宿主上有 smap 活动，不开测：%s。%s" % ("；".join(problems), SMAP_ADVICE))
     current = None
     for step in data["steps"]:
         if step["status"] == "PASS":
@@ -496,6 +594,10 @@ def execute(args):
                 json.dumps(data["identity"][key], ensure_ascii=False, indent=1))
         if step.get("clean_netns") and CLEAN_NETNS:
             maybe_recycle(data, run_dir, force="开测前清掉重启留下的 netns")
+        problems = check_smap(data, "%s 开始前" % step["id"])
+        if problems:
+            save(data)
+            raise RuntimeError("%s 开始前发现 smap 活动：%s。%s" % (step["id"], "；".join(problems), SMAP_ADVICE))
         step["status"] = "运行中"
         step["started"] = datetime.now().isoformat()
         save(data)
@@ -503,8 +605,14 @@ def execute(args):
         rc, out, logf = run_step(step, run_dir)
         step["seconds"] = int(time.time() - t0)
         step["status"], step["detail"] = outcome(step, rc, out)
+        problems = check_smap(data, "%s 结束后" % step["id"])
+        if problems:
+            step["detail"] = "smap 活动，数据作废（原判定 %s %s）" % (step["status"], step["detail"])
+            step["status"] = "作废"
         log("%s %s（%s）%s" % (step["id"], step["status"], dur(step["seconds"]), step["detail"]))
         save(data)
+        if problems:
+            raise RuntimeError("%s 运行期间出现 smap 活动：%s。%s" % (step["id"], "；".join(problems), SMAP_ADVICE))
     maybe_recycle(data, run_dir)
     data["resources"]["结束"] = resources()
     data["finished"] = datetime.now().isoformat()
@@ -573,6 +681,8 @@ def print_overview(run):
     for s in data["steps"]:
         print(report.clip("  %-6s %-22s %-9s %s" % (s["status"], s["id"], dur(s["seconds"]) if "seconds" in s else "-",
                                                    s.get("detail", ""))))
+    for line in smap_lines(data):
+        print(report.clip("-- " + line if not line.startswith(" ") else line))
     print("-- 身份（每段开头记录，相同的只列一次）")
     seen = set()
     for key, ident in data.get("identity", {}).items():
@@ -728,6 +838,11 @@ def main():
                 sys.exit("上一轮还在跑（pid %d），先 bash test950.sh status 看进度" % prev["pid"])
         except OSError:
             pass
+    if CHECK_SMAP and not args.fg:
+        # 转后台之前先查一次，不能开测时直接在终端上说
+        problems = smap_problems(smap_state())
+        if problems:
+            sys.exit("宿主上有 smap 活动，不开测：\n  %s\n%s" % ("\n  ".join(problems), SMAP_ADVICE))
     if not args.fg:
         RESULTS.mkdir(parents=True, exist_ok=True)
         bg_log = state_dir() / "test950-bg.log"

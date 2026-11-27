@@ -99,6 +99,60 @@ class RunnerTests(unittest.TestCase):
         base = sum(s["est_min"] for s in steps) + switches * runner.SWITCH_MIN
         self.assertEqual(total, base + (2 * runner.SWITCH_MIN if runner.CLEAN_NETNS else 0))
 
+    def test_smap_detection(self):
+        mods = ("smap_tiering 1228800 0 - Live 0x0 (OE)\nnbd 49152 64 - Live 0x0\n"
+                "smap_haft_exp 16384 0 - Live 0x0 (OE)\nsmapexp 9518080 0 - Live 0x0 (OE)\nkvm 1 0 - Live 0x0\n")
+        self.assertEqual(runner.smap_modules(mods), ["smap_tiering", "smap_haft_exp", "smapexp"])
+        self.assertEqual(runner.smap_modules("nbd 49152 64 - Live 0x0\n"), [])
+        clean = {"service": "inactive", "modules": [], "service_migrations": 0, "kernel_migrations": 0}
+        self.assertEqual(runner.smap_problems(clean), [])
+        # journalctl 查不到（None）不当成有问题；920B 上没有 ubturbo 服务，is-active 打印 inactive
+        self.assertEqual(runner.smap_problems(dict(clean, service_migrations=None, kernel_migrations=None)), [])
+        self.assertEqual(len(runner.smap_problems(dict(clean, service="active"))), 1)
+        self.assertEqual(len(runner.smap_problems(dict(clean, modules=["smapexp"]))), 1)
+        # 服务停了、模块卸了，但本次开机迁移过：内核里可能已有损坏，仍不开测
+        self.assertIn("3 次迁出请求", runner.smap_problems(dict(clean, service_migrations=3))[0])
+        self.assertEqual(len(runner.smap_problems(dict(clean, kernel_migrations=5))), 1)
+
+    def test_count_marks(self):
+        text = "Receive ubturbo_smap_migrate_out msg.\nother\n[smap-mig] page[1]\nSMAP_migrate x\n"
+        cmd = ["printf", "%s", text]
+        self.assertEqual(runner.count_marks(cmd, (runner.SMAP_SERVICE_MARK,)), 1)
+        self.assertEqual(runner.count_marks(cmd, runner.SMAP_KERNEL_MARKS), 2)
+        self.assertIsNone(runner.count_marks(["/nonexistent-cmd"], ("x",)))
+
+    def test_check_smap_records(self):
+        clean = {"time": "2026-11-27T10:00:00", "service": "inactive", "modules": [], "service_migrations": 0,
+                 "kernel_migrations": 0}
+        states = [clean, clean, dict(clean, time="2026-11-27T11:22:33", service="active", service_migrations=2)]
+        old = runner.smap_state, runner.CHECK_SMAP
+        runner.smap_state, runner.CHECK_SMAP = lambda: states.pop(0), True
+        try:
+            data = {}
+            self.assertEqual(runner.check_smap(data, "开测前"), [])
+            self.assertEqual(runner.check_smap(data, "a 开始前"), [])
+            self.assertEqual(len(runner.check_smap(data, "a 结束后")), 2)
+        finally:
+            runner.smap_state, runner.CHECK_SMAP = old
+        self.assertEqual(data["smap"]["checks"], 3)
+        self.assertEqual(data["smap"]["first"]["when"], "开测前")
+        self.assertEqual([v["when"] for v in data["smap"]["violations"]], ["a 结束后"])
+        lines = runner.smap_lines(data)
+        self.assertIn("1 次有 smap 活动", lines[0])
+        self.assertIn("11:22:33 a 结束后", lines[1])
+        self.assertIn("全部正常", runner.smap_lines({"smap": {"checks": 2, "violations": [], "first": clean}})[0])
+        self.assertIn("未做", runner.smap_lines({})[0])
+
+    def test_check_smap_off(self):
+        old = runner.CHECK_SMAP
+        runner.CHECK_SMAP = False
+        try:
+            data = {}
+            self.assertEqual(runner.check_smap(data, "开测前"), [])
+            self.assertNotIn("smap", data)
+        finally:
+            runner.CHECK_SMAP = old
+
     def test_secret_filter(self):
         for name in ("job-before.json", ".job-cur.json", "job-restore.json", "x.env", "acl.token",
                      "baseline.json", "baseline.sha256"):
