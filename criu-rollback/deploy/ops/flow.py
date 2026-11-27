@@ -319,6 +319,7 @@ def daily(target):
         ensure_python()
         redeployed = stack.baseline_redeployed()
         if redeployed:
+            clear_e2b_sandboxes()      # 保存基线要求没有 e2b 沙箱
             stack.refresh_baseline(redeployed)
         stack.place_files()
     switch_with_check(target, logdir)

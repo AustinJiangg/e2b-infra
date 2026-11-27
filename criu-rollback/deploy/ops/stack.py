@@ -232,20 +232,52 @@ def save_baseline():
     print("已保存本机沙箱级基线（含密钥，只留在本机，不打印）:", STATE)
 
 
+def job_diff(old, new):
+    """两份 job 的 TaskGroups 哪里不同，返回说明（只列名字，不列值：值里有密钥）；相同返回空表。
+    只比 TaskGroups：job 级的 NomadTokenID（谁提交的）等每次提交都会变，与运行配置无关。"""
+    ga, gb = old["Job"].get("TaskGroups"), new["Job"].get("TaskGroups")
+    if ga == gb:
+        return []
+    out = []
+    try:
+        _, ta = select_task(old)
+        _, tb = select_task(new)
+    except RuntimeError:
+        return ["task group 结构"]
+    ea, eb = ta.get("Env") or {}, tb.get("Env") or {}
+    keys = sorted(k for k in set(ea) | set(eb) if ea.get(k) != eb.get(k))
+    if keys:
+        out.append("环境变量 " + "、".join(keys))
+    fields = sorted(k for k in set(ta) | set(tb) if k != "Env" and ta.get(k) != tb.get(k))
+    if fields:
+        out.append("task 字段 " + "、".join(fields))
+    return out or ["task group 其他设置"]
+
+
 def baseline_redeployed():
-    """沙箱级重新部署过（RPM 升级、build.sh 重装）时返回原因：基线记录的二进制与现在 job 里运行的
-    不同，而现在确实是沙箱级、服务健康。其余情况返回 None。"""
+    """沙箱级重新部署过（RPM 升级、build.sh -d/-i/-s 重装）时返回原因，其余情况返回 None。只在现在确实是
+    沙箱级、服务健康时判断，两种情况都算：
+      - 基线记录的二进制与现在运行的不同（RPM 换了）；
+      - 二进制没变，但现场 job 与基线不同。build.sh -d 删掉 consul 数据，-s 重新 bootstrap 出新的
+        Consul token，job 的 CONSUL_TOKEN 跟着变；按旧基线切栈会提交带作废 token 的 job。"""
     STATE = state()
     ident_p = STATE / "baseline.identity.json"
     if not ident_p.exists():
         return None
-    ident = json.loads(ident_p.read_text())
-    if Path(ident["exe"]).is_file() and sha(ident["exe"]) == ident["sha256"]:
-        return None
     active = processes()
     if len(active) != 1 or is_criu(active[0]["exe"]) or not health():
         return None
-    return "沙箱级二进制已由 %s 换成 %s（重新部署过）" % (ident["sha256"][:12], active[0]["sha256"][:12])
+    ident = json.loads(ident_p.read_text())
+    if not Path(ident["exe"]).is_file() or sha(ident["exe"]) != ident["sha256"]:
+        return "沙箱级二进制已由 %s 换成 %s（重新部署过）" % (ident["sha256"][:12], active[0]["sha256"][:12])
+    try:
+        saved = normalize(json.loads((STATE / "baseline.json").read_text()))
+        diff = job_diff(saved, load_job())
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError):
+        return None      # 读不到就不动基线，切栈时 baseline() 照常核对
+    if diff:
+        return "沙箱级 job 与基线不同（重新部署过）：%s" % "；".join(diff)
+    return None
 
 
 def refresh_baseline(reason):

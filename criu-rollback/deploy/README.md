@@ -301,7 +301,14 @@ bash criu-rollback/deploy/950.sh smoke
 
 回切后 `/fc-criu/` 和 `base-criu` 都保留，下次 `950.sh criu` 直接复用。原沙箱级 checkpoint 与进程级 checkpoint 不能互相使用。
 
-**升级沙箱级 RPM 之后。** 原二进制的 SHA256 变了，`sandbox` 会拒绝回切，防止盖掉别人的更新。此时先在沙箱级栈上核对新版本，再按需要重新保存基线（先移走 `/var/lib/criu-rollback/`），不要手改基线文件。
+**重新部署沙箱级之后（升级 RPM，或 `build.sh -d/-i/-s`）。** 不用手动处理基线。在沙箱级栈上、服务健康时执行 `criu`、`recycle-netns` 或 `all`，会先判断沙箱级是否重新部署过，满足下面任一条就把旧基线改名为 `*.before-<时间>`，再按现在的 job 重新保存：
+
+- 基线记录的二进制 SHA256 与现在运行的不同：RPM 换过了。
+- 二进制没变，但现场 job 的 TaskGroups 与基线不同：典型的是同一个 RPM 重跑 `-d/-i/-s`。`-d` 删掉 consul 的数据，`-s` 重新 bootstrap 出新的 Consul token，job 的 `CONSUL_TOKEN` 跟着变。按旧基线切栈，会提交带作废 token 的 job。
+
+重存时日志只列出变了的名字（例如“环境变量 CONSUL_TOKEN”），不列出值。job 级的 `NomadTokenID` 每次提交都会变，不参与比较。读不到现场 job 时不动基线。
+
+当前在进程级栈上时不做这个判断：那时 nomad 里是生成的进程级 job，不能拿来当基线。如果基线记录的二进制已经不在了，`sandbox` 会拒绝回切。不要手改基线文件。
 
 ## 11. 失败时怎么处理
 

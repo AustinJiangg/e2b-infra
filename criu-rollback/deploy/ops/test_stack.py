@@ -51,6 +51,55 @@ class StackTests(unittest.TestCase):
         self.assertEqual(t["Env"]["STORAGE_PROVIDER"], "Local")
         self.assertEqual(new["Job"]["TaskGroups"][0], original["Job"]["TaskGroups"][0])
 
+    def test_job_diff(self):
+        a = stack.normalize(fixture())
+        b = copy.deepcopy(a)
+        b["Job"]["NomadTokenID"] = "someone-else"        # 每次提交都会变，不算
+        self.assertEqual(stack.job_diff(a, b), [])
+        t = stack.select_task(b)[1]
+        t["Env"]["CONSUL_TOKEN"] = "new"
+        t["Env"]["STORAGE_PROVIDER"] = "GCS"
+        diff = stack.job_diff(a, b)
+        self.assertEqual(diff, ["环境变量 CONSUL_TOKEN、STORAGE_PROVIDER"])
+        self.assertNotIn("new", "".join(diff))            # 只列名字，不列值
+        t["Config"]["command"] = "/bin/sh"
+        self.assertEqual(stack.job_diff(a, b)[1], "task 字段 Config")
+        c = copy.deepcopy(a); c["Job"]["TaskGroups"][0]["Count"] = 2
+        self.assertEqual(stack.job_diff(a, c), ["task group 其他设置"])
+
+    def test_baseline_redeployed(self):
+        import json, tempfile
+        from pathlib import Path
+        base = stack.normalize(fixture())
+        sandbox = [{"pid": 1, "exe": "/usr/bin/template-manager", "sha256": "h1", "env": {}}]
+        with tempfile.TemporaryDirectory() as d:
+            st = Path(d)
+            (st / "baseline.json").write_text(json.dumps(base))
+            (st / "baseline.identity.json").write_text(json.dumps({"exe": __file__, "sha256": "h1"}))
+            live = copy.deepcopy(base)
+
+            def check(procs=sandbox, healthy=True, binsha="h1"):
+                with patch.object(stack, "state", return_value=st), \
+                        patch.object(stack, "processes", return_value=procs), \
+                        patch.object(stack, "health", return_value=healthy), \
+                        patch.object(stack, "sha", return_value=binsha), \
+                        patch.object(stack, "load_job", return_value=live):
+                    return stack.baseline_redeployed()
+
+            self.assertIsNone(check())                                  # 没重新部署
+            self.assertIn("二进制", check(binsha="h2"))                  # RPM 换了
+            stack.select_task(live)[1]["Env"]["CONSUL_TOKEN"] = "new"   # 二进制不变、重新部署过
+            self.assertIn("环境变量 CONSUL_TOKEN", check())
+            criu = [dict(sandbox[0], exe=str(stack.hfc() / "orchestrator"))]
+            self.assertIsNone(check(procs=criu))                        # 在进程级栈上不判断
+            self.assertIsNone(check(healthy=False))
+            with patch.object(stack, "load_job", side_effect=stack.CmdError(1, ["nomad"], output="denied")), \
+                    patch.object(stack, "state", return_value=st), \
+                    patch.object(stack, "processes", return_value=sandbox), \
+                    patch.object(stack, "health", return_value=True), \
+                    patch.object(stack, "sha", return_value="h1"):
+                self.assertIsNone(stack.baseline_redeployed())          # 读不到现场 job 不动基线
+
     def test_default_paths(self):
         import paths
         with patch.dict(paths.os.environ, {}, clear=False):
