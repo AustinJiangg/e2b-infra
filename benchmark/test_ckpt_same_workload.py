@@ -208,12 +208,18 @@ class MixTests(unittest.TestCase):
     def test_host_conditions_network(self):
         h = csw.host_conditions()
         for k in ("netns", "iptables_lines", "nft_lines", "firecracker_procs", "loadavg", "cpus", "mounts",
-                  "nsfs_mounts", "cgroup"):
+                  "nsfs_mounts", "cgroup", "thp_defrag", "compaction_proactiveness"):
             self.assertIn(k, h)
         buf = io.StringIO()
         with redirect_stdout(buf):
             csw.print_host({"host_conditions": h, "host_conditions_end": h})
         out = buf.getvalue()
+        self.assertIn("compaction_proactiveness=", out)
+        # 旧结果文件没有这两项时不打印
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            csw.print_host({"host_conditions": {"numa_balancing": "1", "thp": "always", "numa_summary": "1 个节点"}})
+        self.assertNotIn("compaction_proactiveness", buf.getvalue())
         self.assertIn("netns", out)
         self.assertIn("挂载点", out)
         self.assertIn("结束时", out)

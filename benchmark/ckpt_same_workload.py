@@ -1000,8 +1000,11 @@ def print_host(prov, indent=""):
     h = prov.get("host_conditions") or {}
     if not h:
         return
-    print("%s宿主条件：NUMA %s · numa_balancing=%s · 宿主 THP=%s" % (
-        indent, h.get("numa_summary") or "?", h.get("numa_balancing"), h.get("thp")))
+    mm = ""
+    if "thp_defrag" in h:      # 旧结果文件没有这两项
+        mm = "（defrag=%s） · compaction_proactiveness=%s" % (h.get("thp_defrag"), h.get("compaction_proactiveness"))
+    print("%s宿主条件：NUMA %s · numa_balancing=%s · 宿主 THP=%s%s" % (
+        indent, h.get("numa_summary") or "?", h.get("numa_balancing"), h.get("thp"), mm))
     if "netns" in h:      # 旧结果文件没有这几项
         print("%s          netns %s 个 · iptables-save %s 行 · nft %s 行 · 运行中的 firecracker %s 个 · "
               "loadavg %s · CPU %s × %s · 调频 %s" % (
@@ -1642,6 +1645,9 @@ def host_conditions():
                 if "MemTotal:" in line:
                     size = int(line.split()[-2]) // 1024
             nodes.append("%s:%s" % (p.rsplit("node", 1)[1], size if size is not None else "?"))
+    def selected(v):      # sysfs 的多选项写法 "always [madvise] never" 取方括号里的那个
+        return v.split("[")[1].split("]")[0] if v and "[" in v else v
+
     thp = rd("/sys/kernel/mm/transparent_hugepage/enabled")
 
     def count_lines(cmd):
@@ -1673,7 +1679,10 @@ def host_conditions():
             "cpus": os.cpu_count(), "cpu": cpu,
             "governor": rd("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
             "numa_balancing": rd("/proc/sys/kernel/numa_balancing"),
-            "thp": thp.split("[")[1].split("]")[0] if thp and "[" in thp else thp,
+            "thp": selected(thp),
+            # smap 要求的另外两项（与 numa_balancing、THP enabled 合称 4 项默认配置）
+            "thp_defrag": selected(rd("/sys/kernel/mm/transparent_hugepage/defrag")),
+            "compaction_proactiveness": rd("/proc/sys/vm/compaction_proactiveness"),
             "numa_summary": "%d 个节点（MiB：%s）" % (len(nodes), " ".join(nodes)) if nodes else None,
             "numactl": numa, "cmdline": rd("/proc/cmdline")}
 
