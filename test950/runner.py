@@ -365,7 +365,7 @@ def outcome(step, rc, out):
         if res.is_file():
             data = json.loads(res.read_text())
             return ("PASS" if rc == 0 else "FAIL"), "verdict %s%s" % (
-                data.get("verdict"), ("：" + data["error"][:200]) if data.get("error") else "")
+                data.get("verdict"), ("：" + data["error"][:400]) if data.get("error") else "")
         return ("PASS" if rc == 0 else "FAIL"), "退出码 %d" % rc
     if step["kind"] == "run":
         summaries = sorted(out.glob("*/SUMMARY.md"))
@@ -379,7 +379,7 @@ def outcome(step, rc, out):
     if summary.is_file():
         data = json.loads(summary.read_text())
         return ("PASS" if rc == 0 else "FAIL"), "verdict %s%s" % (
-            data.get("verdict"), ("：" + data["error"][:200]) if data.get("error") else "")
+            data.get("verdict"), ("：" + data["error"][:400]) if data.get("error") else "")
     return ("PASS" if rc == 0 else "FAIL"), "退出码 %d" % rc
 
 

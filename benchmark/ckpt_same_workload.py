@@ -119,11 +119,24 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 logging.getLogger("e2b").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 LOG = logging.getLogger("same")
+
+# 每个线程最近在做哪一步（conc 组 N 个沙箱并行）。测量失败时记进日志和错误信息，用来定位是哪一次调用断的
+_STEP = threading.local()
+
+
+def step(what):
+    _STEP.now = (what, time.time())
+
+
+def step_now():
+    what, t = getattr(_STEP, "now", ("?", time.time()))
+    return "%s（%s 开始，已过 %.1f s）" % (what, time.strftime("%H:%M:%S", time.localtime(t)), time.time() - t)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from native_snapshot_tiers import fc_info, list_cache, export_sizes, remove_builds  # noqa: E402
@@ -475,6 +488,7 @@ class Hog:
         self.pids = []
 
     def sh(self, cmd, timeout=120):
+        step("commands.run: %s" % (cmd if len(cmd) <= 80 else cmd[:77] + "..."))
         return self.sb.commands.run(cmd, user="root", timeout=timeout).stdout.strip()
 
     def ask(self, op, arg=""):
@@ -816,11 +830,13 @@ def set_soft_dirty_dbm(sb, ctx):
 def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
     point = norm(point)
     d, f = point["d"], point["f"]
+    step("Sandbox.create")
     sb = Sandbox.create(template=ctx.args.template, timeout=SBX_TIMEOUT)
     try:
         sd_dbm = set_soft_dirty_dbm(sb, ctx)
         hog, lazy_s = prepare_sandbox(sb, ctx, point, lock)
         want = hog.state(f)
+        step("checkpoint.create base")
         t0 = time.perf_counter()
         base = sb.checkpoint.create(name="base")
         base_ms = (time.perf_counter() - t0) * 1000
@@ -836,6 +852,7 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
             hog.write_file(f, point["sync"])
             if point["wait"]:
                 time.sleep(point["wait"])
+            step("checkpoint.create %s" % name)
             t0 = time.perf_counter()
             cp = sb.checkpoint.create(name=name)
             ms = (time.perf_counter() - t0) * 1000
@@ -845,6 +862,7 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
         for rep in range(reps):
             cp, ck_ms, ck_server, art, dirty_ms = change_and_checkpoint("r%da" % rep)
             cp2, ck2_ms, ck2_server, art2, dirty2_ms = change_and_checkpoint("r%db" % rep)
+            step("checkpoint.restore base（rep %d）" % rep)
             t0 = time.perf_counter()
             sb.checkpoint.restore(base.checkpoint_id)
             rs_ms = (time.perf_counter() - t0) * 1000
@@ -858,6 +876,7 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
                                              ("restore_criulog", base.checkpoint_id, "criu-restore.log")]))
             for c in (cp2, cp):   # 先删子节点
                 try:
+                    step("checkpoint.delete")
                     sb.checkpoint.delete(c.checkpoint_id)
                 except Exception as exc:  # 删不掉不影响本次测量，记下来
                     LOG.warning("删除 %s 失败：%s", c.checkpoint_id, exc)
@@ -872,6 +891,11 @@ def one_sandbox(Sandbox, ctx, point, series, pass_no, reps, warmup, rows, lock):
             if not ok:
                 raise RuntimeError("restore 后内容不一致：%s %s rep %d" % (series, point_label(point), rep))
         LOG.info("%-8s %s pass %d：%d 次完成", series, point_label(point), pass_no, reps)
+    except Exception as exc:
+        where = step_now()
+        LOG.error("%-8s %s pass %d：沙箱 %s 在 %s 失败：%s: %s\n%s", series, point_label(point), pass_no, sb.sandbox_id,
+                  where, type(exc).__name__, exc, traceback.format_exc())
+        raise RuntimeError("%s: %s（沙箱 %s；在 %s）" % (type(exc).__name__, exc, sb.sandbox_id, where)) from exc
     finally:
         try:
             sb.kill()
@@ -1799,6 +1823,8 @@ def main():
                         futs = [pool.submit(one_sandbox, Sandbox, ctx, CONC_POINT, "conc", i, args.conc_reps,
                                             args.warmup, rows, lock) for i in range(n)]
                         errs = [f.exception() for f in futs if f.exception()]
+                    for i, e in enumerate(errs):
+                        LOG.error("conc N=%d 失败 %d/%d：%s", n, i + 1, len(errs), e)
                     for r in rows:
                         r["N"] = n
                     result["rows"].extend(rows)
