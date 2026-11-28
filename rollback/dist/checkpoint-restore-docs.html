@@ -5587,7 +5587,7 @@ socket 前面若是别的东西则回 404。两个客户端（<code>rollbackSnap
 <tr>
 <td>VMM 线程</td>
 <td><code>TUNSETOFFLOAD</code>（:448）</td>
-<td>回滚后按回退后的协商特性重设 tap 的 offload 标志，这一步在 VMM 线程上执行</td>
+<td>回滚后若回退后的协商特性改变了 offload 标志，就重设 tap，这一步在 VMM 线程上执行（标志没变时不调，<a href="#d09">第 9 章</a>）</td>
 </tr>
 <tr>
 <td>VMM 线程</td>
@@ -5995,10 +5995,14 @@ guest 恢复后第一次收包就会报 <code>id N is not a head!</code>、RX �
 设备侧的 THRE 使能被抹掉后发送完成中断永不再来，guest 往串口写会永久阻塞。所以复位时清 IIR，同时打开 RDA 与 THRE，再触发一次（边沿）中断线。</p>
 <p><strong>网卡</strong>多两步：</p>
 <ul>
-<li><code>apply_net_rx_cache</code>（<code>rollback.rs:1111</code>）：重建 RX 描述符缓存，原因与做法见 <a href="#d10-2-网络-rx-描述符缓存">第 10 章 §2</a>；</li>
-<li><code>apply_net_tap_offload</code>（<code>rollback.rs:1169</code>）：从活设备读回刚写进去的 <code>acked_features</code>，据此重设 tap 的 offload 标志。
+<li><code>apply_net_rx_cache</code>（<code>rollback.rs:1112</code>）：重建 RX 描述符缓存，原因与做法见 <a href="#d10-2-网络-rx-描述符缓存">第 10 章 §2</a>；</li>
+<li><code>apply_net_tap_offload</code>（<code>rollback.rs:1178</code>）：从活设备读回刚写进去的 <code>acked_features</code>，据此重设 tap 的 offload 标志。
     重建路线在加载时就做这一步；原地路线原本只回退了 <code>acked_features</code>，guest 在 checkpoint 之后重协商过特性（驱动重载、<code>ip link down/up</code>、<code>ethtool -K</code>）时，
-    tap 仍按新的特性集工作，vnet header 长度对不上，帧静默出错。读回而不是作为参数传入，是为了不可能与 <code>apply_one_device</code> 写进去的值不一致。</li>
+    tap 仍按新的特性集工作，vnet header 长度对不上，帧静默出错。读回而不是作为参数传入，是为了不可能与 <code>apply_one_device</code> 写进去的值不一致。
+    写回之前，<code>programmed_tap_offload</code>（<code>rollback.rs:1232</code>）先按活设备当时的 <code>acked_features</code> 算出 tap 现有的标志；
+    回退后的标志与它相同时不调 <code>TUNSETOFFLOAD</code>，设备之前没激活过、或者 guest 在 checkpoint 之后重协商过时才调（<code>tap_offload_needs_reprogram</code>，<code>rollback.rs:1253</code>）。
+    正常情况下 guest 只在启动时协商一次，这个 ioctl 什么都不改，却要拿宿主全局的 <code>rtnl_lock</code>；宿主在增删网络命名空间时它要排队，
+    920B 上实测 <code>fc_devices</code> 从 0.1 ms 涨到 p50 97 ms、p99 225 ms（<a href="#d28-16-宿主增删网络命名空间时-restore-变慢">第 28 章 §16</a>）。</li>
 </ul>
 <p><strong>有意不回滚</strong>的两样，保留活对象，并在日志里明说：</p>
 <ul>
@@ -15248,7 +15252,7 @@ restore ≈ 固定开销 + 回滚集写回成本 + 磁盘视图装配成本
 <li>同一负载，倍数可以直接读：checkpoint 比 pause 快 3.5～18 倍；restore 在 128 档以内比 resume 快 1.2～4.1 倍，256 档慢 22.2 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 114.8 ms，restore 仍快 9.0 ms。</li>
 <li>这一列测自进程级部署包的 orchestrator <code>f66dbe2c1</code>：停 Firecracker 前查进程状态由执行 <code>ps</code> 改为读 <code>/proc</code>（§6.1）。2026-11-20 那两轮在同一负载上做过改前改后的对比：改前 E2B pause 230.5～457.2 ms，改后每档少 89～129 ms；resume 基本不变。</li>
 <li>pause 不含等上传。等上传另记：第 3 轮 pause 墙钟 182.7～517.3 ms，其中等上传 56.5～178.7 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。</li>
-<li>本方案的 restore 在 0～64 MiB 档 p99 是 80.8～108.6 ms，远高于 p50；2026-11-20、11-24 两轮 0～32 MiB 档也是 73～103 ms，原因未查（进程级手册第 24 章 §4.3）。</li>
+<li>本方案的 restore 在 0～64 MiB 档 p99 是 80.8～108.6 ms，远高于 p50；2026-11-20、11-24 两轮 0～32 MiB 档也是 73～103 ms。原因已查明：慢样本都在每个沙箱级步骤开头，测试刚清完 netns、重启了 orchestrator，回滚里 tap 的 <code>TUNSETOFFLOAD</code> 在等宿主的 <code>rtnl_lock</code>。2026-11-28 起的 Firecracker 已修，920B 上复现与修复数据见<a href="#d28-16-宿主增删网络命名空间时-restore-变慢">第 28 章 §16</a>；表里是修复前的数据，950 待下一轮 compare 复测。</li>
 <li>2026-11-20 那一轮（每格 n = 20，pause / resume 取同日另一轮）的表在进程级手册第 24 章 §5.6。2026-11-19 那一轮固定 256 MiB 进程、pause 含等上传、两套代码各测一遍，结论的方向相同（checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍），原始输出存于工作区 <code>rollback-reports/950-compare-20261119/compare.txt</code>。</li>
 <li>两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册<a href="https://github.com/AustinJiangg/e2b-infra/blob/main/criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-27">第 24 章 §4.3</a>。</li>
 </ul>
@@ -22144,6 +22148,52 @@ docker<span class="w"> </span>logs<span class="w"> </span>--since<span class="w"
 <p><strong>原因</strong>：部署脚本装的 80 → 3002 转发不限入口网卡时，排在 hyperloop 规则前面，guest 发往 hyperloop 的连接被转给了 client-proxy（<a href="#dC-6-80-端口的转发规则劫持-hyperloop-请求">附录 C §6</a>）。</p>
 <p><strong>怎么处置</strong>：checkpoint / restore 不受影响。950 测试部署的 <code>build.sh -s</code> 把这条规则限定为 <code>-m addrtype --dst-type LOCAL</code>，并先删掉不带限定的那条；已装好的节点重跑一次 <code>build.sh -s</code> 即可。其他部署脚本按同样方式限定这条规则，详见 <a href="#dC-6-80-端口的转发规则劫持-hyperloop-请求">附录 C §6</a>。
 日志量大时注意 client-proxy 所在盘的余量。</p>
+<h2 id="d28-16-宿主增删网络命名空间时-restore-变慢">16. 宿主增删网络命名空间时 restore 变慢</h2>
+<p><strong>症状</strong>：restore 的 <code>fc_rollback</code> 偶尔多出几十毫秒，多出的全在 Firecracker 自报的 <code>fc_devices</code>（平时约 0.1 ms），<code>fc_memory</code> 等其余段不变。
+慢样本集中在宿主大量新建或删除网络命名空间的时段：orchestrator 重启后补满网络槽位池、清理泄漏的 netns（<a href="#d28-9-网络槽位netns泄漏">§9</a>）、批量创建或销毁沙箱。</p>
+<p><strong>看哪里</strong>：<code>last-restore-timings.json</code> 里的 <code>fc_devices</code>；同一时段 <code>ip netns list | wc -l</code> 是否在变。</p>
+<p><strong>原因</strong>：回滚恢复设备时，对每块网卡调一次 <code>TUNSETOFFLOAD</code> 重设 tap 的 offload 标志（<a href="#d09">第 9 章</a>）。内核处理 tun 的 ioctl 要先拿全局的 <code>rtnl_lock</code>，
+增删 netns、veth、tap 和地址也要拿它，ioctl 就排在后面。950 上 2026-11-27 那轮 compare 里，沙箱级 0～64 MiB 档的 restore p99（80.8～108.6 ms）就来自这里：
+68 个慢样本全部落在每个沙箱级步骤开头约 80 次测量里，正是测试脚本清掉旧 netns、重启 orchestrator、新池正在建的时候。
+920B 上用后台 4 个循环增删 netns 和 veth 复现（P=0 档，每组 40 次）：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Firecracker</th>
+<th>条件</th>
+<th>restore 墙钟 p50 / p99（ms）</th>
+<th><code>fc_devices</code> p50 / p99（ms）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>修改前</td>
+<td>宿主安静</td>
+<td>18.5 / 22.6</td>
+<td>0.1 / 0.1</td>
+</tr>
+<tr>
+<td>修改前</td>
+<td>增删 netns</td>
+<td>115.8 / 267.7</td>
+<td>97.3 / 225.1</td>
+</tr>
+<tr>
+<td>修改后</td>
+<td>宿主安静</td>
+<td>18.8 / 22.6</td>
+<td>0.1 / 0.1</td>
+</tr>
+<tr>
+<td>修改后</td>
+<td>增删 netns</td>
+<td>19.4 / 31.7</td>
+<td>0.1 / 1.2</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>怎么处置</strong>：部署包 2026-11-28 起的 Firecracker（sha256 <code>ad30a141…6aad</code>）在标志不变时不再调这个 ioctl，正常情况下不再撞这把锁。
+用旧版时，性能测试在清理 netns、重启 orchestrator 之后先等槽位池建完（netns 数稳定）再开测。修改后增删 netns 时 restore p99 仍比安静时高约 9 ms，不在 <code>fc_devices</code> 里，原因没有追。</p>
 <h2 id="d28-本章要点">本章要点</h2>
 <ul>
 <li>先看能力文件或能力行，再看 <code>timings_ms</code> 分段，最后才看别的。分段缺哪个键，说明失败停在哪一步。</li>
@@ -22151,6 +22201,7 @@ docker<span class="w"> </span>logs<span class="w"> </span>--since<span class="w"
 <li>restore 变慢先分清是回滚量变大（工作量）、视图块数增长、conntrack 清扫，还是 GC 停顿，各有对应的键。</li>
 <li>宿主表清扫的代价跟整张宿主 conntrack 表走，不跟沙箱条目走。</li>
 <li>orchestrator 每重启一次漏约一池网络槽位，做性能测试前先数 netns。</li>
+<li><code>fc_devices</code> 偶尔几十毫秒，是 tap ioctl 在等 <code>rtnl_lock</code>（宿主在增删 netns）；2026-11-28 起的 Firecracker 在标志不变时不再调它。</li>
 </ul><nav class="pager" data-n="28"></nav></article><article id="v29" class="doc" hidden><h1 id="d29-代码入口修改指引与开发验证">代码入口、修改指引与开发验证</h1>
 <h2 id="d29-本章目标">本章目标</h2>
 <p>让接手开发的工程师知道代码在哪、从哪读起、改一类东西要动哪些地方、改完怎么验证。代码讲解基准是 <code>KASandbox_0904</code> 的 <code>deltabox-dev@57a30632c</code>；单元测试在同一仓库，上机测试工具在 <code>e2b-infra</code> 的 <code>rollback/scripts/</code>。</p>
@@ -27803,7 +27854,7 @@ cat<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$OUT</
 <tr>
 <td>Firecracker</td>
 <td><code>firecracker.arm</code> → <code>/opt/e2b-infra/bin/firecracker</code> → <code>init-client.sh</code> 拷到 <code>/fc-versions/v1.13.1/firecracker</code></td>
-<td>两处 sha256 都是 <code>18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9</code></td>
+<td>两处 sha256 都是 <code>ad30a141f5ca9243dffbb261369a0e2adbfed4bf171900f65a5b1186e60b6aad</code>（2026-11-28 起；此前是 <code>18f3faa7…d4c9</code>）</td>
 </tr>
 <tr>
 <td>guest 内核</td>

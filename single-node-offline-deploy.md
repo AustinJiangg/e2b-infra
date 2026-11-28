@@ -501,7 +501,7 @@ RPM 里的 orchestrator（0001 补丁）、Firecracker（`firecracker.arm`）和
 ```bash
 # ① Firecracker 走完了"第二跳"（init-client.sh 把 /opt/e2b-infra/bin/firecracker 拷进 /fc-versions）
 sha256sum /opt/e2b-infra/bin/firecracker /fc-versions/v1.13.1/firecracker
-#    两行都应是 18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9（= 仓库里的 firecracker.arm）
+#    两行都应是 ad30a141f5ca9243dffbb261369a0e2adbfed4bf171900f65a5b1186e60b6aad（= 仓库里的 firecracker.arm）
 
 # ② SDK 覆盖层（21 个文件）装好且自检通过
 python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check

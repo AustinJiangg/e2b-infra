@@ -280,10 +280,14 @@ guest 恢复后第一次收包就会报 `id N is not a head!`、RX 永久卡死�
 
 **网卡**多两步：
 
-- `apply_net_rx_cache`（`rollback.rs:1111`）：重建 RX 描述符缓存，原因与做法见 [第 10 章 §2](10-device-network-time.md#2-网络-rx-描述符缓存)；
-- `apply_net_tap_offload`（`rollback.rs:1169`）：从活设备读回刚写进去的 `acked_features`，据此重设 tap 的 offload 标志。
+- `apply_net_rx_cache`（`rollback.rs:1112`）：重建 RX 描述符缓存，原因与做法见 [第 10 章 §2](10-device-network-time.md#2-网络-rx-描述符缓存)；
+- `apply_net_tap_offload`（`rollback.rs:1178`）：从活设备读回刚写进去的 `acked_features`，据此重设 tap 的 offload 标志。
   重建路线在加载时就做这一步；原地路线原本只回退了 `acked_features`，guest 在 checkpoint 之后重协商过特性（驱动重载、`ip link down/up`、`ethtool -K`）时，
   tap 仍按新的特性集工作，vnet header 长度对不上，帧静默出错。读回而不是作为参数传入，是为了不可能与 `apply_one_device` 写进去的值不一致。
+  写回之前，`programmed_tap_offload`（`rollback.rs:1232`）先按活设备当时的 `acked_features` 算出 tap 现有的标志；
+  回退后的标志与它相同时不调 `TUNSETOFFLOAD`，设备之前没激活过、或者 guest 在 checkpoint 之后重协商过时才调（`tap_offload_needs_reprogram`，`rollback.rs:1253`）。
+  正常情况下 guest 只在启动时协商一次，这个 ioctl 什么都不改，却要拿宿主全局的 `rtnl_lock`；宿主在增删网络命名空间时它要排队，
+  920B 上实测 `fc_devices` 从 0.1 ms 涨到 p50 97 ms、p99 225 ms（[第 28 章 §16](28-troubleshooting.md#16-宿主增删网络命名空间时-restore-变慢)）。
 
 **有意不回滚**的两样，保留活对象，并在日志里明说：
 

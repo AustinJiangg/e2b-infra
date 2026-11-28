@@ -254,6 +254,28 @@ docker logs --since 60s "$c" 2>&1 | grep -c 'invalid host'
 **怎么处置**：checkpoint / restore 不受影响。950 测试部署的 `build.sh -s` 把这条规则限定为 `-m addrtype --dst-type LOCAL`，并先删掉不带限定的那条；已装好的节点重跑一次 `build.sh -s` 即可。其他部署脚本按同样方式限定这条规则，详见 [附录 C §6](C-evolution-and-cases.md#6-80-端口的转发规则劫持-hyperloop-请求)。
 日志量大时注意 client-proxy 所在盘的余量。
 
+## 16. 宿主增删网络命名空间时 restore 变慢
+
+**症状**：restore 的 `fc_rollback` 偶尔多出几十毫秒，多出的全在 Firecracker 自报的 `fc_devices`（平时约 0.1 ms），`fc_memory` 等其余段不变。
+慢样本集中在宿主大量新建或删除网络命名空间的时段：orchestrator 重启后补满网络槽位池、清理泄漏的 netns（[§9](#9-网络槽位netns泄漏)）、批量创建或销毁沙箱。
+
+**看哪里**：`last-restore-timings.json` 里的 `fc_devices`；同一时段 `ip netns list | wc -l` 是否在变。
+
+**原因**：回滚恢复设备时，对每块网卡调一次 `TUNSETOFFLOAD` 重设 tap 的 offload 标志（[第 9 章](09-in-place-rollback.md)）。内核处理 tun 的 ioctl 要先拿全局的 `rtnl_lock`，
+增删 netns、veth、tap 和地址也要拿它，ioctl 就排在后面。950 上 2026-11-27 那轮 compare 里，沙箱级 0～64 MiB 档的 restore p99（80.8～108.6 ms）就来自这里：
+68 个慢样本全部落在每个沙箱级步骤开头约 80 次测量里，正是测试脚本清掉旧 netns、重启 orchestrator、新池正在建的时候。
+920B 上用后台 4 个循环增删 netns 和 veth 复现（P=0 档，每组 40 次）：
+
+| Firecracker | 条件 | restore 墙钟 p50 / p99（ms） | `fc_devices` p50 / p99（ms） |
+|---|---|---|---|
+| 修改前 | 宿主安静 | 18.5 / 22.6 | 0.1 / 0.1 |
+| 修改前 | 增删 netns | 115.8 / 267.7 | 97.3 / 225.1 |
+| 修改后 | 宿主安静 | 18.8 / 22.6 | 0.1 / 0.1 |
+| 修改后 | 增删 netns | 19.4 / 31.7 | 0.1 / 1.2 |
+
+**怎么处置**：部署包 2026-11-28 起的 Firecracker（sha256 `ad30a141…6aad`）在标志不变时不再调这个 ioctl，正常情况下不再撞这把锁。
+用旧版时，性能测试在清理 netns、重启 orchestrator 之后先等槽位池建完（netns 数稳定）再开测。修改后增删 netns 时 restore p99 仍比安静时高约 9 ms，不在 `fc_devices` 里，原因没有追。
+
 ## 本章要点
 
 - 先看能力文件或能力行，再看 `timings_ms` 分段，最后才看别的。分段缺哪个键，说明失败停在哪一步。
@@ -261,3 +283,4 @@ docker logs --since 60s "$c" 2>&1 | grep -c 'invalid host'
 - restore 变慢先分清是回滚量变大（工作量）、视图块数增长、conntrack 清扫，还是 GC 停顿，各有对应的键。
 - 宿主表清扫的代价跟整张宿主 conntrack 表走，不跟沙箱条目走。
 - orchestrator 每重启一次漏约一池网络槽位，做性能测试前先数 netns。
+- `fc_devices` 偶尔几十毫秒，是 tap ioctl 在等 `rtnl_lock`（宿主在增删 netns）；2026-11-28 起的 Firecracker 在标志不变时不再调它。

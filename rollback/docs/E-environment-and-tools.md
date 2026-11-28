@@ -133,7 +133,7 @@ python3 /opt/e2b-infra/dep/e2b-sdk-checkpoint/install.py --check
 | 组件 | 产物 → 安装位置 | 核对 |
 |---|---|---|
 | orchestrator | RPM → `/opt/e2b-infra/bin/orchestrator`，再由部署拷到 `/usr/bin/template-manager`（nomad job `template-manager-system` 实际执行的就是它）与 `/usr/bin/orchestrator` | 三个文件 sha256 相同；运行中的进程 `readlink /proc/$(pidof -s template-manager)/exe` 指向 `/usr/bin/template-manager` |
-| Firecracker | `firecracker.arm` → `/opt/e2b-infra/bin/firecracker` → `init-client.sh` 拷到 `/fc-versions/v1.13.1/firecracker` | 两处 sha256 都是 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9` |
+| Firecracker | `firecracker.arm` → `/opt/e2b-infra/bin/firecracker` → `init-client.sh` 拷到 `/fc-versions/v1.13.1/firecracker` | 两处 sha256 都是 `ad30a141f5ca9243dffbb261369a0e2adbfed4bf171900f65a5b1186e60b6aad`（2026-11-28 起；此前是 `18f3faa7…d4c9`） |
 | guest 内核 | `/fc-kernels/vmlinux-6.1.158/vmlinux.bin` | 文件存在；缺了建模板必失败 |
 | Python SDK | KASandbox `py-sdk/` 中的配套 SDK；950 测试部署采用 `e2b==2.20.0` 加覆盖层 | 确认 checkpoint 接口与异常类型；覆盖层另用 `install.py --check`（[§4](#4-sdk-覆盖层)） |
 

@@ -166,6 +166,13 @@ chmod -R a+rX %{buildroot}/opt/e2b-infra/helm
 /opt/e2b-infra/dep/.env
 
 %changelog
+* Sat Nov 28 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
+- firecracker: the in-place rollback no longer calls TUNSETOFFLOAD when the
+  tap offload flags the rewind implies are the ones the tap already holds.
+  The ioctl takes the host-wide rtnl_lock and waited on it while the host
+  created or deleted network namespaces, which made the restore p99 of small
+  checkpoints 3-5x its p50 (fc_devices 0.1 ms -> 97 ms p50 under netns churn)
+
 * Tue Nov 24 2026 jianglulu <jianglulu001@gmail.com> - 2026.09-3
 - orchestrator: drop the root disk's host page cache in the background
   after a checkpoint resumes the VM (CHECKPOINT_BACKGROUND_DROP_CACHE,

@@ -309,7 +309,7 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 - 同一负载，倍数可以直接读：checkpoint 比 pause 快 3.5～18 倍；restore 在 128 档以内比 resume 快 1.2～4.1 倍，256 档慢 22.2 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 114.8 ms，restore 仍快 9.0 ms。
 - 这一列测自进程级部署包的 orchestrator `f66dbe2c1`：停 Firecracker 前查进程状态由执行 `ps` 改为读 `/proc`（§6.1）。2026-11-20 那两轮在同一负载上做过改前改后的对比：改前 E2B pause 230.5～457.2 ms，改后每档少 89～129 ms；resume 基本不变。
 - pause 不含等上传。等上传另记：第 3 轮 pause 墙钟 182.7～517.3 ms，其中等上传 56.5～178.7 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。
-- 本方案的 restore 在 0～64 MiB 档 p99 是 80.8～108.6 ms，远高于 p50；2026-11-20、11-24 两轮 0～32 MiB 档也是 73～103 ms，原因未查（进程级手册第 24 章 §4.3）。
+- 本方案的 restore 在 0～64 MiB 档 p99 是 80.8～108.6 ms，远高于 p50；2026-11-20、11-24 两轮 0～32 MiB 档也是 73～103 ms。原因已查明：慢样本都在每个沙箱级步骤开头，测试刚清完 netns、重启了 orchestrator，回滚里 tap 的 `TUNSETOFFLOAD` 在等宿主的 `rtnl_lock`。2026-11-28 起的 Firecracker 已修，920B 上复现与修复数据见[第 28 章 §16](28-troubleshooting.md#16-宿主增删网络命名空间时-restore-变慢)；表里是修复前的数据，950 待下一轮 compare 复测。
 - 2026-11-20 那一轮（每格 n = 20，pause / resume 取同日另一轮）的表在进程级手册第 24 章 §5.6。2026-11-19 那一轮固定 256 MiB 进程、pause 含等上传、两套代码各测一遍，结论的方向相同（checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍），原始输出存于工作区 `rollback-reports/950-compare-20261119/compare.txt`。
 - 两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册[第 24 章 §4.3](../../criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-27)。
 

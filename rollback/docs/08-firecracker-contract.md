@@ -424,7 +424,7 @@ Firecracker 给每个线程装独立的 seccomp 过滤器（`firecracker/resourc
 | 线程 | 需要什么 | 为什么 |
 |---|---|---|
 | vCPU 线程 | `KVM_SET_ONE_REG`、mp state、`KVM_ARM_VCPU_INIT` 及其后的 SVE finalize 等 vCPU ioctl（:1043-1082） | vCPU 状态恢复派发到这些线程执行（[第 9 章 §3.6](09-in-place-rollback.md#36-阶段-5vcpu)） |
-| VMM 线程 | `TUNSETOFFLOAD`（:448） | 回滚后按回退后的协商特性重设 tap 的 offload 标志，这一步在 VMM 线程上执行 |
+| VMM 线程 | `TUNSETOFFLOAD`（:448） | 回滚后若回退后的协商特性改变了 offload 标志，就重设 tap，这一步在 VMM 线程上执行（标志没变时不调，[第 9 章](09-in-place-rollback.md)） |
 | VMM 线程 | `pread64`（:29） | "取脏页位图"路径逐页读 `/proc/self/pagemap`（[第 5 章](05-dirty-tracking-and-hdbss.md)） |
 
 漏了的表现是进程在**运行期**被 SIGSYS 杀掉 —— 明显，但不在编译期暴露。`TUNSETOFFLOAD` 那一条的白名单注释记下了漏掉时的样子：

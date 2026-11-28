@@ -120,7 +120,7 @@ ext4 套的 orchestrator 依赖 `PUT /snapshot/save-dirty-bitmap`，只有 `fc-e
 | | 说明 |
 |---|---|
 | `0001-adapted-for-arm-architecture.patch` | ARM 适配 + checkpoint / restore；2026-09-21 起来源是 `deltabox-dev` 的 `packages/`（融合到 `4af2872c6`），由开发工作区的 `tmp/regen-e2b-infra-patch-deltabox.sh` 生成。738827 字节 / 20132 行 / 169 个文件，sha256 `90bd549c315dbbe0de4b1ea3bb27c94cb8164bb826a00e4c6b7312b9e7bd1c96` |
-| `firecracker.arm` | 构建自 `deltabox-dev` 的 `firecracker/`（`86e4d9610`；到 `4af2872c6` 该目录无变化）。2677888 字节，sha256 `18f3faa7f47c173a5f47bfc7f578f5073cfbde2ac9bdb50bf88c434341d6d4c9`。含 seccomp `pread64` 修复、原地 rollback、`save-dirty-bitmap` |
+| `firecracker.arm` | 构建自 `deltabox-dev` 的 `firecracker/`（`0825b09`，2026-11-28）。2678032 字节，sha256 `ad30a141f5ca9243dffbb261369a0e2adbfed4bf171900f65a5b1186e60b6aad`。含 seccomp `pread64` 修复、原地 rollback、`save-dirty-bitmap` |
 | `e2b-deploy/build.sh` | `install_e2b` 里多调一次 SDK 覆盖层安装；两个脚本共用一个解析出来的解释器 |
 | `e2b-deploy/dep/e2b-sdk-checkpoint/` | **新增**：SDK 覆盖层（installer + **21 个** payload 文件 + 使用说明）。08-28 时是 16 个；2026-09-21 起 21 个 = 12 个新增 + 9 个覆盖上游（新纳入 `e2b/sandbox/checkpoint/errors.py`、`e2b/exceptions.py`、`e2b/envd/{api,rpc}.py`、`e2b_connect/client.py`）。17 个取自 `py-sdk@4af2872c6`，4 个（`e2b/__init__.py`、`e2b/connection_config.py`、`e2b/sandbox_{sync,async}/main.py`）取自 `e2b-arm@1598c96e`，两边差异只来自 SDK 基线版本 |
 | `e2b-deploy.tar.gz` | 随 `e2b-deploy/` 重打（保住了被 gitignore 的 70MB `ubuntu-22.04-custom.tar.gz`） |
