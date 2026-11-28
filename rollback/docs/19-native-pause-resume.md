@@ -290,52 +290,54 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 
 ![920B 上 checkpoint / restore 与原生 pause / resume 按档的 p50](img/19-2-920B原生与checkpoint按档.svg)
 
-### 5.3 950 同一轮（2026-11-20）
+### 5.3 950 同一轮（2026-11-27）
 
-§5.1 的两组数来自不同轮次、不同负载。2026-11-20 用 `bash test950.sh compare --series mix`，在同一台 950、同一时段、同一种负载上把 checkpoint / restore 和 pause / resume 一起测了：每档新建沙箱，常驻进程的大小等于这一档的内存改动，改写内存并写根盘文件后 `fsync`，内存与文件按 3 : 1 拆分；pause / resume 在同一负载上另起沙箱测。pause / resume 只在进程级那套代码上测；pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，等上传的时间从 orchestrator 的 `Pause timing` 日志读出后扣掉（§7）。每个测量步骤开测前先回收宿主上积累的网络命名空间（§6.3）。每格 n = 20，客户端墙钟 p50，单位 ms。条件：checkpoint / restore 取自 e2b-infra `1384b02` 那一轮，结果目录 `test950/results/20261120-122146-compare/`，本方案 orchestrator `3a1b4c51…`（RPM `2026.09-3`，`hdbss`，模板 `base`）；pause / resume 与首读取自同一天 16:50 那一轮，结果目录 `test950/results/20261120-165024-compare/`，进程级那套的 orchestrator `fbe72d14…`（KASandbox `f66dbe2c1`，脏页跟踪关闭，模板 `base-criu`），同一负载、同一脚本。
+§5.1 的两组数来自不同轮次、不同负载。`bash test950.sh compare --rounds 5` 在同一台 950、同一轮、同一种负载上把 checkpoint / restore 和 pause / resume 一起测了：每档新建沙箱，常驻进程的大小等于这一档的内存改动，改写内存并写根盘文件后 `fsync`，内存与文件按 3 : 1 拆分；pause / resume 在同一负载上另起沙箱测。pause / resume 只在进程级那套代码上测；pause 只计第一步（拍快照并放进本节点缓存），与上游返回的时机一致，等上传的时间从 orchestrator 的 `Pause timing` 日志读出后扣掉（§7）。每个测量步骤开测前先回收宿主上积累的网络命名空间（§6.3）。
+
+条件：2026-11-27，e2b-infra `e4041b5`，结果目录 `test950/results/20261127-194830-compare/`。两套各 5 轮，按 ABBA 交替，每格 n = 100，客户端墙钟 p50，单位 ms。本方案 orchestrator `3a140cc5…`（RPM `2026.09-3`，e2b-infra `6d29da4` 构建，含 O-1/O-3，`hdbss`，模板 `base`）；pause / resume 与首读在进程级那套的 orchestrator `fbe72d14…`（KASandbox `f66dbe2c1`，脏页跟踪关闭，模板 `base-criu`）上测。宿主透明大页 `never`、`kernel.numa_balancing=0`，与 2026-11-24 及以前各轮（`always`、`1`）不同，本节不与以前的轮次相减。原始终端输出存于工作区 `rollback-reports/950-test950-20261127/`。
 
 | 总改动 MiB | checkpoint | E2B pause | 倍数 | restore | E2B resume | 倍数 | resume 后首读 |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 0 | 6.7 | 112.9 | 16.9 | 17.2 | 69.1 | 4.0 | 0.4 |
-| 16 | 18.3 | 133.4 | 7.3 | 30.5 | 68.2 | 2.2 | 2.7 |
-| 32 | 24.5 | 153.6 | 6.3 | 31.7 | 69.0 | 2.2 | 4.0 |
-| 64 | 35.0 | 188.4 | 5.4 | 47.3 | 73.6 | 1.6 | 7.9 |
-| 128 | 65.4 | 213.1 | 3.3 | 68.2 | 76.6 | 1.1 | 16.0 |
-| 256 | 114.1 | 336.3 | 2.9 | 108.7 | 82.0 | 0.75 | 33.1 |
-| 70.001（只改内存 70） | 22.3 | 130.8 | 5.9 | 38.8 | 74.9 | 1.9 | 8.3 |
+| 0 | 6.9 | 124.3 | 18.0 | 19.0 | 77.8 | 4.1 | 0.0 |
+| 16 | 18.2 | 140.7 | 7.7 | 27.2 | 75.7 | 2.8 | 1.4 |
+| 32 | 22.5 | 146.8 | 6.5 | 32.6 | 72.7 | 2.2 | 2.9 |
+| 64 | 32.0 | 177.3 | 5.5 | 44.3 | 75.2 | 1.7 | 6.4 |
+| 128 | 54.0 | 213.6 | 4.0 | 65.4 | 79.8 | 1.2 | 13.7 |
+| 256 | 97.2 | 337.0 | 3.5 | 105.8 | 83.6 | 0.79 | 31.2 |
+| 70.001（只改内存 70） | 22.1 | 135.0 | 6.1 | 42.2 | 77.1 | 1.8 | 9.2 |
 
-- 同一负载，倍数可以直接读：checkpoint 比 pause 快 2.9～17 倍；restore 在 128 档以内比 resume 快 1.1～4.0 倍，256 档慢 26.7 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 115.1 ms，restore 仍快 6.4 ms。
-- 这一列测自进程级部署包的 orchestrator `f66dbe2c1`：停 Firecracker 前查进程状态由执行 `ps` 改为读 `/proc`（§6.1）。改前（同一天 12:21 那一轮，orchestrator `e77c0e29…`，与本表 checkpoint / restore 同一轮）E2B pause 是 230.5～457.2 ms，每档多 89～129 ms，checkpoint 比它快 4.0～34 倍；resume 71.4～83.7 ms，与改后基本相同。
-- pause 不含等上传。等上传另记：pause 墙钟 173.3～492.5 ms，其中等上传 60.5～185.7 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。
-- 同一天上午那一轮（`20261120-091104-compare`）开测时宿主有 1421 个网络命名空间，没有先清，resume 是 86.3～98.5 ms，明显偏慢，原因见 §6.3。那一轮的 pause / resume 不再使用。
-- 2026-11-19 那一轮固定 256 MiB 进程、pause 含等上传、两套代码各测一遍，结论的方向相同（checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍），原始输出存于工作区 `rollback-reports/950-compare-20261119/compare.txt`。
-- 两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册[第 24 章 §4.3](../../criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-20)。原始终端输出存于工作区 `rollback-reports/950-test950-20261120/`（`clean-122146-compare.txt`、`compare-165024-criu-ps2proc.txt`）。
+- 同一负载，倍数可以直接读：checkpoint 比 pause 快 3.5～18 倍；restore 在 128 档以内比 resume 快 1.2～4.1 倍，256 档慢 22.2 ms。resume 返回时内存还没有读回，“resume 后首读”是之后第一次把整个进程的内存读一遍多花的时间；算上它，256 档 resume 一侧共 114.8 ms，restore 仍快 9.0 ms。
+- 这一列测自进程级部署包的 orchestrator `f66dbe2c1`：停 Firecracker 前查进程状态由执行 `ps` 改为读 `/proc`（§6.1）。2026-11-20 那两轮在同一负载上做过改前改后的对比：改前 E2B pause 230.5～457.2 ms，改后每档少 89～129 ms；resume 基本不变。
+- pause 不含等上传。等上传另记：第 3 轮 pause 墙钟 182.7～517.3 ms，其中等上传 56.5～178.7 ms。本方案代码上的原生 pause / resume 这一轮没有测，两套代码的对照见 §3.5（2026-11-18）。
+- 本方案的 restore 在 0～64 MiB 档 p99 是 80.8～108.6 ms，远高于 p50；2026-11-20、11-24 两轮 0～32 MiB 档也是 73～103 ms，原因未查（进程级手册第 24 章 §4.3）。
+- 2026-11-20 那一轮（每格 n = 20，pause / resume 取同日另一轮）的表在进程级手册第 24 章 §5.6。2026-11-19 那一轮固定 256 MiB 进程、pause 含等上传、两套代码各测一遍，结论的方向相同（checkpoint 比 pause 快 4.3～42 倍，restore 比 resume 快 1.4～6.7 倍），原始输出存于工作区 `rollback-reports/950-compare-20261119/compare.txt`。
+- 两套快照回滚的完整对外表（含进程级 checkpoint / restore、首次全量与 p99）和逐档解释在进程级手册[第 24 章 §4.3](../../criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-27)。
 
 ## 6. 固定开销从哪里来
 
-本节的数字来自 950（2026-11-20）：进程级那套 orchestrator 在 pause、resume 的每一步打点，每档 n = 20 取 p50；Firecracker 退出一段另用内核 ftrace 拆到函数。逐段的完整表格和机理在 [第 13 章 §6](13-native-snapshot.md#6-成本模型)，这里只给结论。
+本节的分段数字来自 950（2026-11-27 compare 的第 3 轮，宿主透明大页 never）：进程级那套 orchestrator 在 pause、resume 的每一步打点，每档 n = 20 取 p50；Firecracker 退出一段另用内核 ftrace 拆到函数（2026-11-20 那一轮）。逐段的完整表格和机理在 [第 13 章 §6](13-native-snapshot.md#6-成本模型)，这里只给结论。
 
 ### 6.1 pause
 
-0 MiB 档 orchestrator 合计 107.5 ms，真正保存状态的约 28 ms：
+0 MiB 档 orchestrator 合计 117.4 ms，真正保存状态的约 28 ms：
 
 | 段 | 0 MiB 档 | 256 MiB 档 |
 |---|---:|---:|
-| 暂停 vCPU、写 `snapfile`、取脏页集合、导出内存 | 27.8 | 158.4 |
-| 停 Firecracker 并等它退出 | 57.3 | 67.8 |
-| 断开 NBD | 19.5 | 19.5 |
-| 导出根盘差分、写元数据 | 1.1 | 79.0 |
-| 合计 | 107.5 | 330.6 |
+| 暂停 vCPU、写 `snapfile`、取脏页集合、导出内存 | 27.7 | 148.3 |
+| 停 Firecracker 并等它退出 | 69.2 | 66.0 |
+| 断开 NBD | 18.9 | 18.9 |
+| 导出根盘差分、写元数据 | 1.3 | 81.3 |
+| 合计 | 117.4 | 333.2 |
 
-- 停 Firecracker 之前查一次进程状态：上游 `Process.Stop` 执行 `ps -o stat= -p PID`，只为在日志里提示进程是否处于 D 状态，950 上约 106 ms（改前一轮 0 档 106.0、256 档 114.1 ms）；进程级那套从 `f66dbe2c1` 起改读 `/proc/PID/stat`，0.8 ms，已并入上表“停 Firecracker 并等它退出”。改前 0 档 orchestrator 合计 226.2 ms。沙箱级 RPM 仍执行 `ps`。机理和 ftrace 对照见[第 13 章 §6.1](13-native-snapshot.md#61-pause改动量为-0-也要约-110-ms)。
-- 等退出一段几乎都在内核关闭 KVM 虚机的 fd（`kvm_vm_release` 46.3 ms，其中 `kvm_destroy_vm` 29.2 ms，主要在等 RCU 宽限期）；释放地址空间不到 0.3 ms，释放 mount 命名空间 2.3 ms。
-- 改动量从 0 到 256 MiB，增长的 223 ms 来自搬数据：写 `snapfile` 时刷根盘、导出内存（168 → 434 MiB，按驻留页导出）、导出根盘差分；进程退出、断开 NBD 基本不变。
+- 停 Firecracker 之前查一次进程状态：上游 `Process.Stop` 执行 `ps -o stat= -p PID`，只为在日志里提示进程是否处于 D 状态，950 上约 106 ms（改前一轮 0 档 106.0、256 档 114.1 ms）；进程级那套从 `f66dbe2c1` 起改读 `/proc/PID/stat`，0.8 ms，已并入上表“停 Firecracker 并等它退出”。改前 0 档 orchestrator 合计 226.2 ms。沙箱级 RPM 仍执行 `ps`。机理和 ftrace 对照见[第 13 章 §6.1](13-native-snapshot.md#61-pause改动量为-0-也要约-120-ms)。
+- 等退出一段几乎都在内核关闭 KVM 虚机的 fd（2026-11-20 的 ftrace：`kvm_vm_release` 46.3 ms，其中 `kvm_destroy_vm` 29.2 ms，主要在等 RCU 宽限期）；释放地址空间不到 0.3 ms，释放 mount 命名空间 2.3 ms。
+- 改动量从 0 到 256 MiB，增长的 216 ms 来自搬数据：写 `snapfile` 时刷根盘、导出内存（168 → 436 MiB，按驻留页导出）、导出根盘差分；进程退出、断开 NBD 基本不变。
 
 ### 6.2 resume
 
-0 MiB 档客户端 69.1 ms，其中 orchestrator 57.4 ms：起一个新的 Firecracker 到 API 可用 34.4 ms，加载 `snapfile` 5.0 ms，恢复 vCPU 与写 MMDS 0.5 ms，等 envd 就绪 15.8 ms；另有 API 与网络 4.2 ms、第一条命令 7.8 ms。起 Firecracker 一段包括：
+0 MiB 档客户端 81.8 ms，其中 orchestrator 68.7 ms：起一个新的 Firecracker 到 API 可用 34.4 ms，加载 `snapfile` 12.2 ms（其他档 3.7～5.3 ms），恢复 vCPU 与写 MMDS 0.9 ms，等 envd 就绪 16.3 ms；另有 API 与网络 4.2 ms、第一条命令 7.5 ms。起 Firecracker 一段包括：
 
-- 建沙箱 cgroup 约 13 ms。950 是 cgroup v2，每个沙箱要在开了 `cpu`、`memory` 控制器的 `/sys/fs/cgroup/e2b` 下新建目录；920B 是 cgroup v1，这一步约 0.1 ms。
+- 建沙箱 cgroup 约 11～13 ms。950 是 cgroup v2，每个沙箱要在开了 `cpu`、`memory` 控制器的 `/sys/fs/cgroup/e2b` 下新建目录；920B 是 cgroup v1，这一步约 0.1 ms。
 - `unshare -m` 新建 mount 命名空间，要复制宿主的整张挂载表，耗时与挂载点数成正比（920B 上约每个挂载点 10 µs）；然后 `ip netns exec` 进入网络命名空间，启动 Firecracker。
 
 这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 不随档位变化，内存读取的成本落在恢复之后（§3.3）。
@@ -343,7 +345,7 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 ### 6.3 测试环境的影响
 
 - **网络命名空间积累。** 每个 e2b 网络命名空间在 `/run/netns` 下留一到两个挂载点；orchestrator 重启时不回收上一次的网络槽位，测试中频繁切换栈会让它们越积越多。同一天上午那一轮开测时有 1421 个网络命名空间，0 档 resume 93.0 ms；第二轮（`110854`，有分段日志）开测时 666 个，起 Firecracker 一段 45.2 ms；清理之后的两轮（挂载点约 450～700），这一段 34～35 ms，0 档 resume 69～71 ms。`bash test950.sh` 现在在每个测量步骤开测前先回收网络命名空间，报告里打印测量开始和结束时的网络命名空间数、挂载点数与 cgroup 版本。
-- **cgroup 版本。** cgroup v2 上每次 resume 多约 13 ms。
+- **cgroup 版本。** cgroup v2 上每次 resume 多约 11～13 ms。
 - **宿主进程数。** 只影响仍执行 `ps` 的版本（上游、沙箱级 RPM）：`ps` 一段随宿主进程数增长。
 
 920B 上同样的拆分：SIGTERM 到进程退出 83.6 ms，结构与 950 相同。所以 950 与 920B 的 pause / resume 差别来自这些环境因素和 cgroup 版本，不来自 ARM 适配代码。上游在 x86 上的耗时取决于同样的因素，本项目没有在 x86 上测。
@@ -376,12 +378,12 @@ snapshot 模式（`create_snapshot()` → `Sandbox.create(template=...)`）：
 ## 本章要点
 
 - 精确增量在 950 和 920B 上都生效：导出内存随写入量增长，0 MiB 档约 16 MiB。
-- pause 由固定开销主导。950 按六档 p50 拟合约为 245.5 ms + 0.52 ms/MiB，920B 约为 275.2 ms + 0.48 ms/MiB。固定开销来自销毁虚机环境，不含本方案的对照构建同样存在：950 上（2026-11-20）0 档 orchestrator 计约 108 ms 里，内核销毁 KVM 虚机约 57 ms，断开 NBD 约 20 ms，真正保存状态约 28 ms（§6.1）。
+- pause 由固定开销主导。950 按六档 p50 拟合约为 245.5 ms + 0.52 ms/MiB，920B 约为 275.2 ms + 0.48 ms/MiB。固定开销来自销毁虚机环境，不含本方案的对照构建同样存在：950 上（2026-11-27）0 档 orchestrator 计约 117 ms 里，等 Firecracker 退出（主要是内核销毁 KVM 虚机）约 68 ms，断开 NBD 约 19 ms，真正保存状态约 28 ms（§6.1）。
 - resume 基本不随档位变化，950 上 0～128 MiB 档 p50 在 106.1～109.3 ms。成本推迟到恢复之后，950 上第一次读 192 MiB 内存负载比快照前慢约 112 ms。
 - 950 上 checkpoint / restore 与 pause / resume 的差距在小档最大，但两组负载和部署条件不同，倍数只说明量级。
 - 数字接近不代表语义接近：restore 保留进程和 checkpoint，resume 换一代进程，之前的 checkpoint 全部失效。
 - 停 Firecracker 前查进程状态由执行 `ps`（约 106 ms，只为日志）改为读 `/proc`（0.8 ms），同一负载下 pause 每档少 89～129 ms（§5.3、§6.1）。
-- 950 同一负载（§5.3，2026-11-20，开测前清过网络命名空间）：checkpoint 比 pause 快 2.9～17 倍；restore 在 128 档以内比 resume 快 1.1～4.0 倍，256 档慢 26.7 ms，算上 resume 后读回内存仍快 6.4 ms。pause 只计第一步，与上游返回的时机一致。
-- resume 约 57 ms 的服务端时间里，起新 Firecracker 约 34 ms（950 的 cgroup v2 建沙箱 cgroup 约 13 ms，新建 mount 命名空间随宿主挂载点数增长），等 envd 约 16 ms（§6.2）。宿主上积累的网络命名空间会让 resume 慢 14～22 ms，测前要清理（§6.3）。
+- 950 同一负载（§5.3，2026-11-27，5 轮交替、每格 n = 100，宿主透明大页 never、`numa_balancing=0`）：checkpoint 比 pause 快 3.5～18 倍；restore 在 128 档以内比 resume 快 1.2～4.1 倍，256 档慢 22.2 ms，算上 resume 后读回内存仍快 9.0 ms。pause 只计第一步，与上游返回的时机一致。
+- resume 约 69 ms 的服务端时间里，起新 Firecracker 约 34 ms（950 的 cgroup v2 建沙箱 cgroup 约 11～13 ms，新建 mount 命名空间随宿主挂载点数增长），等 envd 约 16 ms（§6.2）。宿主上积累的网络命名空间会让 resume 慢 14～22 ms，测前要清理（§6.3）。
 - 950 两套代码上各跑一遍（§3.5）的结论与 920B 相同：沙箱级这套的 pause 每档更快、导出更小，resume 每档慢 20～35 ms。
 - 950 上沙箱级这套代码的逐段拆分、不开跟踪的对照仍待补。

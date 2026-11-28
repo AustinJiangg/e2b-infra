@@ -197,35 +197,35 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 
 修复后的分档实测见 [第 19 章](19-native-pause-resume.md)：pause 由一段与改动量无关的固定开销主导，resume 与档位基本无关。分档数字与判定都以该章为准。
 
-下面两节按阶段说明这些时间花在哪里。数字来自 950（2026-11-20，结果目录 `test950/results/20261120-165024-compare/`）：进程级那套 orchestrator（KASandbox `f66dbe2c1`）在 pause、resume 的每一步打点，测试脚本从 `Pause timing`、`Resume phases` 两类日志读出各段，每档 n = 20，取 p50。Firecracker 退出那一段另用内核 ftrace 拆到函数（`bash test950.sh fcexit`，结果目录 `test950/results/20261120-154039-fcexit/`，每档 n = 5）。开测前清理过宿主上积累的网络命名空间，原因见 §6.3。
+下面两节按阶段说明这些时间花在哪里。分段数字来自 950（2026-11-27 compare 的第 3 轮，结果目录 `test950/results/20261127-194830-compare/`，宿主透明大页 never、`kernel.numa_balancing=0`）：进程级那套 orchestrator（KASandbox `f66dbe2c1`）在 pause、resume 的每一步打点，测试脚本从 `Pause timing`、`Resume phases` 两类日志读出各段，每档 n = 20，取 p50。“256 MiB 档”指总改动 256 MiB（内存 192 MiB、文件 64 MiB）。Firecracker 退出那一段另用内核 ftrace 拆到函数，那是 2026-11-20 的一轮（`bash test950.sh fcexit`，结果目录 `test950/results/20261120-154039-fcexit/`，每档 n = 5，宿主透明大页 always）。开测前清理过宿主上积累的网络命名空间，原因见 §6.3。
 
-### 6.1 pause：改动量为 0 也要约 110 ms
+### 6.1 pause：改动量为 0 也要约 120 ms
 
 各段按时间先后（orchestrator 日志，p50，ms）：
 
 | 段 | 做什么 | 0 MiB 档 | 256 MiB 档 |
 |---|---|---:|---:|
-| 暂停 vCPU | 调 Firecracker API 暂停虚机 | 0.5 | 0.6 |
-| 写 `snapfile` | Firecracker 写虚机状态；它同时把根盘设备上还没写回的数据经 NBD 刷出去，所以随写文件量增长 | 4.0 | 71.6 |
-| 取脏页集合 | 确定要导出哪些页 | 3.2 | 2.4 |
-| 导出内存 | 按驻留页导出（ARM 适配基线的判据，[§3.2](#32-arm-适配基线上的退化)），0 档也要导出 168 MiB，256 档 434 MiB | 20.1 | 83.8 |
+| 暂停 vCPU | 调 Firecracker API 暂停虚机 | 0.5 | 0.5 |
+| 写 `snapfile` | Firecracker 写虚机状态；它同时把根盘设备上还没写回的数据经 NBD 刷出去，所以随写文件量增长 | 3.9 | 66.8 |
+| 取脏页集合 | 确定要导出哪些页 | 3.2 | 3.4 |
+| 导出内存 | 按驻留页导出（ARM 适配基线的判据，[§3.2](#32-arm-适配基线上的退化)），0 档也要导出 168 MiB，256 档 436 MiB | 20.1 | 77.6 |
 | 查 Firecracker 进程状态 | 读 `/proc/PID/stat`，只用于日志里提示进程是否处于 D 状态；上游执行一次 `ps`，见表后 | 0.8 | 0.9 |
 | 发 SIGTERM | 通知 Firecracker 退出 | 0.0 | 0.0 |
-| 等 Firecracker 进程退出 | 内核拆除虚机，见下表 | 56.5 | 66.9 |
-| 断开 NBD | `NBDProvider.Close` 刷盘并断开 NBD 设备 | 19.5 | 19.5 |
-| 导出根盘差分 | 根盘差分要等 NBD 设备释放后才能导出（[§4.1](#41-exportdiff-的步骤)） | 0.8 | 78.5 |
-| 写元数据、进缓存 | 放进本节点的快照缓存 | 0.3 | 0.5 |
-| **orchestrator 合计** | | **107.5** | **330.6** |
+| 等 Firecracker 进程退出 | 内核拆除虚机，见下表 | 68.4 | 65.1 |
+| 断开 NBD | `NBDProvider.Close` 刷盘并断开 NBD 设备 | 18.9 | 18.9 |
+| 导出根盘差分 | 根盘差分要等 NBD 设备释放后才能导出（[§4.1](#41-exportdiff-的步骤)） | 0.9 | 80.8 |
+| 写元数据、进缓存 | 放进本节点的快照缓存 | 0.4 | 0.5 |
+| **orchestrator 合计** | | **117.4** | **333.2** |
 
-客户端看到的 pause（只计第一步，不含上传）是 112.9 / 336.3 ms，比 orchestrator 合计多出的 5～6 ms 是 API 与网络。之后把快照上传到模板存储另花 60.5 / 185.7 ms。
+客户端看到的 pause（只计第一步，不含上传）是 122.8 / 339.4 ms，比 orchestrator 合计多出的 5～6 ms 是 API 与网络。之后把快照上传到模板存储另花 56.5 / 178.6 ms。5 轮合并的 p50 是 124.3 / 337.0 ms（进程级手册第 24 章 §4.3）。
 
-**真正保存状态的步骤（暂停到导出内存）在 0 档约 28 ms。每次都要付、与改动量无关的是两段：等 Firecracker 退出约 57 ms、断开 NBD 约 20 ms，合计约 76 ms。** 改动量从 0 增加到 256 MiB 时，增长的 223 ms 来自搬数据：写 `snapfile` 时刷根盘 +68 ms，导出内存 +64 ms，导出根盘差分 +78 ms；进程退出和断开 NBD 基本不变。
+**真正保存状态的步骤（暂停到导出内存）在 0 档约 28 ms。每次都要付、与改动量无关的是两段：等 Firecracker 退出约 65～68 ms、断开 NBD 约 19 ms，合计约 85 ms。** 改动量从 0 增加到 256 MiB 时，增长的 216 ms 来自搬数据：写 `snapfile` 时刷根盘 +63 ms，导出内存 +58 ms，导出根盘差分 +80 ms；进程退出和断开 NBD 基本不变。2026-11-20 那一轮（宿主透明大页 always）0 档等退出是 56.5 ms，这一轮宿主条件不同，不归因。
 
 **查进程状态：从执行 `ps` 改为读 `/proc`。** 上游 `fc/process.go` 的 `Process.Stop` 在发 SIGTERM 之前调用 `getProcessState`，它执行 `ps -o stat= -p PID`，代码注释写明用途是检查进程是否处于 D 状态（gopsutil 看不到），结果只用来打一行日志，不影响后续步骤。耗时在 `ps` 自身，随宿主进程数增长：950 上这一段约 106 ms，920B 上宿主约 4000 个进程时单独执行它约 85 ms。进程级那套的 orchestrator 从 KASandbox `f66dbe2c1` 起改为读 `/proc/PID/stat` 的状态字段（按最后一个 `)` 之后切分，命令名带空格或括号也不会错），这一段降到 0.8 ms，日志不变；返回的是单个状态字母，原来 `state == "D"` 的判断对多线程的 Firecracker（`ps` 给出 `Dl`）从不成立，现在能命中。沙箱级 RPM 里的 orchestrator 没有改，仍执行 `ps`。
 
-改前的同一负载、同一脚本（同一天 12:21 那一轮，orchestrator `e77c0e29…`，KASandbox `237b9ac62`）：`ps` 一段 0 档 106.0 ms、256 档 114.1 ms，orchestrator 合计 226.2 / 450.5 ms，客户端 pause 230.5 / 457.2 ms；改后每档少 89～129 ms。resume 不经过这一步，改前 71.4～83.7 ms，与改后基本相同。早先在 920B 上对 Firecracker 做内核栈采样时，有约 114 ms 一直看不到栈、没能归因，就是这一段：那时 Firecracker 还没收到信号。
+改前的同一负载、同一脚本（2026-11-20 12:21 那一轮，orchestrator `e77c0e29…`，KASandbox `237b9ac62`；改后对照是同日 16:50 那一轮）：`ps` 一段 0 档 106.0 ms、256 档 114.1 ms，orchestrator 合计 226.2 / 450.5 ms，客户端 pause 230.5 / 457.2 ms；改后每档少 89～129 ms。resume 不经过这一步，改前 71.4～83.7 ms，与改后基本相同。早先在 920B 上对 Firecracker 做内核栈采样时，有约 114 ms 一直看不到栈、没能归因，就是这一段：那时 Firecracker 还没收到信号。
 
-**Firecracker 退出那 57 ms。** ftrace 只跟踪这个 Firecracker 的线程，950 上 0 档 5 次的 p50（跟踪本身有开销，看比例和归属；改前一列是同一天改为读 `/proc` 之前的一轮）：
+**Firecracker 退出那一段。** 2026-11-20 那一轮（当时这一段 p50 约 57 ms）用 ftrace 只跟踪这个 Firecracker 的线程，950 上 0 档 5 次的 p50（跟踪本身有开销，看比例和归属；改前一列是同一天改为读 `/proc` 之前的一轮）：
 
 | 段 | 读 `/proc`（现在） | 执行 `ps`（改前） |
 |---|---:|---:|
@@ -239,7 +239,7 @@ e2b 为此做了 **prefetch**：记录上一次运行时的缺页顺序，下次
 
 SIGTERM 发出后，第一个线程立刻进入 `do_exit`；时间几乎都花在关闭 KVM 虚机的 fd 上。920B 的原始跟踪里，`kvm_destroy_vm` 的时间主要在 `synchronize_rcu` 等 RCU 宽限期，`kvm_vm_release` 里另有 irqfd 清理（`kvm_irqfd_release`）约 11 ms。guest 内存走 hugetlb，释放地址空间不到 0.3 ms。192 MiB 档这一段是 60.6 ms（改前 168.7 ms），与 0 档同一量级。920B 上同样的测量，“开始停沙箱 → Firecracker 退出”由 192.2 ms 降到 84.8 ms（0 档），SIGTERM 到进程退出 83.6 ms，结构相同。等 RCU 宽限期的长短受宿主整体负载影响，同一台机器两轮之间 SIGTERM 到退出这一段会差十几到几十毫秒，所以改前改后的差值里只有 `ps` 那约 104 ms 算作这次改动的效果。
 
-### 6.2 resume：各档 68～82 ms
+### 6.2 resume：各档 73～84 ms
 
 各段按时间先后（orchestrator 日志，p50，ms）：
 
@@ -247,22 +247,24 @@ SIGTERM 发出后，第一个线程立刻进入 `do_exit`；时间几乎都花�
 |---|---:|---:|
 | 排队、取模板 | 0.2 | 0.2 |
 | 网络槽位、NBD、uffd | 0.2 | 0.3 |
-| 起 Firecracker 进程到 API 可用 | 34.4 | 46.0 |
-| 加载 `snapfile` | 5.0 | 4.2 |
-| 恢复 vCPU、写 MMDS | 0.5 | 0.6 |
-| 等 envd 就绪 | 15.8 | 18.4 |
+| 起 Firecracker 进程到 API 可用 | 34.4 | 45.7 |
+| 加载 `snapfile` | 12.2 | 4.2 |
+| 恢复 vCPU、写 MMDS | 0.9 | 1.0 |
+| 等 envd 就绪 | 16.3 | 20.1 |
 | 收尾返回 | 0.6 | 0.7 |
-| **orchestrator 合计** | **57.4** | **69.0** |
+| **orchestrator 合计** | **68.7** | **72.1** |
 | API 与网络 | 4.2 | 4.6 |
-| 第一条命令 | 7.8 | 9.0 |
-| **客户端 resume**（`connect` 返回 + 第一条命令） | **69.1** | **82.0** |
+| 第一条命令 | 7.5 | 8.3 |
+| **客户端 resume**（`connect` 返回 + 第一条命令） | **81.8** | **85.6** |
+
+5 轮合并的客户端 resume p50 是 77.8 / 83.6 ms。0 档加载 `snapfile` 12.2 ms，其他各档都是 3.7～5.3 ms，这一点没有再查。
 
 最大的一段是起一个新的 Firecracker。它包括：
 
-- 建沙箱 cgroup。950 是 cgroup v2，orchestrator 启动时在 `/sys/fs/cgroup/e2b` 上打开 `cpu`、`memory` 两个控制器（`cgroup/manager.go` 的 `Initialize`），每个沙箱在它下面 `mkdir` 一个子目录，内核要为两个控制器建好接口文件，测试脚本单独 `mkdir` / `rmdir` 一个这样的目录约 12.6～13.6 ms。920B 是 cgroup v1，`Initialize` 直接跳过，同一步约 0.1 ms。这是 950 的 resume 比 920B 多出的主要部分。
+- 建沙箱 cgroup。950 是 cgroup v2，orchestrator 启动时在 `/sys/fs/cgroup/e2b` 上打开 `cpu`、`memory` 两个控制器（`cgroup/manager.go` 的 `Initialize`），每个沙箱在它下面 `mkdir` 一个子目录，内核要为两个控制器建好接口文件，测试脚本单独 `mkdir` / `rmdir` 一个这样的目录约 11～13 ms（2026-11-27 那一轮 11.0～12.9 ms）。920B 是 cgroup v1，`Initialize` 直接跳过，同一步约 0.1 ms。这是 950 的 resume 比 920B 多出的主要部分。
 - 启动命令 `unshare -m -- bash -c '…'`：先新建 mount 命名空间，内核要复制宿主的整张挂载表，再 `mount --make-rprivate /`，再 `ip netns exec` 进入沙箱的网络命名空间，最后启动 Firecracker，等它的 API socket 可用。新建 mount 命名空间的耗时与宿主挂载点数成正比，920B 上约每个挂载点 10 µs（2915 个挂载点时 `unshare -m` 29.3 ms，1486 个时 14.4 ms）。
 
-256 档这一段多出约 10 ms，其他档都是 34～37 ms；等 envd 就绪 16～20 ms。这两处都没有再拆。
+这一段各档 34～46 ms，随档位略有增长；等 envd 就绪 16～20 ms。这两处都没有再拆。
 
 这些步骤都不搬运内存，也不拷根盘：内存由 uffd 按缺页加载，根盘由 Overlay 按需读差分，所以 resume 耗时**基本不随档位变化**。
 
@@ -273,7 +275,7 @@ SIGTERM 发出后，第一个线程立刻进入 `do_exit`；时间几乎都花�
 两项环境因素会改变上面的固定开销，与 ARM 适配代码无关：
 
 - **宿主挂载点数。** 每个 e2b 网络命名空间在 `/run/netns` 下留一到两个 nsfs 挂载点。orchestrator 重启时不回收上一次留下的网络槽位，本项目测试中频繁切换栈、重启 orchestrator，950 上曾积累到 1421 个网络命名空间。每起一个 Firecracker 都要复制一遍挂载表，resume 随之变慢：950 上同一天，开测时有 666 个网络命名空间的一轮，起 Firecracker 一段 45.2 ms；清理到约 450 个挂载点后这一段 35.0 ms。有 1421 个网络命名空间的一轮没有分段日志，0 档 resume 93.0 ms，清理后约 70 ms。pause 里释放 mount 命名空间一段（`put_mnt_ns`）也随挂载点数增长，在约 450～570 个挂载点时是 1.9～2.3 ms。`bash test950.sh` 现在在每个测量步骤开测前先回收网络命名空间。
-- **cgroup 版本。** cgroup v2 上每次 resume 多约 13 ms 建沙箱 cgroup（§6.2）。
+- **cgroup 版本。** cgroup v2 上每次 resume 多约 11～13 ms 建沙箱 cgroup（§6.2）。
 
 - **宿主进程数。** 只影响仍执行 `ps` 的版本（上游、沙箱级 RPM）：`ps` 要扫一遍 `/proc`，宿主进程越多越慢。
 

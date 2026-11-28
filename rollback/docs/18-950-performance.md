@@ -577,7 +577,7 @@ n = 3 的中位数，单位 ms，差分为 MiB；o1 / o9 是 order 1 / order 9�
 
 本轮只回传了 `compliance.log`、`serial-restore.log`、HDBSS 汇总表和 idle 汇总，没有 perf-full 的 `analyze.log`，所以下面没有分档冻结窗口、拟合和漂移；§4～§6 的这些分析仍是 11-18 改进前的。下表两轮都取 `compliance.py` 的口径（§3），可以直接相减。
 
-另一轮 compare（`20261125-090341-compare`）在 2026-11-25 上午被宿主上的其他负载打断：第 1 轮之后机器上的 Firecracker 从 65 个增加到 160 个，loadavg 从 10 升到 160，第 2 轮沙箱级出现一次 restore 后 envd 45 s 不回应，随后宿主重启。那一轮数据不采用，待机器空闲时重跑。
+另一轮 compare（`20261125-090341-compare`）在 2026-11-25 上午被宿主上的其他负载打断：第 1 轮之后机器上的 Firecracker 从 65 个增加到 160 个，loadavg 从 10 升到 160，第 2 轮沙箱级出现一次 restore 后 envd 45 s 不回应，随后宿主重启。那一轮数据不采用。之后查明这几次宿主重启与 smap 有关（工作区 `rollback-reports/950-reboot-20261126/`）；2026-11-27 宿主重启、停掉 `ubturbo` 后重跑了 compare（`20261127-194830-compare`，5 轮交替，12 步全部 PASS），两套快照回滚与 E2B 原生的同负载对比见进程级手册[第 24 章 §4.3](../../criu-rollback/docs/24-vs-sandbox-level.md#43-对外分档表9502026-11-27)，与原生 pause / resume 的并列见[第 19 章 §5.3](19-native-pause-resume.md#53-950-同一轮2026-11-27)。
 
 ### 11.2 十八档：改进前后对照
 
@@ -637,5 +637,5 @@ n = 3 的中位数，单位 ms，差分为 MiB；o1 / o9 是 order 1 / order 9�
 - 默认 order 1 的 HDBSS 启用已有能力、自报、启用日志、数据面和内容一致性证据。order 9 把每页 KVM 退出降到 order 1 的 0.35～0.74 倍，checkpoint、restore 耗时与差分体积没有可分辨的变化，默认保持 order 1。
 - 改动量相同时，页分布影响很大：单写者 256 MiB 的 seq / rand，checkpoint 为 35.5 / 164.4 ms，restore 为 76.8 / 324.8 ms。
 - 950 上空闲后 restore 七臂 p50 16.1～22.4 ms，没有一次超过 100 ms；920B 上的空闲后 checkpoint 变慢、不拍 cpB 直接 restore 变慢在 950 上都没有出现。
-- 冻结窗口改进之后（2026-11-24 extended，§11）：带文件改动的大档 checkpoint p50 低 15～26 ms（混合 256 MiB 119 → 92.7 ms，纯文件 64 MiB 98.2 → 77.1 ms），混合 512 MiB 的 checkpoint p50 第一次落到线内（177 ms）；restore 没有被拖慢（纯文件 64 MiB 43.2 → 43.7 ms）。判定结论不变：全部达标的最高已测档 128 MiB，192 / 256 MiB 档 restore p99 超线。compare 待机器空闲时重跑。
+- 冻结窗口改进之后（2026-11-24 extended，§11）：带文件改动的大档 checkpoint p50 低 15～26 ms（混合 256 MiB 119 → 92.7 ms，纯文件 64 MiB 98.2 → 77.1 ms），混合 512 MiB 的 checkpoint p50 第一次落到线内（177 ms）；restore 没有被拖慢（纯文件 64 MiB 43.2 → 43.7 ms）。判定结论不变：全部达标的最高已测档 128 MiB，192 / 256 MiB 档 restore p99 超线。compare 已于 2026-11-27 重跑（§11.1 末，进程级手册第 24 章 §4.3）。
 - 2026-11-17 第一轮（配置了 UB，§10）的判定结论与上面相同；两轮之间换了二进制、宿主重启过，差值不归因。仍缺原始样本的独立重算、同机软件写保护对照和长期或大样本尾延迟。

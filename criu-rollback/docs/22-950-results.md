@@ -1,6 +1,6 @@
 # 22 · 950 结果
 
-> **状态：五轮已填（2026-11-17、11-18、11-23 两轮）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 `test950.sh` extended、native、compare 三档里的进程级各步，全部 PASS（§10）。第四轮是 2026-11-23 的 `test950.sh dbm`：换上带补丁 0004 的 guest 内核之后的验收与 soft-dirty 开关 A/B，全部 PASS（§11）。第五轮是同一天换上带补丁 0005 的 guest 内核之后的 `test950.sh standard --stack criu`，全部 PASS（§12）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
+> **状态：六轮已填（2026-11-17、11-18、11-23 两轮、11-27）。** 第一轮是 `criu-rollback/deploy/950.sh all`，13 步全部 PASS（§0～§7），各表由同一轮结果目录经 `bash criu-rollback/deploy/950.sh report handbook` 取数填写，“串口关键词命中”一行是事后用新版取数脚本补取的（正则与 `analyze_stress.py` 相同）。第二轮是同一天 `test950.sh standard` 里的进程级验收与压测，全部 PASS（§9）。第三轮是 2026-11-18 重新部署后 `test950.sh` extended、native、compare 三档里的进程级各步，全部 PASS（§10）。第四轮是 2026-11-23 的 `test950.sh dbm`：换上带补丁 0004 的 guest 内核之后的验收与 soft-dirty 开关 A/B，全部 PASS（§11）。第五轮是同一天换上带补丁 0005 的 guest 内核之后的 `test950.sh standard --stack criu`，全部 PASS（§12）。第六轮是 2026-11-27 宿主重启、停掉 smap 之后的 `test950.sh compare --rounds 5`，12 步全部 PASS（§13）。原始文件留在 950 上。这是填写 950 结果的唯一位置。
 
 ## 本章目标
 
@@ -507,6 +507,29 @@ e2b-infra `26300e3` 起，部署包里进程级的 guest 内核再换一版：�
 
 ---
 
+## 13. 第六轮：宿主重启后的 compare（2026-11-27）
+
+2026-11-26 950 宿主多次重启，查明与 smap 迁移 Firecracker 内存有关（工作区 `rollback-reports/950-reboot-20261126/`）。11-27 重启宿主、停掉 `ubturbo`，按 `build.sh -d / -i / -s` 重新部署，再跑同负载 compare。test950 从 e2b-infra `0d9bbc5` 起在开测前和每一步前后检查 smap；`950.sh` 从 `e4041b5` 起在重新部署后自动重存切栈基线。
+
+| 项 | 值 |
+|---|---|
+| 仓库提交 | e2b-infra `e4041b5`（950 上工作区里多出来的仍是用 LFS 拉下来的包） |
+| 命令 | `bash test950.sh compare --rounds 5 --new`：两套各 5 轮，按 ABBA 交替，最后合并成一张对比表，再回切沙箱级做冒烟 |
+| 被测文件 | 进程级：orchestrator `fbe72d14…`，gsd `8bc5dc49…`，guest 内核 `6fdcd2d6…`，Firecracker v1.13.1 `18f3faa7…`；沙箱级：orchestrator `3a140cc5…`（RPM `2026.09-3`，e2b-infra `6d29da4` 构建）；宿主内核 `6.6.0-159.4.3.154.oe2403sp4.aarch64` |
+| 宿主条件 | 透明大页 `never`（`defrag=never`）、`kernel.numa_balancing=0`、`compaction_proactiveness=0`（与前五轮的 `always`、`1` 不同）；`ubturbo` inactive，没有 smap 模块；开跑时 AgentENV 的 Firecracker 0 个 |
+| 结果目录 | `test950/results/20261127-194830-compare/` |
+| 时间 | 19:48～21:09，共 81 分钟：沙箱级每轮约 4 分 48 秒，进程级每轮 7 分 30 秒～7 分 40 秒，每步前回收网络命名空间约 1 分 10 秒 |
+| 判定 | 12 步全部 **PASS**：sandbox / criu `compare-r1`～`r5`、`criu/compare-table`、`sandbox/smoke-after`（PASS 5 / FAIL 0 / SKIP 0）；进程级每轮测量 900 次、失败 0 |
+| smap 检查 | 25 次，全部正常；本次开机迁出请求 0 次，内核迁移记录 0 行 |
+
+- **conc N = 16 没有复现报错。** 11-26 那一轮（宿主处在 smap 崩溃期）进程级 `compare-r3` 在 16 个沙箱并发时报过一次 `incomplete chunked read`；这一轮 5 轮共 400 次并发测量都成功。排查记录在工作区 `950-conc16-incomplete-chunked-read-分析-20261127.md`。e2b-infra `e6c6571` 起 compare 脚本在失败时会记下沙箱 id、正在做的调用和完整回溯，这一轮用的是之前的脚本。
+- **数据去向。** 对外分档表与逐档解释在 [24](24-vs-sandbox-level.md) §4.3，dirty / size / file / conc 组在 [24](24-vs-sandbox-level.md) §5.3。
+- **进程级每轮比 11-24 那一轮快约 2 分钟。** 11-24 每轮约 9 分 25 秒，这一轮约 7 分 35 秒；沙箱级每轮基本不变。两轮的宿主条件不同，本章不归因。
+
+原始终端输出存于工作区 `rollback-reports/950-test950-20261127/`。
+
+---
+
 ## 本章要点
 
 - 950 上第一轮 `950.sh all` 已跑完（2026-11-17），13 步全部 PASS；§8 的核对条件除第 11 条（运行期间机器上有没有别的负载，没有记录）外都满足。
@@ -515,6 +538,7 @@ e2b-infra `26300e3` 起，部署包里进程级的 guest 内核再换一版：�
 - 2026-11-18 的第三轮（gsd `1a0a3b67…`）验收、压测、扩展压测全部 PASS；扩展压测第一次在 950 上跑，两个容量组跑满 1000 轮、校验全部一致；all 与 noworkers 两组的 `resource_exhausted` 从五十多次降到 0（§10）；分档性能三轮中位数与第二轮相差不超过 3.7 ms（§10.5）。
 - 2026-11-23 的第四轮（guest 内核 `35b25505…`，带补丁 0004）验收与 A/B 全部 PASS。950 的 guest 有 DBM，checkpoint 之后改写内存的耗时降到原来的 1/4～1/9，每 MiB 省约 0.35 ms；两轮期间宿主上另有约 100 个 Firecracker 进程，checkpoint 与 restore 的差不判读（§11）。
 - 同一天的第五轮（guest 内核 `6fdcd2d6…`，加了补丁 0005）验收与压测全部 PASS，压测计数与前几轮相同（§12）。
+- 2026-11-27 的第六轮是宿主重启、停掉 smap 之后的 compare，5 轮交替 12 步全部 PASS，smap 检查 25 次全部正常；11-26 在 N = 16 并发时出现过的 `incomplete chunked read` 没有复现（§13）。
 - 结果由 `criu-rollback/deploy/950.sh all` 里的验收、压测和回切冒烟产生，每张表的来源文件都已写明。
 - 表的结构与第 19、20、21 章相同；V12 首次部署跳过，没有对应的表。
 - 950 的第一轮结果是它自己的基线，920B 的耗时不是通过阈值，两者不相减。
