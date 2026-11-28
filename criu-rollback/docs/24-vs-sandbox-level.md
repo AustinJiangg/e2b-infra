@@ -479,7 +479,7 @@ compare 那一轮，沙箱级写 64 MiB 文件的 checkpoint 里 `snapshot` 段�
 
 **这对测量意味着什么。** 宿主内核会按 `dirty_expire_centisecs`（默认 30 s）和 `dirty_writeback_centisecs`（默认 5 s）自行把这些脏页写回。分档测试是写完、`sync` 之后立刻 checkpoint，测到的是最贵的情况。2026-11-18 在新 920B 上用同一个 64 MiB 文件实测（沙箱级手册[第 18 章 §5.4](../../rollback/docs/18-950-performance.md#54-写文件的代价由什么决定)）：只 `write` 不 `sync`、立刻 checkpoint，墙钟 15.4 ms，数据还在 guest 页缓存里，按内存计价；`fsync` + `sync` 后立刻 checkpoint，72.8 ms，期间经 NBD 推送 64.2 MiB；`sync` 后等 40 s，推送为 0。这里的代价与平台是否用 `O_DIRECT` 打开磁盘无关：Firecracker 的块设备没有这个选项，测试与生产用的是同一种打开方式；决定代价落在不落在暂停窗口里的，是写完是否 `fsync`、写完多久 checkpoint。
 
-**O-1/O-3 之后：推送挪到暂停之前。** 2026-11-24 起的沙箱级部署包（e2b-infra `6461e1c`，`CHECKPOINT_PREFLUSH` 默认开）在暂停 vCPU 之前先把根盘写回一遍（服务端分段 `preflush`），暂停窗口里的 `drain_and_flush` 要推的就只剩这之后新写的少量数据。代价没有消失，只是移出了冻结窗口，仍计入 checkpoint 的墙钟。2026-11-27 那一轮第 3 轮 file 组 f = 64：连续 checkpoint 服务端 68.7 ms，其中 `preflush` 52.4 ms、冻结 15.6 ms（`snapshot` 14.4 ms）；mix 组的 `preflush` 随文件量增长，f = 4 / 8 / 16 / 32 / 64 时约 5.3 / 7.5 / 13.5 / 27.6 / 59.3 ms（compare 的耗时分解表还没有单列这一段，记在“其他”里）。文件代价约为每 MiB 0.9 ms，与之前的量级相同。
+**O-1/O-3 之后：推送挪到暂停之前。** 2026-11-24 起的沙箱级部署包（e2b-infra `6461e1c`，`CHECKPOINT_PREFLUSH` 默认开）在暂停 vCPU 之前先把根盘写回一遍（服务端分段 `preflush`），暂停窗口里的 `drain_and_flush` 要推的就只剩这之后新写的少量数据。代价没有消失，只是移出了冻结窗口，仍计入 checkpoint 的墙钟。2026-11-27 那一轮第 3 轮 file 组 f = 64：连续 checkpoint 服务端 68.7 ms，其中 `preflush` 52.4 ms、冻结 15.6 ms（`snapshot` 14.4 ms）；mix 组的 `preflush` 随文件量增长，f = 4 / 8 / 16 / 32 / 64 时约 5.3 / 7.5 / 13.5 / 27.6 / 59.3 ms（这一轮的 compare 耗时分解表还没有单列这一段，记在“其他”里；之后的 compare 单列为“暂停前写回根盘”）。文件代价约为每 MiB 0.9 ms，与之前的量级相同。
 
 **沙箱级 restore 也为文件付费，但少得多。** 写文件时 guest 页缓存里那些页算作内存改动，要按内存回滚；磁盘视图只是换层（perf-full 纯文件 64 MiB 的 `reset_view` 3.2 ms）。所以文件写入的 restore 代价（约 0.36～0.43 ms/MiB）与内存改动接近，远小于 checkpoint 那一侧。
 

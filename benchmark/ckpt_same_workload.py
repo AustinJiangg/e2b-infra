@@ -1229,8 +1229,11 @@ def print_stages(result):
 #   - 沙箱级 checkpoint 的 snapshot：Firecracker 导出内存的同时，把 guest 写过、还在宿主页缓存里的文件
 #     数据经 NBD 推进写层，两者在同一次调用里，分不开，类别记“内存+文件”；
 #   - 沙箱级 restore 的 conntrack 清理在后台与主流程同时进行，单列，不计入各段之和。
+# 沙箱级 checkpoint 的 preflush（CHECKPOINT_PREFLUSH，O-1/O-3）在暂停 vCPU 之前把根盘写回一遍，
+# 与 frozen 并列、不在冻结窗口里，但计入服务端总计；随文件写入量增长，没有单列时会全部落进“其他”。
 BREAKDOWN = {
     ("sandbox", "ckpt2"): (
+        ("暂停前写回根盘", ("preflush",), "文件"),
         ("准备", ("prepare", "rootfs_header"), "固定"),
         ("暂停 vCPU", ("pause",), "固定"),
         ("存脏页位图", ("save_live_bitmap",), "内存"),

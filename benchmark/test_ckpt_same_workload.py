@@ -299,8 +299,8 @@ class SummaryTests(unittest.TestCase):
         rows = []
         for i in range(3):
             rows.append({"series": "mix", **p, "pass": 0, "rep": i, "kind": "sample", "ok": True,
-                         "ckpt2_ms": 42.0 + i, "restore_ms": 41.0 + i,
-                         "ckpt2_server": {"total": 40.0 + i, "frozen": 39.0, "checkpoint_to_files": 39.5,
+                         "ckpt2_ms": 45.0 + i, "restore_ms": 41.0 + i,
+                         "ckpt2_server": {"total": 43.0 + i, "frozen": 39.0, "checkpoint_to_files": 42.5, "preflush": 3.0,
                                           "prepare": 0.2, "rootfs_header": 0.0, "pause": 0.2, "snapshot": 34.0 + i,
                                           "seal": 4.5, "resume": 0.3, "seal_move": 0.1, "append_layer": 0.3,
                                           "commit": 0.2, "commit_manifest": 0.2},
@@ -312,14 +312,16 @@ class SummaryTests(unittest.TestCase):
                                             "materialize_read_mb": 85.0, "conntrack_host_entries_count": 477}})
         b = csw.breakdown(rows, "sandbox", csw.BREAKDOWN_OPS[0])
         self.assertEqual(b["n"], 3)
-        self.assertAlmostEqual(b["total"], 41.0)
+        self.assertAlmostEqual(b["total"], 44.0)
         self.assertAlmostEqual(b["api"], 2.0)
         segs = {s[0]: s for s in b["segs"]}
         self.assertNotIn("存脏页位图", segs)                     # 没有这一段的样本不列
         self.assertEqual(segs["导出内存、刷文件数据"][1], "内存+文件")
+        self.assertEqual(segs["暂停前写回根盘"][1:], ("文件", 3.0))      # preflush 在冻结之前，单列，不落进“其他”
+        self.assertEqual(b["segs"][0][0], "暂停前写回根盘")
         self.assertAlmostEqual(segs["导出内存、刷文件数据"][2], 35.0)
         # 其他 = 总计 - 各段之和；frozen、checkpoint_to_files、commit_manifest 是外层或内层，不重复计
-        self.assertAlmostEqual(b["other"], 41.0 - (0.2 + 0.0 + 0.2 + 35.0 + 4.5 + 0.3 + 0.1 + 0.3 + 0.2))
+        self.assertAlmostEqual(b["other"], 44.0 - (3.0 + 0.2 + 0.0 + 0.2 + 35.0 + 4.5 + 0.3 + 0.1 + 0.3 + 0.2))
         r = csw.breakdown(rows, "sandbox", csw.BREAKDOWN_OPS[1])
         self.assertAlmostEqual(r["other"], 39.0 - (0.2 + 0.2 + 0.8 + 16.0 + 11.0 + 2.4 + 0.3 + 2.4))
         self.assertEqual(r["parallel"], [("conntrack 清理", 7.8)])
