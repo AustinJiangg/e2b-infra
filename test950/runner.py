@@ -100,13 +100,18 @@ CRIU_STEPS = {
 
 
 COMPARE_SERIES = "mix,dirty,size,file,conc,layout,trees"   # ckpt_same_workload.py 的默认测点组
+COMPARE_MIN_PER_DEFAULT = {"sandbox": 6, "criu": 9}          # 默认测点组每轮的分钟数（950 实测，见 compare_steps）
 
 
 def compare_steps(stacks, rounds, series):
     """compare：两套各跑 rounds 轮，按 ABBA 交替（相邻两轮首尾同栈，少切一次）；最后把各轮合并、两套并列。"""
     series = series or COMPARE_SERIES
-    est = (7 + (22 if "filewait" in series or series == "all" else 0) + (6 if "scen" in series else 0)
-           + (15 if "mix" in series or series == "all" else 0) + (8 if "big" in series or series == "all" else 0))
+    # 各组的分钟数是早先的估计，合起来按两套分别缩放：默认那 7 组在 950 上实测沙箱级每轮 4 分 40 秒～8 分，
+    # 进程级 7 分 30 秒～10 分 14 秒（2026-11-19、11-24、11-27），取 6、9 分钟。filewait 主要是写完之后的等待，不缩放。
+    work = (7 + (6 if "scen" in series else 0) + (15 if "mix" in series or series == "all" else 0)
+            + (8 if "big" in series or series == "all" else 0))
+    wait = 22 if "filewait" in series or series == "all" else 0
+    est_of = {st: max(1, round(work * COMPARE_MIN_PER_DEFAULT[st] / 22.0)) + wait for st in stacks}
     steps = []
     for r in range(1, rounds + 1):
         order = stacks if r % 2 else list(reversed(stacks))
@@ -115,7 +120,7 @@ def compare_steps(stacks, rounds, series):
             if st == "criu":
                 args.append("--criu-logs")
             sid = "%s/compare" % st if rounds == 1 else "%s/compare-r%d" % (st, r)
-            steps.append({"id": sid, "stack": st, "kind": "py", "args": args, "est_min": est, "status": "待跑",
+            steps.append({"id": sid, "stack": st, "kind": "py", "args": args, "est_min": est_of[st], "status": "待跑",
                           "clean_netns": True})
     if len(stacks) == 2:
         steps.append({"id": "%s/compare-table" % steps[-1]["stack"], "stack": steps[-1]["stack"], "kind": "py",
@@ -175,7 +180,7 @@ def plan(level, stacks, hours, rounds=1, series=None):
     return steps
 
 
-SWITCH_MIN = 2     # 每次切栈（950.sh criu / sandbox）约 1～2 分钟；netns 清理每次约 2 分钟另计
+SWITCH_MIN = 1.2   # 每次切栈（950.sh criu / sandbox）、每次 netns 清理，950 上各约 1～1.3 分钟（2026-11-27）
 
 
 def estimate(steps):
@@ -574,8 +579,8 @@ def execute(args):
     data["resources"].setdefault("开始", resources())
     save(data)
     total, switches = estimate(data["steps"])
-    log("共 %d 步，预计约 %d 分钟（含 %d 次切栈；中途清理 netns 每次另加约 2 分钟）。进度：bash test950.sh status"
-        % (len(data["steps"]), total, switches))
+    log("共 %d 步，预计约 %d 分钟（含 %d 次切栈；中途清理 netns 每次另加约 1 分钟）。进度：bash test950.sh status"
+        % (len(data["steps"]), round(total), switches))
     problems = check_smap(data, "开测前")
     if problems:
         save(data)

@@ -97,7 +97,7 @@ class RunnerTests(unittest.TestCase):
         steps = runner.plan("compare", ["sandbox", "criu"], 4)
         total, switches = runner.estimate(steps)
         base = sum(s["est_min"] for s in steps) + switches * runner.SWITCH_MIN
-        self.assertEqual(total, base + (2 * runner.SWITCH_MIN if runner.CLEAN_NETNS else 0))
+        self.assertAlmostEqual(total, base + (2 * runner.SWITCH_MIN if runner.CLEAN_NETNS else 0))
 
     def test_smap_detection(self):
         mods = ("smap_tiering 1228800 0 - Live 0x0 (OE)\nnbd 49152 64 - Live 0x0\n"
