@@ -1560,8 +1560,10 @@ DBM_NOTES = (
     "进程级 checkpoint 清 soft-dirty 时，原来把页写保护（连 DBM 一起清掉），之后每页第一次写都缺页一次；"
     "用 DBM 时只把页设回硬件干净，写由硬件记录，不缺页。改写一列是常驻进程自己量的写内存耗时"
     "（第二次改写，紧跟在一次 checkpoint 之后），这部分代价在负载一侧，checkpoint / restore 的耗时里没有。",
-    "checkpoint 与 restore 两列看的是 DBM 对快照本身有没有影响；两轮各自开测前都清过 netns，"
+    "checkpoint 与 restore 两列看的是 DBM 对快照本身有没有影响；每一轮开测前都清过 netns，"
     "同一部署、同一模板，只差 guest 里 soft_dirty_dbm 这一个开关。",
+    "多轮时 off、on 按 ABBA 交替（奇数轮先 off，偶数轮先 on），上表是每一侧各轮合并后的 p50；"
+    "逐轮差值表看差值的方向是否每轮都一样：方向一致才能归给 DBM，忽正忽负就是随时间的波动。",
 )
 
 
@@ -1609,11 +1611,54 @@ def print_dbm_ab(results):
         cr, r0, r1 = col("restore_ms")
         print("%-34s %2d/%-2d | %s | %s | %s" % ("%s %s" % (k[0], point_label(x)), x["n"], y["n"], cd, cc, cr))
         table.append({"series": k[0], "label": point_label(x), "n": [x["n"], y["n"]], "dirty2_ms": [d0, d1],
-                      "ckpt2_ms": [c0, c1], "restore_ms": [r0, r1]})
+                      "ckpt2_ms": [c0, c1], "restore_ms": [r0, r1], "key": k})
+    print_dbm_rounds(side, table)
+    for t in table:
+        t.pop("key")
     print("\n说明：")
     for i, note in enumerate(DBM_NOTES, 1):
         print("%d. %s" % (i, note))
     return table
+
+
+def dbm_round_of(res):
+    """结果所在步骤目录名末尾的 -r<N>（dbm 多轮交替）；单轮时 0。"""
+    m = re.search(r"-r(\d+)$", os.path.basename(os.path.dirname(res.get("_path") or "")))
+    return int(m.group(1)) if m else 0
+
+
+def print_dbm_rounds(side, table):
+    """多轮时逐轮打印 on - off 的差值（restore、连续 checkpoint 的 p50），并记进表的每一行。"""
+    rounds = {}
+    for v, rs in side.items():
+        for res in rs:
+            rounds.setdefault(dbm_round_of(res), {})[v] = res
+    rounds = {k: x for k, x in sorted(rounds.items()) if set(x) == {"0", "1"}}
+    if len(rounds) < 2:
+        return
+    per = {}
+    for rk, pair in rounds.items():
+        for tag, v in (("off", "0"), ("on", "1")):
+            for e in pair[v]["summary"]:
+                key = (e["series"], e["N"], e["name"]) + tuple(e[dd] for dd in DIMS)
+                per.setdefault(key, {}).setdefault(rk, {})[tag] = e
+
+    def diffs(key, stat):
+        out = []
+        for rk in rounds:
+            x = per.get(key, {}).get(rk, {})
+            p = ((x.get("off") or {}).get(stat) or {}).get("p50")
+            q = ((x.get("on") or {}).get(stat) or {}).get("p50")
+            out.append(None if p is None or q is None else round(q - p, 1))
+        return out
+    cell = lambda vs: " ".join("%6s" % ("—" if v is None else "%+.1f" % v) for v in vs)
+    head = " ".join("%6s" % ("r%d" % rk) for rk in rounds)
+    print("\n逐轮差值（on - off，p50，ms；奇数轮先 off、偶数轮先 on）")
+    print("%-34s | restore %s | 连续 ckpt %s" % ("测点", head, head))
+    for t in table:
+        rs, ck = diffs(t["key"], "restore_ms"), diffs(t["key"], "ckpt2_ms")
+        t["restore_diff_by_round"], t["ckpt2_diff_by_round"] = rs, ck
+        print("%-34s | restore %s | 连续 ckpt %s" % ("%s %s" % (t["series"], t["label"]), cell(rs), cell(ck)))
 
 
 # ------------------------------------------------------------ 主流程

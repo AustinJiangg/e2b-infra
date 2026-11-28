@@ -72,6 +72,13 @@ class RunnerTests(unittest.TestCase):
         # dbm 只在进程级栈：先验收（新内核默认开 DBM），再同一负载 off / on 各一轮，最后 A/B 表，回沙箱级冒烟
         self.assertEqual(self.ids("dbm", ["sandbox", "criu"]),
                          ["criu/acceptance", "criu/dbm-off", "criu/dbm-on", "criu/dbm-table", "sandbox/smoke-after"])
+        # 多轮时 off / on 按 ABBA 交替，步骤名带轮次
+        ids = [s["id"] for s in runner.plan("dbm", ["criu"], 4, dbm_rounds=4)]
+        self.assertEqual(ids, ["criu/acceptance", "criu/dbm-off-r1", "criu/dbm-on-r1", "criu/dbm-on-r2",
+                               "criu/dbm-off-r2", "criu/dbm-off-r3", "criu/dbm-on-r3", "criu/dbm-on-r4",
+                               "criu/dbm-off-r4", "criu/dbm-table", "sandbox/smoke-after"])
+        steps = {s["id"]: s for s in runner.plan("dbm", ["criu"], 4, dbm_rounds=2)}
+        self.assertEqual(steps["criu/dbm-on-r2"]["args"][-2:], ["--soft-dirty-dbm", "1"])
         steps = {s["id"]: s for s in runner.plan("dbm", ["criu"], 4)}
         self.assertEqual(steps["criu/dbm-off"]["args"][-2:], ["--soft-dirty-dbm", "0"])
         self.assertEqual(steps["criu/dbm-on"]["args"][-2:], ["--soft-dirty-dbm", "1"])

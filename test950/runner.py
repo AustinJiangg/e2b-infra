@@ -64,9 +64,11 @@ LEVELS = ("quick", "standard", "extended", "long")
 #   native   e2b 原生 pause / resume 分档（benchmark/native_snapshot_tiers.py），在所选栈上各跑一遍
 #   compare  同一负载下的 checkpoint / restore（benchmark/ckpt_same_workload.py），两套各跑一遍
 #   fcexit   原生 pause 里“停 Firecracker 到进程退出”的内核拆分（benchmark/fc_exit_trace.py），只在进程级栈
-#   dbm      进程级 soft-dirty 用不用硬件 DBM：进程级验收（新内核默认开 DBM）+ 同一负载 A/B（只在进程级栈）
+#   dbm      进程级 soft-dirty 用不用硬件 DBM：进程级验收（新内核默认开 DBM）+ 同一负载 A/B（只在进程级栈），
+#            off / on 按 ABBA 交替跑 --dbm-rounds 轮
 EXTRA = ("native", "compare", "fcexit", "dbm")
 DBM_SERIES = "dirty,layout,mix"
+DBM_ROUNDS_DEFAULT = 4
 CLEAN_NETNS = os.environ.get("TEST950_CLEAN_NETNS", "1") != "0"
 CHECK_SMAP = os.environ.get("TEST950_CHECK_SMAP", "1") != "0"
 PERF_STEPS = ("perf", "perf-full")     # 沙箱级 run.sh 里测性能的档，开测前也清 netns
@@ -129,21 +131,31 @@ def compare_steps(stacks, rounds, series):
     return steps
 
 
-def plan(level, stacks, hours, rounds=1, series=None):
+def dbm_steps(rounds, series=None):
+    """dbm：进程级验收，再把 soft_dirty_dbm=0 / 1 按 ABBA 交替各跑 rounds 轮（奇数轮先 off，偶数轮先 on），
+    宿主状态随时间的变化平均分到两侧；最后 dbm-table 把每一侧的各轮合并并列，另列逐轮差值。"""
+    base = ["benchmark/ckpt_same_workload.py", "--stack", "criu", "--template", TEMPLATES["criu"],
+            "--series", series or DBM_SERIES, "--no-native"]
+    steps = [{"id": "criu/acceptance", "stack": "criu", "kind": "criu", "args": ["acceptance"],
+              "est_min": 4, "status": "待跑"}]
+    for r in range(1, rounds + 1):
+        pair = (("0", "dbm-off"), ("1", "dbm-on"))
+        for v, name in (pair if r % 2 else pair[::-1]):
+            sid = "criu/" + name if rounds == 1 else "criu/%s-r%d" % (name, r)
+            steps.append({"id": sid, "stack": "criu", "kind": "py", "args": base + ["--soft-dirty-dbm", v],
+                          "est_min": 5, "status": "待跑", "clean_netns": True})   # 950 实测每轮 3～3.5 分钟
+    steps.append({"id": "criu/dbm-table", "stack": "criu", "kind": "py",
+                  "args": ["benchmark/ckpt_same_workload.py", "--dbm-siblings"], "est_min": 1, "status": "待跑"})
+    return steps
+
+
+def plan(level, stacks, hours, rounds=1, series=None, dbm_rounds=1):
     """按档展开步骤。quick ⊂ standard ⊂ extended；long 单独，只含长跑；native、compare 各自单独。"""
     if level in EXTRA:
         if level == "compare":
             steps = compare_steps(stacks, rounds, series)
         elif level == "dbm":
-            base = ["benchmark/ckpt_same_workload.py", "--stack", "criu", "--template", TEMPLATES["criu"],
-                    "--series", series or DBM_SERIES, "--no-native"]
-            steps = [{"id": "criu/acceptance", "stack": "criu", "kind": "criu", "args": ["acceptance"],
-                      "est_min": 4, "status": "待跑"}]
-            for v, name in (("0", "dbm-off"), ("1", "dbm-on")):
-                steps.append({"id": "criu/" + name, "stack": "criu", "kind": "py", "args": base + ["--soft-dirty-dbm", v],
-                              "est_min": 8, "status": "待跑", "clean_netns": True})
-            steps.append({"id": "criu/dbm-table", "stack": "criu", "kind": "py",
-                          "args": ["benchmark/ckpt_same_workload.py", "--dbm-siblings"], "est_min": 1, "status": "待跑"})
+            steps = dbm_steps(dbm_rounds, series)
             stacks = ["criu"]
         elif level == "fcexit":   # ARM 版 E2B 原生 pause 在进程级那套的 orchestrator 上测，只在它上面测
             steps = [{"id": "criu/fcexit", "stack": "criu", "kind": "py", "args": ["benchmark/fc_exit_trace.py"],
@@ -559,6 +571,9 @@ def execute(args):
     prev = json.loads(progress_file().read_text()) if progress_file().is_file() else None
     redo = prev and any(s["status"] != "PASS" for s in prev["steps"])
     opts = {"rounds": args.rounds, "series": args.series}
+    dbm_rounds = args.dbm_rounds or DBM_ROUNDS_DEFAULT
+    if args.level == "dbm":
+        opts["dbm_rounds"] = dbm_rounds
     if prev and redo and prev["level"] == args.level and prev["stacks"] == stacks \
             and prev.get("opts", {"rounds": 1, "series": None}) == opts and not args.new:
         # 上一轮没跑完，或跑完了但有没通过的步骤：只重跑没通过的，已 PASS 的保留
@@ -572,7 +587,8 @@ def execute(args):
         run_dir.mkdir(parents=True)
         data = {"level": args.level, "stacks": stacks, "hours": args.hours, "run_dir": str(run_dir), "opts": opts,
                 "started": datetime.now().isoformat(), "pid": os.getpid(),
-                "steps": plan(args.level, stacks, args.hours, args.rounds, args.series), "identity": {}, "resources": {}}
+                "steps": plan(args.level, stacks, args.hours, args.rounds, args.series, dbm_rounds),
+                "identity": {}, "resources": {}}
     data["pid"] = os.getpid()
     data["log"] = stdout_target()
     run_dir = Path(data["run_dir"])
@@ -823,6 +839,8 @@ def main():
     ap.add_argument("--lines", type=int, default=40, help="report：每个文件打印的行数，0 为全部")
     ap.add_argument("--stack", choices=("both",) + STACKS, default="both", help="测哪套，默认两套都测")
     ap.add_argument("--hours", type=float, default=4.0, help="long 档每套的长跑时长（小时），默认 4；两套都测约 9 小时")
+    ap.add_argument("--dbm-rounds", type=int,
+                    help="dbm：soft_dirty_dbm off / on 按 ABBA 交替跑几轮（默认 %d）" % DBM_ROUNDS_DEFAULT)
     ap.add_argument("--rounds", type=int, default=1,
                     help="compare：两套交替跑几轮（ABBA），最后合并各轮、两套并列；默认 1")
     ap.add_argument("--series", help="compare：测点组，逗号分隔或 all（默认 %s）" % COMPARE_SERIES)

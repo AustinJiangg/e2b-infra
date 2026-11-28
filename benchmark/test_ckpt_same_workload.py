@@ -398,6 +398,26 @@ class DbmTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(csw.print_dbm_ab(res[:1]), [])
 
+    def test_dbm_ab_rounds(self):
+        # 两轮交替：各轮的差值单列；合并表不变
+        res = []
+        for rnd, order in ((1, ("0", "1")), (2, ("1", "0"))):
+            for v in order:
+                rows = fake_rows("criu", "dirty", {"P": 256, "d": 16}, rnd=rnd)
+                for r in rows:
+                    if r["kind"] != "base":
+                        r["restore_ms"] += (5.0 if v == "1" else 0.0) * (1 if rnd == 1 else -1)
+                r_ = fake_result("criu", rows)
+                r_["provenance"]["args"] = {"soft_dirty_dbm": v}
+                r_["_path"] = "/x/run/criu-dbm-%s-r%d/result.json" % ("on" if v == "1" else "off", rnd)
+                res.append(r_)
+        with redirect_stdout(io.StringIO()) as out:
+            table = csw.print_dbm_ab(res)
+        self.assertEqual(len(table), 1)
+        self.assertEqual(table[0]["restore_diff_by_round"], [5.0, -5.0])
+        self.assertNotIn("key", table[0])
+        self.assertIn("逐轮差值", out.getvalue())
+
 
 class GuestScriptTests(unittest.TestCase):
     def test_resident_process(self):
